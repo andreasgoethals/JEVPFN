@@ -1,6 +1,6 @@
 {
-  // Shared, and committed on purpose — see the note in .gitignore. Everything here follows
-  // from the repository's layout rather than from anyone's taste.
+  // Committed on purpose — see the note in .gitignore. Everything here follows from the
+  // repository's layout rather than from anyone's taste.
 
   // The repository root on the analysis path. WHY: `src/` is a FLAT package root
   // (src/data, src/utils, src/visualize), so every import reads `from src.utils.paths import

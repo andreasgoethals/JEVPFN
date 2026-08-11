@@ -77,12 +77,6 @@ ignore = [
     "B905",    # zip(strict=) noise in numeric code
 ]
 
-[tool.ruff.lint.per-file-ignores]
-# Template idiom: scripts/ are invoked as files, not imported, so they insert the
-# repository root on sys.path BEFORE importing from src. That is an import-not-at-top
-# by construction.
-"scripts/*" = ["E402"]
-
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]

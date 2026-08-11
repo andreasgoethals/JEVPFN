@@ -4,17 +4,16 @@ Instructions for AI agents working in this repository.
 
 ## 0. Before you start
 
-1. [`docs/TEMPLATE.md`](docs/TEMPLATE.md) — the governing document for the layout and every
-   rule. **Adhere to it.** Deviate only when the user says so, and when you do, **say so in
-   your reply** — never silently.
-2. [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md) — what has already been tried here and
-   **failed**. Reading it is not optional; it exists so you do not spend an hour on a known
-   dead end.
+1. [`docs/TEMPLATE.md`](docs/TEMPLATE.md) — the layout and rules this project started from.
+   **Follow it**, and when you deviate — which is allowed, it is a starting point rather than a
+   contract — **say so in your reply**. Never silently.
+2. [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md) — the cluster runs already done and the dead
+   ends already hit. Reading it is not optional: it is how you avoid resubmitting a configuration
+   that failed last month, or spending an hour on a known dead end.
 3. [`README.md`](README.md) — what this project actually is.
 
-**If a `_template/` folder still exists**, read [`_template/INITIALISE.md`](_template/INITIALISE.md)
-first: this is either the un-initialised template or a project where nobody deleted the folder,
-and that file tells the two apart in one command. Say which you found.
+**If a `_template/` folder still exists**, read [`_template/README.md`](_template/README.md)
+first: this is either the un-initialised template or a project where nobody deleted the folder.
 
 ## 1. `tfm-library/` IS READ-ONLY. NO EXCEPTIONS BUT ONE.
 
@@ -35,7 +34,8 @@ library's own checkout, where it flows down to every consumer. Never lint, forma
 
 Cite papers by path (`tfm-library/papers/<year>/...`, full text under `papers/text/`), and **code
 dumps by symbol name, never by line number** — the dumps are re-snapshotted and line numbers drift
-by thousands. Record the pin (`git submodule status`) next to any result that depends on it.
+by thousands. Record the pin (`git submodule status`) next to any result that depends on it. Bump it with
+`python -m src.utils.update_tfm_library`.
 
 ## 2. Never commit data or checkpoints
 
@@ -69,26 +69,32 @@ SLURM job scripts are a separate world — bash on Linux, normal POSIX syntax. K
 
 Newest first, dates `DD-MM-YYYY`.
 
-- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — every substantive change: what, and why if it is not
-  obvious.
-- [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md) — every **failure** that cost more than a couple
-  of minutes: **Tried**, **Result**, **Why**, **Instead**. Write it even when the eventual fix
-  worked — especially then, because the dead end is the expensive part.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — every substantive change, one bullet, **as short as
+  possible**: what, and why only if it is not obvious. Usually one line; longer only when the change
+  genuinely is. The detail belongs in the commit.
+- [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md) — two things. **Every cluster run**, one row in
+  the table: config, outcome, headline number. And **every failure** that cost more than a couple of
+  minutes, four lines: **Tried**, **Result**, **Why**, **Instead** — even when the eventual fix
+  worked, because the dead end is the expensive part.
 
 ## 7. Notebooks and figures
 
 - A notebook contains **no `def` and no `class`** — logic goes in `src/` — and its **last code
-  cell prints a text summary**. Both are enforced by the compliance test.
-- **Never pick a colour.** `src/visualize/style.py` owns every colour, and a name means the same
-  colour in every figure. Register a new series name there, once, by appending.
-- Save through `src/visualize/figures.FigureSaver`: PDF plus PNG, into that notebook's own folder,
-  which it clears before drawing.
+  cell prints a text summary**, section by section, in the notebook's own section order.
+- **Never pick a colour or a size.** `src/visualize/style.py` owns both, so every notebook here
+  looks the same. Add a new one there, once, not in the notebook.
+- Save through `src/visualize/figures.FigureSaver`: **PDF only**, into that notebook's own
+  folder, which it clears before drawing. The notebook displays each figure inline.
+- Use `style.figsize(style.WIDTH_FULL)` or `WIDTH_HALF`: every figure is drawn at the width it
+  will occupy on an **A4** page, and never rescaled afterwards — rescaling carries the text with it.
+- Captions are the **paper's** captions: pure description, ready to paste under the figure.
 
-## 8. Say you are done only when it passes
+## 8. Say you are done only when it runs
 
 ```powershell
-python scripts/check.py
+python -m pytest -q
 ```
 
-Ruff, an import of every `src` module, and pytest. That is the one command that answers "is this
-repository healthy?" — run it before you claim anything is finished.
+And `python -m src.utils.run_notebooks` if you touched a notebook or anything under
+`src/visualize/`. Nothing runs these for you — no CI, no hook — so run them before you claim
+anything is finished.

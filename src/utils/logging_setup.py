@@ -1,9 +1,9 @@
 """One logger, configured once. Writes to the console and to `output/logs/`.
 
-WHY A FILE AS WELL AS THE CONSOLE: on the cluster the console is a SLURM `.out` file that
-lands wherever the job script put it, and after a requeue it is a *different* file. A log
-under `output/logs/` is where the code decides, on the backed-up tier, and it survives the
-job that produced it.
+WHY A FILE AS WELL AS THE CONSOLE: on the cluster the console is a SLURM `.out` file that lands
+wherever the job script put it, and after a requeue it is a *different* file. A `.log` under
+`output/logs/` is where the code decides, on the tier you can browse, and it survives the job that
+produced it. `output/logs/` holds `.log` files and nothing else, so "read the logs" is unambiguous.
 
 WHY `force=True` and an idempotence guard: a notebook cell that calls this twice would
 otherwise attach a second handler and print every line twice — which reads like the code

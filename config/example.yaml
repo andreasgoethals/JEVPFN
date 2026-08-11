@@ -1,16 +1,11 @@
-# One YAML per experiment. No subfolders, no inheritance, no includes — a config file is
-# read top to bottom and that is the whole story. Copy this file, rename it after the
-# experiment, and delete what you do not use.
+# An example config. Copy it, rename it after the experiment, delete what you do not use, and
+# organise config/ flat or in subfolders — whichever suits the project.
 #
-# The shape is fixed by the template:
+# `src/utils/config.py` understands one optional convention: a `sweep:` block whose knobs are
+# expanded into the full cartesian product, with everything outside it shared by every run. Use
+# it when a config describes several runs; leave it out when it describes one.
 #
-#   sweep:      at the TOP. Every knob with more than one value. The full cartesian
-#               product is run, so a sweep of 3 x 2 x 2 is twelve runs — check the count
-#               before you submit, because it grows faster than it reads.
-#   everything  below the sweep is a SINGLE value, shared by every run in the sweep.
-#   below
-#
-# One short comment per knob, saying what it is.
+# A short comment per knob is worth the two seconds.
 
 name: example                  # experiment name; names the output subdirectory
 seed: 20260811                 # base seed; each sweep point derives its own from this

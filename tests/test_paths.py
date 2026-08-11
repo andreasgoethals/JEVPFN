@@ -1,3 +1,6 @@
+# Came with the template, and worth keeping: `src/utils/paths.py` is identical in every project,
+# and every other module trusts it. The interesting cases only happen on the cluster, so they are
+# forced with environment variables rather than left untested until a job hits them.
 """`src/utils/paths.py` — the resolver. Tested because every other module trusts it.
 
 The interesting cases are the ones that only happen on the cluster, so they are forced with

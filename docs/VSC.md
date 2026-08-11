@@ -1,9 +1,12 @@
 # {{PROJECT_NAME}} on the KU Leuven VSC
 
 How to run this project on the cluster. The authoritative cluster documentation is in the
-`tfm-library/` submodule — read it there and keep this file as *this project's* answer to it, not
-a copy. Fill in the `TODO`s the first time you submit, and record what you learned in
-[`CHANGELOG.md`](CHANGELOG.md).
+`tfm-library/` submodule — read it there and keep this file as *this project's* answer to it, not a
+copy. Fill in the `TODO`s the first time you submit.
+
+**Log every run** in the Runs table of [`AGENTS_MEMORY.md`](AGENTS_MEMORY.md): one row with the
+config, the outcome and the headline number. That table is what stops a configuration being
+resubmitted months after it already failed.
 
 ## The machines
 
@@ -27,16 +30,20 @@ On **both** tiers everything lives inside a folder named after the project. Neve
 paths by hand: `src/utils/paths.py` is the only module that constructs them, and it collapses both
 tiers to the repository root off-cluster, so the same code runs on a laptop unconfigured.
 
-| tier | path | holds | backed up | quota |
-|---|---|---|---|---|
-| **project storage** | `/lustre1/project/stg_00211/{{PROJECT_NAME}}/` | datasets, checkpoints, caches, **`output/results/`** | no | large, **low inodes** |
-| **personal data** | `$VSC_DATA/{{PROJECT_NAME}}/` | the repository, and the rest of `output/` | **yes** | 75 GiB |
-| scratch | `$VSC_SCRATCH/` | working scratch only | no | **purged after 30 days** |
+| tier | path | holds | quota |
+|---|---|---|---|
+| **project storage** | `/lustre1/project/stg_00211/{{PROJECT_NAME}}/` | datasets, checkpoints, caches, **`output/results/`** | large, **low inodes** |
+| **personal data** | `$VSC_DATA/{{PROJECT_NAME}}/` | the repository, and the rest of `output/` | 75 GiB |
+| scratch | `$VSC_SCRATCH/` | working scratch only | **purged after 30 days** |
 
+- **Both tiers are backed up.** They differ in size and in convenience: you can browse `$VSC_DATA`
+  directly, while anything on project storage has to be pulled down locally first (PowerShell,
+  `scp`/`rsync`) before you can look at it. So the big, rarely-read things go to project storage and
+  everything you actually want to open stays on `$VSC_DATA`.
 - `$VSC_DATA` is 75 GiB. One forgotten checkpoint directory fills it, and then every job that
   writes a log fails too.
 - Project storage has a **low inode budget** — few big files, not a hundred thousand small ones.
-  Per-step metrics therefore go to `$VSC_DATA`.
+  Per-step records therefore go to `$VSC_DATA`.
 - Scratch's purge is on **access** time, and `mv` and timestamp-preserving `rsync` do **not** count
   as an access, so freshly staged data can vanish almost immediately. Copy, then
   `paths.touch_tree()`.
@@ -77,6 +84,10 @@ scancel <jobid>
 | credits | `#SBATCH --account` | the credit account to charge |
 | GPUs | `#SBATCH --gpus-per-node` | what this project actually needs |
 
+When the job comes back, add its row to the Runs table in
+[`AGENTS_MEMORY.md`](AGENTS_MEMORY.md) — `done` / `walltime` / `OOM` / `crashed` / `diverged`, plus
+one line of notes.
+
 ## Outliving the walltime
 
 Any run that can exceed the limit must be **resumable** — a job killed at the walltime is
@@ -104,8 +115,10 @@ rsync -av vsc<number>@login.hpc.kuleuven.be:$VSC_DATA/{{PROJECT_NAME}}/output/ .
 `/lustre1/project/stg_00211/{{PROJECT_NAME}}/output/results/`.
 
 ```bash
-python scripts/clean_run.py            # list what a previous run left, delete nothing
-python scripts/clean_run.py --clean    # delete the cheap categories
+python -m src.utils.clean_run                       # list what the previous run left
+python -m src.utils.clean_run --clean               # wipe output/ on both tiers
+python -m src.utils.clean_run --clean --processed    # ...and the data/processed cache
 ```
 
-It walks both tiers and can never remove `data/raw/`, `checkpoints/`, or `tfm-library/`.
+One invocation covers `$VSC_DATA` and project storage, and it can never remove `data/raw/`,
+`checkpoints/`, or `tfm-library/` — it only ever looks inside `output/`.

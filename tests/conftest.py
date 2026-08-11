@@ -12,9 +12,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# `from src...` without an editable install. WHY: `tests/test_template_compliance.py` has to
-# run on a fresh clone before `pip install -e .`, and a suite that half-works depending on
-# whether someone installed the package is a suite people stop trusting.
+# `from src...` without an editable install, so the suite runs on a fresh clone. A suite that
+# half-works depending on whether someone ran `pip install -e .` is a suite people stop trusting.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

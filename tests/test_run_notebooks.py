@@ -1,3 +1,6 @@
+# Came with the template, and worth keeping: `src/utils/run_notebooks.py` is identical in every
+# project, and these pin the two documented contracts — notebooks discovered alphabetically, and
+# `All_Results.md` sorted alphabetically with each block verbatim.
 """`src/utils/run_notebooks.py` — the runner and the two summary documents.
 
 The end-to-end test executes a real one-cell notebook in a subprocess. It is marked `slow`
@@ -115,7 +118,8 @@ def test_a_notebook_with_no_figures_still_gets_a_section(isolated_output) -> Non
     assert "_No figures produced._" in rn.write_captions(("empty",)).read_text(encoding="utf-8")
 
 
-def test_all_results_concatenates_captured_text(isolated_output) -> None:
+def test_all_results_is_sorted_alphabetically_by_notebook(isolated_output) -> None:
+    """One block per notebook, verbatim, alphabetical — even when passed out of order."""
     from src.utils.paths import figures_dir
 
     for name, text in (("a", "SUMMARY A"), ("b", "SUMMARY B")):
@@ -123,7 +127,8 @@ def test_all_results_concatenates_captured_text(isolated_output) -> None:
         folder.mkdir(parents=True, exist_ok=True)
         (folder / rn.STDOUT_FILE).write_text(text, encoding="utf-8")
 
-    written = rn.write_all_results(("a", "b")).read_text(encoding="utf-8")
+    # Passed b-then-a on purpose: the file must still come out a-then-b.
+    written = rn.write_all_results(("b", "a")).read_text(encoding="utf-8")
     assert written.index("SUMMARY A") < written.index("SUMMARY B")
     assert written.index("## a") < written.index("## b")
 
@@ -169,8 +174,8 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
             "from src.visualize import figures, style\n"
             "style.apply()\n"
             "save = figures.FigureSaver('smoke')\n"
-            "fig, ax = plt.subplots()\n"
-            "ax.plot([0, 1], [0, 1], color=style.color('proposed'))\n"
+            "fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_HALF))\n"
+            "ax.plot([0, 1], [0, 1])\n"
             "save(fig, 'line', caption='A line from (0,0) to (1,1).')\n"
             "print('SMOKE SUMMARY: 1 figure')\n"
         ],
@@ -179,7 +184,8 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
     assert result.ok, result.error
     assert result.n_figures == 1
     folder = figures_dir("smoke")
-    assert (folder / "01_line.pdf").is_file() and (folder / "01_line.png").is_file()
+    assert (folder / "01_line.pdf").is_file()
+    assert not list(folder.glob("*.png"))  # PDF only
 
     from src.utils.paths import all_results_path, captions_path
 

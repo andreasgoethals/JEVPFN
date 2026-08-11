@@ -1,8 +1,8 @@
 """Bump this project's `tfm-library/` pin. REPORTS BY DEFAULT — changes nothing.
 
-    python scripts/update_tfm_library.py                 what is pinned, what is upstream
-    python scripts/update_tfm_library.py --update         fetch and move the working tree
-    python scripts/update_tfm_library.py --update --commit  ...and record the new pin
+    python -m src.utils.update_tfm_library                     what is pinned vs upstream
+    python -m src.utils.update_tfm_library --update             fetch and move the working tree
+    python -m src.utils.update_tfm_library --update --commit    ...and record the new pin
 
 WHY THREE STEPS AND NOT ONE: `git submodule update --remote` moves the working tree but
 does NOT record the new pin — `git submodule status` then shows a leading `+`, which looks
@@ -23,7 +23,8 @@ import argparse
 import subprocess
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+#: `parents[2]` because this file is `<root>/src/utils/update_tfm_library.py`.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SUBMODULE = "tfm-library"
 
 

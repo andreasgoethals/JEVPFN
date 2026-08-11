@@ -4,13 +4,9 @@
     python _template/init_project.py CreditICL --dry-run
     python _template/init_project.py CreditICL --repo-url https://github.com/me/CreditICL
 
-No copying: this repository already *is* the template, so the whole job is (1) replace every
-`{{PLACEHOLDER}}` in every text file, (2) hash `docs/TEMPLATE.md` into
-`tests/test_template_compliance.py` so a later edit fails the suite, (3) print the steps it
-deliberately does not take.
-
-The hash is baked in rather than fetched at test time because the compliance test has to run on a
-fresh clone with no network and no submodule.
+No copying: this repository already *is* the template, so the whole job is to replace every
+`{{PLACEHOLDER}}` in every text file with a real value, and print the steps it deliberately does
+not take.
 
 IT RUNS NOTHING ELSE — no install, no git, no push, and it does not delete `_template/` for you.
 Each of those reaches outside this directory or throws files away, so each is printed instead.
@@ -19,7 +15,6 @@ Each of those reaches outside this directory or throws files away, so each is pr
 from __future__ import annotations
 
 import argparse
-import hashlib
 import re
 import subprocess
 import sys
@@ -29,7 +24,6 @@ from pathlib import Path
 #: `parents[1]`, because this file is `<repo>/_template/init_project.py`.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DOC = REPO_ROOT / "docs" / "TEMPLATE.md"
-TEMPLATE_ONLY_DIR = REPO_ROOT / "_template"
 
 DEFAULT_AUTHOR = "Andreas Goethals"
 DEFAULT_EMAIL = "andreas.goethals@kuleuven.be"
@@ -53,10 +47,6 @@ SKIP_DIRS = frozenset({".git", "_template", "tfm-library", ".venv", "venv", "__p
 PLACEHOLDER_RE = re.compile(r"(?<!\$)\{\{([A-Z][A-Z0-9_]*)\}\}")
 
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
-
-#: Where the template hash lives, and the line that holds it.
-COMPLIANCE_TEST = REPO_ROOT / "tests" / "test_template_compliance.py"
-HASH_LINE_RE = re.compile(r'^(EXPECTED_TEMPLATE_SHA256\s*=\s*)".*"$', re.M)
 
 
 def git(*args: str) -> str:
@@ -100,7 +90,8 @@ def submodule_state() -> tuple[str, str]:
             f"no submodule pin recorded. Add it once:\n"
             f"       git submodule add {DEFAULT_LIBRARY_URL} tfm-library",
         )
-    if any((REPO_ROOT / "tfm-library").iterdir()) if (REPO_ROOT / "tfm-library").is_dir() else False:
+    library = REPO_ROOT / "tfm-library"
+    if library.is_dir() and any(library.iterdir()):
         return "populated", "nothing to do"
     return (
         "pinned, empty",
@@ -121,20 +112,17 @@ def derive(project: str, args: argparse.Namespace) -> dict[str, str]:
         "PROJECT_UPPER": re.sub(r"[^A-Z0-9]", "_", project.upper()),
         "AUTHOR": args.author,
         "EMAIL": args.email,
-        # One sentence, reused in the README's opening line, pyproject's `description` and
-        # CITATION.cff's abstract — so an agent initialises in one command instead of editing
-        # three files and getting two of them slightly different.
+        # One sentence, reused in the README's opening line and pyproject's `description` —
+        # so an agent initialises in one command instead of editing two files and getting them
+        # slightly different.
         "DESCRIPTION": args.description or f"{project} — PhD research, KU Leuven: machine "
                                            f"learning on tabular data.",
         "YEAR": str(today.year),
         # DD-MM-YYYY: the changelog convention. Not ISO, deliberately — one format everywhere.
         "DATE": today.strftime("%d-%m-%Y"),
-        # ISO only for CITATION.cff, whose format requires it.
-        "DATE_ISO": today.isoformat(),
         "REPO_URL": args.repo_url or detected_repo_url()
                     or f"https://github.com/{GITHUB_OWNER}/{project}",
         "TFM_LIBRARY_URL": args.library_url,
-        "TEMPLATE_SHA256": hashlib.sha256(TEMPLATE_DOC.read_bytes()).hexdigest(),
     }
 
 
@@ -174,17 +162,6 @@ def substitute(values: dict[str, str], *, dry_run: bool) -> tuple[list[str], lis
     return changed, leftovers
 
 
-def bake_hash(sha: str, *, dry_run: bool) -> bool:
-    """Write the template hash into the compliance test. Returns whether it changed."""
-    text = COMPLIANCE_TEST.read_text(encoding="utf-8")
-    updated = HASH_LINE_RE.sub(rf'\1"{sha}"', text, count=1)
-    if updated == text:
-        return False
-    if not dry_run:
-        COMPLIANCE_TEST.write_text(updated, encoding="utf-8", newline="")
-    return True
-
-
 def next_steps(project: str, values: dict[str, str]) -> str:
     """The steps this script deliberately does not take, because each reaches outside."""
     state, advice = submodule_state()
@@ -200,9 +177,6 @@ Windows PowerShell — ONE COMMAND PER LINE, `&&` is a parser error there.
 
      Remove-Item -Recurse -Force _template
 
-     A rule change reaches this project later via the template's own
-     `_template/sync_template_rules.py`, not from anything in here.
-
   2. Environment
 
      python -m venv .venv
@@ -214,16 +188,17 @@ Windows PowerShell — ONE COMMAND PER LINE, `&&` is a parser error there.
 
      Copy-Item tfm-library\\PROJECT_SPECIFIC.template.md tfm-library\\PROJECT_SPECIFIC.md
 
-  4. Is it healthy? This must pass before the first commit.
+  4. Check it runs.
 
-     python scripts/check.py
+     python -m pytest -q
+     python -m src.utils.run_notebooks
 
   5. Make it yours
 
      README.md          replace everything ABOVE the last chapter. Keep that chapter.
      docs/VSC.md        fill in the TODOs: partition, walltime, credit account.
      scripts/slurm/job.slurm    the same TODOs.
-     config/example.yaml        copy per experiment; delete the example.
+     config/                    real configs; delete example.yaml.
      src/visualize/style.py     register this project's series names, once.
      notebooks/example_analysis.ipynb   the pattern to copy, then delete.
      docs/CHANGELOG.md          the first entry is already dated {values["DATE"]}.
@@ -233,9 +208,8 @@ Windows PowerShell — ONE COMMAND PER LINE, `&&` is a parser error there.
      git add -A
      git commit -m "Initialise {project} from the repository template"
 
-Do NOT edit docs/TEMPLATE.md. Its SHA-256 is now baked into
-tests/test_template_compliance.py, so an edit fails the test suite — which is the point.
-Change a rule at the template source and pull it down.
+docs/TEMPLATE.md is a starting point, not a contract. Deviate where the work needs it — but
+deliberately, and say so. Generic rule changes belong at the template source.
 """
 
 
@@ -247,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--description", default=None,
         help="one sentence: what the project is and what question it answers. Lands in "
-             "README.md, pyproject.toml and CITATION.cff.",
+             "README.md and pyproject.toml.",
     )
     parser.add_argument("--author", default=DEFAULT_AUTHOR)
     parser.add_argument("--email", default=DEFAULT_EMAIL)
@@ -267,9 +241,6 @@ def main(argv: list[str] | None = None) -> int:
         )
     if not TEMPLATE_DOC.is_file():
         raise SystemExit(f"{TEMPLATE_DOC} is missing — it is the governing document.")
-    if not COMPLIANCE_TEST.is_file():
-        raise SystemExit(f"{COMPLIANCE_TEST} is missing — it is where the hash goes.")
-
     values = derive(args.project, args)
     print(f"{'DRY RUN — nothing will be written' if args.dry_run else 'initialising'} "
           f"in {REPO_ROOT}\n")
@@ -280,12 +251,6 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{len(changed)} files updated:")
     for relative in changed:
         print(f"  {relative}")
-
-    if bake_hash(values["TEMPLATE_SHA256"], dry_run=args.dry_run):
-        print(f"\ntemplate hash baked into {COMPLIANCE_TEST.relative_to(REPO_ROOT)}")
-    else:
-        # A second run is harmless but did nothing, and silence would look like success.
-        print("\ntemplate hash was already up to date — has this already been initialised?")
 
     if leftovers:
         # A template bug, not a user error: a key exists that `derive()` does not produce.

@@ -1,178 +1,90 @@
-"""THE shared visual style. One place, every figure, every notebook.
+"""THE shared style. One place, every notebook in THIS project.
 
-Call `apply()` once at the top of a notebook, then never choose a font, size, grid or — above
-all — a colour again. Two figures from different notebooks then sit together in one paper, and
-**a name means the same colour everywhere**, so a reader learns the legend once.
+MOSTLY EMPTY ON PURPOSE. What the template fixes is the part that follows from the output medium:
+**every figure ends up in a scientific paper printed on A4**, so it is drawn at the width it will
+occupy on the page and its text is sized to be readable there. That is the same in every project,
+so it is filled in below.
 
-COLOUR FOLLOWS THE ENTITY, NEVER ITS RANK. `register_series()` + `color()` do that: if a figure
-drops a series, a plain cycler shifts every colour after it and the same model is blue in one
-figure and orange in the next. A notebook never picks a colour, so no two can disagree.
+WHAT THIS PROJECT FILLS IN is the *look*: the colours, the grid, the spines, the marker shapes.
+Two projects plotting different things have no reason to look alike, so the template does not
+pretend otherwise — the requirement is only that **every notebook inside one project shares one
+style**, defined here and nowhere else. A notebook never picks a colour or a size itself; if it
+needs a new one, it gets added here, once, and every figure gains it at the same time. (If a new
+project is close to an existing one, copying that project's `style.py` is the fastest start.)
 
-THE PALETTE IS VALIDATED, NOT CHOSEN BY EYE. On white, the order below clears the OKLCH
-lightness band, a chroma floor, CVD separation of every ADJACENT pair (worst ΔE 9.2 deutan,
-OKLab x100, target >= 8) and an adjacent normal-vision floor (worst 20.8, floor 15). Three slots
-sit below 3:1 contrast against white (aqua 2.8, magenta 2.7, yellow 2.2) — hence a legend is
-always present and marks carry direct labels, so identity never rests on colour alone.
-
-THE ORDER IS THE SAFETY MECHANISM, not decoration: reordering changes which pairs are adjacent.
-Re-validate the whole set before changing a hex or a position.
-
-SCATTER AND SMALL MULTIPLES CAP AT FOUR. There every pair is on screen at once, not just
-neighbours, and only the first four slots clear the floors all-pairs (9.2 CVD, 16.3 normal). The
-fifth beside the second measures 12.9 to normal vision — hard to tell apart, colourblind or not.
-
-ONE MODE: a figure for a paper renders on white, so there is no dark variant to keep in sync.
+Call `apply()` once at the top of every notebook.
 """
 
 from __future__ import annotations
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 
 # ---------------------------------------------------------------------------
-# Ink and chrome. Data is the only thing allowed to be loud.
-# ---------------------------------------------------------------------------
-
-INK = {
-    "primary": "#0b0b0b",     # titles, values — near-black, not pure black
-    "secondary": "#52514e",   # subtitles, annotations
-    "muted": "#898781",       # axis labels, tick labels
-    "grid": "#e1e0d9",        # hairline gridlines
-    "axis": "#c3c2b7",        # baseline and spines
-    "surface": "#ffffff",     # the paper
-}
-
-# ---------------------------------------------------------------------------
-# SEMANTIC roles — colours that carry a MEANING rather than an identity, and the anchors of
-# the shared legend: "baseline" is grey in every figure, "proposed" is blue in every figure.
+# FIGURE SIZES — A4, and nothing else.
 #
-# The two baselines are achromatic on purpose, so they sit OUTSIDE the categorical palette: a
-# reference condition should recede, and greying it says "the thing being improved on" without
-# spending a hue.
+# A4 is 210 x 297 mm. With 25 mm margins that leaves a 160 x 247 mm text block, and the numbers
+# below are that block in inches.
+#
+# DRAW AT FINAL WIDTH, and never rescale a figure in the document. Rescaling carries the text with
+# it: 9pt squeezed to 70% arrives as 6.3pt, under the ~7pt floor where small print stops being
+# legible on paper. So the point sizes in `_RC` are the point sizes ON THE PRINTED PAGE.
 # ---------------------------------------------------------------------------
 
-COLORS = {
-    "baseline": "#52514e",          # the control / unmodified / reference condition
-    "secondary_baseline": "#898781",  # a second reference, when there are two
-    "proposed": "#2a78d6",          # this project's method
-    "observed": "#eb6834",          # measured from real data / ground truth
-    "alternative": "#1baf7a",       # a competing method being compared against
-    "highlight": "#4a3aa7",         # the one thing the figure is about
-    "annotation": "#52514e",        # reference lines, thresholds, arrows
-    "surface": "#ffffff",
-}
+WIDTH_FULL = 6.30   # 160 mm — the full A4 text width
+WIDTH_HALF = 3.05   # two side by side, with a ~5 mm gutter
+WIDTH_THIRD = 1.95  # three side by side. Label sparingly at this width.
 
-# Fixed, and never reused as a series colour: a red bar must not mean "model 8" in one figure
-# and "failed" in the next. Always paired with a label, never carrying meaning alone.
-STATUS = {
-    "good": "#0ca30c",
-    "warning": "#fab219",
-    "serious": "#ec835a",
-    "critical": "#d03b3b",
-}
+#: The A4 text block is 247 mm tall, but a figure taking all of it leaves no room for its caption
+#: and pushes every surrounding paragraph onto another page. Half a page is the practical ceiling,
+#: and `figsize` clamps to it rather than letting a tall panel grid silently overflow.
+MAX_HEIGHT = 4.80   # 122 mm
 
-# ---------------------------------------------------------------------------
-# CATEGORICAL palette — identity. Fixed order; see the module docstring.
-# ---------------------------------------------------------------------------
-
-SERIES: tuple[str, ...] = (
-    "#2a78d6",  # 1 blue
-    "#eb6834",  # 2 orange
-    "#1baf7a",  # 3 aqua
-    "#4a3aa7",  # 4 violet     <- first four are safe when ALL pairs are visible at once
-    "#e87ba4",  # 5 magenta
-    "#008300",  # 6 green
-    "#eda100",  # 7 yellow
-    "#e34948",  # 8 red
-)
-
-#: Past this, colour alone stops working: fold the tail into "other", facet, or add a
-#: marker-shape channel. Enforced by `series_colors`.
-MAX_SERIES = len(SERIES)
-#: The cap for forms where every pair is simultaneously visible (scatter, bubble, small
-#: multiples, choropleth) rather than only neighbours (bars, stacks, lines).
-MAX_SERIES_ALL_PAIRS = 4
-
-# ---------------------------------------------------------------------------
-# SEQUENTIAL and DIVERGING — magnitude and polarity. Never a rainbow.
-# ---------------------------------------------------------------------------
-
-#: One hue, light to dark, for continuous magnitude. The light end may recede into the paper
-#: because it means "near zero".
-_SEQUENTIAL_STEPS = (
-    "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b",
-)
-
-#: Discrete ordered categories need visible gaps AND a light end that clears the paper — a
-#: barely-visible first bar is not "low", it is missing. Validated: monotone lightness, all
-#: adjacent gaps >= 0.06, light end 2.1:1 on white.
-ORDINAL = ("#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281")
-
-#: Two hues plus a NEUTRAL midpoint, for signed quantities. Blue against red because they read
-#: as opposites; the midpoint is grey, not a third hue, so zero reads as "nothing".
-_DIVERGING_STEPS = (
-    "#184f95", "#3987e5", "#9ec5f4", "#f0efec", "#f3a6a5", "#e34948", "#a32120",
-)
+GOLDEN = 0.618      # height = width * GOLDEN, unless the data wants otherwise
 
 
-def sequential_cmap(name: str = "seq") -> LinearSegmentedColormap:
-    """The one-hue light-to-dark map. Use for unsigned magnitude."""
-    return LinearSegmentedColormap.from_list(name, _SEQUENTIAL_STEPS)
+def figsize(width: float = WIDTH_FULL, ratio: float = GOLDEN) -> tuple[float, float]:
+    """(width, height) in inches, clamped to `MAX_HEIGHT`. `ratio` is height/width.
 
-
-def diverging_cmap(name: str = "div") -> LinearSegmentedColormap:
-    """The two-hue map with a neutral midpoint, for signed quantities.
-
-    Always centre on zero (`vmin=-v, vmax=+v`, or a `TwoSlopeNorm`): an off-centre diverging map
-    puts the neutral colour at a value that is not neutral, which is a figure that lies.
+    Pass `WIDTH_FULL`, `WIDTH_HALF` or `WIDTH_THIRD` — never a number of your own, because the
+    whole point is that the figure arrives on the page at exactly the width it was drawn at.
     """
-    return LinearSegmentedColormap.from_list(name, _DIVERGING_STEPS)
+    return (width, min(width * ratio, MAX_HEIGHT))
 
 
 # ---------------------------------------------------------------------------
-# Figure sizes, in inches. Draw at FINAL width: a figure scaled afterwards has the wrong font
-# size — 8pt text squeezed to 70% arrives as 5.6pt. So the point sizes below are the point
-# sizes on the printed page.
+# What A4 output requires. Everything here is about the figure being correct on paper, so it is
+# the same in every project.
 # ---------------------------------------------------------------------------
 
-WIDTH_SINGLE = 3.5   # a single column in a two-column paper
-WIDTH_DOUBLE = 7.16  # the full text width
-GOLDEN = 0.618       # height = width * GOLDEN, unless the data wants otherwise
-
-
-def figsize(width: float = WIDTH_DOUBLE, ratio: float = GOLDEN) -> tuple[float, float]:
-    """(width, height) in inches. `ratio` is height/width."""
-    return (width, width * ratio)
-
-
-# ---------------------------------------------------------------------------
-# The style itself.
-# ---------------------------------------------------------------------------
-
-#: Most preferred first. DejaVu Sans is LAST and is the one that matters: it ships with
-#: matplotlib, so it is the only face guaranteed present both locally and on a compute node. A
-#: missing face makes matplotlib fall back silently, changing text metrics — which moves every
-#: label and makes a cluster-drawn figure differ from the local one for no visible reason.
+#: Most preferred first. DejaVu Sans is LAST and is the one that matters: it ships with matplotlib,
+#: so it is the only face guaranteed present both locally and on a compute node. A missing face
+#: makes matplotlib fall back silently, which changes text metrics — moving every label and making
+#: a cluster-drawn figure differ from the local one for no visible reason.
 _FONT_STACK = ["Source Sans 3", "Segoe UI", "Helvetica", "Arial", "DejaVu Sans"]
 
 _RC = {
+    # A4 full text width by default, so a figure saved without thinking about it is already the
+    # right size for the page.
     "figure.figsize": figsize(),
     "figure.dpi": 110,
-    # constrained_layout, and NOT savefig.bbox="tight". Tight-bbox crops to the drawn
-    # content, so two figures declared at the same width come out at different widths and
-    # the paper's font sizes stop matching between them. constrained_layout fits the
-    # content INSIDE the declared size instead. `None` is matplotlib's spelling for "use
-    # the declared figure size" — it is the only other accepted value besides "tight".
+
+    # constrained_layout, and NOT savefig.bbox="tight". Tight-bbox crops to the drawn content, so
+    # two figures declared at the same width come out at different widths and the paper's font
+    # sizes stop matching between them. constrained_layout fits the content INSIDE the declared
+    # size instead. `None` is matplotlib's spelling for "use the declared figure size".
     "figure.constrained_layout.use": True,
     "savefig.bbox": None,
-    "savefig.facecolor": INK["surface"],
+    "savefig.facecolor": "white",
     "savefig.transparent": False,
-    # TrueType, not the default Type 3: Type 3 is rejected by several journal submission
-    # systems and cannot be searched or copied out of the PDF.
+
+    # TrueType, not the default Type 3: Type 3 is rejected by several journal submission systems
+    # and cannot be searched or copied out of the PDF.
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 
+    # Point sizes ON THE PRINTED A4 PAGE, since the figure is drawn at final width. 9pt sits just
+    # under a paper's own 10-11pt, which reads as "part of the document" rather than shrunken;
+    # 7pt is the floor below which small print stops being legible on paper.
     "font.family": "sans-serif",
     "font.sans-serif": _FONT_STACK,
     "font.size": 9,
@@ -182,196 +94,25 @@ _RC = {
     "ytick.labelsize": 8,
     "legend.fontsize": 8,
     "figure.titlesize": 11,
-
-    "text.color": INK["primary"],
-    "axes.titlecolor": INK["primary"],
-    "axes.labelcolor": INK["secondary"],
-    "xtick.color": INK["muted"],
-    "ytick.color": INK["muted"],
-    "axes.edgecolor": INK["axis"],
-    "axes.facecolor": INK["surface"],
-    "figure.facecolor": INK["surface"],
-
-    # Recessive chrome: a hairline y-grid behind the data, no box. Vertical gridlines are off
-    # because they compete with categorical bars — enable per-axes when x is read off.
-    "axes.grid": True,
-    "axes.grid.axis": "y",
-    "grid.color": INK["grid"],
-    "grid.linewidth": 0.6,
-    "grid.alpha": 1.0,
-    "axes.axisbelow": True,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.linewidth": 0.8,
-    "xtick.direction": "out",
-    "ytick.direction": "out",
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
-    "xtick.major.size": 3,
-    "ytick.major.size": 3,
-
-    # Thin marks: readable at print size without turning the figure into a poster.
-    "lines.linewidth": 1.8,
-    "lines.markersize": 4.5,
-    "lines.markeredgewidth": 0.0,
-    "patch.linewidth": 0.0,
-    "hatch.linewidth": 0.6,
-    "scatter.edgecolors": "none",
-
-    # A legend is a label list, not a panel. No frame, no shadow.
-    "legend.frameon": False,
-    "legend.handlelength": 1.6,
-    "legend.handletextpad": 0.5,
-    "legend.columnspacing": 1.2,
-    "legend.borderaxespad": 0.3,
-
-    "image.cmap": "viridis",  # replaced below by the project's sequential map
-    "errorbar.capsize": 2.0,
-    "axes.prop_cycle": mpl.cycler(color=list(SERIES)),
 }
+
+# ---------------------------------------------------------------------------
+# THIS PROJECT'S OWN LOOK — fill this in.
+#
+# Colours, grid, spines, line widths, marker shapes, colormaps: whatever this project's figures
+# need. Put them here rather than in a notebook, so every figure changes together and a reader
+# never has to re-learn a legend between two figures of the same paper.
+#
+# Two things worth deciding up front:
+#   * Give a colour a MEANING and keep it. If a name means one thing in one figure and another
+#     somewhere else, the legend has to be read twice.
+#   * Check the palette is readable when printed, and in greyscale — a paper gets photocopied.
+# ---------------------------------------------------------------------------
+
+_PROJECT_RC: dict = {}
 
 
 def apply() -> None:
-    """Install the style. Call once, at the top of every notebook and plotting script.
-
-    Registers the project maps as `seq` and `div` and makes `seq` the default for
-    `imshow`/`pcolormesh` — otherwise viridis quietly appears in one heatmap and breaks the look.
-    """
-    for cmap in (sequential_cmap(), diverging_cmap()):
-        # Unregister first rather than passing `force=True`. Both make re-running a
-        # notebook's setup cell idempotent, but `force=True` emits a UserWarning every
-        # time — and a warning that always fires is a warning nobody reads.
-        if cmap.name in mpl.colormaps:
-            mpl.colormaps.unregister(cmap.name)
-        mpl.colormaps.register(cmap, name=cmap.name)
-    rc = dict(_RC)
-    rc["image.cmap"] = "seq"
-    mpl.rcParams.update(rc)
-
-
-# ---------------------------------------------------------------------------
-# Name -> colour. The mechanism that makes a legend mean one thing project-wide.
-# ---------------------------------------------------------------------------
-
-#: Declared series names, in slot order. A PROJECT FILLS THIS IN, once, here: model names,
-#: dataset groups, experiment arms. Order assigns the colours, so APPEND — inserting repaints
-#: every figure after it and silently invalidates any already in the paper.
-REGISTERED: list[str] = []
-
-
-def register_series(*names: str) -> None:
-    """Declare series names in slot order. Idempotent, so a notebook can call it too: already
-    registered names keep their slot and new ones take the next free ones."""
-    for name in names:
-        if name not in REGISTERED:
-            REGISTERED.append(name)
-
-
-def color(name: str) -> str:
-    """The colour for a series name, or a semantic role, or a status.
-
-    Resolution order, first match wins:
-      1. a semantic role in `COLORS`      — "baseline", "proposed", ...
-      2. a status in `STATUS`             — "good", "critical", ...
-      3. a registered series name         — its fixed categorical slot
-      4. an unregistered name             — registers it, then returns its slot
-
-        (4) is deliberate: a missing `register_series()` call should not stop a figure being drawn
-    while it is iterated on. It costs order-independence — two notebooks meeting the same name
-    in different orders disagree — so register the project's names here once and it never fires.
-    """
-    if name in COLORS:
-        return COLORS[name]
-    if name in STATUS:
-        return STATUS[name]
-    if name not in REGISTERED:
-        register_series(name)
-    idx = REGISTERED.index(name)
-    if idx >= MAX_SERIES:
-        raise ValueError(
-            f"{len(REGISTERED)} series registered but only {MAX_SERIES} colours are "
-            f"distinguishable ({name!r} is number {idx + 1}). Fold the tail into one "
-            f"'other' series, use small multiples, or add a marker-shape channel — do "
-            f"not generate a ninth hue."
-        )
-    return SERIES[idx]
-
-
-def series_colors(names: list[str] | tuple[str, ...], *, all_pairs: bool = False) -> list[str]:
-    """Colours for several series at once, stable under a changing subset.
-
-    `all_pairs=True` for forms where every pair is visible at once (scatter, bubble, small
-    multiples); they cap lower than the neighbour-only forms (bars, stacks, lines).
-    """
-    cap = MAX_SERIES_ALL_PAIRS if all_pairs else MAX_SERIES
-    if len(names) > cap:
-        form = "all pairs visible at once" if all_pairs else "adjacent pairs only"
-        raise ValueError(
-            f"{len(names)} series requested but the cap for this form ({form}) is {cap}. "
-            f"Fold the tail into 'other' or facet the figure."
-        )
-    return [color(n) for n in names]
-
-
-# ---------------------------------------------------------------------------
-# Small shared helpers. Anything used in more than one notebook belongs here.
-# ---------------------------------------------------------------------------
-
-
-def despine(ax: plt.Axes, *, left: bool = False, bottom: bool = False) -> plt.Axes:
-    """Drop spines. Top and right are already off; this removes the other two."""
-    if left:
-        ax.spines["left"].set_visible(False)
-        ax.tick_params(left=False)
-    if bottom:
-        ax.spines["bottom"].set_visible(False)
-        ax.tick_params(bottom=False)
-    return ax
-
-
-def legend(ax: plt.Axes, *, ncol: int = 1, **kwargs) -> None:
-    """The project's legend, present whenever a figure has two or more series.
-
-    Not optional: three of the eight colours sit below 3:1 against white, so a figure with no
-    legend and no direct labels asks the reader to identify a series by a colour they may not see.
-    """
-    handles, labels = ax.get_legend_handles_labels()
-    if len(labels) < 2:
-        return  # one series is named by the title; a one-entry legend is noise
-    ax.legend(handles, labels, ncol=ncol, **kwargs)
-
-
-def annotate_reference(ax: plt.Axes, value: float, label: str = "", *, axis: str = "y") -> None:
-    """A dashed reference line (a threshold, a chance level, a published number). Always the
-    annotation colour and always dashed, so it can never be mistaken for data."""
-    draw = ax.axhline if axis == "y" else ax.axvline
-    draw(value, color=COLORS["annotation"], linestyle="--", linewidth=0.9, zorder=1)
-    if not label:
-        return
-    # An opaque, borderless backing box. A reference line crosses the data by definition, so
-    # its label lands on top of something sooner or later; without this it becomes
-    # unreadable in exactly the figures where the reference matters most.
-    backing = {"facecolor": INK["surface"], "edgecolor": "none", "pad": 1.0}
-    if axis == "y":
-        ax.annotate(label, (0.995, value), xycoords=("axes fraction", "data"),
-                    ha="right", va="bottom", fontsize=7, color=COLORS["annotation"],
-                    bbox=backing, zorder=5)
-    else:
-        # Bottom, not top: a distribution's mass sits high in the panel, so the strip just
-        # above the x axis is the one place a vertical line's label is usually clear.
-        ax.annotate(label, (value, 0.02), xycoords=("data", "axes fraction"),
-                    ha="left", va="bottom", fontsize=7, color=COLORS["annotation"],
-                    bbox=backing, zorder=5)
-
-
-def palette_table() -> str:
-    """The palette as text, for a notebook's printed summary — a figure of swatches is unreadable
-    to an agent or a diff; a table is not."""
-    lines = ["role/name              colour", "-" * 32]
-    for k, v in COLORS.items():
-        lines.append(f"{k:<22} {v}")
-    for k, v in STATUS.items():
-        lines.append(f"{'status:' + k:<22} {v}")
-    for i, name in enumerate(REGISTERED):
-        lines.append(f"{'series:' + name:<22} {SERIES[i]}")
-    return "\n".join(lines)
+    """Install the style. Call once, at the top of every notebook and plotting script."""
+    mpl.rcParams.update(_RC)
+    mpl.rcParams.update(_PROJECT_RC)

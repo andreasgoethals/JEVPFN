@@ -4,13 +4,17 @@ THE ONLY MODULE THAT BUILDS A PATH — everything else asks this one. A path ass
 site with `"output/" + name` is correct on a laptop and wrong on the cluster, and the failure
 shows up as a full quota or an empty results directory hours into a job.
 
-        project storage  /lustre1/project/stg_00211/<Project>/  big files, no backup, LOW INODES
+        project storage  /lustre1/project/stg_00211/<Project>/  big files, backed up, LOW INODES
     personal data    $VSC_DATA/<Project>/                   repo + output/, backed up, 75 GiB
     scratch          $VSC_SCRATCH/                          purged after 30 days of no ACCESS
 
-`output/results/` is the one part of `output/` on project storage: per-row predictions reach
-gigabytes and $VSC_DATA is small. Logs and per-step metrics go the other way, because project
-storage wants few big files rather than thousands of small ones.
+Both tiers are backed up. They differ in size and in convenience: `$VSC_DATA` is only 75 GiB but
+can be browsed directly, while project storage is large but has to be pulled down locally first
+(PowerShell, `scp`/`rsync`) before you can look at anything in it.
+
+`output/results/` is therefore the one part of `output/` on project storage: per-row predictions
+reach gigabytes. Everything else stays where you can read it without a download, and project
+storage wants few big files rather than thousands of small ones anyway.
 
 OFF-CLUSTER EVERY TIER COLLAPSES INTO THE REPO. Pretending `/lustre1` exists on a laptop would
 mean two code paths, and the one that only runs on the cluster is the one that breaks.
@@ -161,11 +165,6 @@ def captions_path() -> Path:
 def all_results_path() -> Path:
     """Every notebook's printed text summary, concatenated in notebook order."""
     return outputs_dir() / "All_Results.md"
-
-
-def run_dir(run_id: str) -> Path:
-    """Per-run scratch inside `output/`: the resolved config, metrics, a partial state."""
-    return outputs_dir() / "runs" / run_id
 
 
 # ---------------------------------------------------------------------------

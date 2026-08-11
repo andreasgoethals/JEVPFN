@@ -57,5 +57,5 @@ trap checkpoint_and_requeue USR1
 # TODO replace with this project's entry point. `&` plus `wait` is required, not stylistic:
 # a foreground process makes bash defer the trap until it exits, so the signal would arrive
 # only after the job was already killed.
-srun python scripts/run_notebooks.py &
+srun python -m src.utils.run_notebooks &
 wait
