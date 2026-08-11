@@ -44,10 +44,8 @@ def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> Non
 
 
 def test_project_name_is_inserted_only_on_shared_tiers(tmp_path, monkeypatch) -> None:
-    """A shared tier needs a `<Project>/` component; the repo root already IS the project.
-
-    Without this the cluster path would be `<Project>/<Project>/output`.
-    """
+    """A shared tier needs a `<Project>/` component; the repo root already IS the project. Without
+    this the cluster path would be `<Project>/<Project>/output`."""
     monkeypatch.setenv("VSC_DATA", str(tmp_path))
     assert paths.outputs_dir() == tmp_path / paths.PROJECT_NAME / "output"
 

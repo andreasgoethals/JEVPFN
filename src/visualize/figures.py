@@ -4,24 +4,19 @@
     output/figures/<notebook>/01_<name>.png     110 dpi — small enough to commit and review
     output/figures/<notebook>/_figures.json     what was drawn, in order, with captions
 
-WHY THE NOTEBOOK SAVES ITS OWN FIGURES, and the runner does not do it for it: a runner
-that captures figures on the notebook's behalf only works inside the runner. *Run All* in
-Jupyter — where figures are actually iterated on — then produces nothing, and the two
-execution paths silently disagree. Here both paths run the same code, so what you see
-interactively is exactly what lands on disk.
+THE NOTEBOOK SAVES ITS OWN FIGURES, not the runner: a runner that captures them on the
+notebook's behalf only works inside the runner, so *Run All* in Jupyter — where figures are
+actually iterated on — produces nothing, and the two paths silently disagree.
 
-WHY BOTH FORMATS: the PDF goes in the paper (vector, text embedded as TrueType so journal
-systems accept it); the PNG is committed so a figure can be reviewed in a diff and looked
-at on GitHub without cloning and re-running anything.
+BOTH FORMATS: the PDF goes in the paper (vector, TrueType-embedded so journal systems accept
+it); the PNG is committed so a figure can be reviewed in a diff and seen on GitHub.
 
-WHY THE FOLDER IS CLEARED FIRST, by the notebook, on construction: a stale PDF next to a
-fresh one is how a paper ends up with a figure that no longer matches the code that made
-it. Clearing happens BEFORE anything is drawn, and only ever inside this notebook's own
-folder — never another's.
+THE FOLDER IS CLEARED ON CONSTRUCTION, before anything is drawn, and only ever this notebook's
+own: a stale PDF beside a fresh one is how a paper ends up with a figure that no longer matches
+the code that made it.
 
-THE NUMBERED PREFIX is what makes `CAPTIONS.md` reproducible: alphabetical order of the
-files is the order the notebook drew them, so the captions file can be rebuilt from disk
-without re-executing anything.
+THE NUMBERED PREFIX makes alphabetical order equal drawing order, so `CAPTIONS.md` is
+rebuildable from disk without re-executing anything.
 """
 
 from __future__ import annotations
@@ -36,15 +31,13 @@ from src.utils.paths import figures_dir
 #: Extensions written for every figure. PDF first — it is the one that matters.
 FORMATS = ("pdf", "png")
 
-#: DPI per format. The PDF is vector, but heatmaps and scatter clouds inside it rasterise,
-#: so it still needs a print DPI. The PNG's is chosen so a few dozen of them do not bloat
-#: the repository.
+#: The PDF is vector, but heatmaps and scatter clouds inside it rasterise, so it still needs a
+#: print DPI. The PNG's is set so a few dozen do not bloat the repository.
 DPI = {"pdf": 300, "png": 110}
 
-#: The runner's and the saver's own bookkeeping files, and the two figure formats. Only
-#: these are ever deleted from a notebook's folder — anything else a person put there
-#: survives, because a cleaner that removes files it does not recognise is a cleaner that
-#: eventually removes something irreplaceable.
+#: The only things ever deleted from a notebook's folder. Anything else a person put there
+#: survives: a cleaner that removes what it does not recognise eventually removes something
+#: irreplaceable.
 _OWNED = ("*.pdf", "*.png", "_figures.json", "_stdout.txt")
 
 MANIFEST = "_figures.json"
@@ -68,10 +61,10 @@ def read_manifest(notebook: str) -> list[dict]:
 
 
 def clear(notebook: str) -> int:
-    """Delete this notebook's own figures and manifest. Returns how many files went.
+    """Delete this notebook's own figures and manifest; returns how many went.
 
-    Scoped to one notebook's folder and to the extensions above, and non-recursive, so it
-    cannot reach a sibling notebook's figures or anything nested.
+    Scoped to one folder, to the extensions above, and non-recursive, so it cannot reach a
+    sibling notebook's figures.
     """
     folder = figures_dir(notebook)
     if not folder.is_dir():
@@ -99,13 +92,12 @@ class FigureSaver:
         save(fig, "target_distribution",
              caption="Histogram of the target, 40 bins, n = 12,043.")
 
-    CAPTIONS ARE PURE DESCRIPTION: what is plotted, on what axes, from how much data. No
-    interpretation, no conclusion, no "this shows that" — exactly what would sit under the
-    figure in a journal. The argument belongs in the body text, and a caption that argues
-    is a caption that has to be rewritten when the argument changes.
+        CAPTIONS ARE PURE DESCRIPTION: what is plotted, on what axes, from how much data. No
+    interpretation — exactly what would sit under the figure in a journal. A caption that argues
+    has to be rewritten when the argument changes.
 
-    A caption is required at save time rather than kept in a central registry, so it lives
-    next to the figure it describes and cannot go stale when the figure is renamed.
+    Passed at save time rather than kept in a central registry, so it lives next to the figure
+    it describes and cannot go stale when that figure is renamed.
     """
 
     def __init__(self, notebook: str, *, clear_first: bool = True) -> None:
@@ -134,8 +126,8 @@ class FigureSaver:
     ) -> list[Path]:
         """Write `<NN>_<name>.pdf` and `.png`, and record the caption.
 
-        `close=False` by default so the figure still displays in Jupyter — the interactive
-        run has to look the same as the runner's, and a closed figure shows nothing.
+        `close=False` by default so the figure still displays in Jupyter: the interactive run has
+        to look the same as the runner's.
         """
         index = len(self.entries) + 1
         stem = f"{index:02d}_{_slug(name)}"
@@ -163,11 +155,8 @@ class FigureSaver:
     # -- the notebook's closing summary -------------------------------------
 
     def summary(self) -> str:
-        """A text listing of what was saved, for the notebook's final `print`.
-
-        Every notebook ends by printing a summary, and the figure list is part of it: it
-        makes `All_Results.md` say what the run drew, not only what it computed.
-        """
+        """What was saved, for the notebook's final `print` — so `All_Results.md` says what the run
+        drew, not only what it computed."""
         if not self.entries:
             return f"{self.notebook}: no figures saved."
         lines = [f"{self.notebook}: {len(self.entries)} figures -> {self.folder}"]
@@ -185,12 +174,8 @@ def _slug(name: str) -> str:
 
 
 def _guard(path: Path, folder: Path) -> None:
-    """Refuse to write outside this notebook's own figure folder.
-
-    A figure name with a `..` or an absolute path in it would otherwise put a generated
-    file outside `output/`, which is the one rule the whole layout rests on. Cheap check,
-    caught once in a template rather than in every project.
-    """
+    """Refuse to write outside this notebook's own folder — a `..` in a figure name would put a
+    generated file outside `output/`, the one rule the layout rests on."""
     resolved = path.resolve()
     root = folder.resolve()
     if root != resolved.parent:

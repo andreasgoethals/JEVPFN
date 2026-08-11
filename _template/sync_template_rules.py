@@ -6,28 +6,21 @@
     python _template/sync_template_rules.py --apply --also scripts/check.py
     python _template/sync_template_rules.py --only CreditICL --apply
 
-WHY THIS EXISTS. A project made with "Use this template" has no upstream to merge from, so a
-rule change would otherwise be propagated by hand: copy `docs/TEMPLATE.md`, re-compute its
-SHA-256, paste it into that project's compliance test, repeat per project. Four steps, five
-repositories, and the fourth step is the one that gets skipped.
+WHY. A project made with "Use this template" has no upstream to merge from, so a rule change
+would otherwise be propagated by hand: copy `docs/TEMPLATE.md`, re-compute its SHA-256, paste it
+into that project's compliance test, repeat. Four steps, five repositories, and the fourth is the
+one that gets skipped. This is why forking is unnecessary — `git pull upstream main` looks like
+it solves the same problem, but the files a template change touches most are exactly the ones
+`init_project.py` rewrote per project, so every pull conflicts where you least want it.
 
-This is the whole reason forking is unnecessary. `git pull upstream main` looks like it solves
-the same problem, but the files a template change touches most are exactly the files
-`init_project.py` rewrote per project — README, pyproject, paths.py, the compliance test's hash
-line — so every pull is a conflict in the files you least want to merge by hand.
+TWO TIERS, split by who owns a file after initialisation.
 
-TWO TIERS, and the difference is about who owns a file after initialisation.
-
-  APPLIED  `docs/TEMPLATE.md`, plus its hash in `tests/test_template_compliance.py`.
-           Safe to overwrite without asking, because the template owns it verbatim and the
-           compliance test already proves the project has not edited it — if it had, that
-           project's test suite would be red.
-
-  REPORTED  every other file the template ships unchanged. Shown as differing, never
-            overwritten, because a project is *allowed* to extend some of them (a new cleanup
-            category, an extra check) and is expected to delete others (the example notebook,
-            the example config). Silently overwriting would throw that away. Use `--diff` to
-            look, then `--also <path>` to take a specific one deliberately.
+  APPLIED   `docs/TEMPLATE.md` plus its hash. Safe to overwrite unasked: the template owns it
+            verbatim, and the compliance test already proves the project has not edited it — if
+            it had, that project's suite would be red.
+  REPORTED  every other file the template ships unchanged. Shown as differing, never written: a
+            project may *extend* some (a new cleanup category) and is *expected* to delete
+            others (the example notebook). `--diff` to look, `--also <path>` to take one.
 
 IT NEVER COMMITS AND NEVER PUSHES. It writes files; `git diff` afterwards is the review step.
 """
@@ -50,9 +43,8 @@ TEMPLATE_DOC = Path("docs") / "TEMPLATE.md"
 #: Overwritten by `--apply`. The template owns these byte for byte.
 APPLIED = (TEMPLATE_DOC,)
 
-#: Reported when they differ, never written without `--also`. Everything here is shipped
-#: unchanged by the template, so a difference means either the template moved on or the project
-#: extended it — and this tool cannot tell which, so it does not guess.
+#: Reported when they differ, never written without `--also`. A difference means either the
+#: template moved on or the project extended it, and this tool cannot tell which.
 REPORTED = (
     Path(".gitattributes"),
     Path(".vscode") / "settings.json",
@@ -77,11 +69,8 @@ REPORTED = (
     COMPLIANCE_TEST,
 )
 
-#: Never compared. Each holds a substituted placeholder, a per-project registry, or content the
-#: project is meant to replace outright, so "differs from the template" is the correct state.
-#:   paths.py, style.py            PROJECT_NAME and the series registry
-#:   README/AGENTS/pyproject/...   rewritten by init_project.py
-#:   loaders.py, example.*         a shape the project replaces or deletes
+#: Never compared: each holds a substituted placeholder, a per-project registry, or content the
+#: project replaces outright, so "differs from the template" is the correct state.
 PROJECT_OWNED = (
     "README.md", "AGENTS.md", "LICENSE", "CITATION.cff", "pyproject.toml", ".gitignore",
     ".gitmodules", "docs/CHANGELOG.md", "docs/AGENTS_MEMORY.md", "docs/VSC.md",
@@ -108,8 +97,8 @@ def compare(project: Path, relative: Path) -> str:
     if ours is None:
         return "missing in template"
     if relative == COMPLIANCE_TEST:
-        # The baked hash line differs BY DESIGN — it is the one project-specific line in an
-        # otherwise shared file. Blank it on both sides so the comparison is about the checks.
+        # The hash line differs BY DESIGN — the one project-specific line in a shared file.
+        # Blank it on both sides so the comparison is about the checks.
         ours = HASH_LINE_RE.sub(r'\1"<hash>"', ours)
         theirs = HASH_LINE_RE.sub(r'\1"<hash>"', theirs)
     return "same" if ours == theirs else "differs"
@@ -123,7 +112,7 @@ def rebake_hash(project: Path, sha: str) -> str:
         return f"cannot read {COMPLIANCE_TEST}"
     updated = HASH_LINE_RE.sub(rf'\1"{sha}"', text, count=1)
     if updated == text:
-        # Either already correct, or the line is not there at all. Both are worth saying.
+        # Already correct, or the line is missing entirely. Both are worth saying.
         return "hash already current" if sha in text else "no EXPECTED_TEMPLATE_SHA256 line found"
     target.write_text(updated, encoding="utf-8", newline="")
     return "hash re-baked"
@@ -141,8 +130,7 @@ def show_diff(project: Path, relative: Path) -> None:
     if not lines:
         return
     print(f"\n    --- {relative.as_posix()} ---")
-    # Capped: a full diff of twenty files across five projects is unreadable, and the point
-    # here is to decide whether to look properly, not to review it in a terminal.
+    # Capped: the point is to decide whether to look properly, not to review it in a terminal.
     for line in lines[:40]:
         print(f"    {line.rstrip()}")
     if len(lines) > 40:
@@ -182,8 +170,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"docs/TEMPLATE.md sha256: {sha}")
     print(f"searching {root} for projects\n")
 
-    # The template itself turns up in the walk — it has .gitmodules and a git dir. Copying
-    # TEMPLATE.md onto itself is a no-op, but reporting it as a project is confusing.
+    # The template turns up in the walk too; copying TEMPLATE.md onto itself is a no-op, but
+    # reporting it as a project is confusing.
     found = [p for p in _projects.find_projects(root) if p.resolve() != REPO_ROOT.resolve()]
     if not found:
         print(f"No project under {root} to update.")

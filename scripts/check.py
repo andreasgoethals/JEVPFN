@@ -5,14 +5,13 @@
     python scripts/check.py --no-tests   lint and imports only — for a fast loop
     python scripts/check.py --quick      skip tests marked `slow`
 
-WHY ONE COMMAND: three commands means one of them is the one nobody remembers, and it is
-always the one that would have caught the problem. CI runs this exact script, so the
-failure a reviewer sees is the failure the author can reproduce.
+ONE COMMAND, because three means one of them is the one nobody remembers — always the one that
+would have caught the problem. CI runs this exact script, so the failure a reviewer sees is the
+one the author can reproduce.
 
-WHY THE IMPORT CHECK IS ITS OWN STEP: ruff parses files, it does not import them, and
-pytest only imports what a test happens to touch. A module with a circular import or a
-typo'd import in a branch nobody tests passes both and fails the first time it is used —
-usually inside a job on the cluster, twenty minutes in.
+THE IMPORT CHECK IS ITS OWN STEP because ruff parses files without importing them, and pytest
+only imports what a test touches. A circular import, or a typo'd import in an untested branch,
+passes both and fails the first time it is used — usually twenty minutes into a cluster job.
 """
 
 from __future__ import annotations
@@ -24,8 +23,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: Directories never linted, never imported, never collected. `tfm-library` is the
-#: read-only literature submodule: it is not our code and touching it is a rule violation.
+#: Never linted, imported or collected. `tfm-library` is the read-only submodule: not our code,
+#: and touching it is a rule violation.
 EXCLUDE_DIRS = {"tfm-library", "output", "data", ".venv", "venv", "__pycache__", ".git"}
 
 
@@ -35,8 +34,8 @@ def _run(label: str, argv: list[str]) -> bool:
     try:
         completed = subprocess.run(argv, cwd=REPO_ROOT, check=False)
     except FileNotFoundError:
-        # A missing tool is a setup problem, not a code problem, and saying so beats a
-        # traceback. This is the common first-run failure: `pip install -e ".[dev]"` skipped.
+        # A missing tool is a setup problem, not a code problem — the common first-run
+        # failure is a skipped `pip install -e ".[dev]"`, and saying so beats a traceback.
         print(f"  MISSING: {argv[0]} is not installed. Run:  pip install -e \".[dev]\"")
         return False
     return completed.returncode == 0
@@ -60,9 +59,8 @@ def src_modules() -> list[str]:
 def check_imports() -> bool:
     """Import every `src` module in a fresh interpreter.
 
-    A subprocess rather than `importlib` in-process: a module that mutates global state on
-    import (matplotlib's backend, a logging config) would otherwise leak into the rest of
-    this script and into pytest, and the failure would be attributed to the wrong step.
+    A subprocess, not in-process `importlib`: a module that mutates global state on import
+    (matplotlib's backend, a logging config) would leak into pytest and misattribute the failure.
     """
     modules = src_modules()
     if not modules:

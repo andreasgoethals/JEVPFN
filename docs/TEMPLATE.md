@@ -1,170 +1,103 @@
 # Andreas' repository template
 
-The structure and rules every one of my research repositories follows. The template
-repository IS this structure with the name left blank, so a new project is that repository
-initialised — never a tree assembled from scratch.
+The structure and rules every one of my research repositories follows.
 
     Author   Andreas Goethals <andreas.goethals@kuleuven.be>
     Context  PhD research, KU Leuven — machine learning on tabular data
     Cluster  KU Leuven VSC (Genius login, wICE and Mindwell compute)
-    Source   https://github.com/andreasgoethals/repo-template
+    Source   https://github.com/andreasgoethals/0.-Template
 
-**Generic and read-only.** Never edited from inside a repository — only at the source
-above. Anything project-specific belongs in `README.md` or another `docs/` file. This
-file names no dataset, no model, no experiment and no result: if a rule cannot be stated
-without one, it is not a template rule.
+**This is the one governing document.** Every rule is here; `README.md`, `AGENTS.md` and the
+tests point back to it rather than restating it. If two documents disagree, this one wins.
 
-A `tests/test_template_compliance.py` hashes this file against the source, so editing it
-inside a repository **fails the test suite**. That is deliberate: a rule asking politely
-not to be edited is not a rule.
+**Generic and read-only.** Edited only at the source above, never from inside a repository —
+`tests/test_template_compliance.py` hashes it, so a local edit fails the test suite. That is
+deliberate: a rule asking politely not to be edited is not a rule. Project-specific rules go in
+`README.md` or a new `docs/<NAME>.md`. This file names no dataset, model, experiment or result:
+if a rule cannot be stated without one, it is not a template rule.
 
-This is the **one governing document**. Every rule and every piece of structure is
-written here; `README.md`, `AGENTS.md` and the tests point back to it rather than
-restating it. If two documents disagree, this one wins.
+---
+
+## Retrofitting an existing repository
+
+Hand this file to an agent in a repository that predates it. In order, stopping to report:
+
+1. **Inventory.** List what exists against § Structure. Name what is missing, what is misplaced,
+   and what exists under another name — move nothing yet.
+2. **`output/`.** Create it and move every generated artefact under it. Usually the largest change
+   and the one that breaks imports; do it first, then fix the call sites.
+3. **`src/utils/paths.py`.** Build it, then replace every hard-coded path with a call to it. Grep
+   for string literals containing `/`, `output`, `results`, `figures`, `logs`.
+4. **The rest of `src/`** — see § Module contract.
+5. **Notebooks.** Move every `def` and `class` into `src/`. Make each notebook clear its own
+   figures, save through `FigureSaver`, and end by printing a text summary.
+6. **`scripts/`.** Move anything importable into `src/`. Every remaining `.py` gets a `__main__`
+   block. Add `check.py` and `clean_run.py`.
+7. **`docs/`.** `.md` only, CAPITALS. Add `CHANGELOG.md`, `AGENTS_MEMORY.md`, `VSC.md`, and this
+   file. Then `AGENTS.md`, `LICENSE`, `.gitattributes`, `.gitignore`, `.gitmodules`.
+8. **`tfm-library/`.** Add the submodule if absent.
+9. **`tests/test_template_compliance.py`** last, with this file's SHA-256 baked in, and make it
+   pass. Copy it from the template rather than writing it fresh.
+10. **Report** every deviation you left and why. Do not silently narrow the scope.
+
+Deviate only when told to, and always say so.
 
 ---
 
 ## Structure
 
 ```
-config/                 one YAML per experiment. No subfolders.
-data/
-  raw/                  never modified, never committed
-  processed/            generated cache
+config/                 one YAML per experiment. Flat, no subfolders.
+data/raw/               inputs. Never modified, committed, or deleted by a tool.
+data/processed/         generated cache
 docs/                   ONLY .md files, names in CAPITALS
-  TEMPLATE.md           this file, never edited here
-  CHANGELOG.md          what changed, newest first
-  AGENTS_MEMORY.md      what was tried and FAILED, newest first
-  VSC.md                this project on the cluster
-  ...                   more docs as the project needs
+  TEMPLATE.md             this file, never edited here
+  CHANGELOG.md            what changed, newest first
+  AGENTS_MEMORY.md        what was tried and FAILED, newest first
+  VSC.md                  this project on the cluster
 notebooks/              thin: all logic imported from src/
 output/                 EVERYTHING the code generates
-  All_Results.md        every notebook's text summary, alphabetical
-  figures/
-    CAPTIONS.md         one shared file for all notebooks
-    <notebook>/         one PDF + one PNG per figure
-  logs/
-  manifests/
-  results/
-scripts/                only runnable project entry points
-  slurm/                cluster job scripts
-src/
-  data/                 loading and preprocessing
-  utils/                paths, config, logging, cleanup, notebook runner
-  visualize/            all plotting
-  ...                   more subfolders as the project needs (train/, eval/, models/)
+  All_Results.md          every notebook's printed summary, alphabetical
+  figures/CAPTIONS.md     ONE captions file for all notebooks
+  figures/<notebook>/     one PDF + one PNG per figure
+  logs/  manifests/  results/  runs/
+scripts/                only runnable entry points. slurm/ for cluster jobs.
+src/data/               loading and preprocessing
+src/utils/              paths, config, logging, cleanup, notebook runner
+src/visualize/          all plotting
+src/...                 more as needed (train/, eval/, models/)
 tests/                  one file per src module
-tfm-library/            submodule: literature + VSC documentation. READ-ONLY.
+tfm-library/            submodule: literature + VSC docs. READ-ONLY.
 .github/workflows/      CI running scripts/check.py
-.gitattributes
-.gitignore
-.gitmodules
-AGENTS.md
-CITATION.cff            optional
-LICENSE
-README.md
-pyproject.toml
+.vscode/                settings.json and extensions.json only
+.gitattributes  .gitignore  .gitmodules
+AGENTS.md  CITATION.cff  LICENSE  README.md  pyproject.toml
 ```
 
-**The template repository has exactly one extra directory, `_template/`**, holding the
-things that must not travel into a project: the initialiser, the template's own self-check,
-and the cross-project submodule tool. Its presence is what distinguishes the template from a
-project. **A project deletes it** — that is step one after "Use this template".
+New `src/` subfolders need no permission — that is the extension point. Any other new top-level
+directory requires this file to be updated at the source.
 
-Extra top-level directories are otherwise allowed only if this file is updated at the source
-to name them. Extra `src/` subfolders need no permission — that is the documented extension
-point.
+The template repository alone has `_template/`, holding what must not travel into a project: the
+initialiser, the template's self-check, and the cross-project sync tools. **A project deletes it.**
 
----
-
-## Required files
-
-**`README.md`** — what the project is, how to install it, how to run it, the layout.
-It **ends** with the short "Based on the repository template" chapter and nothing after
-it; everything above that chapter is the project's own. A fresh repository starts with
-that chapter alone and grows upward.
-
-**`AGENTS.md`** — the rules an AI agent follows here. Must state: adhere to this
-template; deviate only when the user says so, and always say when you deviate;
-`tfm-library/` is read-only; never commit data or weights; never install, train, or push
-without asking; verify claims against a source rather than filling gaps plausibly; read
-`docs/AGENTS_MEMORY.md` before starting and add to it after a failure.
-
-**`LICENSE`** — MIT, covering only the project's own code:
+**`README.md`** ends with the short "Based on the repository template" chapter and nothing after
+it; everything above is the project's own. **`LICENSE`** is MIT in the author's name, plus a line
+stating that third-party material (the submodule, datasets, downloaded weights, vendored files)
+keeps its own licence. **`pyproject.toml`** targets Python **3.11–3.12**, with `ruff` and `pytest`
+in a `dev` extra, and excludes `tfm-library/` from ruff, from pytest collection and from the
+package. Every non-obvious pin carries a comment saying **why**.
 
 ```
-MIT License
-
-Copyright (c) <year> <name>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+# .gitattributes            # .gitmodules
+* text=auto eol=lf          [submodule "tfm-library"]
+*.ipynb text                	path = tfm-library
+*.pdf *.png *.ckpt binary   	url = <library repo url>
 ```
 
-Add a line stating that third-party code (submodules, vendored files, datasets) keeps its
-own licence.
-
-**`.gitattributes`**
-
-```
-* text=auto eol=lf
-*.ipynb text
-*.pdf binary
-*.png binary
-*.ckpt binary
-```
-
-**`.gitmodules`**
-
-```
-[submodule "tfm-library"]
-	path = tfm-library
-	url = <library repo url>
-```
-
-**The template repository carries the submodule as a real gitlink**, not only as this file.
-`.gitmodules` records a *path and a URL*; the gitlink — a tree entry of mode `160000` holding a
-commit SHA — is what records *which commit*. Without it, `git submodule update --init` in a
-fresh fork does nothing, because there is no commit to check out.
-
-That distinction is the whole reason the template carries it. A fork or a "Use this template"
-copy inherits both, so a new project has a correctly wired, already-pinned submodule from its
-first minute — one `git submodule update --init`, the same command a fresh clone of any project
-needs. The alternative, letting each project run `git submodule add`, is a second and different
-instruction, needs the URL to be right by hand, and is the step an agent gets wrong.
-
-It costs the template nothing: a gitlink is a SHA. The library's ~749 MB is fetched only when
-someone asks for it, and a plain `git clone` never does.
-
-**`.vscode/settings.json`** and **`.vscode/extensions.json`** are committed; the rest of
-`.vscode/` is ignored. They are not preferences — `python.analysis.extraPaths` is what lets an
-editor resolve `from src.utils...` given the flat `src/` package root, and
-`jupyter.notebookFileRoot` is what makes an interactive notebook run from the same directory as
-the notebook runner. Both follow from this layout, so they belong to it.
-
-**`.gitignore`** — never commit: raw data, checkpoints, generated caches, virtual
-environments, tool caches, editable-install metadata, PDF figures, logs, per-run metrics.
-Use globs, and **anchor with a leading slash** when a name should only match at the root
-(a bare `figures/` also matches `output/figures/`).
-
-**`pyproject.toml`** — Python **3.11–3.12**, `ruff` for linting, `pytest` for tests,
-both in a `dev` extra. `tfm-library/` is excluded from ruff, from pytest collection and
-from the installed package. Every non-obvious pin carries a comment saying **why**.
+`.vscode/settings.json` and `extensions.json` are committed; the rest of `.vscode/` is ignored.
+They are not preferences: `python.analysis.extraPaths` is what lets an editor resolve
+`from src.utils...` given the flat `src/` package root, and `jupyter.notebookFileRoot` is what
+makes an interactive notebook run from the same directory as the notebook runner.
 
 ---
 
@@ -172,187 +105,203 @@ from the installed package. Every non-obvious pin carries a comment saying **why
 
 ### `tfm-library/` — the literature submodule
 
-Every repository carries the shared TFM literature library at `tfm-library/`, as a
-**pinned git submodule**. It is not optional and it is not per-project.
+Every repository carries the shared TFM literature at `tfm-library/` as a **pinned git
+submodule**. Not optional, not per-project.
 
-**What it is.** One curated knowledge base — the papers as PDFs with full-text
-extractions, written per-paper summaries, a cross-paper synthesis, flat-text snapshots of
-the upstream reference implementations, and the VSC documentation. It is maintained in
-its own repository and consumed by every project.
+**What it is.** One curated knowledge base: the papers as PDFs with full-text extractions,
+per-paper summaries, a cross-paper synthesis, flat-text snapshots of the upstream reference
+implementations, and the VSC documentation. Maintained in its own repository, consumed by all.
 
-**Why every project has it.** So that a human *or an agent* working in this repository
-can answer "what does the literature actually say?" and "how does the official code
-actually do this?" **from inside the repository, offline, by reading and grepping files**
-— with no web search, no paywall, and no recall from memory. An agent that can read the
-sources does not have to guess, and a claim it makes can be traced to a file path. That
-is the entire purpose: it turns "I believe X" into "X, see `tfm-library/<path>`".
+**Why every project has it.** So a human *or an agent* can answer "what does the literature say?"
+and "how does the official code actually do this?" **from inside the repository, offline, by
+reading and grepping files** — no web search, no paywall, no recall from memory. It turns "I
+believe X" into "X, see `tfm-library/<path>`". That is the entire purpose.
 
-**Why a submodule rather than a copy.** A submodule pins one exact commit. A result
-produced today is reproducible against the literature *as it stood* when it was produced,
-and every project shares one consistently maintained copy instead of four drifting ones.
+**Why a submodule.** It pins one exact commit, so a result stays reproducible against the
+literature *as it stood* when it was produced, and every project shares one maintained copy
+instead of four drifting ones.
 
-**READ-ONLY. No exceptions but one.**
+**READ-ONLY, one exception.** Never create, edit, move, rename or delete anything inside it — not
+a typo fix, not a note, not a reformat. The repository does not track its contents, so anything
+written there is either lost when the pin moves or corrupts a resource four projects share. The
+exception is `tfm-library/PROJECT_SPECIFIC.md`, which the library gitignores for exactly this
+purpose; create it from `PROJECT_SPECIFIC.template.md`. If a library document is wrong, report it
+upstream — do not patch it here. Never lint, format or test it: `pyproject.toml` excludes it, and
+cleanup treats it as protected.
 
-- Never create, edit, move, rename or delete anything inside `tfm-library/` — not to fix
-  a typo, not to add a note, not to reformat. The consuming repository does not track its
-  contents, so anything written there is either silently lost when the pin moves or
-  silently corrupts a resource four projects share.
-- **The single exception** is `tfm-library/PROJECT_SPECIFIC.md`, which the library
-  gitignores on purpose. It is the only place project-specific notes about the literature
-  belong. Create it by copying `tfm-library/PROJECT_SPECIFIC.template.md`.
-- If a library document is wrong, **do not patch it here.** Report it so it is fixed in
-  the library's own checkout and flows down to every consumer.
-- Never lint, format, or test it. `pyproject.toml` excludes it from ruff and pytest.
-- Never let cleanup touch it — it is a protected path in the cleanup helper.
+**Citing it.** Papers by path: `tfm-library/papers/<year>/<MM>_<Author>_<Title>.pdf`, full text at
+`papers/text/<year>/<same-name>.txt`. **Code dumps by symbol name, never by line number** — the
+dumps are re-snapshotted and line numbers drift by thousands. Record the pinned commit next to any
+result that depends on the literature.
 
-**Citing it.**
-
-- Papers by path: `tfm-library/papers/<year>/<MM>_<Author>_<Title>.pdf`, full text at
-  `tfm-library/papers/text/<year>/<same-name>.txt`.
-- **Code dumps by symbol name, never by line number.** The dumps are re-snapshotted
-  periodically and line numbers drift by thousands. `` `TabICL.txt`, `GraphSCM.__call__` ``
-  — yes. `` `TabICL.txt:24994` `` — never.
-- When a result depends on the literature, **record the pinned commit** next to the
-  result and in `AGENTS.md`.
-
-**Commands** (run in the consuming project, never inside the folder; PowerShell has no
-`&&`, so one command per line):
+**A repository carries a real gitlink**, not just `.gitmodules`. `.gitmodules` records a path and
+URL; the gitlink (a tree entry of mode `160000`) records *which commit*. Without it,
+`git submodule update --init` does nothing.
 
 ```
-git submodule update --init            # after a fresh clone — the folder starts empty
-git submodule status                   # which commit this project is pinned to
-git submodule update --remote tfm-library
-git add tfm-library
-git commit -m "Bump tfm-library pin"
+git submodule update --init          # after a clone; the folder is empty until you ask
+git submodule status                 # which commit this project is pinned to
+python scripts/update_tfm_library.py # bump the pin; reports first, --update to move it
 ```
 
-The pin is **not** recorded until the `git add` and commit. Between the two,
-`git submodule status` shows a leading `+`; that is normal. `scripts/update_tfm_library.py`
-does all of this, reports first and changes nothing without `--update`.
+`git submodule update --remote` moves the working tree but does **not** record the pin — a leading
+`+` in `git submodule status` is that, not an error. The library is ~749 MB; a plain `git clone`
+never fetches it.
 
-### `docs/`
+### `output/` — one root for everything generated
 
-Only `.md` files, names in CAPITALS.
+**Everything the code generates goes under `output/`**, locally and on the cluster. Nothing
+generated is written anywhere else: not beside a notebook, not into `src/`, not into a new
+top-level folder. One root means "what did this run produce?" and "what can I delete?" each have
+one answer. Enforced.
 
-- **`TEMPLATE.md`** — this file. Shared across repositories, never edited from inside one.
-- **`VSC.md`** — reads `tfm-library`'s VSC documentation and turns it into a guide for
-  *this* project: which partitions, walltime limits, how to submit, how to resume a job
-  that outlives the walltime, and where files go on the two storage tiers.
-- **`CHANGELOG.md`** — one chapter per date, `DD-MM-YYYY`, **newest at the top**. Terse:
-  what changed, and why if it is not obvious. All rules and rule changes are recorded here.
-- **`AGENTS_MEMORY.md`** — one chapter per date, `DD-MM-YYYY`, **newest at the top**. Not
-  what changed — **what was tried and did not work.** Dead ends, wrong assumptions,
-  approaches that looked right and failed, and the cheap check that would have caught each
-  one. The changelog records the road taken; this records the roads closed, so nobody pays
-  for the same mistake twice. Every entry has exactly four lines: **Tried**, **Result**,
-  **Why**, **Instead**. An agent reads this file *before* starting and appends to it after
-  any failure that cost more than a couple of minutes.
-
-### `output/`
-
-**Everything the code generates goes under `output/`**, locally and on the cluster. One
-root, so "what did this run produce" and "what can I delete" have one answer. Nothing
-generated is written anywhere else — not next to a notebook, not into `src/`, not into a
-new top-level folder. The compliance test enforces this.
-
-- **`output/results/`** — the **fine-grained** results: one row per prediction, per-fold
-  scores, anything large. On the cluster this directory lives on **project storage**, not
-  `$VSC_DATA`, because per-row predictions across every dataset and model run to gigabytes
-  and `$VSC_DATA` is small and backed up. Everything else under `output/` stays on
-  `$VSC_DATA`.
-- **`output/All_Results.md`** — every notebook's printed text summary, concatenated in
-  alphabetical notebook order.
-- **`output/figures/CAPTIONS.md`** — **one** file for all notebooks, grouped per notebook,
-  figures in the order they appear in that notebook. Each entry gives the figure's name,
-  then the caption underneath.
-- **Captions are pure description.** What is plotted, on what axes, from how much data.
-  No interpretation — exactly what would sit under the figure in a journal paper.
+- **`output/results/`** — fine-grained results: one row per prediction, per-fold scores, anything
+  large. On the cluster this alone lives on **project storage**; per-row predictions across every
+  dataset and model reach gigabytes and `$VSC_DATA` is 75 GiB. Locally it is a plain subdirectory.
+- **`output/All_Results.md`** — every notebook's printed summary, in alphabetical notebook order.
+- **`output/figures/CAPTIONS.md`** — **one** file for all notebooks, grouped per notebook, figures
+  in the order that notebook drew them.
+- **Captions are pure description.** What is plotted, on what axes, from how much data. No
+  interpretation — exactly what would sit under the figure in a journal.
 
 ### Notebooks
 
-- **All logic lives in `src/`.** A notebook only calls it. A notebook contains no `def`
-  and no `class` — if you need one, it belongs in `src/` where it can be imported and
-  tested.
-- Every notebook **ends by printing a text summary** of everything it showed.
-- Rerunning a notebook **deletes the figures that same notebook produced before**.
-- Every figure is saved as **PDF** (high DPI, for the paper) *and* rendered as **PNG**
-  (lower DPI, small enough to commit).
-- There is **one file that reruns every notebook**, in parallel, and regenerates
-  `CAPTIONS.md` and `All_Results.md`.
-- **One shared visual style across every notebook**, in a single `src/visualize/style.py`:
-  the same fonts, sizes, grid and — most importantly — the **same colours meaning the same
-  thing in every figure**. A reader should never have to re-learn the legend, and figures
-  from different notebooks must sit together in one paper without looking like they came
-  from different projects. The mapping from a name to a colour is declared **once**, in
-  that module; a notebook never picks a colour itself.
-- **Figures are saved by the notebook itself**, not only by the runner, so an interactive
-  run in Jupyter produces the same files. A notebook deletes **its own** figures — never
-  another notebook's — and does so **before** it draws anything.
+- **All logic lives in `src/`.** A notebook only calls it, and contains **no `def` and no
+  `class`** — a function defined in a notebook cannot be imported or tested, so it gets copied
+  into the next notebook and the two copies then diverge.
+- Every notebook **ends by printing a text summary** of everything it showed. That text is what
+  `All_Results.md` is built from; a notebook ending on a plot contributes nothing to it.
+- **A notebook saves its own figures**, not the runner, so an interactive *Run All* produces
+  exactly the same files. It clears **its own** figure folder — never another's — **before**
+  drawing anything: a stale PDF beside a fresh one is how a paper ends up with a figure that no
+  longer matches the code that made it.
+- Every figure is saved as **PDF** (300 dpi, for the paper) *and* **PNG** (110 dpi, committed).
+- **One file reruns every notebook**, in parallel, and rebuilds both summary documents.
+- **One shared style, in `src/visualize/style.py`**: same fonts, sizes, grid, and above all **the
+  same colours meaning the same thing in every figure**. A reader learns the legend once, and
+  figures from different notebooks sit together in one paper. A notebook never picks a colour.
 
 ### `scripts/`
 
-Only real, runnable entry points for the project's main experiments, plus `slurm/`.
-Anything importable belongs in `src/` — a module in `scripts/` cannot be imported or
-tested. Every `.py` file directly in `scripts/` therefore has an
-`if __name__ == "__main__":` block; the compliance test checks it.
+Only real, runnable entry points, plus `slurm/`. Anything importable belongs in `src/` — a module
+in `scripts/` cannot be imported or tested, so something importable there is untestable by
+construction. Every `.py` directly in `scripts/` therefore has a `__main__` block. Two are
+required:
 
-There must be a **Python script, runnable locally and on the cluster, that deletes all
-output from a previous run.** It lists by default and deletes only when asked. Raw data
-and downloaded model weights can never be deleted by it.
-
-There must be **one command that answers "is this repository healthy?"** —
-`scripts/check.py`, which runs ruff, pytest and an import check of every `src` module and
-prints one verdict. Nothing else needs to be remembered before a commit.
+- **`clean_run.py`** — deletes output from a previous run, on a laptop and on the cluster. **Lists
+  by default, deletes only when asked.** `data/raw/`, downloaded weights and `tfm-library/` can
+  never be deleted by it, by construction rather than by a flag.
+- **`check.py`** — the one command for "is this repository healthy?": ruff, then an import of
+  every `src` module, then pytest. CI runs the same script, so the failure a reviewer sees is the
+  one the author can reproduce. The import step exists because ruff parses files without importing
+  them and pytest only imports what a test touches.
 
 ### `config/`
 
-One YAML per experiment. No subfolders, no inheritance.
+One YAML per experiment. Flat — no subfolders, no inheritance, no includes: a config file is read
+top to bottom and that is the whole story.
 
-- Every knob with more than one value goes in a **`sweep:` block at the top**; the full
-  cartesian product is run. Everything below it is a single value.
+- Every knob with more than one value goes in a **`sweep:` block at the top**; the full cartesian
+  product is run. Everything below it is a single value.
 - **One short comment per knob**, saying what it is.
+- A run writes the fully expanded config it used into its own output directory. The YAML may have
+  been edited since, and a sweep point is not in the YAML at all.
 
-### `src/`
+### `src/` and `tests/`
 
-Always has `data/`, `utils/`, `visualize/`. Add more subfolders as the project needs
-(`train/`, `eval/`, `models/`). Paths are built in **one** module, never by string
-concatenation at the call site, and relative paths resolve against the repository root so
-tools work from any directory.
+`src/` always has `data/`, `utils/`, `visualize/`. **Paths are built in one module and nowhere
+else**, resolving against the repository root so tools work from any directory — a path assembled
+at a call site with `"output/" + name` is correct on a laptop and wrong on the cluster.
 
-### `tests/`
+`tests/` has one file per `src` module plus `test_template_compliance.py`, and never writes
+outside `tmp_path` or `output/`.
 
-One file per `src` module, plus `test_template_compliance.py`. Tests never write outside
-`tmp_path` or `output/`.
+### `docs/`
 
-### Comments
+`.md` only, names in CAPITALS.
 
-Every non-obvious decision carries a short comment saying **why**, not what. A pin, a
-fallback, an exclusion, a magic number, an ordering that matters: say what breaks if it
-changes. Comments that restate the code are noise and are deleted.
+- **`VSC.md`** — reads `tfm-library`'s VSC documentation and turns it into a guide for *this*
+  project: partitions, walltime limits, how to submit, how to resume a job that outlives the
+  walltime, and where files go on the two tiers.
+- **`CHANGELOG.md`** — one chapter per date, `DD-MM-YYYY`, **newest at the top**. What changed, and
+  why if it is not obvious. All rules and rule changes are recorded here.
+- **`AGENTS_MEMORY.md`** — same format, but **what was tried and did *not* work.** Dead ends, wrong
+  assumptions, approaches that looked right and failed. The changelog is the road taken; this is
+  the roads closed, so nobody pays twice. Four lines per entry — **Tried**, **Result**, **Why**,
+  **Instead** — for any failure that cost more than a couple of minutes, including ones eventually
+  fixed: the fix is one changelog line, the dead end is the hour. An agent reads it *before*
+  starting. Never delete entries.
+
+### `AGENTS.md` and comments
+
+`AGENTS.md` must state: adhere to this template, deviate only when told and always say so;
+`tfm-library/` is read-only; never commit data or weights; never install, train, or push without
+asking; verify claims against a source rather than filling gaps plausibly; read
+`docs/AGENTS_MEMORY.md` before starting and add to it after a failure; Windows PowerShell 5.1 has
+no `&&`, so one command per line.
+
+Every non-obvious decision carries a short comment saying **why**, not what: a pin, a fallback, an
+exclusion, a magic number, an ordering that matters. Say what breaks if it changes. Comments that
+restate the code are deleted.
+
+---
+
+## Module contract
+
+What each required module must do. Reasons live in their docstrings.
+
+| Module | Must provide |
+|---|---|
+| `src/utils/paths.py` | Every path in the project. Two VSC tiers, one resolver, repo-root-relative, collapsing to the repo off-cluster. `outputs_dir`, `results_dir`, `logs_dir`, `manifests_dir`, `figures_dir(nb)`, `captions_path`, `all_results_path`, `raw_dir`, `processed_dir`, `checkpoints_dir`, `config_path`, `ensure`, `resolve_writable`, `touch_tree`, `describe`. |
+| `src/utils/config.py` | `load` → `sweep_axes` → `n_points` → `expand` (one flat dict per sweep point, deterministic order), `get` (dotted), `resolved_dump`. |
+| `src/utils/logging_setup.py` | `setup()` once, `get_logger(__name__)` everywhere. Console **and** `output/logs/` — on the cluster stdout is a SLURM file that moves on requeue. |
+| `src/utils/run_artifacts.py` | `find_artifacts`, `summarise`, `clean(dry_run=True)`, `protected_paths`. Cheap categories by default, expensive ones named explicitly. Deletes contents, not directories, so tracked `.gitkeep` markers survive. |
+| `src/utils/run_notebooks.py` | `discover` (glob, alphabetical — never a hard-coded list), `run_one` in **separate processes** (matplotlib's figure registry is global), `write_captions`, `write_all_results`, `run_all`. |
+| `src/visualize/style.py` | `apply()`, and `color(name)` as the only way to get a colour. A **validated** categorical order, semantic roles, sequential and diverging maps, journal column widths. |
+| `src/visualize/figures.py` | `FigureSaver(notebook)` — clears its own folder on construction, writes PDF + PNG with a numbered prefix, records each caption in a manifest so `CAPTIONS.md` is rebuildable from disk. |
+| `src/data/loaders.py` | Read inputs, cache the processed form. Never build a path; `data/raw/` is read-only; the cache marker is written **last**, so a run killed halfway leaves a cache correctly treated as absent. |
+
+### The colour rule, concretely
+
+`color(name)` resolves a **semantic role** (`baseline`, `proposed`, `observed`, `alternative`,
+`highlight`, `annotation`), then a **status** (`good`/`warning`/`serious`/`critical`, never reused
+as a series), then a **registered series name** → its fixed categorical slot. The project declares
+its series names once, in that module, and **appends** — inserting repaints every figure after it
+and invalidates any already in a paper. Colour follows the entity, never its rank: if a figure
+drops a series, a plain cycler shifts every colour after it and the same model is blue in one
+figure and orange in the next.
+
+The categorical **order is a colour-vision-safety mechanism, not decoration** — reordering changes
+which pairs are adjacent. Validate any change: adjacent-pair CVD ΔE ≥ 8 and normal-vision ΔE ≥ 15
+(OKLab ×100) against the surface the figure renders on. Forms where every pair is visible at once
+(scatter, bubble, small multiples) cap lower than neighbour-only forms (bars, lines, stacks). Raise
+past the last distinguishable slot rather than generating another hue. One mode only: a figure for
+a paper renders on white, so there is no dark variant to keep in sync.
 
 ---
 
 ## The compliance test
 
-`tests/test_template_compliance.py` is how these rules stop being advice. It **fails**
-when:
+`tests/test_template_compliance.py` is how these rules stop being advice. It **fails** when:
 
 | # | Failure |
 |---|---|
-| 1 | `docs/TEMPLATE.md` differs from the template source (SHA-256 comparison against the hash the initialiser baked in, and against a root `TEMPLATE.md` if one exists) |
+| 1 | `docs/TEMPLATE.md` differs from the template source — SHA-256 against the baked-in hash, and against a root `TEMPLATE.md` if one exists |
 | 2 | a required directory or file from § Structure is missing |
-| 3 | anything generated is written outside `output/` — a hard-coded write path in `src/` or `scripts/`, or a stray generated file in the working tree |
-| 4 | a `.py` file directly in `scripts/` has no `if __name__ == "__main__":` block |
-| 5 | a notebook contains a `def ` (or a `class `) — logic belongs in `src/` |
+| 3 | anything generated is written outside `output/` — a stray generated file in the tree, or a hard-coded write path in `src/` or `scripts/` |
+| 4 | a `.py` directly in `scripts/` has no `if __name__ == "__main__":` block |
+| 5 | a notebook contains a `def ` or a `class ` |
 | 6 | a notebook's last code cell does not print a text summary |
-| 7 | a `.gitignore` rule that should be root-anchored is not (a bare `figures/` also matches `output/figures/`) |
+| 7 | a `.gitignore` rule that should be root-anchored is not — a bare `figures/` also matches `output/figures/` |
 
-It is a **repository** test, not a code test: it reads files and never imports the
-project. That keeps it runnable on a fresh clone before anything is installed.
+Plus: `docs/` holds only CAPITALISED `.md`; `config/` is flat; both dated logs are `DD-MM-YYYY`
+newest-first; `README.md` ends with the template chapter.
 
-Check 1 stays dormant while the repository is still the un-initialised template — there is
-nothing to compare against until a project exists. It switches on the moment the initialiser
-has run, and cannot be switched off again.
+It is a **repository** test, not a code test: it reads files and never imports the project, so it
+runs on a fresh clone before anything is installed. Check 1 is dormant while the repository is
+still the un-initialised template — there is nothing to compare against until a project exists —
+and cannot be switched off afterwards. **A rule is not enforced until its check has been seen to
+fail** on a repository that violates it; passing on a clean one proves nothing.
 
 ---
 
@@ -362,16 +311,16 @@ Two locations. On **both**, everything lives inside a folder named after the pro
 
 | tier | path | holds | backed up |
 |---|---|---|---|
-| **project storage** | `/lustre1/project/stg_00211/<ProjectName>/` | big files: datasets, checkpoints, generated caches, **`output/results/`** | no |
-| **personal data** | `$VSC_DATA/<ProjectName>/` | the repo, and the rest of `output/` (figures, logs, manifests, the two `.md` summaries) | yes |
+| **project storage** | `/lustre1/project/stg_00211/<Project>/` | big files: datasets, checkpoints, caches, **`output/results/`** | no |
+| **personal data** | `$VSC_DATA/<Project>/` | the repo, and the rest of `output/` | yes |
 
-`$VSC_DATA` is small (75 GiB), so nothing large may go there. Project storage has a low
-inode budget, so it wants few big files rather than thousands of small ones. `$VSC_SCRATCH`
-exists but is purged after 30 days without access — working scratch only.
-
-One module — `src/utils/paths.py` — resolves both tiers and is the only place a path is
-built. Off-cluster both tiers collapse to the repository root, so the same code runs on a
-laptop with no configuration.
+`$VSC_DATA` is 75 GiB, so nothing large goes there. Project storage has a **low inode budget** —
+few big files, not thousands of small ones — so logs and per-step metrics stay on `$VSC_DATA`.
+`$VSC_SCRATCH` is purged after 30 days **without access**, and `mv` and timestamp-preserving
+`rsync` do not count as an access: copy, then `paths.touch_tree()`. Compute nodes have no outbound
+internet, so anything that downloads happens on a login node first. Any run that can exceed the
+walltime must be resumable, writing its state pointer **last** so a job killed mid-write points at
+the previous complete checkpoint.
 
 ---
 
@@ -379,54 +328,26 @@ laptop with no configuration.
 
 The template **is** a project with the name left blank. There is no copying step.
 
-1. On GitHub, **Use this template** → new repository. Set the visibility you want. Clone it.
-2. `python _template/init_project.py <ProjectName> --description "..."` — fills in every
-   placeholder and bakes this file's SHA-256 into the compliance test.
-3. Delete `_template/`. Nothing in the project imports from it.
-4. `git submodule update --init` — the pin came with the repository; this fetches its content.
+1. On GitHub, **Use this template** → new repository. Pick the visibility. Clone it.
+2. `python _template/init_project.py <Name> --description "..."` — fills in every placeholder and
+   bakes this file's SHA-256 into the compliance test.
+3. Delete `_template/`.
+4. `pip install -e ".[dev]"`, then `git submodule update --init`.
 5. `python scripts/check.py` — must pass before the first commit.
 
-**"Use this template", not a fork.** Two reasons, and the second is the bigger one:
+An agent doing this follows `_template/INITIALISE.md`.
 
-- **A fork of a public repository can never be made private.** GitHub does not allow changing a
-  fork's visibility. "Use this template" lets the new repository be private even when the
-  template is public, which is what a project under embargo or with licence-restricted data
-  needs.
-- **The merge a fork promises does not work in practice.** The appeal is
-  `git pull upstream main` to bring a rule change down. But the files a template change touches
-  most are exactly the ones the initialiser rewrote per project — `README.md`,
-  `pyproject.toml`, `src/utils/paths.py`, and the hash line in the compliance test — so every
-  pull is a conflict in the files you least want to merge by hand. A fork also puts the
-  template's commits at the root of the project's history and makes GitHub default a pull
-  request to the *upstream*, so the obvious button proposes your project's work to the template.
-
-Rule changes instead flow **from** the template, deliberately, with
-`_template/sync_template_rules.py` — see below.
-
-**An agent doing the initialising** follows `_template/INITIALISE.md`, which lists the facts to
-ask for, the one command, and the files only a human judgement can fill.
-
-There is exactly one `AGENTS.md`, one `docs/CHANGELOG.md` and one `docs/AGENTS_MEMORY.md`,
-and they are the project's. The template ships them seeded rather than keeping a second set
-of its own. A lesson that turns out to apply everywhere is **promoted** from a project's
-`AGENTS_MEMORY.md` into the template's copy, so new projects start already knowing it.
+**"Use this template", not a fork.** A fork of a public repository can never be made private. And
+the merge a fork promises does not work: the files a template change touches most are exactly the
+ones the initialiser rewrote per project — `README.md`, `pyproject.toml`, `src/utils/paths.py`,
+the hash line — so every pull conflicts where you least want to merge by hand.
 
 ### Changing a rule
 
-1. Edit `docs/TEMPLATE.md` **in the template repository**, and record the change in its
-   `docs/CHANGELOG.md`.
-2. Add or update the check in `tests/test_template_compliance.py`, and add the matching
-   violation to `VIOLATIONS` in `_template/check_template.py`.
-3. `python _template/check_template.py` — the new violation must be **caught**. A rule whose
-   check has only ever been seen to pass is not enforced.
-4. Propagate it: `python _template/sync_template_rules.py --apply`. That copies the new
-   `docs/TEMPLATE.md` into every project and re-bakes each one's SHA-256. It reports by default
-   and writes only with `--apply`; it never commits and never pushes.
-5. In each project: `git diff`, then `python scripts/check.py`, then a line in that project's
-   `docs/CHANGELOG.md`.
-
-Step 4 is what makes the hash check affordable, and step 5 is the point of it: a rule cannot
-drift into a project silently, and it cannot be quietly ignored in one either. Files other than
-`docs/TEMPLATE.md` are **reported** as differing rather than overwritten, because a project is
-allowed to extend some of them and expected to delete others; take one deliberately with
-`--also <path>`.
+1. Edit this file **at the source**; note it in the template's `docs/CHANGELOG.md`.
+2. Update the check in `tests/test_template_compliance.py` and its violation in
+   `_template/check_template.py`.
+3. `python _template/check_template.py` — the new violation must be **caught**.
+4. `python _template/sync_template_rules.py --apply` — copies this file into every project and
+   re-bakes each hash. Reports by default; never commits.
+5. Per project: `git diff`, `python scripts/check.py`, a line in its `CHANGELOG.md`.

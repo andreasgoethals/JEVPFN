@@ -4,23 +4,19 @@
     output/figures/CAPTIONS.md                 ONE file, all notebooks, notebook order
     output/All_Results.md                      every notebook's printed text summary
 
-WHY SEPARATE PROCESSES AND NOT THREADS: matplotlib's figure registry is global state. Two
-notebooks in one interpreter would capture each other's figures, and the corruption is
-silent — you get plausible figures attributed to the wrong notebook.
+SEPARATE PROCESSES, NOT THREADS: matplotlib's figure registry is global, so two notebooks in
+one interpreter would capture each other's figures — silently, giving plausible figures
+attributed to the wrong notebook.
 
-WHY A FLATTENED SCRIPT AND NOT A JUPYTER KERNEL: nothing extra to install (no nbclient, no
-nbformat), it runs identically on the cluster, and a traceback points at a readable line
-number instead of a cell index. The cost is that IPython magics are stripped, which is
-deliberate — a notebook that needs a magic to run is a notebook that cannot be executed
-non-interactively.
+A FLATTENED SCRIPT, NOT A JUPYTER KERNEL: nothing extra to install, identical on the cluster,
+and a traceback points at a line number instead of a cell index. Magics are stripped, which is
+deliberate — a notebook needing one cannot be executed non-interactively at all.
 
-THE RUNNER DOES NOT SAVE FIGURES. Each notebook does that itself through
-`src.visualize.figures.FigureSaver`, so an interactive *Run All* produces exactly the same
-files. All the runner adds is parallelism and the two concatenated documents.
+THE RUNNER DOES NOT SAVE FIGURES; each notebook does, through `FigureSaver`, so an interactive
+*Run All* produces exactly the same files. The runner adds parallelism and the two documents.
 
-NOTEBOOKS ARE DISCOVERED, NOT LISTED, and run in alphabetical order — which is also the
-order they appear in both summary documents. A hard-coded list is a list that silently
-stops covering a notebook someone added.
+NOTEBOOKS ARE DISCOVERED, NOT LISTED, alphabetically — which is also the order in both summary
+documents. A hard-coded list silently stops covering a notebook someone added.
 """
 
 from __future__ import annotations
@@ -43,13 +39,12 @@ from src.utils.paths import (
     notebooks_dir,
 )
 
-#: Per-notebook wall-clock limit. A notebook is a summary of a finished computation, not
-#: the computation — one that needs longer than this is doing work that belongs in a script.
+#: Per-notebook wall-clock limit. A notebook summarises a finished computation; one needing
+#: longer is doing work that belongs in a script.
 DEFAULT_TIMEOUT = 1800
 
-#: Where a notebook's captured stdout is parked between execution and assembly. Removed
-#: afterwards; `_figures.json` is kept, because CAPTIONS.md must be rebuildable from disk
-#: after an interactive run without re-executing anything.
+#: Captured stdout, parked between execution and assembly, then removed. `_figures.json` is
+#: KEPT: CAPTIONS.md must be rebuildable from disk without re-executing anything.
 STDOUT_FILE = "_stdout.txt"
 
 
@@ -75,12 +70,8 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
 
 
 def _prelude() -> str:
-    """Injected above every flattened notebook.
-
-    `Agg` because a compute node has no display and the default backend would either fail
-    or block. stdout is captured so `All_Results.md` can be assembled without the notebook
-    knowing it is being run by anything.
-    """
+    """Injected above every flattened notebook. `Agg` because a compute node has no display, and
+    stdout is captured so `All_Results.md` can be built without the notebook knowing."""
     return (
         "import matplotlib\n"
         'matplotlib.use("Agg")\n'
@@ -160,12 +151,11 @@ def _captured_text(name: str) -> str:
 
 
 def write_captions(notebooks: tuple[str, ...]) -> Path:
-    """ONE CAPTIONS.md for the whole project, grouped per notebook, in notebook order.
+    """ONE CAPTIONS.md for the project, grouped per notebook, in notebook order.
 
-    Built from each notebook's `_figures.json`, so it can be regenerated from disk after an
-    interactive run without executing anything. A figure saved without a caption is listed
-    with a loud placeholder rather than skipped — a missing caption should be visible in
-    the document that is supposed to contain it.
+    Built from each `_figures.json`, so it regenerates from disk after an interactive run. A
+    figure with no caption gets a loud placeholder rather than being skipped — a gap should be
+    visible in the document meant to contain it.
     """
     from src.visualize.figures import read_manifest
 
@@ -230,11 +220,10 @@ def run_all(
     max_workers: int | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[NotebookResult]:
-    """Run every notebook in parallel, then rebuild CAPTIONS.md and All_Results.md.
+    """Run every notebook in parallel, then rebuild both summary documents.
 
-    The two documents are rebuilt even when a notebook failed, using whatever the
-    successful ones wrote. A half-updated summary is more useful than none, and the
-    failure is reported separately rather than by leaving a stale file behind.
+    Rebuilt even when a notebook failed, from whatever the successful ones wrote: a
+    half-updated summary beats a stale one, and the failure is reported separately.
     """
     names = discover(notebooks)
     if not names:

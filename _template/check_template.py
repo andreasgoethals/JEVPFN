@@ -4,25 +4,19 @@
     python _template/check_template.py --fast      skip the notebook run
     python _template/check_template.py --keep      leave the throwaway copy for inspection
 
-WHY THIS IS NOT `scripts/check.py`. That one answers "is this repository healthy?" for a
-project. This one answers a different question: "does this template still produce a healthy
-project?" — and the only honest way to answer it is to make one and check that.
+NOT `scripts/check.py`, which answers "is this repository healthy?" for a project. This answers
+"does this template still produce a healthy project?", and the only honest way is to make one:
+copy the repository to a temp directory, run `init_project.py` there, then in the copy —
 
-So it copies the repository to a temporary directory, runs `_template/init_project.py` there,
-and then, in the copy:
+  1. `scripts/check.py`         ruff, every import, pytest
+  2. `scripts/run_notebooks.py` and a check that it really wrote figures and both documents
+  3. one violation at a time    every rule INJECTED into a fresh copy, compliance test must FAIL
 
-  1. `scripts/check.py`            ruff, every import, pytest
-  2. `scripts/run_notebooks.py`    the notebooks really execute and write their figures,
-                                   CAPTIONS.md and All_Results.md
-  3. one violation at a time       every rule in docs/TEMPLATE.md is INJECTED into a fresh
-                                   copy, and the compliance test must FAIL on it
+Step 3 is the point. A compliance test only ever seen to pass is decoration. Every rule added to
+`docs/TEMPLATE.md` gets an entry in VIOLATIONS below; if it cannot be made to fail, it is not
+enforced.
 
-Step 3 is the point of the script. A compliance test that has only ever been seen to pass is
-decoration: passing on a clean repository proves nothing about whether it would catch anything.
-Every rule added to `docs/TEMPLATE.md` gets an entry in VIOLATIONS below, and if it cannot be
-made to fail, the rule is not enforced.
-
-Nothing here touches this repository. It only reads it, and writes inside temporary directories.
+Nothing here touches this repository — it reads it, and writes inside temp directories.
 """
 
 from __future__ import annotations
@@ -37,8 +31,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: Not copied into the throwaway project. `.git` would make the copy a git repo sharing
-#: history, and the caches are large and worthless.
+#: Not copied: `.git` would share history, and the caches are large and worthless.
 IGNORE = shutil.ignore_patterns(
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".venv", "venv",
     "*.pyc", "output", "tfm-library",
@@ -48,9 +41,8 @@ IGNORE = shutil.ignore_patterns(
 def fresh_copy(label: str) -> Path:
     """A copy of this repository, initialised as a project, in a new temp directory.
 
-    A UNIQUE directory every time, never a reused path: on Windows a directory cannot be
-    removed while any process still holds a handle inside it, and a just-finished pytest
-    subprocess often still does — reusing one path makes the whole sweep flaky.
+    UNIQUE every time, never a reused path: Windows will not remove a directory while any process
+    holds a handle inside it, and a just-finished pytest subprocess often does.
     """
     target = Path(tempfile.mkdtemp(prefix=f"tmplchk_{label}_")) / "DemoProj"
     shutil.copytree(REPO_ROOT, target, ignore=IGNORE)
@@ -83,11 +75,8 @@ def run_step(label: str, argv: list[str], cwd: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# The violations. One per rule in docs/TEMPLATE.md § The compliance test.
-#
-# Each function breaks the copy in exactly one way and returns the name of the test that
-# must catch it. Injecting more than one rule at a time would let a single over-broad check
-# take the credit for all of them.
+# The violations, one per rule. Each function breaks the copy in exactly ONE way and returns the
+# test that must catch it — injecting two at once lets one over-broad check take both credits.
 # ---------------------------------------------------------------------------
 
 
@@ -241,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
             "scripts/run_notebooks.py in a fresh project",
             run_step("scripts/run_notebooks.py", [sys.executable, "scripts/run_notebooks.py"], healthy),
         ))
-        # A green runner that produced nothing is the failure mode worth guarding: the notebook
+        # A green runner that produced nothing is the failure mode worth guarding: a notebook
         # can silently stop saving and the exit code stays 0.
         produced = list((healthy / "output" / "figures").rglob("*.pdf"))
         captions = healthy / "output" / "figures" / "CAPTIONS.md"

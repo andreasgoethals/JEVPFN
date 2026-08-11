@@ -1,31 +1,19 @@
-"""Where files go. Two VSC storage tiers, one resolver, everything relative to the repo.
+"""Every path in the project. Two VSC tiers, one resolver, relative to the repository root.
 
-THE ONLY MODULE THAT BUILDS A PATH. Every other module, script and notebook asks this one.
-WHY: a path assembled at the call site with `"output/" + name` is correct on a laptop and
-wrong on the cluster, and the failure shows up as a full quota or an empty results
-directory hours into a job. One module means one place to be right, and one place to fix.
+THE ONLY MODULE THAT BUILDS A PATH — everything else asks this one. A path assembled at a call
+site with `"output/" + name` is correct on a laptop and wrong on the cluster, and the failure
+shows up as a full quota or an empty results directory hours into a job.
 
-    | tier                | path                                       | holds                                                            | backed up | quota                    |
-    |---------------------|--------------------------------------------|------------------------------------------------------------------|-----------|--------------------------|
-    | **project storage** | `/lustre1/project/stg_00211/<Project>/`    | big files: datasets, checkpoints, caches, **`output/results/`**   | no        | large, low inode budget  |
-    | **personal data**   | `$VSC_DATA/<Project>/`                     | the repo, and the rest of `output/` (figures, logs, manifests)    | **yes**   | 75 GiB                   |
-    | scratch             | `$VSC_SCRATCH/`                            | working scratch only                                             | no        | purged after 30 days     |
+        project storage  /lustre1/project/stg_00211/<Project>/  big files, no backup, LOW INODES
+    personal data    $VSC_DATA/<Project>/                   repo + output/, backed up, 75 GiB
+    scratch          $VSC_SCRATCH/                          purged after 30 days of no ACCESS
 
-Three consequences that shaped this module:
+`output/results/` is the one part of `output/` on project storage: per-row predictions reach
+gigabytes and $VSC_DATA is small. Logs and per-step metrics go the other way, because project
+storage wants few big files rather than thousands of small ones.
 
-* `output/results/` — per-row predictions and per-fold scores — is the one part of
-  `output/` on project storage. It is the part that reaches gigabytes, and `$VSC_DATA` is
-  75 GiB. Locally both tiers collapse to the repo, so `output/results/` is just a
-  subdirectory and the split is invisible.
-* Project storage has a **low inode budget**: few big files, not thousands of small ones.
-  So logs and per-step metrics go to `$VSC_DATA` even though they belong to a run whose
-  results are on staging.
-* Scratch's purge is on **access** time, and `mv`/timestamp-preserving `rsync` do not
-  count as an access. Copy, then call `touch_tree()`.
-
-OFF-CLUSTER EVERYTHING COLLAPSES INTO THE REPO. There is no `/lustre1` on a laptop, so
-pretending there is would mean two code paths, and the one that only runs on the cluster
-is the one that breaks. Same functions, same call sites, different roots.
+OFF-CLUSTER EVERY TIER COLLAPSES INTO THE REPO. Pretending `/lustre1` exists on a laptop would
+mean two code paths, and the one that only runs on the cluster is the one that breaks.
 """
 
 from __future__ import annotations
@@ -40,14 +28,12 @@ PROJECT_NAME = "{{PROJECT_NAME}}"
 #: last resort, not the primary source — VSC has moved it before.
 STAGING_FALLBACK = "/lustre1/project/stg_00211"
 
-#: The repository root. `parents[2]` because this file is `<root>/src/utils/paths.py`.
-#: Resolved from __file__ rather than from the working directory, so a script, a test and
-#: a notebook all agree on where the root is regardless of where they were launched.
+#: `parents[2]` because this file is `<root>/src/utils/paths.py`. From __file__, not the working
+#: directory, so a script, a test and a notebook agree wherever they were launched from.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: Environment variables that override project storage, in priority order. An override is
-#: the supported way to put big files on an external drive locally, and it is how the
-#: tests exercise the staging branch without a cluster.
+#: Overrides for project storage, in priority order. The supported way to put big files on an
+#: external drive locally, and how the tests exercise the staging branch without a cluster.
 STAGING_ENV_VARS = ("{{PROJECT_UPPER}}_STAGING_ROOT", "VSC_STAGING_ROOT")
 
 
@@ -69,9 +55,8 @@ def on_vsc() -> bool:
 def staging_override() -> Path | None:
     """An explicitly requested project-storage root, or None.
 
-    Checked separately from `staging_root()` because the big-file helpers short-circuit to
-    the repo whenever we are off-cluster — which would make an override silently do
-    nothing on a laptop, the one place it is most useful.
+    Separate from `staging_root()` because the big-file helpers short-circuit to the repo when
+    off-cluster, which would make an override silently do nothing on a laptop.
     """
     for var in STAGING_ENV_VARS:
         p = _env_path(var)
@@ -116,9 +101,8 @@ def scratch_root() -> Path:
 def _under(root: Path, *parts: str) -> Path:
     """Join under `root`, inserting the project name only when `root` is SHARED.
 
-    `$VSC_DATA` and project storage are shared across every project, so a path there needs
-    a `<Project>/` component. The repo root already *is* the project, and adding it there
-    would give `<Project>/<Project>/output`.
+    The shared tiers need a `<Project>/` component; the repo root already *is* the project, so
+    adding it there would give `<Project>/<Project>/output`.
     """
     if root == REPO_ROOT:
         return root.joinpath(*parts)
@@ -131,11 +115,10 @@ def _under(root: Path, *parts: str) -> Path:
 
 
 def outputs_dir() -> Path:
-    """THE root for generated files. Nothing generated is written outside it.
+    """THE root for generated files; nothing generated is written outside it.
 
-    Locally `<repo>/output/`; on the cluster `$VSC_DATA/<Project>/output/`, the backed-up
-    tier. One root means "what did this run produce?" and "what can I delete?" have one
-    answer each — which is the whole reason the rule exists.
+    Locally `<repo>/output/`, on the cluster `$VSC_DATA/<Project>/output/`. One root means "what
+    did this run produce?" and "what can I delete?" have one answer each.
     """
     if on_vsc():
         return _under(data_root(), "output")
@@ -145,10 +128,8 @@ def outputs_dir() -> Path:
 def results_dir(*parts: str) -> Path:
     """Fine-grained results: one row per prediction, per-fold scores, anything large.
 
-    THE ONE PART OF `output/` ON PROJECT STORAGE. Per-row predictions across every dataset
-    and model run to gigabytes, and `$VSC_DATA` is 75 GiB — a single sweep would fill it
-    and then every job that writes a log also fails. Off-cluster this is plain
-    `output/results/`, so the split is invisible locally.
+    THE ONE PART OF `output/` ON PROJECT STORAGE. A single sweep of per-row predictions would
+    fill $VSC_DATA's 75 GiB, and then every job that writes a log also fails.
     """
     if _use_staging():
         return _under(staging_root(), "output", "results", *parts)
@@ -166,11 +147,8 @@ def manifests_dir() -> Path:
 
 
 def figures_dir(notebook: str | None = None) -> Path:
-    """`output/figures/`, or one notebook's own folder inside it.
-
-    One folder per notebook, because a notebook clears its OWN figures before drawing and
-    must not be able to reach another notebook's.
-    """
+    """`output/figures/`, or one notebook's own folder — a notebook clears its own before drawing
+    and must not be able to reach another's."""
     root = outputs_dir() / "figures"
     return root / notebook if notebook else root
 
@@ -210,12 +188,8 @@ def processed_dir(*parts: str) -> Path:
 
 
 def data_search_paths(*parts: str) -> list[Path]:
-    """Every root that might hold this input, **repo first**.
-
-    Repo first so a laptop with the data checked out works with no configuration; project
-    storage second so the same code finds it on the cluster. Reading searches; writing
-    picks one (`processed_dir`), which on the cluster is project storage.
-    """
+    """Every root that might hold this input, **repo first** — so a laptop with the data checked
+    out works unconfigured, and the same code finds it on the cluster."""
     roots = [REPO_ROOT.joinpath("data", *parts)]
     if _use_staging():
         staged = _under(staging_root(), "data", *parts)
@@ -233,8 +207,8 @@ def find_input(*parts: str) -> Path | None:
 
 
 def checkpoints_dir(*parts: str) -> Path:
-    """Model weights. Big -> project storage. Never deleted by the cleaner: they are
-    either downloaded from upstream or cost a training run to reproduce."""
+    """Model weights. Big -> project storage. Never deleted by the cleaner: downloaded from
+    upstream, or a training run to reproduce."""
     if _use_staging():
         return _under(staging_root(), "checkpoints", *parts)
     return REPO_ROOT.joinpath("checkpoints", *parts)
@@ -275,10 +249,9 @@ def ensure(path: Path) -> Path:
 def resolve_writable(preferred: Path, fallback: Path | None = None) -> Path:
     """`preferred` if we can genuinely write there, else `fallback`, loudly.
 
-    Probes with a real create-and-delete. `mkdir(exist_ok=True)` is NOT enough: a
-    directory on a shared tier can exist and still be unwritable by this user, and that is
-    exactly the case this guards against. A completed run in the wrong place beats a job
-    that died at hour six with nothing to show.
+    Probes with a real create-and-delete: `mkdir(exist_ok=True)` is not enough, because a
+    directory on a shared tier can exist and still be unwritable. A completed run in the wrong
+    place beats a job that died at hour six with nothing to show.
     """
     fallback = fallback or (data_root() / PROJECT_NAME / "fallback")
     try:
@@ -299,22 +272,16 @@ def resolve_writable(preferred: Path, fallback: Path | None = None) -> Path:
 
 
 def touch_tree(path: Path) -> None:
-    """Refresh access times so `$VSC_SCRATCH`'s 30-day purge does not eat the files.
-
-    `mv` and timestamp-preserving `rsync` do NOT count as an access, so data staged to
-    scratch can be purged almost immediately after it lands. Copy, then call this.
-    """
+    """Refresh access times against scratch's 30-day purge. `mv` and `rsync -a` do NOT count as an
+    access, so freshly staged data can be purged almost immediately. Copy, then call this."""
     for p in path.rglob("*"):
         if p.is_file():
             p.touch()
 
 
 def describe() -> dict[str, str]:
-    """Every resolved root, for logging at job start.
-
-    A run that records where it wrote is a run whose output can be found six months later
-    on a tier that has since been reorganised.
-    """
+    """Every resolved root, for logging at job start — so a run's output can still be found six
+    months later on a tier that has since been reorganised."""
     return {
         "project": PROJECT_NAME,
         "on_vsc": str(on_vsc()),

@@ -1,24 +1,16 @@
 """List and delete what a previous run left behind. Lists by default; deletes when asked.
 
-WHY THIS EXISTS INSTEAD OF `rm -rf`: a run's output is spread over **two storage tiers**
-with different quotas — figures, logs and manifests on `$VSC_DATA`, per-row results on
-project storage — so "delete the last run" is not one command, and the version someone
-types by hand at 23:00 is the version that eventually removes `data/raw`.
+NOT `rm -rf`: a run's output spans **two storage tiers** with different quotas, so "delete the
+last run" is not one command — and the version someone types by hand at 23:00 is the version
+that eventually removes `data/raw`.
 
-WHAT IS PROTECTED, unconditionally and by construction rather than by a flag:
+PROTECTED unconditionally, by construction rather than by a flag: `data/raw/` (irreplaceable),
+`checkpoints/` (downloaded, or a training run to rebuild), `tfm-library/` (not ours), and the
+repository's own directories. No combination of arguments reaches them — a protection you can
+switch off is a protection that gets switched off.
 
-    data/raw/       the inputs. Irreplaceable; several are not ours to re-download.
-    checkpoints/    model weights. Downloaded from upstream, or a training run to rebuild.
-    tfm-library/    the read-only literature submodule. Not ours to touch at all.
-    src/ config/ tests/ docs/ notebooks/ scripts/     the repository itself.
-
-No combination of arguments can remove any of those. That is the point of listing them
-here rather than trusting the caller: a protection you can switch off is a protection that
-gets switched off.
-
-CATEGORIES are ordered cheap-to-rebuild first. Only the cheap ones go by default —
-`results` and `processed` cost real compute, and someone typing "clean up the logs" must
-not lose a week of runs to it.
+CATEGORIES run cheap-to-rebuild first, and only the cheap ones go by default: `results` and
+`processed` cost real compute, and "clean up the logs" must not lose a week of runs.
 """
 
 from __future__ import annotations
@@ -52,9 +44,8 @@ CHEAP = ("figures", "logs", "manifests", "runs")
 #: cache that can take a long time to rebuild from raw.
 EXPENSIVE = ("results", "processed")
 
-#: Structure markers tracked in git so an empty directory survives a clone. They are not
-#: run output, so they are neither counted nor deleted — removing them would quietly change
-#: what git tracks and a fresh clone would come up without its output tree.
+#: Tracked so an empty directory survives a clone. Not run output, so neither counted nor
+#: deleted — removing them would leave a fresh clone with no output tree.
 KEEP_FILES = frozenset({".gitkeep", ".gitignore"})
 
 
@@ -96,9 +87,8 @@ def protected_paths() -> list[Path]:
 def is_protected(path: Path) -> bool:
     """True if `path` is, contains, or lives inside a protected path.
 
-    Both directions are checked. `resolved in guard.parents` catches a caller passing a
-    PARENT of something protected — deleting `data/` to get at `data/processed` would take
-    `data/raw` with it.
+    Both directions: passing a PARENT of something protected counts too, because deleting
+    `data/` to get at `data/processed` would take `data/raw` with it.
     """
     try:
         resolved = path.resolve()
@@ -133,9 +123,8 @@ def _measure(path: Path) -> tuple[int, int]:
 def _candidates() -> list[tuple[str, Path]]:
     """Every location a run may have written, by category.
 
-    Per-notebook figure folders are enumerated rather than taking `output/figures` whole,
-    so the shared `CAPTIONS.md` beside them is not swept up with them — it is regenerated
-    by the notebook runner and belongs to the project, not to one run.
+    Figure folders are enumerated per notebook rather than taking `output/figures` whole, so the
+    shared `CAPTIONS.md` beside them is not swept up with them.
     """
     found: list[tuple[str, Path]] = []
 
@@ -206,13 +195,11 @@ def clean(
 ) -> dict[str, Any]:
     """Remove the named categories. **Dry run by default.**
 
-    `dry_run=True` is the default rather than an opt-in because the two failure modes are
-    not symmetric: a listing you meant to be a deletion costs one more command, and a
-    deletion you meant to be a listing costs the run.
+    Default rather than opt-in because the failure modes are not symmetric: a listing you meant
+    as a deletion costs one more command; a deletion you meant as a listing costs the run.
 
-    Deletes a directory's CONTENTS, not the directory, so the tracked `.gitkeep` markers
-    and the committed layout survive — `rmtree` on `output/logs` removes a directory git
-    expects to exist, and the next clone has nowhere to write.
+    Deletes a directory's CONTENTS, not the directory, so tracked `.gitkeep` markers survive —
+    `rmtree` on `output/logs` removes a directory git expects to exist.
     """
     unknown = [c for c in categories if c not in CATEGORIES]
     if unknown:

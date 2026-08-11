@@ -1,9 +1,6 @@
-"""Finding the sibling projects. Shared by both `sync_*.py` tools.
-
-One copy, because two copies of a filesystem walk drift — and the template's own rules say
-anything used in more than one place belongs in one place. Not a package: `_template/` holds
-loose scripts, and `python _template/sync_x.py` puts that directory on `sys.path`, so a plain
-`import _projects` resolves.
+"""Finding the sibling projects. Shared by both `sync_*.py` tools — one copy, because two
+filesystem walks drift. Not a package: `python _template/sync_x.py` puts this directory on
+`sys.path`, so a plain `import _projects` resolves.
 """
 
 from __future__ import annotations
@@ -18,8 +15,8 @@ SUBMODULE = "tfm-library"
 #: `Projects/<Project>` and `Projects/<N. Project>/<Project>`.
 MAX_DEPTH = 2
 
-#: Never descended into. Without this the walk enters every project's own submodule, virtual
-#: environment and output tree — slow, and it finds nothing.
+#: Never descended into: otherwise the walk enters every project's submodule, venv and output
+#: tree — slow, and it finds nothing.
 SKIP = frozenset({".git", ".venv", "venv", "env", "node_modules", "__pycache__", SUBMODULE,
                   "output", "data", "checkpoints", ".pytest_cache", ".ruff_cache"})
 
@@ -41,11 +38,8 @@ def default_root() -> Path:
 
 
 def find_projects(root: Path) -> list[Path]:
-    """Every git repository under `root` (to MAX_DEPTH) that declares the submodule.
-
-    Filtering on `.gitmodules` rather than on a hard-coded list is what makes a new project
-    appear the moment it has the library — nothing to remember to update here.
-    """
+    """Every git repository under `root` (to MAX_DEPTH) declaring the submodule. Filtered on
+    `.gitmodules`, not a hard-coded list, so a new project appears the moment it has the library."""
     found: list[Path] = []
     seen: set[Path] = set()
 
@@ -74,11 +68,8 @@ def find_projects(root: Path) -> list[Path]:
 
 
 def add_selection_arguments(parser: argparse.ArgumentParser) -> None:
-    """`--only` / `--exclude` / `--pick` / `--all`, mutually exclusive.
-
-    `--only` and `--exclude` cannot be combined: one says "these" and the other says "not
-    these", and a command meaning both is a command whose author was unsure.
-    """
+    """`--only` / `--exclude` / `--pick` / `--all`, mutually exclusive: one says "these" and the
+    other "not these", and a command meaning both is one whose author was unsure."""
     scope = parser.add_mutually_exclusive_group()
     scope.add_argument("--only", nargs="+", metavar="NAME", help="do only these projects")
     scope.add_argument("--exclude", nargs="+", metavar="NAME", help="do all but these")
@@ -96,8 +87,8 @@ def select(projects: list[Path], args: argparse.Namespace) -> list[Path]:
         chosen = [p for p in projects if p.name.lower() in wanted]
         missing = wanted - {p.name.lower() for p in chosen}
         if missing:
-            # Loudly, not silently: a typo in `--only` would otherwise look like "that project
-            # does not have the submodule", and you would go looking in the wrong place.
+            # Loudly: a typo in `--only` would otherwise read as "that project has no
+            # submodule", and you would look in the wrong place.
             raise SystemExit(
                 f"--only named {sorted(missing)}, which is not among the projects found: "
                 f"{[p.name for p in projects]}"
@@ -130,8 +121,8 @@ def pick_interactively(projects: list[Path]) -> list[Path]:
     try:
         answer = input("selection: ").strip()
     except EOFError:
-        # No stdin (a scheduled task, a CI run). Silently doing all of them would be a
-        # surprising default for a command whose whole point is choosing, so refuse.
+        # No stdin (a scheduled task, CI). Doing all of them silently is a surprising default
+        # for a command whose point is choosing, so refuse.
         raise SystemExit(
             "--pick needs an interactive terminal; use --only or --exclude instead"
         ) from None

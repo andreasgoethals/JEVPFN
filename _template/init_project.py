@@ -4,22 +4,16 @@
     python _template/init_project.py CreditICL --dry-run
     python _template/init_project.py CreditICL --repo-url https://github.com/me/CreditICL
 
-WHAT IT DOES. There is no copying — this repository already *is* the template, so the whole
-job is filling in the blanks:
+No copying: this repository already *is* the template, so the whole job is (1) replace every
+`{{PLACEHOLDER}}` in every text file, (2) hash `docs/TEMPLATE.md` into
+`tests/test_template_compliance.py` so a later edit fails the suite, (3) print the steps it
+deliberately does not take.
 
-  1. replaces every `{{PLACEHOLDER}}` in every text file with a real value
-  2. hashes `docs/TEMPLATE.md` and writes that hash into
-     `tests/test_template_compliance.py`, which is what makes a later edit to the template
-     fail the test suite
-  3. prints the steps it deliberately does NOT take
+The hash is baked in rather than fetched at test time because the compliance test has to run on a
+fresh clone with no network and no submodule.
 
-WHY THE HASH IS BAKED IN rather than fetched from the template repository at test time: the
-compliance test has to run on a fresh clone with no network and no submodule, so the
-expected value has to already be in the file.
-
-IT RUNS NOTHING ELSE. No `pip install`, no `git` command, no push, and it does not delete
-`_template/` for you — each of those changes something outside this directory or throws away
-files, so each is printed for you to run.
+IT RUNS NOTHING ELSE — no install, no git, no push, and it does not delete `_template/` for you.
+Each of those reaches outside this directory or throws files away, so each is printed instead.
 """
 
 from __future__ import annotations
@@ -42,23 +36,20 @@ DEFAULT_EMAIL = "andreas.goethals@kuleuven.be"
 DEFAULT_LIBRARY_URL = "https://github.com/andreasgoethals/TFM_Library.git"
 GITHUB_OWNER = "andreasgoethals"
 
-#: File types whose text is substituted. Everything the template ships is text; the guard is
-#: for the day someone adds an image — a binary file quietly mangled by a regex is a bug that
-#: surfaces much later. The empty string covers dotfiles like `.gitignore`, whose whole name
-#: pathlib reports as the stem.
+#: File types whose text is substituted. The guard is for the day someone adds an image — a
+#: binary quietly mangled by a regex surfaces much later. `""` covers dotfiles.
 TEXT_SUFFIXES = frozenset(
     {".py", ".md", ".toml", ".yaml", ".yml", ".cff", ".txt", ".ipynb", ".slurm",
      ".sh", ".cfg", ".ini", ""}
 )
 
-#: Never touched. `.git` is obvious; `_template/` is about to be deleted and its own
-#: documentation quotes placeholders as examples, which substitution would destroy.
+#: Never touched. `_template/` is about to be deleted, and its own documentation quotes
+#: placeholders as examples, which substitution would destroy.
 SKIP_DIRS = frozenset({".git", "_template", "tfm-library", ".venv", "venv", "__pycache__",
                        ".pytest_cache", ".ruff_cache", "output", "data"})
 
-#: `{{NAME}}` for upper-case names only, and never after a `$`. WHY: GitHub Actions
-#: expressions look like `${{ matrix.python-version }}`, and a naive `{{...}}` substitution
-#: would destroy them and a naive leftover-check would flag them.
+#: Upper-case names only, never after a `$`: GitHub Actions expressions look like
+#: `${{ matrix.python-version }}`, which a naive substitution would destroy.
 PLACEHOLDER_RE = re.compile(r"(?<!\$)\{\{([A-Z][A-Z0-9_]*)\}\}")
 
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
@@ -69,11 +60,8 @@ HASH_LINE_RE = re.compile(r'^(EXPECTED_TEMPLATE_SHA256\s*=\s*)".*"$', re.M)
 
 
 def git(*args: str) -> str:
-    """Run git in the repository and return stdout, or "" if it fails.
-
-    Never raises: this repository may not be a git checkout at all (someone downloaded a
-    zip), and that must not stop the initialiser.
-    """
+    """Run git and return stdout, or "" on failure. Never raises: this may not be a git checkout
+    at all (someone downloaded a zip), and that must not stop the initialiser."""
     try:
         result = subprocess.run(
             ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=False
@@ -84,12 +72,10 @@ def git(*args: str) -> str:
 
 
 def detected_repo_url() -> str:
-    """This checkout's own `origin`, as an https URL, or "".
+    """This checkout's `origin`, as an https URL, or "".
 
-    WHY this is the default rather than a name-based guess: the intended workflow is to fork
-    the template on GitHub and clone the fork, so `origin` is *already* the correct answer —
-    and it is right even when the repository name differs from the project name, which a
-    guess built from the project name never is.
+    The default rather than a name-based guess because the new repository is cloned, so `origin`
+    is *already* the right answer — including when its name differs from the project name.
     """
     url = git("remote", "get-url", "origin")
     if not url:
@@ -102,11 +88,8 @@ def detected_repo_url() -> str:
 
 
 def submodule_state() -> tuple[str, str]:
-    """(state, advice) for `tfm-library`. Reported, never acted on.
-
-    Distinguishes the three cases that look alike from the outside and need different fixes:
-    the pin is missing entirely, the pin is there but the folder is empty, or it is populated.
-    """
+    """(state, advice) for `tfm-library`. Reported, never acted on. Distinguishes the three cases
+    that look alike from outside and need different fixes."""
     if not (REPO_ROOT / ".git").exists():
         return "unknown", "not a git checkout yet — `git init`, or clone the fork instead"
 
@@ -138,10 +121,9 @@ def derive(project: str, args: argparse.Namespace) -> dict[str, str]:
         "PROJECT_UPPER": re.sub(r"[^A-Z0-9]", "_", project.upper()),
         "AUTHOR": args.author,
         "EMAIL": args.email,
-        # One sentence, reused in three places that all want the same answer: the README's
-        # opening line, pyproject's `description`, and CITATION.cff's abstract. Passing it
-        # here is what lets an agent initialise the repository in a single command instead of
-        # editing three files afterwards and getting two of them slightly different.
+        # One sentence, reused in the README's opening line, pyproject's `description` and
+        # CITATION.cff's abstract — so an agent initialises in one command instead of editing
+        # three files and getting two of them slightly different.
         "DESCRIPTION": args.description or f"{project} — PhD research, KU Leuven: machine "
                                            f"learning on tabular data.",
         "YEAR": str(today.year),
@@ -249,7 +231,7 @@ Windows PowerShell — ONE COMMAND PER LINE, `&&` is a parser error there.
   6. First commit
 
      git add -A
-     git commit -m "Initialise {project} from repo-template"
+     git commit -m "Initialise {project} from the repository template"
 
 Do NOT edit docs/TEMPLATE.md. Its SHA-256 is now baked into
 tests/test_template_compliance.py, so an edit fails the test suite — which is the point.
@@ -278,8 +260,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not NAME_RE.match(args.project):
         # The name becomes a directory on two cluster tiers, a distribution name and an
-        # environment-variable prefix. A space or a dot fails in one of those three, usually
-        # the last, long after this script ran.
+        # environment-variable prefix. A space or a dot fails in one of the three, usually last.
         raise SystemExit(
             f"invalid project name {args.project!r}: start with a letter, then letters, "
             f"digits, '-' or '_' only."
@@ -303,13 +284,11 @@ def main(argv: list[str] | None = None) -> int:
     if bake_hash(values["TEMPLATE_SHA256"], dry_run=args.dry_run):
         print(f"\ntemplate hash baked into {COMPLIANCE_TEST.relative_to(REPO_ROOT)}")
     else:
-        # Already baked means this script has run before, which is worth saying out loud:
-        # a second run is harmless but it also did nothing, and silence would look like success.
+        # A second run is harmless but did nothing, and silence would look like success.
         print("\ntemplate hash was already up to date — has this already been initialised?")
 
     if leftovers:
-        # A leftover is a template bug, not a user error: a key exists in a file that
-        # `derive()` does not produce.
+        # A template bug, not a user error: a key exists that `derive()` does not produce.
         print("\nWARNING: unsubstituted placeholders remain — this is a template bug:")
         for item in leftovers:
             print(f"  {item}")

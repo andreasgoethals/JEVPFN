@@ -22,7 +22,7 @@ Conventions:
 ## {{DATE}}
 
 - Repository created from
-  [andreasgoethals/repo-template](https://github.com/andreasgoethals/repo-template).
+  [andreasgoethals/0.-Template](https://github.com/andreasgoethals/0.-Template).
 - `docs/TEMPLATE.md` copied in verbatim and its hash baked into
   `tests/test_template_compliance.py` — a local edit to the template now fails the test
   suite, which is the point.

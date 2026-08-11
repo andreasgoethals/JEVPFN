@@ -7,15 +7,13 @@ THE SHAPE, fixed by the template:
       fold: [0, 1, 2]
     <everything else>       single values, shared by every point in the sweep
 
-`expand()` turns that into one flat dict per sweep point, with the swept keys folded in at
-the top level so downstream code never has to know whether a value came from the sweep or
-from the shared part. WHY flatten: the alternative is every consumer checking two places
-for the same knob, and forgetting to in one of them.
+`expand()` gives one flat dict per sweep point, swept keys folded in at the top level, so
+nothing downstream has to know whether a knob came from the sweep or from the shared part —
+the alternative is every consumer checking two places and forgetting in one.
 
-NO INHERITANCE, NO INCLUDES, ON PURPOSE. A config file is read top to bottom and that is
-the whole story. Layered configs make "what did this run actually use?" a question you
-answer by simulating a merge — which is why `resolved_dump()` exists: the run writes the
-fully expanded dict it used into its own output directory, so the answer is a file.
+NO INHERITANCE, NO INCLUDES. A config file is read top to bottom and that is the whole story.
+Layered configs make "what did this run actually use?" a question you answer by simulating a
+merge, which is why `resolved_dump()` exists: the run writes the answer as a file.
 """
 
 from __future__ import annotations
@@ -58,11 +56,8 @@ def sweep_axes(config: dict[str, Any]) -> dict[str, list[Any]]:
 
 
 def n_points(config: dict[str, Any]) -> int:
-    """How many runs this config describes.
-
-    Worth printing before submitting anything: a sweep grows multiplicatively and reads
-    additively, so 4 x 3 x 5 looks like twelve lines of YAML and is sixty runs.
-    """
+    """How many runs this config describes. Print it before submitting: a sweep grows
+    multiplicatively and reads additively — 4 x 3 x 5 is twelve lines of YAML and sixty runs."""
     total = 1
     for values in sweep_axes(config).values():
         total *= len(values)
@@ -72,9 +67,8 @@ def n_points(config: dict[str, Any]) -> int:
 def expand(config: dict[str, Any]) -> list[dict[str, Any]]:
     """One flat config per sweep point, in a deterministic order.
 
-    Deterministic because the order names the runs: `<name>__model=a__fold=0`. If the order
-    changed between invocations, a resumed sweep would re-run points it had already done
-    and skip others.
+    Deterministic because the order names the runs (`<name>__model=a__fold=0`): if it changed
+    between invocations, a resumed sweep would redo some points and skip others.
     """
     axes = sweep_axes(config)
     shared = {k: v for k, v in config.items() if k != SWEEP_KEY}
@@ -97,11 +91,8 @@ def expand(config: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def get(config: dict[str, Any], dotted: str, default: Any = None) -> Any:
-    """`get(cfg, "train.learning_rate")`. Returns `default` for a missing key.
-
-    Dotted access so a caller reads a nested knob without four `.get()` calls, each of
-    which is a place to silently return None.
-    """
+    """`get(cfg, "train.learning_rate")`, `default` if absent. Dotted so a nested knob does not
+    need four `.get()` calls, each a place to silently return None."""
     node: Any = config
     for part in dotted.split("."):
         if not isinstance(node, dict) or part not in node:
@@ -111,11 +102,9 @@ def get(config: dict[str, Any], dotted: str, default: Any = None) -> Any:
 
 
 def resolved_dump(config: dict[str, Any], destination: Path) -> Path:
-    """Write the fully expanded config a run actually used, next to that run's output.
-
-    This is the record that makes a result reproducible: the YAML on disk may have been
-    edited since, and a sweep point is not in the YAML at all.
-    """
+    """The fully expanded config a run used, written beside that run's output. The record that
+    makes a result reproducible: the YAML may have been edited since, and a sweep point is not
+    in it at all."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
         yaml.safe_dump(config, sort_keys=False, default_flow_style=False), encoding="utf-8"

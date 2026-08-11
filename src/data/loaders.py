@@ -1,16 +1,10 @@
 """Reading inputs and caching the processed form. Replace the bodies; keep the contract.
 
-THE CONTRACT this template asks a project's loaders to keep:
-
-1. **Never build a path.** Ask `src.utils.paths`, so the same call works on a laptop and on
-   both cluster tiers.
+1. **Never build a path.** Ask `src.utils.paths`, so one call works on a laptop and both tiers.
 2. **`data/raw/` is read-only.** Nothing here writes to it, ever.
-3. **A cache is only valid once its marker exists.** Write the marker LAST, so a run killed
-   halfway leaves an incomplete cache that is correctly treated as absent rather than
-   silently reused — a half-written cache that looks complete is a wrong result nobody
-   investigates.
-4. **Return the same object shape whether the cache hit or missed.** A caller that can tell
-   the difference will eventually depend on it.
+3. **A cache is valid only once its marker exists**, and the marker is written LAST — a
+   half-written cache that looks complete is a wrong result nobody investigates.
+4. **Return the same shape on a hit and a miss.** A caller that can tell will depend on it.
 """
 
 from __future__ import annotations
@@ -63,11 +57,8 @@ def is_cached(dataset: str) -> bool:
 
 
 def preprocess(frame: pd.DataFrame) -> pd.DataFrame:
-    """PROJECT-SPECIFIC. Replace this with the real preprocessing.
-
-    Kept as a separate pure function so it can be tested on a small frame without touching
-    the filesystem, which is the only way preprocessing bugs get caught early.
-    """
+    """PROJECT-SPECIFIC. Replace with the real preprocessing. A separate pure function so it can
+    be tested on a small frame without touching the filesystem."""
     return frame
 
 
