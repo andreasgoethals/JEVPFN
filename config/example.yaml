@@ -1,0 +1,50 @@
+# One YAML per experiment. No subfolders, no inheritance, no includes — a config file is
+# read top to bottom and that is the whole story. Copy this file, rename it after the
+# experiment, and delete what you do not use.
+#
+# The shape is fixed by the template:
+#
+#   sweep:      at the TOP. Every knob with more than one value. The full cartesian
+#               product is run, so a sweep of 3 x 2 x 2 is twelve runs — check the count
+#               before you submit, because it grows faster than it reads.
+#   everything  below the sweep is a SINGLE value, shared by every run in the sweep.
+#   below
+#
+# One short comment per knob, saying what it is.
+
+name: example                  # experiment name; names the output subdirectory
+seed: 20260811                 # base seed; each sweep point derives its own from this
+
+# ---------------------------------------------------------------------------
+# SWEEP — the cartesian product of everything in here is run.
+# ---------------------------------------------------------------------------
+sweep:
+  model: [baseline, proposed]  # which model variant to fit
+  n_estimators: [100, 500]     # capacity knob being varied
+  fold: [0, 1, 2, 3, 4]        # cross-validation fold index
+
+# ---------------------------------------------------------------------------
+# Single values — the same for every point in the sweep above.
+# ---------------------------------------------------------------------------
+data:
+  dataset: example             # dataset slug, resolved by src/utils/paths.py
+  target: y                    # name of the target column
+  test_size: 0.2               # held-out fraction, applied after the fold split
+
+train:
+  max_epochs: 50               # hard cap; early stopping usually ends it sooner
+  patience: 5                  # epochs without improvement before stopping
+  batch_size: 256              # rows per step
+  learning_rate: 0.001         # optimiser step size
+
+eval:
+  metrics: [auc, accuracy, brier]   # computed for every run, written to output/results/
+  # Per-row predictions are LARGE — one file per run per fold. They go to
+  # output/results/, which lives on project storage on the cluster for exactly this
+  # reason. Turn them off for a quick sweep.
+  save_predictions: true
+
+logging:
+  level: INFO                  # DEBUG only when chasing something specific
+  progress_bar: false          # tqdm writes control characters into a SLURM log; keep
+                               # it off for cluster runs

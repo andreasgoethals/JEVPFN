@@ -1,0 +1,59 @@
+{
+  // Shared, and committed on purpose — see the note in .gitignore. Everything here follows
+  // from the repository's layout rather than from anyone's taste.
+
+  // The repository root on the analysis path. WHY: `src/` is a FLAT package root
+  // (src/data, src/utils, src/visualize), so every import reads `from src.utils.paths import
+  // ...`. Without this, Pylance cannot resolve any of them in a fresh clone and underlines
+  // every import in every file until someone runs `pip install -e .`.
+  "python.analysis.extraPaths": ["."],
+  "python.analysis.typeCheckingMode": "basic",
+
+  // Tests are discovered from tests/, which is where pyproject.toml points pytest too.
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+
+  // Ruff for both linting and formatting, so the editor agrees with `scripts/check.py`.
+  // An editor that formats differently from CI turns every commit into a diff of whitespace.
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // 100 columns, matching [tool.ruff] line-length in pyproject.toml.
+  "editor.rulers": [100],
+
+  // Notebooks run from the repository root, the same as `scripts/run_notebooks.py` does.
+  // Without this a notebook's cwd is notebooks/ and `from src...` fails only interactively —
+  // the worst kind of difference, because interactive is where figures are iterated on.
+  "jupyter.notebookFileRoot": "${workspaceFolder}",
+
+  // Never index or search these. tfm-library/ is a 749 MB read-only submodule; output/ is
+  // regenerated. Searching them buries every real result.
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true
+  },
+  "search.exclude": {
+    "tfm-library": true,
+    "output": true,
+    "data": true,
+    ".venv": true
+  },
+  "python.analysis.exclude": ["tfm-library", "output", "data"],
+
+  // The submodule is READ-ONLY by rule. This makes the editor enforce what the rule asks,
+  // so an accidental edit there is not even possible.
+  "files.readonlyInclude": {
+    "tfm-library/**": true
+  },
+
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}

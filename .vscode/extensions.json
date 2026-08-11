@@ -1,0 +1,11 @@
+{
+  // What VS Code offers to install when this repository is opened. Only the ones
+  // settings.json actually depends on — a long wish list gets dismissed and then the two
+  // that matter are never installed either.
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "ms-toolsai.jupyter"
+  ]
+}

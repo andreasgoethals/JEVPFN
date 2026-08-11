@@ -1,0 +1,86 @@
+# ===========================================================================
+# {{PROJECT_NAME}} — what is never committed.
+#
+# THE ANCHORING RULE, which the compliance test enforces:
+# a bare `figures/` matches EVERY directory called figures at any depth, including
+# `output/figures/`. When a name should only match at the repository root, it carries a
+# leading slash. Every rule below that names one of the tree's directories is anchored;
+# the unanchored rules are the ones that genuinely must match anywhere (`__pycache__/`).
+#
+# THE `**` + directory re-inclusion IDIOM, used for data/ and output/:
+#     /output/**            ignore everything under output/, at any depth
+#     !/output/**/          but still DESCEND into its directories
+#     !/output/**/.gitkeep  and keep the structure markers
+# The middle line is load-bearing. Without it git never enters `output/figures/`, so the
+# `.gitkeep` negation below can never match and a fresh clone has no output tree.
+# ===========================================================================
+
+# --- Raw and processed data ------------------------------------------------
+# Raw data is irreplaceable and usually not ours to redistribute; processed data is a
+# cache that any preprocessing script rebuilds. Neither belongs in git history.
+/data/**
+!/data/**/
+!/data/**/.gitkeep
+
+# --- Everything the code generates ----------------------------------------
+# One root for generated files means one rule here. The exceptions below are the small
+# text artefacts that ARE the record of a run and are worth having in git.
+/output/**
+!/output/**/
+!/output/**/.gitkeep
+!/output/All_Results.md
+!/output/figures/CAPTIONS.md
+# PNGs are committed on purpose — they are the low-DPI renders, small enough to review in
+# a diff and to look at on GitHub without cloning.
+!/output/figures/**/*.png
+# PDFs are the print-quality twins of those PNGs: regenerable, vector, and large. The
+# paper pulls them from a local run, not from git.
+/output/figures/**/*.pdf
+
+# --- Model weights --------------------------------------------------------
+# Hundreds of MB each, and either downloaded from upstream or reproducible from a run.
+/checkpoints/**
+!/checkpoints/**/
+!/checkpoints/**/.gitkeep
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.npz
+
+# --- Environments and tool caches -----------------------------------------
+# Unanchored on purpose: these appear at any depth and are never wanted anywhere.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# --- Editor and OS --------------------------------------------------------
+# `.vscode/` is ignored EXCEPT two files that are shared on purpose. WHY: without
+# `python.analysis.extraPaths`, Pylance cannot resolve `from src.utils...` in a fresh clone
+# (the repository uses a flat `src/` package root, not `src/<package>/`), so every import in
+# every file is underlined red until someone runs the editable install. That is not a
+# personal preference, it is the project's layout, so it belongs in git.
+/.vscode/*
+!/.vscode/settings.json
+!/.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Local secrets and overrides ------------------------------------------
+# Anchored: a project-level .env only, never a fixture called .env inside tests/.
+/.env
+/.env.local

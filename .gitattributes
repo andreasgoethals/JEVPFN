@@ -1,0 +1,19 @@
+# Line endings are normalised in the repository and checked out as LF everywhere.
+# WHY: the dev machine is Windows and every cluster job is Linux bash. Without this, a
+# CRLF `scripts/slurm/*.slurm` fails on SLURM with a bare "$'\r': command not found",
+# which reads like a script bug and is not one.
+* text=auto eol=lf
+
+# Notebooks are JSON: diff them as text, never as a blob.
+*.ipynb text
+
+# Binary, so git never tries to normalise line endings inside them and never offers a
+# useless textual diff.
+*.pdf binary
+*.png binary
+*.ckpt binary
+*.pt binary
+*.npy binary
+*.npz binary
+*.parquet binary
+*.safetensors binary

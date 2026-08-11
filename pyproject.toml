@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{PACKAGE_NAME}}"
+version = "0.1.0"
+description = "{{DESCRIPTION}}"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "{{AUTHOR}}", email = "{{EMAIL}}" }]
+
+# ---------------------------------------------------------------------------
+# WHY 3.11-3.12 and not open-ended.
+#
+# The local dev environment and the VSC environment must run the SAME minor
+# version, because numerics that differ between two interpreters are a
+# reproducibility hazard nobody notices until a result will not replicate.
+#
+# VSC ships a small set of Python modules; 3.11 and 3.12 are both present and
+# both well covered by wheels. 3.13+ is excluded because scientific wheel
+# coverage there still lags, and a template must build on day one.
+# ---------------------------------------------------------------------------
+requires-python = ">=3.11,<3.13"
+
+dependencies = [
+    "numpy>=1.26,<3.0",
+    "pandas>=2.1,<3.0",
+    "pyyaml>=6.0",            # config/*.yaml — the template's config idiom
+    "matplotlib>=3.8",        # src/visualize/
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+# The two tools the template's health check runs, plus a Jupyter kernel for
+# notebooks/. Nothing here is imported by src/, so a production install stays thin.
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "ipykernel>=6.29",
+]
+
+[project.urls]
+Repository = "{{REPO_URL}}"
+
+# ---------------------------------------------------------------------------
+# Packaging: src/ is a flat package root (src/data, src/utils, src/visualize),
+# NOT a src/{{PACKAGE_NAME}}/ layout, because every script and notebook imports
+# `from src.utils.paths import ...`. Changing the layout breaks every import in
+# the repository, so it is fixed by the template.
+#
+# The excludes matter: without them, `pip install -e .` walks the read-only
+# literature submodule and the data directory looking for packages.
+# ---------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+exclude = ["tfm-library*", "notebooks*", "data*", "output*", "checkpoints*", "docs*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    # Read-only submodule. Never lint, never format, never touch.
+    "tfm-library",
+    # Generated output and notebook JSON are not source.
+    "output",
+    "notebooks",
+    ".venv",
+    "venv",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
+ignore = [
+    "E501",    # line length is the formatter's job, not the linter's
+    "B905",    # zip(strict=) noise in numeric code
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Template idiom: scripts/ are invoked as files, not imported, so they insert the
+# repository root on sys.path BEFORE importing from src. That is an import-not-at-top
+# by construction.
+"scripts/*" = ["E402"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+# WHY: without this, pytest walks tfm-library/ and tries to collect the upstream
+# code snapshots as tests. It finds "test" in filenames there and fails on imports
+# of packages this project does not have.
+norecursedirs = ["tfm-library", "output", "data", ".venv", "venv", "notebooks"]
+markers = [
+    "slow: takes more than a few seconds",
+    "gpu: requires CUDA; skipped on the local dev machine",
+]
