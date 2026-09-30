@@ -1,0 +1,23 @@
+phase: experiment_0
+name: debugging
+enabled: false  # Prepared checks only; no allocation has been submitted.
+execution_site: vsc_compute_node
+feature_config: feature_creation/default
+cluster:
+  account: lp_verbekelab  # Same account as CreditPFN; verify current association on VSC.
+  cpu: {name: wice, partition: interactive}
+  gpu: {name: wice, partition: gpu_a100_debug, gpus: 1}
+  gpu_alternative: {name: mindwell, partition: gpu_b200, gpus: 1}
+environment: JEVPFN
+feature_artifacts: []  # Populate after full local feature creation and validation.
+requires: [complete_locally_created_features]
+checks:
+  - python_and_dependency_versions
+  - dataset_hashes_and_row_alignment
+  - no_target_in_jev_state
+  - response_validation_and_probability_mass
+  - cache_reuse_after_restart
+  - feature_artifact_integrity
+  - tabpfn_3_5_import_and_cuda
+  - later_small_inference_smoke_after_weights_are_prepared
+acceptance: unresolved  # Preflight success alone is not experiment-0 acceptance.

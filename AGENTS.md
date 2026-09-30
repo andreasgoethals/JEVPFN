@@ -1,4 +1,4 @@
-# AGENTS.md — {{PROJECT_NAME}}
+# AGENTS.md — JEVPFN
 
 Instructions for AI agents working in this repository.
 
@@ -12,8 +12,12 @@ Instructions for AI agents working in this repository.
    that failed last month, or spending an hour on a known dead end.
 3. [`README.md`](README.md) — what this project actually is.
 
-**If a `_template/` folder still exists**, read [`_template/README.md`](_template/README.md)
-first: this is either the un-initialised template or a project where nobody deleted the folder.
+This project is initialised; the owner requested removal of the inherited `_template` files.
+Current phase layout and setup instructions live in `README.md`, not in that directory.
+The owner selected text-only per-column and joint Jev inputs, skipping empty inputs and storing
+missing features. All Jev feature creation is local before VSC experiment 0. Generated full
+reports contain raw examples and are gitignored under `output_JEVPFN/<phase>/`.
+Publication to the public `andreasgoethals/JEVPFN` repository is explicitly authorized in this session.
 
 ## 1. `tfm-library/` IS READ-ONLY. NO EXCEPTIONS BUT ONE.
 
@@ -29,7 +33,7 @@ sentence.
 reformat. Anything you write there is lost when the pin moves, or corrupts a resource every other
 project shares. **The one exception** is `tfm-library/PROJECT_SPECIFIC.md`, gitignored by the
 library for exactly this purpose and created from `PROJECT_SPECIFIC.template.md`. If a library
-document is wrong, report it to {{AUTHOR}} rather than patching it — the fix belongs in the
+document is wrong, report it to Andreas Goethals rather than patching it — the fix belongs in the
 library's own checkout, where it flows down to every consumer. Never lint, format or test it.
 
 Cite papers by path (`tfm-library/papers/<year>/...`, full text under `papers/text/`), and **code
@@ -52,7 +56,7 @@ represent from how *often* it occurs; a library annotation from the primary sour
 ## 4. Do not train, install, or push without asking
 
 Cluster runs cost real VSC credits. Installs change a shared environment. Pushes are
-{{AUTHOR}}'s action. Ask first.
+Andreas Goethals' action. Ask first.
 
 ## 5. Windows PowerShell 5.1 — no `&&`
 

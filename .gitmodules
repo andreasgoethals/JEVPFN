@@ -1,3 +1,3 @@
 [submodule "tfm-library"]
 	path = tfm-library
-	url = {{TFM_LIBRARY_URL}}
+	url = https://github.com/andreasgoethals/TFM_Library.git

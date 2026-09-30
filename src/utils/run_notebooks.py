@@ -4,9 +4,9 @@
     python -m src.utils.run_notebooks --only exploration  just these, by stem
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
-    output/figures/<notebook>/*.pdf   written by the notebooks themselves
-    output/figures/CAPTIONS.md        ONE file, all notebooks, notebook order
-    output/All_Results.md             every notebook's printed summary, alphabetical
+    output_JEVPFN/<phase>/figures/<notebook>/*.pdf   written by the notebooks themselves
+    output_JEVPFN/captions.md                       all figure captions
+    output_JEVPFN/allresults.md             every notebook's printed summary, alphabetical
 
 SEPARATE PROCESSES, NOT THREADS: matplotlib's figure registry is global, so two notebooks in
 one interpreter would capture each other's figures — silently, giving plausible figures
@@ -26,6 +26,7 @@ documents. A hard-coded list silently stops covering a notebook someone added.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -35,20 +36,26 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.utils.notebook_report import atomic_text
 from src.utils.paths import (
     REPO_ROOT,
     all_results_path,
     captions_path,
     figures_dir,
+    logs_dir,
+    manifests_dir,
+    notebook_phase,
     notebooks_dir,
+    reports_dir,
 )
+from src.utils.serialization import write_json
 
 #: Per-notebook wall-clock limit. A notebook summarises a finished computation; one needing
 #: longer is doing work that belongs in a script.
 DEFAULT_TIMEOUT = 1800
 
-#: Captured stdout, parked between execution and assembly, then removed. `_figures.json` is
-#: KEPT: CAPTIONS.md must be rebuildable from disk without re-executing anything.
+#: Legacy capture filename, still readable by the summary builder. New reports are durable
+#: under each phase's reports/, with process stdout/stderr in logs/.
 STDOUT_FILE = "_stdout.txt"
 
 
@@ -75,7 +82,7 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
 
 def _prelude() -> str:
     """Injected above every flattened notebook. `Agg` because a compute node has no display, and
-    stdout is captured so `All_Results.md` can be built without the notebook knowing."""
+    stdout is captured so `allresults.md` can be built without the notebook knowing."""
     return (
         "import matplotlib\n"
         'matplotlib.use("Agg")\n'
@@ -115,32 +122,65 @@ def run_one(name: str, timeout: int = DEFAULT_TIMEOUT) -> NotebookResult:
 
     out_dir = figures_dir(name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    text_path = out_dir / STDOUT_FILE
+    phase = notebook_phase(name)
+    log_dir = logs_dir(phase)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    text_path = log_dir / f"{name}.stdout.txt"
+    atomic_text(reports_dir(name), f"RUNNING: {name}; previous report superseded.")
 
     # The generated script goes to the system temp dir, NOT into the figure folder: the
     # notebook clears that folder as its first act, and on Windows a directory cannot be
     # modified while it holds the script currently being executed from it.
-    tmp = Path(tempfile.gettempdir()) / f"nbrun_{name}.py"
+    with tempfile.NamedTemporaryFile(prefix=f"nbrun_{name}_", suffix=".py", delete=False) as handle:
+        tmp = Path(handle.name)
     tmp.write_text(_build_script(nb_path, text_path), encoding="utf-8")
     try:
         proc = subprocess.run(
             [sys.executable, str(tmp)],
-            cwd=str(REPO_ROOT),   # so `from src...` resolves without an install
+            cwd=str(REPO_ROOT),  # so `from src...` resolves without an install
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            env={
+                **os.environ,
+                "PYTHONIOENCODING": "utf-8",
+                "OMP_NUM_THREADS": "1",
+                "MKL_NUM_THREADS": "1",
+                "OPENBLAS_NUM_THREADS": "1",
+                "NUMEXPR_NUM_THREADS": "1",
+            },
             timeout=timeout,
             check=False,
         )
     except subprocess.TimeoutExpired:
+        atomic_text(reports_dir(name), f"FAILED: {name}; timed out after {timeout}s")
+        write_json(
+            manifests_dir(phase) / f"{name}_run.json",
+            {"name": name, "ok": False, "error": "timeout"},
+        )
         return NotebookResult(name, False, time.time() - started, 0, f"timed out after {timeout}s")
     finally:
         tmp.unlink(missing_ok=True)
 
+    atomic_text(log_dir / f"{name}.stderr.txt", proc.stderr or "")
+    write_json(
+        manifests_dir(phase) / f"{name}_run.json",
+        {
+            "name": name,
+            "ok": proc.returncode == 0,
+            "seconds": time.time() - started,
+            "interpreter": sys.executable,
+            "phase": phase,
+        },
+    )
     n_figs = len(list(out_dir.glob("*.pdf")))
     if proc.returncode != 0:
         # Only the tail: a full traceback from twelve notebooks buries the one that matters.
         tail = "\n".join((proc.stderr or "").strip().splitlines()[-12:])
+        atomic_text(reports_dir(name), f"FAILED: {name}\n{tail}")
         return NotebookResult(name, False, time.time() - started, n_figs, tail)
+    if reports_dir(name).read_text(encoding="utf-8").startswith("RUNNING:"):
+        atomic_text(reports_dir(name), text_path.read_text(encoding="utf-8"))
     return NotebookResult(name, True, time.time() - started, n_figs)
 
 
@@ -150,12 +190,14 @@ def run_one(name: str, timeout: int = DEFAULT_TIMEOUT) -> NotebookResult:
 
 
 def _captured_text(name: str) -> str:
-    path = figures_dir(name) / STDOUT_FILE
+    path = reports_dir(name)
+    if not path.is_file():
+        path = figures_dir(name) / STDOUT_FILE
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
-def write_captions(notebooks: tuple[str, ...]) -> Path:
-    """ONE CAPTIONS.md for the project, grouped per notebook, in notebook order.
+def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> Path:
+    """ONE captions.md for the project, grouped per notebook, in notebook order.
 
     Built from each `_figures.json`, so it regenerates from disk after an interactive run. A
     figure with no caption gets a loud placeholder rather than being skipped — a gap should be
@@ -188,13 +230,18 @@ def write_captions(notebooks: tuple[str, ...]) -> Path:
             lines.append("")
             lines.append(e["caption"] or "> MISSING CAPTION. Add one at the `save()` call.")
             lines.append("")
-    path = captions_path()
+    path = captions_path(phase)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_text(path, "\n".join(lines))
+    if phase is None:
+        for group in sorted({notebook_phase(name) for name in notebooks}):
+            write_captions(
+                tuple(name for name in notebooks if notebook_phase(name) == group), phase=group
+            )
     return path
 
 
-def write_all_results(notebooks: tuple[str, ...]) -> Path:
+def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -> Path:
     """Every notebook's printed summary, concatenated. The shape is fixed:
 
     one block per notebook, **sorted alphabetically by notebook name**; each block is that
@@ -216,16 +263,15 @@ def write_all_results(notebooks: tuple[str, ...]) -> Path:
     for name in names:
         text = _captured_text(name).strip()
         lines += ["---", "", f"## {name}", "", "```", text or "(no output captured)", "```", ""]
-    path = all_results_path()
+    path = all_results_path(phase)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_text(path, "\n".join(lines))
+    if phase is None:
+        for group in sorted({notebook_phase(name) for name in notebooks}):
+            write_all_results(
+                tuple(name for name in notebooks if notebook_phase(name) == group), phase=group
+            )
     return path
-
-
-def _cleanup(notebooks: tuple[str, ...]) -> None:
-    """Drop the captured-stdout scratch files once folded into `All_Results.md`."""
-    for name in notebooks:
-        (figures_dir(name) / STDOUT_FILE).unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -246,9 +292,11 @@ def run_all(
     names = discover(notebooks)
     if not names:
         return []
-    # Capped at 4: notebooks are numpy-heavy and each already uses several threads, so more
-    # workers than this trades parallelism for cache thrashing.
-    workers = max_workers or min(len(names), 4)
+    # Default to four separate processes and one BLAS thread per process.
+    # Users can choose a lower worker count to reduce peak memory.
+    workers = min(len(names), 4) if max_workers is None else max_workers
+    if workers < 1:
+        raise ValueError("workers must be positive")
 
     results: list[NotebookResult] = []
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -256,9 +304,13 @@ def run_all(
         for fut in as_completed(futures):
             results.append(fut.result())
 
-    write_captions(names)
-    write_all_results(names)
-    _cleanup(names)
+    from src.data.audit import audit_lock
+    from src.utils.paths import outputs_dir
+
+    with audit_lock(outputs_dir() / "report_lock"):
+        all_names = tuple(sorted(set(discover()) | set(names)))
+        write_captions(all_names)
+        write_all_results(all_names)
     return sorted(results, key=lambda r: names.index(r.name))
 
 
@@ -300,8 +352,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--only", nargs="+", metavar="STEM", help="notebook stems to run")
     parser.add_argument("--workers", type=int, default=None, help="parallel processes")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="seconds per notebook")
-    parser.add_argument("--summaries-only", action="store_true",
-                        help="rebuild both documents from disk, run nothing")
+    parser.add_argument(
+        "--summaries-only",
+        action="store_true",
+        help="rebuild both documents from disk, run nothing",
+    )
     args = parser.parse_args(argv)
 
     names = discover(tuple(args.only) if args.only else None)
@@ -311,8 +366,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.summaries_only:
         print(f"Rebuilding summaries from disk for: {', '.join(names)}")
-        print(f"  captions  -> {write_captions(names)}")
-        print(f"  summaries -> {write_all_results(names)}")
+        all_names = tuple(sorted(set(discover()) | set(names)))
+        print(f"  captions  -> {write_captions(all_names)}")
+        print(f"  summaries -> {write_all_results(all_names)}")
         return 0
 
     print(f"Running {len(names)} notebook(s): {', '.join(names)}")

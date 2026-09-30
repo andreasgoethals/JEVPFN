@@ -1,0 +1,380 @@
+collection: multabench_core_text
+upstream_commit: 3bb95079a6146ed35d45187e98bcad5b063273a1
+upstream_tag: paper_version
+tabstar_numeric_rule_version: 1.1.15
+sources:
+  core.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/all_multabench_datasets.py
+    sha256: 3c2dec2eb125453024c2964737333559ed5fc5315cc8c34602f8c27ad2dcb9cd
+  ids.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/all_datasets.py
+    sha256: 53eb0532ded23ad9829bf904e6f47aeb7da5a28e3f5dbd751900f451060ecb8d
+  summary.csv:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/leaderboard/results/datasets_summary.csv
+    sha256: 928ab76f66d13878a4c96614a2acede82521c53b6a7bc0a399b5ef8c7f390031
+  summary_script.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/scripts/do_dataset_summary.py
+    sha256: ea4adaaa8370bd59280cba65596e46710a61701ebecdecb19aad64d3da4ad32c
+  feat_types.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/preprocessing/feat_types.py
+    sha256: ea926610bdb9e6673ae8e588e5c32b573957911c2ee07ee3780bac6eaf0f0c84
+  nulls.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/utils/nulls.py
+    sha256: e781f1d7ce5984cb6a6e0dd7b4f80161d914e60c36ab514c705e81c92f72b6ce
+  load.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/benchmark/load.py
+    sha256: aa5591e947406d05ddb03a738e4dce01f4505f1c039a9585665263c1e58b3ab5
+  curation.py:
+    url: https://raw.githubusercontent.com/alanarazi7/MulTaBench/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/benchmark/utils/curation.py
+    sha256: 273d21e2af8cfb648c4009af6db6118eef4489e49ea6ef96407fb59905414d3b
+datasets:
+- id: BIN_TEXT_FAKE_JOB_POSTING
+  name: Fake Job Postings
+  slug: multabench-fake-job-posting
+  version: 1
+  paper_summary:
+    rows: 12725
+    text_columns: 3
+    non_text_columns: 2
+  text_columns:
+  - title
+  - salary_range
+  - description
+  sha256:
+    data.csv: b6568e415ad49cb7bd23848dfbb8d381f9de590e133a5075abbf4c1a7c7c1711
+    metadata.json: 4543d454ae6faf856d33137278ad58553663d193a34a35740de969f9c4e652d8
+  directory: 01_fake_job_posting
+- id: BIN_TEXT_JIGSAW_TOXICITY
+  name: Jigsaw Toxicity
+  slug: multabench-jigsaw-toxicity
+  version: 1
+  paper_summary:
+    rows: 100000
+    text_columns: 1
+    non_text_columns: 30
+  text_columns:
+  - comment_text
+  sha256:
+    data.csv: f7fc03fae6417d9d672b20ac2a5da5d9b3cb9d9e9f4b174610bc32379b6d9d38
+    metadata.json: 982ef528956e01422c3e7a943422202c39579f673c01ba302a7171cfb8dc66af
+  directory: 02_jigsaw_toxicity
+- id: BIN_TEXT_KICKSTARTER_FUNDING
+  name: Kickstarter
+  slug: multabench-kickstarter-funding
+  version: 1
+  paper_summary:
+    rows: 86502
+    text_columns: 3
+    non_text_columns: 6
+  text_columns:
+  - name
+  - desc
+  - keywords
+  sha256:
+    data.csv: 29fc9013b44778fc280905ab1e07b4f7d1e42b62333c7af5a5e704a9a17d2371
+    metadata.json: d4443dab3681016ab6d7a3d4c1b2a560aba9410016d7d8205bc56429a1b8f711
+  directory: 03_kickstarter_funding
+- id: MUL_TEXT_DATA_SCIENTIST_SALARY
+  name: Data Scientist Salary
+  slug: multabench-data-scientist-salary
+  version: 1
+  paper_summary:
+    rows: 15841
+    text_columns: 5
+    non_text_columns: 1
+  text_columns:
+  - experience
+  - job_description
+  - job_desig
+  - key_skills
+  - location
+  sha256:
+    data.csv: 9ba54d2c8d54eeb4b4dcc5ef74f0775d12713ccfabe1b618c01f468bae1210ca
+    metadata.json: 639a089e694ff5943a5ea7305db21ec08aac7266c29a0e9ec28c4b9ae2525c47
+  directory: 04_data_scientist_salary
+- id: MUL_TEXT_MICHELIN_RESTAURANTS
+  name: Michelin Guide
+  slug: multabench-michelin-restaurants
+  version: 1
+  paper_summary:
+    rows: 18843
+    text_columns: 6
+    non_text_columns: 5
+  text_columns:
+  - Name
+  - Address
+  - Location
+  - Cuisine
+  - FacilitiesAndServices
+  - Description
+  sha256:
+    data.csv: e17db42d03a76d467a0fe29ce7ac0484a2dfda5880725947a3d4715219058b69
+    metadata.json: 0ff22a192e4652525e38eacb0bc4b2971da01caf23dfb69945fab8634c83c55f
+  directory: 05_michelin_restaurants
+- id: MUL_TEXT_PRODUCT_SENTIMENT
+  name: Product Sentiment
+  slug: multabench-product-sentiment
+  version: 1
+  paper_summary:
+    rows: 5091
+    text_columns: 1
+    non_text_columns: 1
+  text_columns:
+  - Product_Description
+  sha256:
+    data.csv: 8a75a9880a5a1a619b16622c7f8f257ff8d19fde9b02864bf0059d5b0a8c2bb7
+    metadata.json: db78538f386c3eed11df6c9110fbd8de30c9f7c72311ff85ee6811fd75bfde13
+  directory: 06_product_sentiment
+- id: MUL_TEXT_SPOTIFY_GENRES
+  name: Spotify Genres
+  slug: multabench-spotify-genres
+  version: 1
+  paper_summary:
+    rows: 114000
+    text_columns: 3
+    non_text_columns: 15
+  text_columns:
+  - artists
+  - album_name
+  - track_name
+  sha256:
+    data.csv: 4adab89484c14fb7784dca2bea1725efa5bab39706e0204ab17f98c2c31c4961
+    metadata.json: 49211f8a65cbec1c9f66d233592852830c403ff0b877d4a03fe7514abee7056b
+  directory: 07_spotify_genres
+- id: MUL_TEXT_US_ACCIDENTS
+  name: US Accidents
+  slug: multabench-us-accidents
+  version: 1
+  paper_summary:
+    rows: 100001
+    text_columns: 6
+    non_text_columns: 38
+  text_columns:
+  - Description
+  - Street
+  - City
+  - County
+  - Zipcode
+  - Airport_Code
+  sha256:
+    data.csv: 0ea60d271a283ce9c6552f6248cf43f4891b04891eb41344ec1a347dddb1ce65
+    metadata.json: 948dca7188c1c21927ce67f1f46b087dac84309a1483f1d8173015c81339a672
+  directory: 08_us_accidents
+- id: MUL_TEXT_WINE_REVIEW
+  name: Wine Review
+  slug: multabench-wine-review
+  version: 1
+  paper_summary:
+    rows: 84123
+    text_columns: 2
+    non_text_columns: 3
+  text_columns:
+  - description
+  - province
+  sha256:
+    data.csv: c54101bb07571a3df0723e93a5f7c48123dd792b316396db4404a04bcf1809cb
+    metadata.json: 6e3d2eb8f0f28a3f8d53a7f91c69ff0ea9e2ce7e79c57c70866b4e8ffc4094b3
+  directory: 09_wine_review
+- id: MUL_TEXT_WOMEN_CLOTHING_REVIEW
+  name: Women's Clothing
+  slug: multabench-women-clothing-review
+  version: 1
+  paper_summary:
+    rows: 18788
+    text_columns: 2
+    non_text_columns: 8
+  text_columns:
+  - Title
+  - Review Text
+  sha256:
+    data.csv: b6e8282316d670df1d53f3679db5da6001030955a109d319f8354360f4fe3fa3
+    metadata.json: b1c67237bd9757abf3bf197d7a395d0ca347069c22751458860ca5a079e433a3
+  directory: 10_women_clothing_review
+- id: REG_TEXT_BABIES_PRICES
+  name: Baby Products
+  slug: multabench-babies-prices
+  version: 1
+  paper_summary:
+    rows: 5085
+    text_columns: 4
+    non_text_columns: 8
+  text_columns:
+  - title
+  - company_struct
+  - company_free
+  - colors
+  sha256:
+    data.csv: f758c32f293b4120a4c257e21c00a42afad36106a936ec0c8b1108f0e4431905
+    metadata.json: 4ddcf12a65a22f96ca0dbf92e2e93215b6dc26d626d3592a3dae11b048d0c178
+  directory: 11_babies_prices
+- id: REG_TEXT_BOOK_PRICE
+  name: Book Price
+  slug: multabench-book-price
+  version: 1
+  paper_summary:
+    rows: 4989
+    text_columns: 5
+    non_text_columns: 3
+  text_columns:
+  - Title
+  - Author
+  - Edition
+  - Synopsis
+  - Genre
+  sha256:
+    data.csv: 306d668de6068df6a89662a18dd1c4a421ce3f6a6ced57b622c5bdef264d1409
+    metadata.json: 488b36e92fbd6ed64c667e466a5db3b3d12a041b5efec8e7ba7f4a512fcfc1b4
+  directory: 12_book_price
+- id: REG_TEXT_BOOK_READABILITY
+  name: Book Readability
+  slug: multabench-book-readability
+  version: 1
+  paper_summary:
+    rows: 4724
+    text_columns: 6
+    non_text_columns: 24
+  text_columns:
+  - Author
+  - Title
+  - Anthology
+  - URL
+  - Excerpt
+  - British Words
+  sha256:
+    data.csv: 7b0e17412d03283b553921613ee3f7b62c9e629104ea4106cc8daf6ca3157a1d
+    metadata.json: d50da294b2fcc52603777c26fa08f2780227b520b9a6c07f2715421d0499e999
+  directory: 13_book_readability
+- id: REG_TEXT_MERCARI_MARKETPLACE
+  name: Mercari Marketplace
+  slug: multabench-mercari-marketplace
+  version: 1
+  paper_summary:
+    rows: 100000
+    text_columns: 6
+    non_text_columns: 3
+  text_columns:
+  - name
+  - category_name
+  - brand_name
+  - item_description
+  - cat2
+  - cat3
+  sha256:
+    data.csv: 4cb2e4e85cb0c2bef788e929c4407e7bdb6c13dea0be89eada7b51d1caa2b30d
+    metadata.json: 5623f451a7c04e05dd452646220a5110b69351343136e53700b480f91897769e
+  directory: 14_mercari_marketplace
+- id: REG_TEXT_MONTGOMERY_SALARIES
+  name: Montgomery Salaries
+  slug: multabench-montgomery-salaries
+  version: 1
+  paper_summary:
+    rows: 9228
+    text_columns: 3
+    non_text_columns: 8
+  text_columns:
+  - full_name
+  - division
+  - employee_position_title
+  sha256:
+    data.csv: 0dc600a333a8dea50d50abd0d00e75ca75fc7c61bdfd8f5579ff1e871b283bf6
+    metadata.json: 1aed1b3817933b5151da7e3574ab2c971409d7099c32045dbcd39c0d486181ab
+  directory: 15_montgomery_salaries
+- id: REG_TEXT_ROTTEN_TOMATOES
+  name: Rotten Tomatoes
+  slug: multabench-rotten-tomatoes
+  version: 1
+  paper_summary:
+    rows: 7158
+    text_columns: 13
+    non_text_columns: 2
+  text_columns:
+  - Name
+  - Release Date
+  - Director
+  - Creator
+  - Actors
+  - Cast
+  - Language
+  - Country
+  - RatingCount
+  - ReviewCount
+  - Genre
+  - Filming Locations
+  - Description
+  sha256:
+    data.csv: ebbddedd9beea465563ea26250bfbce951e371b4972f938394a67c4d4d8196c6
+    metadata.json: 8d492af42684543b85e5bd8187f371dbddddadaae3b50806266df2da529bd9a6
+  directory: 16_rotten_tomatoes
+- id: REG_TEXT_SCIMAGOJR_IMPACT
+  name: SciMagojr Impact
+  slug: multabench-scimagojr-impact
+  version: 1
+  paper_summary:
+    rows: 31136
+    text_columns: 10
+    non_text_columns: 12
+  text_columns:
+  - Title
+  - Issn
+  - SJR
+  - Citations / Doc  (2years)
+  - 'Ref  / Doc '
+  - Country
+  - Publisher
+  - Coverage
+  - Categories
+  - Areas
+  sha256:
+    data.csv: 182afb7a0c81040fc7828dca120fb51d7abe5f822a004dd4b52d2ed0dd6d0470
+    metadata.json: 98843b793f836439871839b6a1b64c99d7962f89987212863e9659e33d3ab8d6
+  directory: 17_scimagojr_impact
+- id: REG_TEXT_VANCOUVER_SALARIES
+  name: Vancouver Salaries
+  slug: multabench-vancouver-salaries
+  version: 1
+  paper_summary:
+    rows: 44574
+    text_columns: 2
+    non_text_columns: 3
+  text_columns:
+  - name
+  - title
+  sha256:
+    data.csv: 62463bf78d9a93c9e5bbae8b9c2f087ae335aa5dbe7c6ec60fdd334ed4c73576
+    metadata.json: 12e800985163992519a89cb11ddb8f479a0c1622ec4bac4c22c0095da9ca6342
+  directory: 18_vancouver_salaries
+- id: REG_TEXT_VIDEO_GAMES_SALES
+  name: Video Games Sales
+  slug: multabench-video-games-sales
+  version: 1
+  paper_summary:
+    rows: 16598
+    text_columns: 2
+    non_text_columns: 3
+  text_columns:
+  - Name
+  - Publisher
+  sha256:
+    data.csv: 635a4b91782c5d0f2f809614bfa86c66687b2ea781c90f8d6397e815a5e73d8d
+    metadata.json: f364bad35542e994be2731225edb21c45233d37c800d132775f8ca41dc40f744
+  directory: 19_video_games_sales
+- id: REG_TEXT_ZOMATO_RESTAURANTS
+  name: Zomato Restaurants
+  slug: multabench-zomato-restaurants
+  version: 1
+  paper_summary:
+    rows: 41665
+    text_columns: 7
+    non_text_columns: 8
+  text_columns:
+  - address
+  - name
+  - phone
+  - dish_liked
+  - cuisines
+  - reviews_list
+  - menu_item
+  sha256:
+    data.csv: f4f22453ca71cb279425752d9c55ac7048e89caf82a12f6598d9da09ce65ba51
+    metadata.json: 1a8c71c2a2f393503364760d665c9c3c038a24c3bc33f6c48aca6516c8fd0a64
+  directory: 20_zomato_restaurants

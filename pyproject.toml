@@ -3,12 +3,12 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "{{PACKAGE_NAME}}"
+name = "jevpfn"
 version = "0.1.0"
-description = "{{DESCRIPTION}}"
+description = "Deterministic Jev semantic augmentation for tabular prediction: initial data and request audit"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "{{AUTHOR}}", email = "{{EMAIL}}" }]
+authors = [{ name = "Andreas Goethals", email = "andreas.goethals@kuleuven.be" }]
 
 # ---------------------------------------------------------------------------
 # WHY 3.11-3.12 and not open-ended.
@@ -17,9 +17,9 @@ authors = [{ name = "{{AUTHOR}}", email = "{{EMAIL}}" }]
 # version, because numerics that differ between two interpreters are a
 # reproducibility hazard nobody notices until a result will not replicate.
 #
-# VSC ships a small set of Python modules; 3.11 and 3.12 are both present and
-# both well covered by wheels. 3.13+ is excluded because scientific wheel
-# coverage there still lags, and a template must build on day one.
+# Preserve the template's support boundary; JEVPFN's verified local runtime
+# and proposed VSC Conda environment both use 3.12. Widen this only after
+# checking the notebook and model dependency stack on both platforms.
 # ---------------------------------------------------------------------------
 requires-python = ">=3.11,<3.13"
 
@@ -29,19 +29,29 @@ dependencies = [
     "pyyaml>=6.0",            # config/*.yaml — the template's config idiom
     "matplotlib>=3.8",        # src/visualize/
     "tqdm>=4.66",
+    "pyarrow==25.0.1",        # Versioned, reusable feature tables (Parquet).
 ]
 
 [project.optional-dependencies]
-# The two tools the template's health check runs, plus a Jupyter kernel for
-# notebooks/. Nothing here is imported by src/, so a production install stays thin.
+# The template's health checks and the kernel used by thin notebook clients.
+# Model/API packages remain optional so data inspection stays lightweight.
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
-    "ipykernel>=6.29",
 ]
+notebooks = [
+    "ipython>=8,<10",         # Rich local notebook displays.
+    "ipykernel>=6.29,<8",     # Required even when dev is not installed.
+    "jupyterlab>=4,<5",
+    "nbclient>=0.10,<1",      # Execute the actual notebook kernel for verification.
+    "nbformat>=5.10,<6",
+]
+jev = ["typesafe-sdk==0.7.2"]  # Optional future transport; no live client is enabled.
+models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the hardware-specific Torch wheel first on VSC.
 
 [project.urls]
-Repository = "{{REPO_URL}}"
+Repository = "https://github.com/andreasgoethals/JEVPFN"
+Template = "https://github.com/andreasgoethals/0.-Template"
 
 # ---------------------------------------------------------------------------
 # Packaging: src/ is a flat package root (src/data, src/utils, src/visualize),
@@ -55,7 +65,7 @@ Repository = "{{REPO_URL}}"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
-exclude = ["tfm-library*", "notebooks*", "data*", "output*", "checkpoints*", "docs*"]
+exclude = ["tfm-library*", "notebooks*", "data*", "output*", "checkpoints*", "docs*", "src.data.upstream*"]
 
 [tool.ruff]
 line-length = 100
@@ -63,8 +73,9 @@ target-version = "py311"
 extend-exclude = [
     # Read-only submodule. Never lint, never format, never touch.
     "tfm-library",
+    "src/data/upstream",
     # Generated output and notebook JSON are not source.
-    "output",
+    "output", "output_JEVPFN",
     "notebooks",
     ".venv",
     "venv",
@@ -84,7 +95,7 @@ addopts = "-ra --strict-markers"
 # WHY: without this, pytest walks tfm-library/ and tries to collect the upstream
 # code snapshots as tests. It finds "test" in filenames there and fails on imports
 # of packages this project does not have.
-norecursedirs = ["tfm-library", "output", "data", ".venv", "venv", "notebooks"]
+norecursedirs = ["tfm-library", "output", "output_JEVPFN", "data", ".venv", "venv", "notebooks"]
 markers = [
     "slow: takes more than a few seconds",
     "gpu: requires CUDA; skipped on the local dev machine",

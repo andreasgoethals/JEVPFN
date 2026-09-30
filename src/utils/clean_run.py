@@ -4,9 +4,9 @@
     python -m src.utils.clean_run --clean                 delete it
     python -m src.utils.clean_run --clean --processed      ...and the data/processed cache too
 
-Clears the **whole `output/` tree on both storage tiers** — `$VSC_DATA` and project storage — so
+Clears the **whole `output_JEVPFN/` tree on both storage tiers** — `$VSC_DATA` and project storage — so
 one invocation is enough whether you are on a laptop or on the cluster. Off-cluster both tiers
-collapse into the repository and it is simply `output/`.
+collapse into the repository and it is simply `output_JEVPFN/`.
 
 `--processed` additionally clears `data/processed/`, the preprocessing cache. It is separate
 because rebuilding that cache can cost far more than re-running the notebooks, so "clean the last
@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.utils.paths import outputs_dir, processed_dir, results_dir
+from src.utils.paths import large_outputs_dir, outputs_dir, processed_dir
 
 #: Tracked so an empty directory survives a clone. Not run output, so never counted or deleted —
 #: removing them would leave a fresh clone with nowhere to write.
@@ -32,13 +32,13 @@ KEEP = frozenset({".gitkeep", ".gitignore"})
 
 
 def roots(*, processed: bool = False) -> list[Path]:
-    """Every tree to clear. Two `output/` roots on the cluster, one locally, plus the cache.
+    """Every tree to clear. Two `output_JEVPFN/` roots on the cluster, one locally, plus the cache.
 
-    `results_dir()` is listed separately because on the cluster it is the one part of `output/`
+    `results_dir()` is listed separately because on the cluster it is the one part of `output_JEVPFN/`
     on project storage — clearing only `outputs_dir()` there would leave the largest files behind.
     """
     found = [outputs_dir()]
-    results = results_dir()
+    results = large_outputs_dir()
     if not results.is_relative_to(found[0]):
         found.append(results)
     if processed:
@@ -60,7 +60,7 @@ def wipe(root: Path) -> int:
     Two passes, and the order matters: files first, then empty directories bottom-up. That leaves
     exactly the directories holding a tracked `.gitkeep` and removes the per-run ones
     (`figures/<notebook>/`) that do not. An `rmtree` of the subtree would take
-    `output/figures/.gitkeep` with it, and the next clone would have nowhere to write.
+    `output_JEVPFN/<phase>/figures/.gitkeep` with it, and the next clone would have nowhere to write.
     """
     if not root.is_dir():
         return 0

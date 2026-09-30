@@ -1,0 +1,10 @@
+phase: experiment_1
+name: main_comparison
+enabled: false
+downstream: {model: TabPFN-3.5, package_version: 9.0.0, device: cuda}
+feature_artifacts: []
+candidate_combinations: [non_text, non_text_plus_per_column, non_text_plus_joint, non_text_plus_both]
+include_non_text_features_in_jev: false
+feature_view: null  # Full vectors/scalars/uncertainty to be agreed.
+evaluation: {splits: null, metrics: null, repetitions: null, small_n: null}
+requires: [accepted_experiment_0, complete_feature_artifacts, agreed_evaluation_protocol]

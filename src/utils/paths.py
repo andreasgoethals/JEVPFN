@@ -1,18 +1,18 @@
 """Every path in the project. Two VSC tiers, one resolver, relative to the repository root.
 
 THE ONLY MODULE THAT BUILDS A PATH — everything else asks this one. A path assembled at a call
-site with `"output/" + name` is correct on a laptop and wrong on the cluster, and the failure
+site with `"output_JEVPFN/" + name` is correct on a laptop and wrong on the cluster, and the failure
 shows up as a full quota or an empty results directory hours into a job.
 
-        project storage  /lustre1/project/stg_00211/<Project>/  big files, backed up, LOW INODES
-    personal data    $VSC_DATA/<Project>/                   repo + output/, backed up, 75 GiB
+        project storage  /lustre1/project/stg_00211/<Project>/  big files; confirm quota/backup
+    personal data    $VSC_DATA/<Project>/                   repo + output_JEVPFN/, backed up, 75 GiB
     scratch          $VSC_SCRATCH/                          purged after 30 days of no ACCESS
 
-Both tiers are backed up. They differ in size and in convenience: `$VSC_DATA` is only 75 GiB but
-can be browsed directly, while project storage is large but has to be pulled down locally first
-(PowerShell, `scp`/`rsync`) before you can look at anything in it.
+The VSC documentation lists personal DATA backups, but does not establish the backup policy
+of this project's staging allocation. Verify it before storing paid responses. Use Lustre for
+wICE I/O; select native GPFS through the staging override before Mindwell bulk I/O.
 
-`output/results/` is therefore the one part of `output/` on project storage: per-row predictions
+`output_JEVPFN/<phase>/results/` is therefore the one part of `output_JEVPFN/` on project storage: per-row predictions
 reach gigabytes. Everything else stays where you can read it without a download, and project
 storage wants few big files rather than thousands of small ones anyway.
 
@@ -23,10 +23,11 @@ mean two code paths, and the one that only runs on the cluster is the one that b
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
-#: Filled in by `_template/init_project.py`. The per-project folder name on BOTH shared tiers.
-PROJECT_NAME = "{{PROJECT_NAME}}"
+#: The per-project folder name on BOTH shared tiers.
+PROJECT_NAME = "JEVPFN"
 
 #: Fallback for project storage when the site variable is not set. The literal path is a
 #: last resort, not the primary source — VSC has moved it before.
@@ -38,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Overrides for project storage, in priority order. The supported way to put big files on an
 #: external drive locally, and how the tests exercise the staging branch without a cluster.
-STAGING_ENV_VARS = ("{{PROJECT_UPPER}}_STAGING_ROOT", "VSC_STAGING_ROOT")
+STAGING_ENV_VARS = ("JEVPFN_STAGING_ROOT", "VSC_STAGING_ROOT")
 
 
 def _env_path(name: str) -> Path | None:
@@ -80,7 +81,7 @@ def _use_staging() -> bool:
 
 
 def staging_root() -> Path:
-    """Project storage — the big, unbacked-up tier."""
+    """Project storage — verify its quota and backup policy with the allocation owner."""
     override = staging_override()
     if override:
         return override
@@ -114,57 +115,81 @@ def _under(root: Path, *parts: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# output/ — the single root for everything the code generates.
+# output_JEVPFN/ — the single root for everything the code generates.
 # ---------------------------------------------------------------------------
 
 
+OUTPUT_DIR_NAME = "output_JEVPFN"
+PHASES = (
+    "exploration",
+    "feature_creation",
+    "experiment_0",
+    "experiment_1",
+    "experiment_2",
+    "experiment_3",
+)
+
+
+def phase_name(phase: str | None = None) -> str:
+    value = phase or os.environ.get("JEVPFN_PHASE", "exploration")
+    if value not in PHASES and not re.fullmatch(r"experiment_[0-9]+", value):
+        raise ValueError(f"Unknown research phase: {value}")
+    return value
+
+
+def notebook_phase(notebook: str) -> str:
+    if Path(notebook).name != notebook or "\\" in notebook or notebook in {".", ".."}:
+        raise ValueError("Notebook must be a plain name.")
+    if notebook == "03_feature_creation":
+        return "feature_creation"
+    match = re.match(r"(experiment_[0-9]+)_", notebook)
+    if match:
+        return match.group(1)
+    return "exploration"
+
+
 def outputs_dir() -> Path:
-    """THE root for generated files; nothing generated is written outside it.
-
-    Locally `<repo>/output/`, on the cluster `$VSC_DATA/<Project>/output/`. One root means "what
-    did this run produce?" and "what can I delete?" have one answer each.
-    """
-    if on_vsc():
-        return _under(data_root(), "output")
-    return REPO_ROOT / "output"
+    """Small outputs on personal DATA; locally all outputs share this root."""
+    return _under(data_root(), OUTPUT_DIR_NAME)
 
 
-def results_dir(*parts: str) -> Path:
-    """Fine-grained results: one row per prediction, per-fold scores, anything large.
-
-    THE ONE PART OF `output/` ON PROJECT STORAGE. A single sweep of per-row predictions would
-    fill $VSC_DATA's 75 GiB, and then every job that writes a log also fails.
-    """
-    if _use_staging():
-        return _under(staging_root(), "output", "results", *parts)
-    return outputs_dir().joinpath("results", *parts)
+def large_outputs_dir() -> Path:
+    """Large tables on project storage; never silently fall back to personal DATA."""
+    return _under(staging_root(), OUTPUT_DIR_NAME) if _use_staging() else outputs_dir()
 
 
-def logs_dir() -> Path:
-    """Timestamped run logs. Small, many files -> `$VSC_DATA`, not the inode-poor tier."""
-    return outputs_dir() / "logs"
+def phase_dir(phase: str | None = None) -> Path:
+    return outputs_dir() / phase_name(phase)
 
 
-def manifests_dir() -> Path:
-    """Per-run manifests: the small CSV/JSON record of what a run did."""
-    return outputs_dir() / "manifests"
+def results_dir(*parts: str, phase: str | None = None) -> Path:
+    return large_outputs_dir().joinpath(phase_name(phase), "results", *parts)
 
 
-def figures_dir(notebook: str | None = None) -> Path:
-    """`output/figures/`, or one notebook's own folder — a notebook clears its own before drawing
-    and must not be able to reach another's."""
-    root = outputs_dir() / "figures"
+def logs_dir(phase: str | None = None) -> Path:
+    return phase_dir(phase) / "logs"
+
+
+def manifests_dir(phase: str | None = None) -> Path:
+    return phase_dir(phase) / "manifests"
+
+
+def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
+    root = phase_dir(phase or (notebook_phase(notebook) if notebook else None)) / "figures"
     return root / notebook if notebook else root
 
 
-def captions_path() -> Path:
-    """The ONE shared captions file for every figure in the project."""
-    return figures_dir() / "CAPTIONS.md"
+def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
+    root = phase_dir(phase or (notebook_phase(notebook) if notebook else None)) / "reports"
+    return root / f"{notebook}.txt" if notebook else root
 
 
-def all_results_path() -> Path:
-    """Every notebook's printed text summary, concatenated in notebook order."""
-    return outputs_dir() / "All_Results.md"
+def captions_path(phase: str | None = None) -> Path:
+    return (phase_dir(phase) if phase else outputs_dir()) / "captions.md"
+
+
+def all_results_path(phase: str | None = None) -> Path:
+    return (phase_dir(phase) if phase else outputs_dir()) / "allresults.md"
 
 
 # ---------------------------------------------------------------------------
@@ -214,9 +239,39 @@ def checkpoints_dir(*parts: str) -> Path:
 
 
 def config_path(name: str) -> Path:
-    """`config/<name>.yaml`. Always in the repo — configs are code, not data."""
+    """`config/<phase>/<name>.yaml`, confined to the configuration tree."""
     stem = name[:-5] if name.endswith(".yaml") else name
-    return REPO_ROOT / "config" / f"{stem}.yaml"
+    root = (REPO_ROOT / "config").resolve()
+    path = (root / f"{stem}.yaml").resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("Configuration must remain under config/.")
+    return path
+
+
+def jev_cache_path(relative: str = "jev_cache/responses.sqlite3") -> Path:
+    """Paid responses survive both ordinary output cleanup and --processed cleanup."""
+    root = _under(staging_root(), "data") if _use_staging() else REPO_ROOT / "data"
+    path = (root / relative).resolve()
+    if not path.is_relative_to(root.resolve()) or any(
+        path.is_relative_to((root / name).resolve()) for name in ("processed", "raw")
+    ):
+        raise ValueError("Jev cache must stay under data/, outside data/raw/ and data/processed/.")
+    return path
+
+
+def source_snapshot_path(commit: str, filename: str) -> Path:
+    return REPO_ROOT / "src" / "data" / "upstream" / commit / filename
+
+
+def dataset_file(directory: str, filename: str) -> Path:
+    """Raw files live directly in each numbered folder; versions remain in metadata."""
+    if Path(directory).name != directory or directory in {".", ".."} or "\\" in directory:
+        raise ValueError("Dataset directory must be a single local folder name.")
+    return raw_dir(directory, filename)
+
+
+def manifest_path(name: str, *, phase: str | None = None) -> Path:
+    return manifests_dir(phase) / f"{name}.json"
 
 
 def notebooks_dir() -> Path:
@@ -246,28 +301,17 @@ def ensure(path: Path) -> Path:
 
 
 def resolve_writable(preferred: Path, fallback: Path | None = None) -> Path:
-    """`preferred` if we can genuinely write there, else `fallback`, loudly.
+    """Probe a required storage directory; never redirect large files to personal DATA.
 
-    Probes with a real create-and-delete: `mkdir(exist_ok=True)` is not enough, because a
-    directory on a shared tier can exist and still be unwritable. A completed run in the wrong
-    place beats a job that died at hour six with nothing to show.
+    The legacy fallback argument is accepted for caller compatibility but is never used.
+    A storage error must be fixed before a run starts.
     """
-    fallback = fallback or (data_root() / PROJECT_NAME / "fallback")
-    try:
-        preferred.mkdir(parents=True, exist_ok=True)
-        probe = preferred / ".write_probe"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
-        return preferred
-    except OSError as exc:
-        print(
-            f"WARNING: cannot write to {preferred} ({exc}).\n"
-            f"         Falling back to {fallback}. Move the output to project storage "
-            f"afterwards, or $VSC_DATA will fill up (75 GiB quota).",
-            flush=True,
-        )
-        fallback.mkdir(parents=True, exist_ok=True)
-        return fallback
+    import tempfile
+
+    preferred.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryFile(dir=preferred) as probe:
+        probe.write(b"ok")
+    return preferred
 
 
 def touch_tree(path: Path) -> None:
@@ -290,5 +334,8 @@ def describe() -> dict[str, str]:
         "scratch_root": str(scratch_root()),
         "outputs_dir": str(outputs_dir()),
         "results_dir": str(results_dir()),
+        "raw_dir": str(raw_dir()),
+        "jev_cache": str(jev_cache_path()),
+        "phase": phase_name(),
         "checkpoints_dir": str(checkpoints_dir()),
     }

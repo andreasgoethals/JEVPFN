@@ -128,8 +128,8 @@ def test_summary_flags_a_missing_caption(isolated_output, fig) -> None:
     """A missing caption must be visible in the notebook's own printed summary, not only in
     the document that is supposed to contain it."""
     save = figures.FigureSaver("nb")
-    save(fig, "uncaptioned")
-    assert "NO CAPTION" in save.summary()
+    with pytest.raises(ValueError, match="caption"):
+        save(fig, "uncaptioned")
     save2 = figures.FigureSaver("nb2")
     save2(fig, "captioned", caption="A line.")
     assert "NO CAPTION" not in save2.summary()
@@ -146,5 +146,5 @@ def test_clear_returns_how_many_files_went(isolated_output, fig) -> None:
     save = figures.FigureSaver("nb")
     save(fig, "a", caption="c")
     save(fig, "b", caption="c")
-    assert figures.clear("nb") == 3  # 2 pdfs + the manifest
+    assert figures.clear("nb") == 4  # 2 pdfs + manifest + captions
     assert figures.clear("never_existed") == 0

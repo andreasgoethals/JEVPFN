@@ -1,0 +1,47 @@
+name: exploration
+phase: exploration
+seed: 20260929
+dataset_collection: multabench_core_text
+catalog: exploration/datasets
+allow_download: true  # Public version-pinned data only; false for a fully offline run.
+token_estimation:
+  method: characters_divided_by_four
+  characters_per_token: 4.0  # Approximation, NOT a Jev tokenizer or billing measure.
+audit:
+  examples_per_column: 3
+  example_character_limit: 240  # Display only; requests and statistics retain complete values.
+  top_categories: 5
+jev:
+  enabled: false  # No network client exists; true is rejected in this phase.
+  representation: per_column_and_joint
+  include_non_text_features: false  # Agreed: Jev sees text only; non-text features go to TabPFN.
+  model: jev-1.13.0  # Official model documentation checked 2026-09-30; no call made.
+  version: 1.13.0
+  request_configuration: {}  # No invented provider parameters.
+  template_version: directional-v1
+  binary_positive_class: canonical_last  # Mechanical orientation, not a domain assertion.
+  regression_scores: [-4, -3, -2, -1, 0, 1, 2, 3, 4]
+  missing_text_policy: skip_empty_store_nan
+  cache_location: jev_cache/responses.sqlite3  # Future paid-response store; exploration uses temporary storage.
+cost:
+  input_price_per_million: 0.042  # Or JEV_INPUT_PRICE_PER_MILLION; verify before paid calls.
+  currency: USD
+  checked_on: '2026-09-30'
+  source: https://docs.typesafe.ai/models
+  output_price_per_million: 0.0
+  price_must_be_verified_before_calls: true
+  provider_overhead_tokens_per_request: 0  # Unknown; excluded, not claimed to be zero.
+downstream:
+  model: TabPFN-3.5
+  enabled: false
+provider_reference:
+  endpoint: https://api.typesafe.ai/v1/systemone
+  model: jev-1.13.0
+  source: https://docs.typesafe.ai/models
+  checked_on: '2026-09-30'
+  state_plus_longest_question_tokens: 32000
+  all_questions_total_tokens: 64000
+  max_choice_options: 255
+  max_score_levels: 10
+  requests_per_minute_reference: 2400  # Published 40/second on 2026-09-30; not an account guarantee.
+  tokens_per_second_reference: 100000

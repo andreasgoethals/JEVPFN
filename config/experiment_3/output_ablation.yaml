@@ -1,0 +1,9 @@
+phase: experiment_3
+name: proposed_output_ablation
+enabled: false
+proposal: true
+feature_artifacts: []
+candidate_views: [probability_vectors, scalar_summary, probability_vectors_plus_uncertainty]
+new_jev_calls_required: false
+evaluation: inherit_approved_experiment_1_protocol
+notes: Generated questions and extra datasets remain separate, unapproved proposals.

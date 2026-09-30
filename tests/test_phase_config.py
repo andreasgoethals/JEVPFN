@@ -1,0 +1,44 @@
+from pathlib import Path
+
+import pytest
+
+from src.utils import paths
+from src.utils.config import load_config, load_yaml, validate_config
+
+
+def test_phase_inheritance_preserves_defaults():
+    cfg = load_config("feature_creation/default")
+    assert cfg["phase"] == "feature_creation"
+    assert cfg["allow_download"] is False
+    assert cfg["jev"]["model"] == "jev-1.13.0"
+    assert cfg["jev"]["regression_scores"] == list(range(-4, 5))
+    assert cfg["provider_reference"]["state_plus_longest_question_tokens"] == 32000
+    assert load_yaml("experiment_0/debug")["cluster"]["account"] == "lp_verbekelab"
+    for number, name in [
+        (0, "debug"),
+        (1, "main"),
+        (2, "representation_ablation"),
+        (3, "output_ablation"),
+    ]:
+        assert load_yaml(f"experiment_{number}/{name}")["enabled"] is False
+
+
+def test_inheritance_cycle_and_escape_fail(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    folder = tmp_path / "config"
+    folder.mkdir()
+    (folder / "a.yaml").write_text("extends: b\n", encoding="utf-8")
+    (folder / "b.yaml").write_text("extends: a\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Cyclic"):
+        load_yaml("a")
+    with pytest.raises(ValueError):
+        paths.config_path("../outside")
+    with pytest.raises(ValueError):
+        paths.config_path(str(Path(tmp_path.anchor) / "outside"))
+
+
+def test_cannot_enable_live_features():
+    cfg = load_config("feature_creation/default")
+    cfg["feature_creation"]["enabled"] = True
+    with pytest.raises(ValueError, match="disabled"):
+        validate_config(cfg)

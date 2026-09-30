@@ -1,0 +1,22 @@
+extends: exploration/audit
+name: semantic_feature_creation
+phase: feature_creation
+allow_download: false
+feature_creation:
+  enabled: false
+  execution_site: local  # Owner decision: all Jev feature creation precedes VSC experiment 0.
+  scope: all_20_datasets_all_text_columns
+  modes: [per_column, joint]
+  cache_namespace: verified_response
+  retain: [raw_response, complete_probability_vector, confidence_if_available]
+  feature_schema_version: 2
+  feature_directory: jev_cache/features
+  pilot_rows_per_dataset: 3  # Proposed pilot size, deterministic CSV positions, no calls yet.
+  full_build_requires_local_pilot_pass: true
+  context_overflow_policy: unresolved  # Fail before paid execution; never silently truncate.
+  missing_text_policy: skip_empty_store_nan
+budget_review:
+  # Sensitivity assumptions, not provider tokenizer or retry guarantees.
+  characters_per_token_scenarios: [3, 4, 5]
+  extra_tokens_per_unique_request_scenarios: [0, 50, 100]
+  billed_retry_fraction_scenarios: [0.0, 0.05, 0.10]

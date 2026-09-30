@@ -1,3 +1,7 @@
+> Historical template reference. JEVPFN now uses phase-specific `output_JEVPFN/` paths,
+> complete gitignored notebook reports, and text-only Jev requests. Current commands and
+> decisions are in README.md and docs/DESIGN_NOTES.md; older paths below describe the template.
+
 # Andreas' repository template
 
 The structure and rules every one of my research repositories starts from.

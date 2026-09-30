@@ -1,7 +1,7 @@
 """Saving figures. One folder per notebook, one PDF per figure, cleared before drawing.
 
-    output/figures/<notebook>/01_<name>.pdf     the figure — vector, for the paper
-    output/figures/<notebook>/_figures.json     what was drawn, in order, with captions
+    output_JEVPFN/<phase>/figures/<notebook>/01_<name>.pdf     the figure — vector, for the paper
+    output_JEVPFN/<phase>/figures/<notebook>/_figures.json     what was drawn, in order, with captions
 
 PDF ONLY, AND SIZED FOR A4. The PDF is what the paper uses: vector, text embedded as TrueType so
 journal systems accept it, drawn at the width it will occupy on the A4 page (see
@@ -27,6 +27,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+from src.utils.notebook_report import atomic_text, record_figure
 from src.utils.paths import figures_dir
 
 #: Vector already, but heatmaps and scatter clouds inside a PDF rasterise, so it still needs a
@@ -36,7 +37,7 @@ DPI = 300
 #: The only things ever deleted from a notebook's folder. Anything else a person put there
 #: survives: a cleaner that removes what it does not recognise eventually removes something
 #: irreplaceable.
-_OWNED = ("*.pdf", "_figures.json", "_stdout.txt")
+_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "captions.md")
 
 MANIFEST = "_figures.json"
 
@@ -118,6 +119,8 @@ class FigureSaver:
         The figure is left open so it still displays in Jupyter — that inline render is the only
         raster copy there is, and the interactive run has to look the same as the runner's.
         """
+        if not caption.strip():
+            raise ValueError("Every figure requires a descriptive caption.")
         index = len(self.entries) + 1
         stem = f"{index:02d}_{_slug(name)}"
         path = self.folder / f"{stem}.pdf"
@@ -131,6 +134,11 @@ class FigureSaver:
         manifest_path(self.notebook).write_text(
             json.dumps(self.entries, indent=2), encoding="utf-8"
         )
+        atomic_text(
+            self.folder / "captions.md",
+            "\n\n".join(f"## {e['stem']}\n\n{e['caption']}" for e in self.entries),
+        )
+        record_figure(fig, name, caption)
         return path
 
     def summary(self) -> str:
@@ -140,7 +148,7 @@ class FigureSaver:
             return f"{self.notebook}: no figures saved."
         lines = [f"{self.notebook}: {len(self.entries)} figures -> {self.folder}"]
         for e in self.entries:
-            lines.append(f"  {e['index']:02d}  {e['name']}")
+            lines.append(f"  {e['index']:02d}  {e['name']}\n      {e['caption']}")
             if not e["caption"]:
                 lines.append("      NO CAPTION — add one; CAPTIONS.md will flag it.")
         return "\n".join(lines)
@@ -154,7 +162,7 @@ def _slug(name: str) -> str:
 
 def _guard(path: Path, folder: Path) -> None:
     """Refuse to write outside this notebook's own folder — a `..` in a figure name would put a
-    generated file outside `output/`, the one rule the layout rests on."""
+    generated file outside `output_JEVPFN/`, the one rule the layout rests on."""
     if folder.resolve() != path.resolve().parent:
         raise ValueError(
             f"figure would be written to {path.resolve()}, outside {folder.resolve()}. "

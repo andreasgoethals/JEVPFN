@@ -111,6 +111,13 @@ _RC = {
 
 _PROJECT_RC: dict = {}
 
+# Audit plots: the same quantity always has the same visual meaning.
+AUDIT_RATIO = 0.76
+MEDIAN_COLOR = "#276A87"
+P95_COLOR = "#C37929"
+TOTAL_COLOR = "#54765A"
+AUDIT_MARKER_SIZE = 18
+
 
 def apply() -> None:
     """Install the style. Call once, at the top of every notebook and plotting script."""

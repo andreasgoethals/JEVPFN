@@ -33,9 +33,9 @@ train:
   learning_rate: 0.001         # optimiser step size
 
 eval:
-  metrics: [auc, accuracy, brier]   # computed for every run, written to output/results/
+  metrics: [auc, accuracy, brier]   # computed for every run, written to output_JEVPFN/exploration/results/
   # Per-row predictions are LARGE — one file per run per fold. They go to
-  # output/results/, which lives on project storage on the cluster for exactly this
+  # output_JEVPFN/exploration/results/, which lives on project storage on the cluster for exactly this
   # reason. Turn them off for a quick sweep.
   save_predictions: true
 
