@@ -1,6 +1,6 @@
 # Came with the template, and worth keeping: `src/utils/run_notebooks.py` is identical in every
 # project, and these pin the two documented contracts — notebooks discovered alphabetically, and
-# `All_Results.md` sorted alphabetically with each block verbatim.
+# `Allresults.md` sorted alphabetically with each block verbatim.
 """`src/utils/run_notebooks.py` — the runner and the two summary documents.
 
 The end-to-end test executes a real one-cell notebook in a subprocess. It is marked `slow`
@@ -80,7 +80,7 @@ def test_markdown_cells_are_skipped(tmp_path) -> None:
 
 
 def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch) -> None:
-    """ONE CAPTIONS.md for the project, built from each notebook's manifest — so it can be
+    """ONE Captions.md for the project, built from each notebook's manifest — so it can be
     regenerated after an interactive run without executing anything."""
     from src.utils.paths import figures_dir
 

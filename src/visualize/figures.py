@@ -1,7 +1,7 @@
 """Saving figures. One folder per notebook, one PDF per figure, cleared before drawing.
 
-    output_JEVPFN/<phase>/figures/<notebook>/01_<name>.pdf     the figure — vector, for the paper
-    output_JEVPFN/<phase>/figures/<notebook>/_figures.json     what was drawn, in order, with captions
+    output_JEVPFN/figures/<phase>/<notebook>/01_<name>.pdf     the figure — vector, for the paper
+    output_JEVPFN/figures/<phase>/<notebook>/_figures.json     what was drawn, in order, with captions
 
 PDF ONLY, AND SIZED FOR A4. The PDF is what the paper uses: vector, text embedded as TrueType so
 journal systems accept it, drawn at the width it will occupy on the A4 page (see
@@ -16,7 +16,7 @@ THE FOLDER IS CLEARED ON CONSTRUCTION, before anything is drawn, and only ever t
 own: a stale PDF beside a fresh one is how a paper ends up with a figure that no longer matches
 the code that made it.
 
-THE NUMBERED PREFIX makes alphabetical order equal drawing order, so `CAPTIONS.md` is rebuildable
+THE NUMBERED PREFIX makes alphabetical order equal drawing order, so `Captions.md` is rebuildable
 from disk without re-executing anything.
 """
 
@@ -37,7 +37,7 @@ DPI = 300
 #: The only things ever deleted from a notebook's folder. Anything else a person put there
 #: survives: a cleaner that removes what it does not recognise eventually removes something
 #: irreplaceable.
-_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "captions.md")
+_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "Captions.md")
 
 MANIFEST = "_figures.json"
 
@@ -135,14 +135,14 @@ class FigureSaver:
             json.dumps(self.entries, indent=2), encoding="utf-8"
         )
         atomic_text(
-            self.folder / "captions.md",
+            self.folder / "Captions.md",
             "\n\n".join(f"## {e['stem']}\n\n{e['caption']}" for e in self.entries),
         )
         record_figure(fig, name, caption)
         return path
 
     def summary(self) -> str:
-        """What was saved, for the notebook's final `print` — so `All_Results.md` says what the run
+        """What was saved, for the notebook's final `print` — so `Allresults.md` says what the run
         drew, not only what it computed."""
         if not self.entries:
             return f"{self.notebook}: no figures saved."
@@ -150,7 +150,7 @@ class FigureSaver:
         for e in self.entries:
             lines.append(f"  {e['index']:02d}  {e['name']}\n      {e['caption']}")
             if not e["caption"]:
-                lines.append("      NO CAPTION — add one; CAPTIONS.md will flag it.")
+                lines.append("      NO CAPTION — add one; Captions.md will flag it.")
         return "\n".join(lines)
 
 

@@ -1,9 +1,0 @@
-phase: experiment_2
-name: proposed_representation_ablation
-enabled: false
-proposal: true
-feature_artifacts: []
-comparison: [per_column, joint, per_column_and_joint]
-hold_constant: [data_splits, downstream_non_text_features, model, output_view]
-new_jev_calls_required: false  # Reuse the two text-only feature tables.
-evaluation: inherit_approved_experiment_1_protocol

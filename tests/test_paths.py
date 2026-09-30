@@ -71,9 +71,12 @@ def test_staging_override_works_off_cluster(tmp_path, monkeypatch) -> None:
 
 def test_figures_dir_is_per_notebook() -> None:
     root = paths.figures_dir()
-    assert paths.figures_dir("some_notebook") == root / "some_notebook"
-    assert paths.captions_path() == paths.outputs_dir() / "captions.md"
-    assert paths.all_results_path() == paths.outputs_dir() / "allresults.md"
+    assert root == paths.outputs_dir() / "figures"
+    assert paths.figures_dir("some_notebook") == root / "exploration" / "some_notebook"
+    assert paths.captions_path() == paths.outputs_dir() / "Captions.md"
+    assert paths.all_results_path() == paths.outputs_dir() / "Allresults.md"
+    assert paths.figures_dir(phase="experiment_1") == root / "experiment_1"
+    assert paths.figures_dir("experiment_1_models") == root / "experiment_1" / "experiment_1_models"
 
 
 def test_config_path_appends_the_suffix_once() -> None:
@@ -140,8 +143,8 @@ def test_phases_separate_large_results_and_small_reports(isolated_output):
     assert "staging" in str(paths.results_dir(phase="experiment_1"))
     assert "vsc_data" in str(paths.logs_dir("experiment_0"))
     assert paths.figures_dir("03_feature_creation").parts[-3:] == (
-        "feature_creation",
         "figures",
+        "feature_creation",
         "03_feature_creation",
     )
     assert paths.reports_dir("01_data_exploration").parts[-3:] == (

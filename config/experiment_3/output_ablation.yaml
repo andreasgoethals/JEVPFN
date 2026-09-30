@@ -1,9 +1,16 @@
+extends: experiment_1/protocol
 phase: experiment_3
 name: proposed_output_ablation
 enabled: false
 proposal: true
 feature_artifacts: []
 candidate_views: [probability_vectors, scalar_summary, probability_vectors_plus_uncertainty]
+task_applicability:
+  binary: probability_only  # Do not fabricate confidence unavailable from Noul.
+  multiclass: [class_probabilities, class_probabilities_plus_confidence]
+  regression: [expected_direction, nine_probabilities, nine_probabilities_plus_confidence]
+model_catalog: experiment_1/models
+candidate_models: [tabpfn_3_5, catboost]
+fixed_feature_mode_proposal: per_column_and_joint
 new_jev_calls_required: false
-evaluation: inherit_approved_experiment_1_protocol
-notes: Generated questions and extra datasets remain separate, unapproved proposals.
+notes: Freeze this experiment before viewing test results; reuse identical experiment-1 fits.

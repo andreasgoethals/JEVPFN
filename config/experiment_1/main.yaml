@@ -1,10 +1,13 @@
+extends: experiment_1/protocol
 phase: experiment_1
 name: main_comparison
 enabled: false
-downstream: {model: TabPFN-3.5, package_version: 9.0.0, device: cuda}
+proposal: true
+model_catalog: experiment_1/models
+candidate_models: [tabpfn_3_5, tabpfn_3, catboost, linear, tabicl_v2, tabdpt_1_3, mitra, tabfm]
 feature_artifacts: []
 candidate_combinations: [non_text, non_text_plus_per_column, non_text_plus_joint, non_text_plus_both]
 include_non_text_features_in_jev: false
 feature_view: null  # Full vectors/scalars/uncertainty to be agreed.
-evaluation: {splits: null, metrics: null, repetitions: null, small_n: null}
+deduplicate_identical_feature_views: true  # Single-text datasets need no duplicate arms/fits.
 requires: [accepted_experiment_0, complete_feature_artifacts, agreed_evaluation_protocol]

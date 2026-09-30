@@ -175,7 +175,13 @@ def manifests_dir(phase: str | None = None) -> Path:
 
 
 def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
-    root = phase_dir(phase or (notebook_phase(notebook) if notebook else None)) / "figures"
+    """All figures share one root, then phase and notebook subdirectories."""
+    root = outputs_dir() / "figures"
+    if notebook is not None:
+        inferred_phase = notebook_phase(notebook)  # Also validate a plain notebook name.
+        root = root / phase_name(phase or inferred_phase)
+    elif phase is not None:
+        root = root / phase_name(phase)
     return root / notebook if notebook else root
 
 
@@ -185,11 +191,11 @@ def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
 
 
 def captions_path(phase: str | None = None) -> Path:
-    return (phase_dir(phase) if phase else outputs_dir()) / "captions.md"
+    return (phase_dir(phase) if phase else outputs_dir()) / "Captions.md"
 
 
 def all_results_path(phase: str | None = None) -> Path:
-    return (phase_dir(phase) if phase else outputs_dir()) / "allresults.md"
+    return (phase_dir(phase) if phase else outputs_dir()) / "Allresults.md"
 
 
 # ---------------------------------------------------------------------------

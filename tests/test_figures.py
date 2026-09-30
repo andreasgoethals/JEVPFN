@@ -37,7 +37,7 @@ def test_a_pdf_and_only_a_pdf_is_written(isolated_output, fig) -> None:
 
 def test_filenames_are_numbered_in_drawing_order(isolated_output, fig) -> None:
     """Alphabetical order of the files is the order the notebook drew them, which is what
-    makes CAPTIONS.md rebuildable from disk without re-executing anything."""
+    makes Captions.md rebuildable from disk without re-executing anything."""
     save = figures.FigureSaver("nb")
     save(fig, "alpha", caption="c")
     save(fig, "beta", caption="c")

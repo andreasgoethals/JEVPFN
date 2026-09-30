@@ -1,196 +1,115 @@
-# VSC setup and experiment-0 checks
+# VSC setup
 
-Checked 30-09-2026 against current package metadata and official VSC/PyTorch documentation,
-alongside the synced TFM Library at
-`81c749bdf17e88b5152f4dc7f2e49bd48e9cc8ba` and the existing CreditPFN checkout.
-**No JEVPFN allocation has been submitted; compute-node networking/CUDA remain unverified.**
+Current status: no JEVPFN allocation or model run has been submitted. Local Jev feature
+creation precedes experiment 0. VSC prediction consumes completed feature tables offline;
+Jev API access from compute nodes is unnecessary for this workflow and remains unverified.
 
-## Sources and inherited conventions
+## Environment
 
-The read-only [VSC documentation snapshot](<../tfm-library/repositories/VSC Documentation.txt>)
-contains `source/leuven/wice_quick_start.rst`, `source/leuven/mindwell_quick_start.rst`,
-`source/leuven/tier2_hardware/kuleuven_storage.rst` and the SSH/Slurm sections. Refer to these
-embedded section names: snapshot line numbers are not stable.
-
-CreditPFN's `scripts/slurm/_activate_env.sh`, experiment Slurm scripts, `docs/VSC.md` and
-`docs/AGENTS_MEMORY.md` establish these conventions:
-
-- Slurm credit account **`lp_verbekelab`**. Verify current association before submitting;
-  an old `lp_mindwell_pilot` attempt is a recorded failure, not an account to reuse.
-- Conda bootstrap under `$VSC_DATA/miniconda3`; separate environment **JEVPFN**.
-- Repository `$VSC_DATA/JEVPFN`; wICE project storage under
-  `/lustre1/project/stg_00211/JEVPFN` if this allocation is available to the account.
-- Explicitly select `$CONDA_PREFIX/bin/python` after activation; an inherited venv can otherwise
-  shadow Conda. `_activate_env.sh` checks the selected interpreter and Python 3.12.
-- Use `--gpus-per-node`, following CreditPFN's working scheduler convention.
-
-The current [wICE quick start](https://docs.vscentrum.be/leuven/wice_quick_start.html)
-confirms the `gpu_a100_debug` full-GPU partition and its one-hour maximum.
-
-No user-specific SSH alias/login was present in the inspected setup. Use the same authenticated
-session or SSH login you already use for CreditPFN. The documented KU Leuven login endpoint is
-`login.hpc.kuleuven.be`. For example, replacing `YOUR_VSC_LOGIN`:
-
-```powershell
-ssh YOUR_VSC_LOGIN@login.hpc.kuleuven.be
-```
-
-The environment has no ready authenticated VSC session. No credential discovery or password
-export was attempted; the existing interactive login is sufficient for the commands below.
-
-## Appropriate cluster by phase
-
-| Work | Initial recommendation | Reason and qualification |
-|---|---|---|
-| Local notebook inspection | Local Python 3.12 / JEVPFN | No GPU or cluster credits needed. |
-| Exp0 networking, hashes, CPU tests | wICE `interactive`, 2 cores / 8 GB / 10 min | Small diagnostic allocation; docs allow up to 8 cores and 16 hours here. |
-| Future large CPU audits | wICE CPU `batch` | Profile RAM first; Jev feature creation is local. |
-| Exp0 Torch/TabPFN GPU check | wICE `gpu_a100_debug`, one full A100 | Full GPU; documentation permits up to one hour. Script requests 10 min. |
-| Main TabPFN inference later | Start by profiling wICE `gpu_a100` | Choose memory/time from exp0; H100/B200 is an option if measurements justify it. |
-| Memory-intensive alternative | Mindwell `gpu_b200` | Use native GPFS storage and a supported CUDA build; do not copy CreditPFN's large training request by default. |
-
-The wICE interactive GPU resource is a 1/7 A100 slice, not a full A100; do not assume it can
-hold TabPFN for the largest tasks. Mindwell has a separate RTX 5000 Ada interactive resource.
-Scheduler limits and account access can change. Check `sinfo` and the current associations.
-
-## Environment: same pyproject, separate Python environments
-
-Bash below runs on VSC. Reuse CreditPFN's Conda installation, **not its CreditPFN environment**.
-The project still uses pip/pyproject for dependencies; no duplicate requirements or Conda package
-specification is introduced.
+Use the CreditPFN Conda bootstrap with a separate Python 3.12 environment named **JEVPFN**.
+Dependencies remain managed by pip and `pyproject.toml`; do not share CreditPFN's environment.
+Run setup on an approved connected setup/login session, not inside an experiment:
 
 ```bash
 source "$VSC_DATA/miniconda3/etc/profile.d/conda.sh"
-conda create -n JEVPFN python=3.12 pip
+conda create -n JEVPFN python=3.12 pip  # Skip if it already exists.
 conda activate JEVPFN
 cd "$VSC_DATA/JEVPFN"
 python -m pip install -e '.[dev,notebooks]'
 python -m pip check
-python -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
 ```
 
-If the environment already exists, skip `conda create`. Perform installs on an approved connected
-setup node/session. Do not install packages in a running experiment or change a shared environment.
-
-For the later GPU package check, first inspect `nvidia-smi` in an allocated GPU session. The
-[official PyTorch wheel table](https://pytorch.org/get-started/previous-versions/) lists the
-following candidate matching the Torch 2.12 family already used by CreditPFN:
+After selecting the GPU runtime in experiment 0, optional model extras can be installed.
+The current candidates pin Torch 2.12.1. Select a CUDA wheel compatible with the allocated
+GPU and driver before installing extras: see the [official PyTorch wheel table](https://pytorch.org/get-started/previous-versions/).
+The wICE A100 candidate is cu126; Mindwell B200 needs a Blackwell-capable build such as cu130.
+Neither has been validated for JEVPFN on the cluster. Check `nvidia-smi` in an allocation and
+`ldd --version` on the host; relevant Linux wheels require a compatible glibc baseline.
 
 ```bash
-# Candidate for wICE A100, only after confirming driver compatibility:
+# Later, after driver compatibility is confirmed; not needed for exploration:
 python -m pip install 'torch==2.12.1' --index-url https://download.pytorch.org/whl/cu126
-python -m pip install -e '.[dev,notebooks,jev,models]'
+python -m pip install -e '.[dev,notebooks,models,baselines,tabicl]'
 python -m pip check
 mkdir -p output_JEVPFN/experiment_0/manifests
 python -m pip freeze > output_JEVPFN/experiment_0/manifests/environment.txt
 ```
 
-For Mindwell B200, select a Blackwell-capable build (for example the documented `cu130` build
-of the same Torch release) after checking its actual driver. A wheel's availability does not
-certify that runtime. Do not install `torchvision`, `torchaudio`, CatBoost or TabSTAR for these
-notebooks; none is needed. `models` pins TabPFN 9.0.0, which includes `ModelVersion.V3_5` in
-[the official implementation snapshot](<../tfm-library/repositories/TabPFN .txt>). The future
-estimator should select that version explicitly, not rely on a moving default.
+`models` supplies TabPFN-3/3.5, `baselines` supplies CatBoost/scikit-learn, and `tabicl` supplies
+TabICL v2. Optional `tabdpt`, `mitra` and `tabstar` extras are declared separately. Package
+metadata was checked on 30-09-2026; this is not a tested joint environment. Validate imports
+and tiny task examples on VSC before selecting the final roster. TabDPT also needs compatible
+FAISS wheels. Prefer a separate Python environment for heavier/conflicting integrations,
+with its own frozen manifest, rather than changing a working notebook environment.
 
-The `notebooks` extra explicitly includes IPython, ipykernel, JupyterLab, nbclient and nbformat;
-`dev` adds pytest and Ruff. No separate cluster requirements file is necessary. `models` pins
-Torch 2.12.1; a matching `+cu126` or `+cu130` wheel satisfies that pin without a package upgrade.
-The CUDA choice remains a host-specific installation step, not a global notebook dependency.
+Do not install `autogluon[all]`: it adds many unrequested engines and its TabICL extra currently
+requires tabicl<2.2, unlike our standalone 2.2.0 candidate. Use only the selected MITRA model
+in a reviewed environment, not an AutoML ensemble. TabFM still needs a source pin/backend;
+Mitra's exact checkpoint generation remains open. Installing packages must not trigger model
+weights during notebook execution. Prepare approved weights on a connected host before
+using offline compute; use explicit checkpoint paths and record their hashes.
 
-Local notebook dependencies are installed and tested. The SDK/Torch/TabPFN extras are declared,
-but **have not been installed or validated on VSC**. The GPU preflight imports packages and does
-one tiny CUDA tensor multiplication; it never constructs an estimator, fits data or loads weights.
-Weights/authentication/licence acceptance and the eventual small model smoke are separate steps.
+## Two storage tiers, both under JEVPFN
 
-Published package metadata was checked for Python 3.12: TabPFN 9.0.0 and TypeSafe SDK 0.7.2
-have platform-independent wheels; Torch 2.12.1 and PyArrow 25.0.1 have Windows and Linux x86-64
-wheels. Their Linux wheels use the `manylinux_2_28` baseline: check `ldd --version` on the actual
-host rather than assuming every VSC environment meets it. Record the final resolved environment
-on that host; the local `pip check` is not a substitute for this verification.
+| Location | Contents |
+|---|---|
+| `$VSC_DATA/JEVPFN/` | Git checkout and Python environment metadata. |
+| `$VSC_DATA/JEVPFN/output_JEVPFN/` | `Allresults.md`, `Captions.md`, shared `figures/<phase>/<notebook>/`, phase logs/reports/manifests. |
+| `$JEVPFN_STAGING_ROOT/JEVPFN/data/` | Raw data, durable paid responses and feature tables. |
+| `$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/` | Large model weights. |
+| `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/` | Large audit tables, predictions and experiment results. |
 
-## Storage and transfer
-
-On wICE, `src/utils/paths.py` uses the same two-tier convention as CreditPFN:
-
-- `$VSC_DATA/JEVPFN/output_JEVPFN/<phase>/`: figures, reports, captions, logs and small manifests; code also lives under `$VSC_DATA/JEVPFN`.
-- `/lustre1/project/stg_00211/JEVPFN`: raw data, durable Jev cache and weights; large tables go to `output_JEVPFN/<phase>/results/`.
-- Project storage failure stops the run; no fallback writes large files to personal DATA.
-- Node scratch: disposable runtime/compiler caches only.
-
-The Slurm activator sets `TABPFN_MODEL_CACHE_DIR` to the resolved project
-`checkpoints/tabpfn` directory, so future weights persist across jobs. It does not download or
-create weights. Compiler/plotting caches can still use node scratch.
-
-The snapshot lists personal DATA backups and a 75 GB quota; scratch may be purged after 30 days
-without access. It does **not** verify backup/quota policy for `stg_00211`. Establish a separate
-backup/restore plan for paid responses before extraction. Never put the only paid cache on scratch.
-
-Override the storage **parent**, not the JEVPFN subdirectory:
+`JEVPFN_STAGING_ROOT` is the **allocation parent**, not its JEVPFN child. The path resolver
+inserts the project name exactly once. The current wICE default is inherited from CreditPFN;
+confirm access/quota before use. Override it for a different allocation, especially native
+GPFS on Mindwell. Never use cross-mounted Lustre for sustained Mindwell I/O or GPFS for wICE I/O.
 
 ```bash
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+# Set JEVPFN_STAGING_ROOT to your verified project allocation parent when overriding the default.
 python -c 'from src.utils.paths import describe; print(describe())'
 ```
 
-For Mindwell, set `JEVPFN_STAGING_ROOT` to your confirmed project allocation on native GPFS.
-The VSC documentation requires intensive Mindwell I/O on GPFS and wICE I/O on Lustre;
-cross-mounted storage is for transfers, not sustained model I/O. No GPFS allocation path is
-invented here.
+Large-file writes never fall back to limited personal DATA. Slurm activation directs
+TabPFN, Hugging Face and Torch weight caches to project storage. Other future adapters must
+use explicit paths from `checkpoints_dir`, not package defaults under HOME. Node scratch is disposable; never keep the only paid cache there.
+Confirm allocation backup policy and test an independent backup of paid responses.
+Transfer a closed/consistent SQLite database and complete immutable feature folders. Verify
+`python -m src.data.prepare --offline` after copying the numbered raw folders; do not recreate
+`v1` wrappers. GitHub synchronizes code, not datasets or generated features.
 
-Copy the numbered raw folders to the resolved `data/raw/` location, placing CSV/metadata directly in each dataset folder and preserving the hash
-manifests. Copy a **closed/consistent** response database and complete feature directories when
-transferring a cache; do not copy an actively written SQLite file. Verify data with
-`python -m src.data.prepare --offline`. The library travels through `git clone --recurse-submodules`
-after GitHub publication, or `git submodule update --init --recursive` in an existing clone.
+## Experiment 0
 
-## Compute-node API connectivity: verify before paid work
+Use the existing CreditPFN login/account convention and verify the current Slurm association.
+The prepared account/partitions are in `config/experiment_0/debug.yaml` and the Slurm scripts.
+The [wICE guide](https://docs.vscentrum.be/leuven/wice_quick_start.html) documents the resources;
+the pinned [VSC snapshot](<../tfm-library/repositories/VSC Documentation.txt>) records the source
+sections `wice_quick_start.rst`, `mindwell_quick_start.rst` and `kuleuven_storage.rst`.
 
-The owner decided to complete the small tests and full Jev feature creation locally, before
-experiment 0. Transfer the saved feature tables to VSC for debugging and prediction. Jev API
-connectivity on VSC is unnecessary for this chosen workflow; the check below remains optional.
+| Check | Candidate resource |
+|---|---|
+| CPU environment, hashes, deterministic tests | wICE interactive, 2 cores / 8 GB / 10 minutes. |
+| CUDA/import preflight | wICE gpu_a100_debug, one full A100 / 10 minutes. |
+| Later model profiling | wICE gpu_a100 first; select RAM/time from measurements. |
+| Memory-heavy alternative | Mindwell gpu_b200 with native GPFS and compatible CUDA, if profiling justifies it. |
 
-Jev is a hosted API. Its Python client needs outbound DNS/TLS/HTTPS, not a local GPU. The inspected
-VSC documentation does not establish a blanket ban or guarantee for outbound HTTPS from all
-partitions. A successful login-node request would not prove compute-node connectivity.
-
-The optional `--network` probe resolves `api.typesafe.ai` and sends **one credential-free HEAD** to the
-published endpoint. It follows no redirect, sends no body/key, and never makes an inference POST.
-An HTTP 401/403/405 can establish an HTTP response, but does not establish authentication, billing
-access, or permission for a long extraction job. Review proxy/site restrictions if applicable.
-
-After the environment, data, account and allocation are approved, run from a VSC login session:
+The wICE interactive GPU slice is not a full A100. Check current availability/account limits;
+no allocation is automatically launched. After local features are complete and execution approved:
 
 ```bash
 cd "$VSC_DATA/JEVPFN"
 mkdir -p output_JEVPFN/experiment_0/logs
 sinfo --clusters=wice
 sbatch scripts/slurm/experiment_0_cpu.slurm
-# After installing/validating the appropriate GPU packages:
 sbatch scripts/slurm/experiment_0_gpu.slurm
 ```
 
-Use the returned job IDs to inspect `squeue` and logs. Reports are written under
-`output_JEVPFN/experiment_0/manifests/preflight_<job_id>.json`; `full_experiment_0_passed` stays false.
-The CPU script also verifies all 20 raw datasets offline and runs the deterministic tests.
-The GPU script tests the actual CUDA runtime without model weights. These commands are prepared
-for the owner; the agent has not submitted them.
+The prepared preflights check CPU data/tests and CUDA imports/tiny tensors. They do not load
+model weights, fit estimators or establish full experiment-0 acceptance. Future checks must
+cover all selected engines/tasks/class limits, feature joins, missing values, five-fold split
+identity, validation-only threshold selection, fold-local preprocessing, restarts and resource
+budgets. Do not call a passing infrastructure check a completed benchmark debug phase.
 
-If already inside an allocated compute session with the JEVPFN environment active:
-
-```bash
-python -m src.cluster.preflight --network
-python -m src.cluster.preflight --gpu --network
-```
-
-If compute HTTPS is allowed and reachable, a later single CPU extraction job is a reasonable
-host for Jev calls. If it is blocked, use an approved connected workstation/service for feature
-creation and transfer immutable cached artifacts to VSC. Do not add a tunnel or proxy to evade
-site policy. The numbered modelling experiments can consume the cache offline either way.
-
-## What remains before an actual run
-
-Account association/quotas, authenticated cluster access, the installed CUDA/TabPFN combination,
-full-data storage and backup,
-local Jev credentials/rate limits, pilot acceptance and model weights are still pending. No main
-experiment or paid feature extraction Slurm script is supplied yet; the live client/protocol
-must be agreed first. The original generic `job.slurm` now points to these specific preflights.
+Optional `python -m src.cluster.preflight --network` inside an allocation tests outbound
+DNS/TLS/HTTPS with one credential-free HEAD request. No inference POST is sent. A login-node
+success does not establish compute access, and an HTTP error response does not establish
+billing/authentication. This check is not needed for the chosen local Jev workflow.

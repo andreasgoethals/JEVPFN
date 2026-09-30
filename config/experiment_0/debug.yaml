@@ -19,5 +19,10 @@ checks:
   - cache_reuse_after_restart
   - feature_artifact_integrity
   - tabpfn_3_5_import_and_cuda
+  - proposed_model_imports_and_task_class_limits
+  - same_five_fold_split_manifest_across_arms
+  - binary_threshold_uses_inner_validation_only
+  - fold_specific_non_text_and_native_text_preprocessing
+  - identical_single_text_views_not_fitted_twice
   - later_small_inference_smoke_after_weights_are_prepared
 acceptance: unresolved  # Preflight success alone is not experiment-0 acceptance.

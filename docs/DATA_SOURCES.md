@@ -1,7 +1,6 @@
 # Data sources and audit definitions
 
-Verified 29-09-2026. The first data audit used pinned official upstream sources while the
-literature submodule was uninitialised. The library is now synced read-only to
+Source pins verified 29-09-2026; text-reuse audit updated 30-09-2026. The library is pinned read-only to
 `81c749bdf17e88b5152f4dc7f2e49bd48e9cc8ba`; the original data/source pins below remain unchanged.
 
 ## Primary sources and pins
@@ -51,12 +50,14 @@ The frozen column names reproduce the official counts for all 20 datasets.
 
 - Feature counts exclude the target; the total column count includes it.
 - Missingness uses pandas CSV null semantics. No extra sentinel strings are reinterpreted.
-- Unique counts exclude missing entries; the unique ratio divides by nonmissing row count.
+- General feature unique counts exclude pandas-null entries. Text reuse separately excludes null,
+  nonfinite and whitespace-only inputs; its unique ratio divides by nonempty row count.
 - Numeric features use their CSV dtype; booleans are categorical; date-like strings are “other”.
   Numeric-looking strings are not transformed into floats during this audit.
 - Numeric and regression summaries include count, mean, sample standard deviation, min/max and
   5th/25th/50th/75th/95th percentiles; nonfinite values are excluded from these summaries.
-- Text lengths count characters and whitespace-delimited words. Missing text contributes zero.
+- Text lengths count characters and whitespace-delimited words. Missing/empty text contributes zero.
+  The additional nonempty character mean excludes skipped inputs.
   Approximate tokens are `ceil(characters / 4)`, configurable as a character ratio. This is not
   calibrated to Jev, especially for Unicode, codes or serialised lists.
 - Combined text tokens use `ceil(sum(text characters for that row) / ratio)`; per-column tokens
@@ -87,3 +88,44 @@ inside each dataset folder. Dataset versions remain pinned in the catalog and `d
 the loader rejects a cached download with a different source or version instead of silently
 reusing it. Frozen source snapshots live under `src/data/upstream/`; their SHA-256 hashes are
 unchanged, and they are never imported or executed. No Python files remain under `data/`.
+
+## Exact text reuse
+
+`src/data/text_reuse.py` matches the request builder's canonical typed JSON, without target
+values. It profiles every official text column and the full joint tuple of available named
+fields. `reuse.csv` records nonempty/missing counts, distinct inputs, repeated copies, rows in
+repeated groups, and the most common input frequencies. `text.csv` adds these to field lengths.
+`summary.csv` gives per-dataset totals and joint/per-column overlap. No raw text is stored in
+the reuse table. A missing field is omitted jointly, so a one-available-field joint request
+shares the per-column response. Missing inputs incur no call and are not counted as reusable
+nonempty text. Neither case folding nor fuzzy matching is applied.
+
+`repeated_nonempty_rows` means nonempty slots minus distinct inputs (avoidable calls).
+`rows_in_repeated_groups` includes the first occurrence too. For a value appearing five times,
+these are four and five respectively. Exact input equality predicts cache reuse only with
+unchanged task metadata, question and settings. It does not guarantee identical API resampling.
+
+## Dataset issues relevant to the experiment
+
+The pinned collection contains 821,071 rows and 90 official text columns: three binary,
+seven multiclass and ten regression tasks. All official row/text/non-text counts matched the
+loaded data. The generated notebook report contains the per-dataset column names and counts.
+
+Official text includes short names, identifiers, URLs and numeric/date-like strings. Rotten
+Tomatoes has 13 text fields and SciMagojr has 10; some are measurements, not prose. Review
+prediction-time availability and target proxies rather than relabelling features silently.
+Spotify has 114 genre classes; Data Scientist Salary has six interval-labelled classes;
+Wine Review predicts 30 varieties; Mercari predicts log_price. Numeric class labels need an
+authoritative interpretation before final questions are frozen.
+
+Zomato contributes about three quarters of raw text tokens and has extreme review lengths.
+Some inputs exceed the documented Jev context limit under the approximate token screen.
+No automatic truncation, chunking or summarisation is implemented. Review scores and repeated
+entities also need attention when defining prediction-time inputs and grouped/time splits.
+Audit target distributions/quantiles remain descriptive only; none enter Jev inputs.
+
+The 30-09-2026 audit finds substantial reuse of joint inputs too: Vancouver Salaries avoids
+59.36% of nonempty joint slots, Zomato 31.94%, Video Games Sales 28.20% and Data Scientist
+Salary 23.78%. Across both modes, 3,985,167 nonempty slots become 2,032,351 distinct requests;
+107,235 distinct joint inputs overlap per-column inputs. These counts hold for the current
+untruncated text and fixed request design. They must be recomputed if that design changes.

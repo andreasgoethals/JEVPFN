@@ -4,13 +4,12 @@ Instructions for AI agents working in this repository.
 
 ## 0. Before you start
 
-1. [`docs/TEMPLATE.md`](docs/TEMPLATE.md) — the layout and rules this project started from.
-   **Follow it**, and when you deviate — which is allowed, it is a starting point rather than a
-   contract — **say so in your reply**. Never silently.
-2. [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md) — the cluster runs already done and the dead
-   ends already hit. Reading it is not optional: it is how you avoid resubmitting a configuration
-   that failed last month, or spending an hour on a known dead end.
-3. [`README.md`](README.md) — what this project actually is.
+1. [`README.md`](README.md): current layout, setup and outputs.
+2. [`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md): agreed choices and disabled proposals.
+3. [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md): protected data and known operational failures.
+
+The owner requested consolidating documentation; generic template instructions and historical
+status reports were merged into these files. Preserve useful conventions without duplicating docs.
 
 This project is initialised; the owner requested removal of the inherited `_template` files.
 Current phase layout and setup instructions live in `README.md`, not in that directory.
@@ -53,10 +52,11 @@ upstream source, or a primary reference, **say so** rather than filling the gap 
 Distinguish what a paper *evaluated* from what its code merely *supports*; what a mechanism *can*
 represent from how *often* it occurs; a library annotation from the primary source it summarises.
 
-## 4. Do not train, install, or push without asking
+## 4. Honor the authorized stage
 
-Cluster runs cost real VSC credits. Installs change a shared environment. Pushes are
-Andreas Goethals' action. Ask first.
+No paid extraction, model runs or VSC allocations are authorized in exploration. Do not enable
+them as part of a refactor. Honor existing owner authorization for environment setup/publication;
+do not ask repeatedly for an already authorized action. Check before changing a shared environment.
 
 ## 5. Windows PowerShell 5.1 — no `&&`
 
@@ -78,8 +78,7 @@ Newest first, dates `DD-MM-YYYY`.
   genuinely is. The detail belongs in the commit.
 - [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md) — two things. **Every cluster run**, one row in
   the table: config, outcome, headline number. And **every failure** that cost more than a couple of
-  minutes, four lines: **Tried**, **Result**, **Why**, **Instead** — even when the eventual fix
-  worked, because the dead end is the expensive part.
+  minutes and has reusable lessons. Keep the notes concise; Git history retains superseded details.
 
 ## 7. Notebooks and figures
 
@@ -87,8 +86,7 @@ Newest first, dates `DD-MM-YYYY`.
   cell prints a text summary**, section by section, in the notebook's own section order.
 - **Never pick a colour or a size.** `src/visualize/style.py` owns both, so every notebook here
   looks the same. Add a new one there, once, not in the notebook.
-- Save through `src/visualize/figures.FigureSaver`: **PDF only**, into that notebook's own
-  folder, which it clears before drawing. The notebook displays each figure inline.
+- Save through `src/visualize/figures.FigureSaver`: **PDF only**, into `output_JEVPFN/figures/<phase>/<notebook>/`, which it clears before drawing. The notebook displays each figure inline.
 - Use `style.figsize(style.WIDTH_FULL)` or `WIDTH_HALF`: every figure is drawn at the width it
   will occupy on an **A4** page, and never rescaled afterwards — rescaling carries the text with it.
 - Captions are the **paper's** captions: pure description, ready to paste under the figure.

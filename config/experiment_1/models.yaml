@@ -1,0 +1,88 @@
+# Candidate catalog, reviewed against primary sources on 2026-09-30.
+# Packages can be declared without importing, downloading weights, or fitting models.
+enabled: false
+adapters_implemented: false
+common_tasks: [binary_classification, multiclass_classification, regression]
+models:
+  tabpfn_3_5:
+    name: TabPFN-3.5
+    priority: primary
+    package: tabpfn==9.0.0
+    model_selector: ModelVersion.V3_5
+    extra: models
+    device_proposal: cuda
+    source: https://github.com/PriorLabs/TabPFN
+  tabpfn_3:
+    name: TabPFN-3
+    priority: requested
+    package: tabpfn==9.0.0
+    model_selector: ModelVersion.V3
+    extra: models
+    device_proposal: cuda
+    source: https://github.com/PriorLabs/TabPFN
+  catboost:
+    name: CatBoost
+    priority: requested
+    package: catboost==1.2.10
+    extra: baselines
+    device_proposal: cpu
+    source: https://catboost.ai/docs/
+  linear:
+    name: Logistic regression for classification; linear regression for regression
+    priority: requested
+    package: scikit-learn==1.9.1
+    extra: baselines
+    device_proposal: cpu
+    regularization: unresolved  # OLS versus Ridge; fix/tune regularization inside train only.
+    preprocessing: training_fold_imputation_one_hot_encoding_and_scaling
+    source: https://scikit-learn.org/stable/modules/linear_model.html
+  tabicl_v2:
+    name: TabICL v2
+    priority: requested
+    package: tabicl==2.2.0
+    classification_checkpoint: tabicl-classifier-v2-20260212.ckpt
+    regression_checkpoint: tabicl-regressor-v2-20260212.ckpt
+    extra: tabicl
+    device_proposal: cuda
+    source: https://github.com/soda-inria/tabicl
+  tabdpt_1_3:
+    name: TabDPT 1.3
+    priority: proposed
+    package: tabdpt==1.3.1
+    extra: tabdpt
+    device_proposal: cuda
+    review: [real_data_pretraining_overlap, faiss_platform_support, context_budget]
+    source: https://github.com/layer6ai-labs/TabDPT-inference
+  mitra:
+    name: Mitra
+    priority: proposed
+    package: autogluon.tabular[mitra]==1.6.3
+    extra: mitra
+    device_proposal: cuda
+    version_and_checkpoint: unresolved  # Do not confuse the MITRA adapter with a Mitra-v2 release.
+    review: [separate_environment, single_model_no_automl_ensemble, class_limits, memory]
+    source: https://auto.gluon.ai/stable/tutorials/tabular/tabular-foundational-models.html
+  tabfm:
+    name: Google Research TabFM
+    priority: proposed
+    package: null  # Pin a source commit and backend before adding a dependency.
+    extra: null
+    model_release: v1.0.0
+    device_proposal: cuda
+    review: [weight_license, context_sampling, checkpoint_hash, class_limits]
+    source: https://github.com/google-research/tabfm
+  tabstar:
+    name: TabSTAR
+    priority: proposed_native_text_comparator
+    package: tabstar==1.1.16
+    extra: tabstar
+    device_proposal: cuda
+    review: [real_data_pretraining_overlap, target_task_finetuning_budget, text_encoder_weights]
+    source: https://github.com/alanarazi7/TabSTAR
+acceptance_before_benchmark:
+  - immutable_checkpoint_hashes_and_licenses
+  - all_task_and_class_limits_including_114_class_spotify
+  - missing_value_and_categorical_handling
+  - training_data_overlap_check_for_models_pretrained_on_real_tables
+  - matching_row_splits_and_declared_compute_budgets
+  - offline_vsc_import_and_tiny_model_smoke_after_approval

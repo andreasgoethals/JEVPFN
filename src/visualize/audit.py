@@ -43,3 +43,34 @@ def burden_figures(summary, characters_per_token: float = 4.0):
         "task metadata, questions and non-text features are excluded."
     )
     yield fig, "total_text_burden", caption
+
+
+def reuse_figure(summary):
+    """Show actual duplicate savings for separate and joint inputs."""
+    ordered = summary.sort_values("per_column_reuse_savings_pct")
+    fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_FULL, style.AUDIT_RATIO))
+    ax.scatter(
+        ordered.per_column_reuse_savings_pct,
+        ordered.dataset,
+        color=style.MEDIAN_COLOR,
+        s=style.AUDIT_MARKER_SIZE,
+        label="Per-column",
+    )
+    ax.scatter(
+        ordered.joint_reuse_savings_pct,
+        ordered.dataset,
+        color=style.P95_COLOR,
+        s=style.AUDIT_MARKER_SIZE,
+        marker="x",
+        label="Joint",
+    )
+    ax.set_xlim(-2, 102)
+    ax.set_xlabel("Nonempty request slots avoided by exact reuse (%)")
+    ax.legend()
+    caption = (
+        "Fraction of nonempty input slots avoided through exact deduplication in each dataset, "
+        "for per-column and joint modes separately. Per-column counts are summed across fields; "
+        "joint equality uses the complete named set of available text fields. Empty inputs are "
+        "excluded. Overlap between modes is excluded from this figure and reported in the audit table."
+    )
+    return fig, "exact_text_reuse", caption

@@ -16,10 +16,11 @@ import pandas as pd
 from src.data.loaders import LoadedDataset, load_catalog, load_dataset
 from src.data.metadata import TaskMetadata
 from src.data.official_types import is_date
+from src.data.text_reuse import text_reuse_profile
 from src.utils import paths
 from src.utils.serialization import canonical_json, digest, scalar, text_value, write_json
 
-AUDIT_VERSION = "audit-v2-skip-empty"
+AUDIT_VERSION = "audit-v3-exact-text-reuse"
 
 
 @dataclass
@@ -27,6 +28,7 @@ class AuditCollection:
     summary: pd.DataFrame
     columns: pd.DataFrame
     text: pd.DataFrame
+    reuse: pd.DataFrame
     numeric: pd.DataFrame
     categorical: pd.DataFrame
     details: dict
@@ -75,7 +77,7 @@ def _length_stats(values: pd.Series, prefix: str) -> dict:
 
 
 def _examples(series: pd.Series, count: int, limit: int) -> list[dict]:
-    nonnull = series.dropna().astype(str)
+    nonnull = series.map(text_value).dropna().astype(str)
     candidates = pd.DataFrame({"value": nonnull, "characters": nonnull.str.len()})
     candidates = candidates[candidates["characters"] > 0].drop_duplicates("value")
     candidates = candidates.sort_values("characters", kind="stable")
@@ -113,6 +115,14 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
     frame, m = dataset.frame, dataset.metadata
     ratio = cfg["token_estimation"]["characters_per_token"]
     n = len(frame)
+    reuse = text_reuse_profile(
+        dataset.features.loc[:, list(m.text_columns)],
+        dataset_id=m.dataset_id,
+        top_n=cfg["audit"]["top_categories"],
+    )
+    reuse_by_column = {
+        r["text_columns"][0]: r for r in reuse["groups"] if r["mode"] == "per_column"
+    }
     columns, texts, numeric, categorical, examples = [], [], [], [], {}
     combined_chars = pd.Series(np.zeros(n, dtype=np.int64), index=frame.index)
     cell_tokens_total = 0
@@ -146,7 +156,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         }
         columns.append(base)
         if kind == "text":
-            values = series.fillna("").astype(str)
+            values = series.map(text_value).fillna("").astype(str)
             chars = values.str.len()
             words = values.str.split().str.len()
             tokens = np.ceil(chars / ratio).astype(np.int64)
@@ -154,7 +164,13 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
             cell_tokens_total += int(tokens.sum())
             text_stats = {
                 **base,
+                **{
+                    k: v
+                    for k, v in reuse_by_column[col].items()
+                    if k not in {"dataset_id", "mode", "text_columns", "rows"}
+                },
                 **_length_stats(chars, "characters"),
+                **_length_stats(chars[chars > 0], "nonempty_characters"),
                 **_length_stats(words, "words"),
                 **_length_stats(tokens, "tokens"),
                 "empty_or_whitespace_pct": float(100 * values.str.strip().eq("").mean()),
@@ -189,6 +205,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         "class_labels": list(m.classes),
         "text_columns": len(m.text_columns),
         "non_text_columns": len(m.non_text_columns),
+        **reuse["summary"],
         **_length_stats(combined_tokens, "combined_tokens"),
         "total_text_tokens": int(combined_tokens.sum()),
         "total_cell_text_tokens": cell_tokens_total,
@@ -222,6 +239,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         "summary": summary,
         "columns": columns,
         "text": texts,
+        "reuse": reuse["groups"],
         "numeric": numeric,
         "categorical": categorical,
     }, details
@@ -308,7 +326,9 @@ def audit_collection(cfg: dict, *, refresh: bool = False) -> AuditCollection:
 
 
 def _collect_audit(cfg, catalog, identity, folder, *, refresh):
-    tables = {name: [] for name in ("summary", "columns", "text", "numeric", "categorical")}
+    tables = {
+        name: [] for name in ("summary", "columns", "text", "reuse", "numeric", "categorical")
+    }
     details = {}
     for entry in catalog["datasets"]:
         marker = folder / f"{entry['id']}.json"
@@ -363,16 +383,43 @@ def audit_summary(audit: AuditCollection) -> str:
         s[["dataset", "task_type", "rows", "text_columns", "non_text_columns"]].to_string(
             index=False
         ),
-        "3. Column, text and target audit",
+        "3. Individual text columns: length, missingness and repetition",
+        audit.text[
+            [
+                "dataset_id",
+                "feature",
+                "nonempty_characters_mean",
+                "missing_or_empty_pct",
+                "unique_nonempty_inputs",
+                "repeated_nonempty_rows",
+            ]
+        ].to_string(index=False),
+        "4. Joint duplicates and total reusable extraction",
+        s[
+            [
+                "dataset",
+                "per_column_unique_inputs",
+                "joint_unique_inputs",
+                "joint_single_field_unique_overlap",
+                "combined_unique_inputs",
+                "per_column_missing_or_empty_pct",
+                "joint_missing_or_empty_pct",
+            ]
+        ].to_string(index=False),
+        f"Both modes: {s.combined_nonempty_inputs.sum():,} nonempty slots, "
+        f"{s.combined_unique_inputs.sum():,} distinct requests after reuse.",
+        "Equal values in different columns/tasks are not automatically equal requests.",
+        "A cached first response is reused; deterministic API inference is not assumed.",
+        "5. Full column and target audit",
         f"Audited {len(audit.columns)} features, including {len(audit.text)} text columns.",
         "Distinct-value ratios exclude missing values. Length statistics include missing text as empty.",
         "Target distributions and regression summaries are audit-only and never enter requests.",
-        "4. Text burden",
+        "6. Text burden",
         f"Combined text: approximately {s.total_text_tokens.sum():,} tokens at the configured character ratio.",
         s[
             ["dataset", "combined_tokens_median", "combined_tokens_p95", "total_text_tokens"]
         ].to_string(index=False),
-        "5. Saved outputs",
+        "7. Saved outputs",
         str(audit.folder),
         "No Jev calls, model training or evaluation were performed.",
     ]

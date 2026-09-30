@@ -15,8 +15,10 @@ export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export NUMEXPR_NUM_THREADS="$OMP_NUM_THREADS"
 export XDG_CACHE_HOME="${VSC_SCRATCH_NODE:-${VSC_DATA:?}}/jevpfn-runtime-${SLURM_JOB_ID:-setup}"
 export MPLCONFIGDIR="$XDG_CACHE_HOME/matplotlib"
-export TORCH_HOME="$XDG_CACHE_HOME/torch"
-# Future TabPFN weights belong on durable project storage, not node scratch.
+# Every model's durable weights belong on project storage, including HF/Torch downloads.
+export TORCH_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("torch"))')"
+export HF_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("huggingface"))')"
+export HF_HUB_CACHE="$HF_HOME/hub"
 export TABPFN_MODEL_CACHE_DIR="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("tabpfn"))')"
 export TRITON_CACHE_DIR="$XDG_CACHE_HOME/triton"
 export CUDA_CACHE_PATH="$XDG_CACHE_HOME/nv"

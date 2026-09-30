@@ -1,0 +1,40 @@
+# Design contract only: no estimator or benchmark runner is implemented.
+enabled: false
+proposal: true
+random_seed: 20260929
+evaluation:
+  outer_folds: 5  # Owner requested five-fold CV; repeated CV was not requested.
+  repeats: 1
+  identical_splits_across_models_and_features: true
+  split_manifest: null  # Freeze after dataset group/time/duplicate review.
+  classification_split_proposal: stratified
+  regression_split_proposal: shuffled_kfold
+  group_or_time_policy: unresolved
+  inner_validation:
+    source: outer_training_only
+    strategy: unresolved  # Held-out fraction versus inner out-of-fold predictions.
+    fraction: null
+  binary:
+    threshold_objective: f1
+    threshold_source: inner_validation_predictions_only
+    test_threshold_tuning: forbidden
+    positive_class: unresolved  # Agree semantics; never choose from test performance.
+    tie_break: unresolved
+    refit_after_threshold_selection: unresolved
+    secondary_metrics: []
+  multiclass:
+    decision_rule_proposal: argmax
+    primary_metric_proposal: f1_macro
+    per_class_threshold_tuning: false  # Needs a separate design if later requested.
+  regression:
+    primary_metric: null
+    candidate_metrics: [rmse, mae, r2]
+    classification_threshold: not_applicable
+  preprocessing_fit_scope: training_partition_only
+  model_tuning_budget: unresolved
+  calibration: unresolved
+  small_n: unresolved
+  statistical_tests: unresolved
+  failed_or_unsupported_runs: record_explicitly_never_silently_drop
+  cached_jev_features_are_fold_independent: true
+  native_text_preprocessing_is_fold_specific: true

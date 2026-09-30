@@ -4,9 +4,9 @@
     python -m src.utils.run_notebooks --only exploration  just these, by stem
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
-    output_JEVPFN/<phase>/figures/<notebook>/*.pdf   written by the notebooks themselves
-    output_JEVPFN/captions.md                       all figure captions
-    output_JEVPFN/allresults.md             every notebook's printed summary, alphabetical
+    output_JEVPFN/figures/<phase>/<notebook>/*.pdf   written by the notebooks themselves
+    output_JEVPFN/Captions.md                       all figure captions
+    output_JEVPFN/Allresults.md             every notebook's printed summary, alphabetical
 
 SEPARATE PROCESSES, NOT THREADS: matplotlib's figure registry is global, so two notebooks in
 one interpreter would capture each other's figures — silently, giving plausible figures
@@ -82,7 +82,7 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
 
 def _prelude() -> str:
     """Injected above every flattened notebook. `Agg` because a compute node has no display, and
-    stdout is captured so `allresults.md` can be built without the notebook knowing."""
+    stdout is captured so `Allresults.md` can be built without the notebook knowing."""
     return (
         "import matplotlib\n"
         'matplotlib.use("Agg")\n'
@@ -197,7 +197,7 @@ def _captured_text(name: str) -> str:
 
 
 def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> Path:
-    """ONE captions.md for the project, grouped per notebook, in notebook order.
+    """ONE Captions.md for the project, grouped per notebook, in notebook order.
 
     Built from each `_figures.json`, so it regenerates from disk after an interactive run. A
     figure with no caption gets a loud placeholder rather than being skipped — a gap should be

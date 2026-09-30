@@ -60,7 +60,7 @@ def wipe(root: Path) -> int:
     Two passes, and the order matters: files first, then empty directories bottom-up. That leaves
     exactly the directories holding a tracked `.gitkeep` and removes the per-run ones
     (`figures/<notebook>/`) that do not. An `rmtree` of the subtree would take
-    `output_JEVPFN/<phase>/figures/.gitkeep` with it, and the next clone would have nowhere to write.
+    `output_JEVPFN/figures/<phase>/.gitkeep` with it, and the next clone would have nowhere to write.
     """
     if not root.is_dir():
         return 0

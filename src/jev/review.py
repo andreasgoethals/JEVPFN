@@ -14,29 +14,14 @@ import pandas as pd
 
 from src.data.audit import request_lengths
 from src.data.loaders import load_catalog, load_dataset
+from src.data.text_reuse import semantic_codes
 from src.jev.cost import group_lengths
 from src.jev.provider import api_preview
 from src.jev.requests import build_requests, text_groups
 from src.utils import paths
 from src.utils.config import load_config
 from src.utils.provenance import code_identity
-from src.utils.serialization import canonical_json, text_value, write_json
-
-
-def semantic_codes(features: pd.DataFrame) -> pd.DataFrame:
-    """Equal codes within a field mean identical canonical JSON scalar values.
-
-    Encode one column at a time to avoid retaining another copy of all long text.
-    Unlike ordinary dataframe deduplication, this preserves typed JSON distinctions
-    and merges all missing/nonfinite values exactly as the request builder does.
-    """
-    return pd.DataFrame(
-        {
-            col: pd.factorize(features[col].map(lambda v: canonical_json(text_value(v))))[0]
-            for col in features
-        },
-        index=features.index,
-    )
+from src.utils.serialization import canonical_json, write_json
 
 
 def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:

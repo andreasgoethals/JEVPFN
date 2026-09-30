@@ -271,8 +271,20 @@ def feature_plan(audit, cfg: dict) -> pd.DataFrame:
                     "rows": row.rows,
                     "potential_slots": row.rows * groups,
                     "requests_before_deduplication": active,
+                    "unique_requests_within_mode": getattr(row, f"{mode}_unique_inputs"),
+                    "new_requests_in_combined_build": (
+                        row.per_column_unique_inputs
+                        if mode == "per_column"
+                        else row.joint_unique_inputs - row.joint_single_field_unique_overlap
+                    ),
                     "empty_slots_skipped": row.rows * groups - active,
                     "retained_numeric_columns": width * groups,
+                    "proposed_compact_numeric_columns": groups
+                    * (
+                        len(metadata.classes)
+                        if metadata.task_type == "multiclass_classification"
+                        else 1
+                    ),
                     "status": "planned_only",
                 }
             )

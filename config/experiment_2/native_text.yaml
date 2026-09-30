@@ -1,0 +1,20 @@
+extends: experiment_1/protocol
+phase: experiment_2
+name: proposed_native_text_comparison
+enabled: false
+proposal: true
+model_catalog: experiment_1/models
+candidate_models: [tabpfn_3_5]
+optional_comparator: tabstar
+feature_artifacts: []
+candidate_combinations:
+  - non_text_plus_original_text
+  - non_text_plus_original_text_plus_per_column
+  - non_text_plus_original_text_plus_joint
+  - non_text_plus_original_text_plus_both
+reuse_experiment_1_arms: true
+native_text_preprocessing: training_partition_only
+text_length_policy: unresolved
+new_jev_calls_required: false
+hosted_thinking_mode: excluded_from_current_proposal
+requires: [approved_experiment_1_protocol, agreed_native_text_handling]

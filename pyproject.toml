@@ -48,6 +48,14 @@ notebooks = [
 ]
 jev = ["typesafe-sdk==0.7.2"]  # Optional future transport; no live client is enabled.
 models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the hardware-specific Torch wheel first on VSC.
+# Proposed benchmark engines. Metadata checked 2026-09-30; not installed by notebook setup.
+# Validate each selected extra on VSC in experiment 0. Do not install AutoGluon[all].
+baselines = ["scikit-learn==1.9.1", "catboost==1.2.10"]
+tabicl = ["tabicl==2.2.0", "torch==2.12.1"]
+tabdpt = ["tabdpt==1.3.1", "torch==2.12.1"]
+mitra = ["autogluon.tabular[mitra]==1.6.3", "torch==2.12.1"]
+tabstar = ["tabstar==1.1.16", "torch==2.12.1"]
+# TabFM remains catalog-only until its source revision/backend is agreed.
 
 [project.urls]
 Repository = "https://github.com/andreasgoethals/JEVPFN"

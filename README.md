@@ -1,56 +1,37 @@
 # JEVPFN
 
-Can label-free Jev features extracted from text improve TabPFN-3.5 prediction?
+Can label-free Jev features extracted from text improve tabular prediction?
+TabPFN-3.5 is the main model; the proposed benchmark also includes other foundation models
+and conventional baselines on the **20 core MulTaBench TEXT datasets**.
 
-Author: Andreas Goethals, KU Leuven. Initial collection: **20 core MulTaBench TEXT datasets**.
-Public repository: [andreasgoethals/JEVPFN](https://github.com/andreasgoethals/JEVPFN).
+**Current phase: exploration and design. No paid calls or model experiments are enabled.**
+The public repository is [andreasgoethals/JEVPFN](https://github.com/andreasgoethals/JEVPFN).
 
-**Current stage: exploration and feature design. No real Jev calls or modelling are enabled.**
-All 20 datasets are available locally. Questions are fixed templates filled with task metadata;
-no generative LLM creates questions. True row targets and label statistics never enter Jev.
+## Workflow
 
-## Agreed method
+Exploration → local feature pilot and full feature creation → experiment 0 on VSC →
+predictive experiments. The [research plan](docs/RESEARCH_PLAN.md) separates agreed choices
+from the proposed experiments and remaining decisions.
 
-- Read each text column separately **and** read all available text columns together.
-- Send **text and task metadata only** to Jev. Non-text features go to TabPFN later.
-- Skip null/empty/whitespace-only inputs and store missing numeric features. Joint requests use
-  available text and are skipped only when all text is missing.
-- Cache identical requests once. With t nonempty text columns, both modes give t + 1 request
-  slots per row before reuse; a joint request with one available column reuses that column's response.
-- Create features locally after review and a small approved pilot. Then debug the predictive
-  pipeline on VSC in experiment 0. No experiment makes fresh Jev calls.
+Jev reads each text column separately and all available text columns jointly, with fixed
+questions filled from task metadata. **Non-text features and true row targets never enter Jev.**
+Skip empty inputs and store missing numeric features. Identical complete requests reuse a
+cached response; future experiments join different combinations of those saved features.
 
 | Notebook | Purpose |
 |---|---|
-| [01_data_exploration](notebooks/01_data_exploration.ipynb) | All 20 datasets, full column/target audits and text burden. |
-| [02_jev_input_design](notebooks/02_jev_input_design.ipynb) | Exact deterministic requests, missing-input handling, cache demonstration and workload. |
-| [03_feature_creation](notebooks/03_feature_creation.ipynb) | Feature-table plan, documented API-body previews and offline budget. No calls. |
+| [01_data_exploration](notebooks/01_data_exploration.ipynb) | Text counts, lengths, missingness, per-column and joint duplicates; complete dataset audit. |
+| [02_jev_input_design](notebooks/02_jev_input_design.ipynb) | Deterministic requests, task-specific questions, temporary mock cache and token estimates. |
+| [03_feature_creation](notebooks/03_feature_creation.ipynb) | Intended API bodies, numeric feature tables, reuse and cost estimates. No API calls. |
 
-The synthetic `example_analysis.ipynb` is preserved. Reusable logic is under `src/`.
-Every notebook ends with a **complete printed report**, including every displayed table,
-JSON preview, plotted value and figure caption. Reports may contain raw examples and are ignored by Git.
+All logic is in `src/`. The inherited synthetic example remains separate. Every notebook
+ends with a full printed report containing all displayed tables, previews, plotted values and
+captions. Source notebooks have cleared outputs; generated reports remain local and ignored.
 
-## Run locally
+## Local environment and notebooks
 
-Work in the inner `JEVPFN/` repository. The existing `.venv` is Python 3.12 with prompt/kernel
-name **JEVPFN**; no reinstall is required:
-
-```powershell
-Set-Location -LiteralPath 'C:\Users\U0152019\PhD Documents\Projects\5. JEVPFN\JEVPFN'
-.\.venv\Scripts\python.exe -m jupyter lab
-```
-
-Select **Python 3.12 (JEVPFN)**. Run every notebook in parallel with one command:
-
-```powershell
-.\.venv\Scripts\python.exe -m src.utils.run_notebooks --workers 4
-```
-
-The runner uses separate processes, one numerical-library thread per process, saved logs and
-run manifests. It preserves other notebooks' reports during a partial rerun. To rebuild reports
-without rerunning anything, add `--summaries-only`. `--only 03_feature_creation` runs one notebook.
-
-For a fresh clone, create the same environment from `pyproject.toml`:
+Open the inner `JEVPFN/` directory containing this README and `pyproject.toml`.
+For a fresh checkout, run in PowerShell:
 
 ```powershell
 py -3.12 -m venv --prompt JEVPFN .venv
@@ -59,53 +40,17 @@ py -3.12 -m venv --prompt JEVPFN .venv
 .\.venv\Scripts\python.exe -m src.data.prepare
 ```
 
-The `.venv` directory, shell prompt and Jupyter display name refer to the same environment.
-Activation is optional; using its Python directly avoids PowerShell execution-policy changes.
-The `jev` and `models` extras declare the future SDK and TabPFN/Torch dependencies. They are not
-needed for these notebooks and no weights have been downloaded. On VSC use a separate Conda
-**JEVPFN** environment with Python 3.12 and the same pyproject; select a compatible CUDA wheel
-before installing `models`. See [VSC.md](docs/VSC.md).
+The existing local environment is already set up. Its prompt/kernel is **JEVPFN**; the
+`.venv` folder is its location. Activation is optional. Launch Jupyter or run everything:
 
-## Files and outputs
-
-```text
-config/
-  exploration/          audit, dataset catalog and preserved template example
-  feature_creation/     text-only per-column and joint extraction design
-  experiment_0/         VSC debugging
-  experiment_1/         main experiment, disabled
-  experiment_2/         representation comparison proposal, disabled
-  experiment_3/         output-view comparison proposal, disabled
-notebooks/              three research notebooks and one synthetic example
-src/                    data/, jev/, cluster/, utils/, visualize/
-data/raw/               20 numbered dataset folders, data.csv + metadata.json + download.json
-data/jev_cache/        future durable responses and reusable feature tables
-output_JEVPFN/
-  allresults.md         complete reports from all notebooks
-  captions.md           captions from all notebooks
-  exploration/          figures/, reports/, logs/, manifests/, results/
-  feature_creation/     figures/, reports/, logs/, manifests/, results/
-  experiment_0/         same layout, created when used
-  experiment_1/         same layout, created when used
-  experiment_2/         same layout, created when used
-  experiment_3/         same layout, created when used
-scripts/slurm/          prepared CPU/GPU preflights; no submission performed
-tests/, docs/          verification and research notes
-tfm-library/           pinned, read-only literature submodule
+```powershell
+.\.venv\Scripts\python.exe -m jupyter lab
+.\.venv\Scripts\python.exe -m src.utils.run_notebooks --workers 4
 ```
 
-Each phase also has `allresults.md` and `captions.md`. Each notebook's figure folder holds PDF
-figures, its captions and a figure manifest. Future experiment folders are created when used;
-empty placeholders are unnecessary. All generated output is ignored by Git.
-
-On VSC, **small outputs** (figures, reports, logs, manifests) use
-`$VSC_DATA/JEVPFN/output_JEVPFN/<phase>/`. **Large results** use
-`$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/`. Raw data, Jev caches and weights
-also use project storage. Unavailable project storage raises an error; it never silently fills
-personal DATA. The wICE allocation inherited from CreditPFN is `/lustre1/project/stg_00211`;
-confirm access and backup arrangements before use. Mindwell requires a confirmed native GPFS path.
-
-## Reproducibility and next steps
+Select **Python 3.12 (JEVPFN)** in Jupyter/VS Code. The runner uses four separate processes,
+saves logs and preserves reports from other notebooks during partial reruns.
+`--only 01_data_exploration` selects one notebook; `--summaries-only` rebuilds saved reports.
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.data.prepare --offline
@@ -113,35 +58,71 @@ confirm access and backup arrangements before use. Mindwell requires a confirmed
 .\.venv\Scripts\python.exe -m src.jev.review
 ```
 
-The catalog pins release versions, official text definitions and SHA-256 hashes. Keep all data
-files directly in their numbered folders. Earlier folder-cleanup instructions are retired after
-the reported data loss; the command is disabled. **Raw data and paid caches are never output cleanup.**
+The last command recalculates the duplicate-aware offline budget; it sends nothing.
+All dependencies are declared in `pyproject.toml`. Optional `jev`, `models`, `baselines`,
+`tabicl`, `tabdpt`, `mitra` and `tabstar` extras are for later implementation. Notebook setup
+installs none of those extras. GPU/model environments still require VSC validation; see
+[the VSC guide](docs/VSC.md). TabFM is catalogued pending a pinned source revision.
 
-Next: agree score wording and long-text policy, inspect previews, approve a small local pilot,
-implement and test resumable paid extraction, create/validate features locally, then experiment 0
-on VSC. Final model inputs, splits, metrics and benchmark configuration remain open.
-See [the research plan](docs/RESEARCH_PLAN.md), [feature design](docs/FEATURE_CREATION.md),
-[design decisions](docs/DESIGN_NOTES.md), [data audit](docs/INITIAL_REPORT.md) and
-[GitHub sync](docs/GITHUB.md). The [model review](docs/REVIEW_2026_09_30.md) preserves the
-TabPFN text/Thinking research and per-dataset feature counts.
+## Files and outputs
 
-No credential is required now. `.env*`, credentials, datasets, paid responses, feature tables,
-notebook report outputs and weights remain outside Git. Source notebooks have cleared outputs.
-The library remains pinned to `81c749bdf17e88b5152f4dc7f2e49bd48e9cc8ba`.
+```text
+config/
+  exploration/          dataset catalog and audit
+  feature_creation/     local feature preparation
+  experiment_0/         VSC debugging
+  experiment_1/         main comparison, shared CV proposal and model catalog
+  experiment_2/         original-text comparison proposal
+  experiment_3/         Jev output-representation proposal
+notebooks/              thin notebook clients
+src/                    reusable data, Jev, cluster, plotting and utility code
+tests/                  deterministic checks
+data/raw/               20 numbered folders, files directly inside each folder
+data/jev_cache/         future durable responses and feature tables, created when needed
+output_JEVPFN/
+  Allresults.md         complete reports from every notebook
+  Captions.md           all figure captions
+  figures/
+    exploration/<notebook>/
+    feature_creation/<notebook>/
+    experiment_0/<notebook>/ ...
+  exploration/          reports/, logs/, manifests/, results/
+  feature_creation/     same layout
+  experiment_0/ ...     same layout, created when used
+docs/                   research plan, data sources, VSC guide and maintenance records
+scripts/slurm/          prepared preflights; no jobs submitted
+tfm-library/            pinned read-only literature submodule
+```
 
-Deliberate template adaptations: phase-specific config/output, complete ignored reports,
-numbered raw folders, Python data logic under `src/data`, and removal of the inherited initializer
-at the owner's request. Original Git history and useful source/style/test conventions are preserved.
+Each phase also has `Allresults.md` and `Captions.md`. Notebook figure folders contain PDFs,
+`Captions.md` and a figure manifest. No empty future-output folders are created.
 
----
+On VSC, small outputs use `$VSC_DATA/JEVPFN/output_JEVPFN/`, including the shared `figures/`
+folder. Large tables use `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/`.
+Raw data, paid caches and weights also live under that project-storage `JEVPFN/` directory.
+A project-storage error stops the run rather than filling personal DATA.
 
-## Based on the repository template
+## GitHub and provenance
 
-This repository was created from
-[**andreasgoethals/0.-Template**](https://github.com/andreasgoethals/0.-Template).
-[`docs/TEMPLATE.md`](docs/TEMPLATE.md) is that template: it explains every folder and file here,
-and it is a **starting point, not a contract** — this project may grow past it, and deviating where
-the work needs it is fine as long as you say so. Generic rule changes belong at the source above.
+VS Code tracks local Git changes; they appear on GitHub only after committing and pushing.
+The repository is already connected to the public GitHub URL above. For future code updates:
 
-*Keep this chapter, at the bottom, in every project that starts from the template. Everything above
-it is that project's own.*
+```powershell
+git status
+git add <specific-code-or-config-files>
+git commit -m "Describe the change"
+git push origin main
+```
+
+On VSC, initially clone with `git clone --recurse-submodules https://github.com/andreasgoethals/JEVPFN.git`;
+subsequent updates use `git pull --ff-only` and `git submodule update --init --recursive`.
+Transfer data and completed feature artifacts separately; Git does not sync them.
+
+The [data-source notes](docs/DATA_SOURCES.md) document official definitions and immutable hashes.
+Raw data and paid caches are protected inputs, never cleanup targets. The old empty-folder
+cleanup command is disabled after the dataset-loss incident. Credentials, `.env*`, data,
+model weights and generated reports are ignored. No credentials are needed for the current notebooks.
+
+Based on [Andreas' research template](https://github.com/andreasgoethals/0.-Template).
+Useful source, style, test and Git-history conventions are retained; project-specific phases,
+numbered raw folders and shared figures replace the original generic layout.
