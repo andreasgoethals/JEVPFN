@@ -103,7 +103,13 @@ nonempty text. Neither case folding nor fuzzy matching is applied.
 `repeated_nonempty_rows` means nonempty slots minus distinct inputs (avoidable calls).
 `rows_in_repeated_groups` includes the first occurrence too. For a value appearing five times,
 these are four and five respectively. Exact input equality predicts cache reuse only with
-unchanged task metadata, question and settings. It does not guarantee identical API resampling.
+unchanged task metadata, question and settings. Cache reuse means returning the first stored
+response; it does not require a claim that repeated API executions are bit-identical.
+
+`overview.csv` adds one readable row per dataset, including task/dimensions, pooled mean
+characters/tokens per nonempty text cell, missingness and separate/joint savings in absolute
+counts and percentages. Its companion large-format figure annotates actual values; each
+column's shading is scaled independently. Full numeric values remain in the table and report.
 
 ## Dataset issues relevant to the experiment
 

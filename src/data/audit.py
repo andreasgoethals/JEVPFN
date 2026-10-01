@@ -18,6 +18,7 @@ from src.data.metadata import TaskMetadata
 from src.data.official_types import is_date
 from src.data.text_reuse import text_reuse_profile
 from src.utils import paths
+from src.utils.files import atomic_replace, atomic_text
 from src.utils.serialization import canonical_json, digest, scalar, text_value, write_json
 
 AUDIT_VERSION = "audit-v3-exact-text-reuse"
@@ -250,10 +251,7 @@ def _save_lengths(path: Path, lengths: dict) -> None:
     with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".npz", delete=False) as handle:
         temporary = Path(handle.name)
         np.savez_compressed(handle, **lengths)
-    try:
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic_replace(temporary, path)
 
 
 @contextmanager
@@ -363,15 +361,7 @@ def _collect_audit(cfg, catalog, identity, folder, *, refresh):
 
 
 def _atomic_csv(frame: pd.DataFrame, path: Path) -> None:
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", newline="", dir=path.parent, suffix=".tmp", delete=False
-    ) as handle:
-        temporary = Path(handle.name)
-        frame.to_csv(handle, index=False)
-    try:
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic_text(path, frame.to_csv(index=False))
 
 
 def audit_summary(audit: AuditCollection) -> str:
@@ -409,7 +399,7 @@ def audit_summary(audit: AuditCollection) -> str:
         f"Both modes: {s.combined_nonempty_inputs.sum():,} nonempty slots, "
         f"{s.combined_unique_inputs.sum():,} distinct requests after reuse.",
         "Equal values in different columns/tasks are not automatically equal requests.",
-        "A cached first response is reused; deterministic API inference is not assumed.",
+        "Identical requests reuse the first saved response; no repeat API call is needed.",
         "5. Full column and target audit",
         f"Audited {len(audit.columns)} features, including {len(audit.text)} text columns.",
         "Distinct-value ratios exclude missing values. Length statistics include missing text as empty.",

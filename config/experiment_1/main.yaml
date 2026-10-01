@@ -4,7 +4,8 @@ name: main_comparison
 enabled: false
 proposal: true
 model_catalog: experiment_1/models
-candidate_models: [tabpfn_3_5, tabpfn_3, catboost, linear, tabicl_v2, tabdpt_1_3, mitra, tabfm]
+candidate_models: [tabpfn_3_5, tabpfn_3, catboost, linear, tabicl_v2, limix_2, causilo, exaone_tabular, tabdpt_1_3, tabfm, tabm]
+deferred_models: [mitra_v2]  # Published integration depends on excluded AutoGluon.
 feature_artifacts: []
 candidate_combinations: [non_text, non_text_plus_per_column, non_text_plus_joint, non_text_plus_both]
 include_non_text_features_in_jev: false

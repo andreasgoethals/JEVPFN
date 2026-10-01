@@ -138,14 +138,22 @@ def phase_name(phase: str | None = None) -> str:
 
 
 def notebook_phase(notebook: str) -> str:
-    if Path(notebook).name != notebook or "\\" in notebook or notebook in {".", ".."}:
-        raise ValueError("Notebook must be a plain name.")
+    parts = notebook.split("/")
+    if any(not p or p in {".", ".."} or "\\" in p or ":" in p for p in parts) or len(parts) > 2:
+        raise ValueError("Notebook must be a name or phase/name, without path traversal.")
+    if len(parts) == 2:
+        return phase_name(parts[0])
     if notebook == "03_feature_creation":
         return "feature_creation"
     match = re.match(r"(experiment_[0-9]+)_", notebook)
     if match:
         return match.group(1)
     return "exploration"
+
+
+def notebook_stem(notebook: str) -> str:
+    notebook_phase(notebook)
+    return notebook.split("/")[-1]
 
 
 def outputs_dir() -> Path:
@@ -182,12 +190,12 @@ def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
         root = root / phase_name(phase or inferred_phase)
     elif phase is not None:
         root = root / phase_name(phase)
-    return root / notebook if notebook else root
+    return root / notebook_stem(notebook) if notebook else root
 
 
 def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
     root = phase_dir(phase or (notebook_phase(notebook) if notebook else None)) / "reports"
-    return root / f"{notebook}.txt" if notebook else root
+    return root / f"{notebook_stem(notebook)}.txt" if notebook else root
 
 
 def captions_path(phase: str | None = None) -> Path:
@@ -195,7 +203,7 @@ def captions_path(phase: str | None = None) -> Path:
 
 
 def all_results_path(phase: str | None = None) -> Path:
-    return (phase_dir(phase) if phase else outputs_dir()) / "Allresults.md"
+    return (phase_dir(phase) if phase else outputs_dir()) / "All Results.md"
 
 
 # ---------------------------------------------------------------------------

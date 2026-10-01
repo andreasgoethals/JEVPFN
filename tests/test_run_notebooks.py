@@ -1,6 +1,6 @@
-# Came with the template, and worth keeping: `src/utils/run_notebooks.py` is identical in every
-# project, and these pin the two documented contracts — notebooks discovered alphabetically, and
-# `Allresults.md` sorted alphabetically with each block verbatim.
+# Retained from the template and adapted to phase folders and automatic concurrency.
+# These pin the documented contracts — notebooks discovered alphabetically, and
+# `All Results.md` sorted alphabetically with each block verbatim.
 """`src/utils/run_notebooks.py` — the runner and the two summary documents.
 
 The end-to-end test executes a real one-cell notebook in a subprocess. It is marked `slow`
@@ -17,6 +17,20 @@ import pytest
 from src.utils import run_notebooks as rn
 
 
+def test_automatic_workers_use_cpu_and_slurm_limits(monkeypatch):
+    monkeypatch.setattr(rn.os, "cpu_count", lambda: 16)
+    monkeypatch.setattr(rn.os, "sched_getaffinity", lambda _: set(range(8)), raising=False)
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK", raising=False)
+    assert rn.worker_count(4) == 4
+    assert rn.worker_count(12) == 8
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "2")
+    assert rn.worker_count(12) == 2
+    assert rn.worker_count(12, 1) == 1
+    assert rn.worker_count(12, 20) == 2
+    with pytest.raises(ValueError):
+        rn.worker_count(4, 0)
+
+
 def make_notebook(path, cells: list[str]) -> None:
     """Write a minimal but valid .ipynb."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -24,8 +38,13 @@ def make_notebook(path, cells: list[str]) -> None:
         json.dumps(
             {
                 "cells": [
-                    {"cell_type": "code", "source": [c], "metadata": {}, "outputs": [],
-                     "execution_count": None}
+                    {
+                        "cell_type": "code",
+                        "source": [c],
+                        "metadata": {},
+                        "outputs": [],
+                        "execution_count": None,
+                    }
                     for c in cells
                 ],
                 "metadata": {},
@@ -52,6 +71,24 @@ def test_discovery_can_be_overridden_for_a_partial_rerun(tmp_path, monkeypatch) 
     assert rn.discover(("only_this",)) == ("only_this",)
 
 
+def test_recursive_discovery_resolves_unique_stems_and_rejects_ambiguity(tmp_path, monkeypatch):
+    monkeypatch.setattr(rn, "notebooks_dir", lambda: tmp_path)
+    for name in (
+        "exploration/a",
+        "feature_creation/a",
+        "experiment_0/b",
+        "exploration/.ipynb_checkpoints/a-checkpoint",
+    ):
+        make_notebook(tmp_path / f"{name}.ipynb", ["print(1)"])
+    assert rn.discover() == ("experiment_0/b", "exploration/a", "feature_creation/a")
+    assert rn.discover(("b",)) == ("experiment_0/b",)
+    with pytest.raises(ValueError, match="Ambiguous"):
+        rn.discover(("a",))
+    assert rn.discover(("feature_creation/a",)) == ("feature_creation/a",)
+    with pytest.raises(ValueError):
+        rn.discover(("../outside",))
+
+
 def test_magics_are_stripped_from_the_flattened_script(tmp_path) -> None:
     """`%matplotlib inline` is a syntax error in a plain interpreter, and a notebook that
     needs a magic to run cannot be executed non-interactively at all."""
@@ -65,14 +102,23 @@ def test_magics_are_stripped_from_the_flattened_script(tmp_path) -> None:
 def test_markdown_cells_are_skipped(tmp_path) -> None:
     nb = tmp_path / "nb.ipynb"
     nb.write_text(
-        json.dumps({
-            "cells": [
-                {"cell_type": "markdown", "source": ["# a heading"]},
-                {"cell_type": "code", "source": ["print('code')"], "outputs": [],
-                 "execution_count": None, "metadata": {}},
-            ],
-            "metadata": {}, "nbformat": 4, "nbformat_minor": 5,
-        }),
+        json.dumps(
+            {
+                "cells": [
+                    {"cell_type": "markdown", "source": ["# a heading"]},
+                    {
+                        "cell_type": "code",
+                        "source": ["print('code')"],
+                        "outputs": [],
+                        "execution_count": None,
+                        "metadata": {},
+                    },
+                ],
+                "metadata": {},
+                "nbformat": 4,
+                "nbformat_minor": 5,
+            }
+        ),
         encoding="utf-8",
     )
     script = rn._build_script(nb, tmp_path / "out.txt")
@@ -155,11 +201,9 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
     """The property the whole design rests on: the NOTEBOOK writes the files, so a runner
     execution and an interactive Run All produce the same thing.
 
-    `run_one` plus the two writers rather than `run_all`: the process pool starts a fresh
-    interpreter that does not inherit monkeypatches, so a redirected `notebooks_dir` would
-    be invisible to it. Environment variables ARE inherited, which is how `isolated_output`
-    still keeps the figures out of the repository. `run_all` is exactly these three calls
-    plus the pool, and each is covered.
+    Environment variables reach the notebook subprocess, which is how `isolated_output`
+    keeps its figures out of the repository. The coordinator can redirect discovery in
+    this process while the notebook itself executes in an isolated interpreter.
     """
     from src.utils.paths import REPO_ROOT, figures_dir
 

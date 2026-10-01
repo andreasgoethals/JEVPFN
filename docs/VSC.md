@@ -20,7 +20,7 @@ python -m pip check
 ```
 
 After selecting the GPU runtime in experiment 0, optional model extras can be installed.
-The current candidates pin Torch 2.12.1. Select a CUDA wheel compatible with the allocated
+The existing TabPFN/TabICL extras pin Torch 2.12.1. Select a CUDA wheel compatible with the allocated
 GPU and driver before installing extras: see the [official PyTorch wheel table](https://pytorch.org/get-started/previous-versions/).
 The wICE A100 candidate is cu126; Mindwell B200 needs a Blackwell-capable build such as cu130.
 Neither has been validated for JEVPFN on the cluster. Check `nvidia-smi` in an allocation and
@@ -36,25 +36,43 @@ python -m pip freeze > output_JEVPFN/experiment_0/manifests/environment.txt
 ```
 
 `models` supplies TabPFN-3/3.5, `baselines` supplies CatBoost/scikit-learn, and `tabicl` supplies
-TabICL v2. Optional `tabdpt`, `mitra` and `tabstar` extras are declared separately. Package
+TabICL v2. Optional `tabdpt` and `tabstar` extras are declared separately. Package
 metadata was checked on 30-09-2026; this is not a tested joint environment. Validate imports
 and tiny task examples on VSC before selecting the final roster. TabDPT also needs compatible
 FAISS wheels. Prefer a separate Python environment for heavier/conflicting integrations,
 with its own frozen manifest, rather than changing a working notebook environment.
 
-Do not install `autogluon[all]`: it adds many unrequested engines and its TabICL extra currently
-requires tabicl<2.2, unlike our standalone 2.2.0 candidate. Use only the selected MITRA model
-in a reviewed environment, not an AutoML ensemble. TabFM still needs a source pin/backend;
-Mitra's exact checkpoint generation remains open. Installing packages must not trigger model
+AutoGluon is excluded by the owner. No environment using its MITRA runtime is prepared;
+Mitra-v2 remains deferred until an independent supported integration is verified. Its `autogluon/` checkpoint
+namespace is a publisher name; the actual runtime dependency was verified in the official
+`mitra_finetune.api.MitraFinetune` and runner code. TabFM still needs a source pin/backend.
+Installing packages must not trigger model
 weights during notebook execution. Prepare approved weights on a connected host before
 using offline compute; use explicit checkpoint paths and record their hashes.
+
+New catalog entries need separate environment acceptance, not a single installation of every extra:
+
+| Model | Documented environment/interface difference |
+|---|---|
+| LimiX-2 | Python ≥3.12, Torch 2.9.1 in its official source dependencies; CUDA/attention build must match. |
+| Causilo | Python 3.10–3.14, Torch ≥2.13; incompatible with the existing 2.12.1 pin in one environment. |
+| EXAONE Tabular | Python ≥3.11, Torch ≥2.6,<3 and NumPy ≥2.3.5; numeric NumPy input and custom estimator lifecycle. |
+| ConTextTab | Python 3.11 reference requirements; text encoder plus gated weights; substantial GPU memory. |
+
+Primary references and model capabilities are in [Literature Review](LITERATURE_REVIEW.md).
+The notebook environment stays Python 3.12 with no model imports. Prepare one frozen environment
+per compatible model group, record its interpreter and full dependency manifest, and select that
+environment explicitly in each future Slurm job. No new model environment has been installed here.
+The notebook runner selects parallelism automatically, respecting CPU affinity and
+`SLURM_CPUS_PER_TASK`. No worker argument is needed. Metric utilities use the lightweight
+`evaluation` extra; fit/prediction timing must include explicit CUDA synchronization.
 
 ## Two storage tiers, both under JEVPFN
 
 | Location | Contents |
 |---|---|
 | `$VSC_DATA/JEVPFN/` | Git checkout and Python environment metadata. |
-| `$VSC_DATA/JEVPFN/output_JEVPFN/` | `Allresults.md`, `Captions.md`, shared `figures/<phase>/<notebook>/`, phase logs/reports/manifests. |
+| `$VSC_DATA/JEVPFN/output_JEVPFN/` | `All Results.md`, `Captions.md`, shared `figures/<phase>/<notebook>/`, phase logs/reports/manifests. |
 | `$JEVPFN_STAGING_ROOT/JEVPFN/data/` | Raw data, durable paid responses and feature tables. |
 | `$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/` | Large model weights. |
 | `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/` | Large audit tables, predictions and experiment results. |

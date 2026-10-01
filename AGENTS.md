@@ -5,7 +5,7 @@ Instructions for AI agents working in this repository.
 ## 0. Before you start
 
 1. [`README.md`](README.md): current layout, setup and outputs.
-2. [`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md): agreed choices and disabled proposals.
+2. [`docs/LITERATURE_REVIEW.md`](docs/LITERATURE_REVIEW.md): verified research and model interfaces.
 3. [`docs/AGENTS_MEMORY.md`](docs/AGENTS_MEMORY.md): protected data and known operational failures.
 
 The owner requested consolidating documentation; generic template instructions and historical
@@ -16,7 +16,10 @@ Current phase layout and setup instructions live in `README.md`, not in that dir
 The owner selected text-only per-column and joint Jev inputs, skipping empty inputs and storing
 missing features. All Jev feature creation is local before VSC experiment 0. Generated full
 reports contain raw examples and are gitignored under `output_JEVPFN/<phase>/`.
-Publication to the public `andreasgoethals/JEVPFN` repository is explicitly authorized in this session.
+Do not stage, commit, or push changes. The owner handles Git publication; this supersedes earlier
+publication authorization. Read-only Git inspection is allowed.
+Give proposed plans and answers in chat, not in temporary documents. Keep `docs/` limited to
+durable references, without duplicating decisions or creating a research-plan file.
 
 ## 1. `tfm-library/` IS READ-ONLY. NO EXCEPTIONS BUT ONE.
 
@@ -55,7 +58,7 @@ represent from how *often* it occurs; a library annotation from the primary sour
 ## 4. Honor the authorized stage
 
 No paid extraction, model runs or VSC allocations are authorized in exploration. Do not enable
-them as part of a refactor. Honor existing owner authorization for environment setup/publication;
+them as part of a refactor. Honor existing owner authorization for environment setup;
 do not ask repeatedly for an already authorized action. Check before changing a shared environment.
 
 ## 5. Windows PowerShell 5.1 — no `&&`
@@ -89,6 +92,8 @@ Newest first, dates `DD-MM-YYYY`.
 - Save through `src/visualize/figures.FigureSaver`: **PDF only**, into `output_JEVPFN/figures/<phase>/<notebook>/`, which it clears before drawing. The notebook displays each figure inline.
 - Use `style.figsize(style.WIDTH_FULL)` or `WIDTH_HALF`: every figure is drawn at the width it
   will occupy on an **A4** page, and never rescaled afterwards — rescaling carries the text with it.
+- Detailed inspection dashboards may use the larger named canvas sizes in `style.py`; their
+  captions identify them as inspection overviews, not figures to shrink onto an A4 page.
 - Captions are the **paper's** captions: pure description, ready to paste under the figure.
 
 ## 8. Say you are done only when it runs

@@ -1,11 +1,11 @@
 extends: experiment_1/protocol
 phase: experiment_2
-name: proposed_native_text_comparison
+name: proposed_original_text_comparison
 enabled: false
 proposal: true
 model_catalog: experiment_1/models
-candidate_models: [tabpfn_3_5]
-optional_comparator: tabstar
+candidate_models: [tabpfn_3_5, tabpfn_3]
+candidate_text_comparators: [tabstar, contexttab]
 feature_artifacts: []
 candidate_combinations:
   - non_text_plus_original_text
@@ -14,6 +14,8 @@ candidate_combinations:
   - non_text_plus_original_text_plus_both
 reuse_experiment_1_arms: true
 native_text_preprocessing: training_partition_only
+text_encoding_candidates: [shared_frozen_e5_small_v2_with_fold_local_PCA, shared_TFIDF_SVD]
+local_tabpfn_text: optional_TFIDF_SVD_in_package_9_for_both_checkpoints_not_hosted_Plus
 text_length_policy: unresolved
 new_jev_calls_required: false
 hosted_thinking_mode: excluded_from_current_proposal

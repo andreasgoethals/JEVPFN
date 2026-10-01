@@ -142,7 +142,7 @@ class FigureSaver:
         return path
 
     def summary(self) -> str:
-        """What was saved, for the notebook's final `print` — so `Allresults.md` says what the run
+        """What was saved, for the notebook's final `print` — so `All Results.md` says what the run
         drew, not only what it computed."""
         if not self.entries:
             return f"{self.notebook}: no figures saved."

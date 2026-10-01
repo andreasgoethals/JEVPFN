@@ -5,7 +5,8 @@
 Exploration and feature design only. No live API client, paid features, model fitting or VSC
 jobs. The public GitHub repository is connected; generated outputs and raw data stay ignored.
 The literature submodule remains read-only at 81c749bdf17e88b5152f4dc7f2e49bd48e9cc8ba.
-Current research choices are in RESEARCH_PLAN.md, not duplicated here.
+Durable method constraints are in README.md; interface evidence is in LITERATURE_REVIEW.md.
+The owner handles Git commits/pushes. Proposed plans belong in chat, not temporary documents.
 
 ## Avoid repeating these failures
 
@@ -14,6 +15,11 @@ Current research choices are in RESEARCH_PLAN.md, not duplicated here.
   an error-only stub. Never revive it or recursively clean input/cache folders.
 - **Parallel audit race on Windows:** atomic replacement alone cannot replace an open NPZ.
   Retain the OS-backed audit lock for writers and readers, and the report aggregation lock.
+- **Notebook report sharing violation (30-09-2026):** an interactive final cell failed at
+  `os.replace` on `feature_creation/Captions.md`. Retry transient access errors, skip unchanged
+  content and preserve a recovery copy on persistent failure. Aggregate writes share `.reports.lock`.
+  The parallel notebook check also reproduced this on audit `text.csv`; the same atomic writer
+  now protects CSV, JSON and reports, with replacement retries for NPZ outputs as well.
 - **Wrong Python:** the default runtime was Python 3.14/pandas 3. Use this project's
   `.venv/Scripts/python.exe` (Python 3.12), including actual Jupyter-kernel verification.
 - **Windows ReadOnly directories:** relocation/case-only renaming may fail. Resolve exact

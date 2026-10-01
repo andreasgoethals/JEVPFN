@@ -74,9 +74,20 @@ def test_figures_dir_is_per_notebook() -> None:
     assert root == paths.outputs_dir() / "figures"
     assert paths.figures_dir("some_notebook") == root / "exploration" / "some_notebook"
     assert paths.captions_path() == paths.outputs_dir() / "Captions.md"
-    assert paths.all_results_path() == paths.outputs_dir() / "Allresults.md"
+    assert paths.all_results_path() == paths.outputs_dir() / "All Results.md"
     assert paths.figures_dir(phase="experiment_1") == root / "experiment_1"
     assert paths.figures_dir("experiment_1_models") == root / "experiment_1" / "experiment_1_models"
+
+
+def test_phase_notebook_ids_keep_output_layout_and_cannot_escape():
+    import pytest
+
+    assert paths.figures_dir("feature_creation/03_feature_creation") == paths.figures_dir("03_feature_creation")
+    assert paths.reports_dir("experiment_2/01_results").name == "01_results.txt"
+    assert paths.notebook_phase("experiment_2/01_results") == "experiment_2"
+    for name in ("../escape", "exploration/../escape", "/escape", "C:/escape", "exploration\\bad"):
+        with pytest.raises(ValueError):
+            paths.figures_dir(name)
 
 
 def test_config_path_appends_the_suffix_once() -> None:

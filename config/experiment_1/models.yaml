@@ -3,6 +3,9 @@
 enabled: false
 adapters_implemented: false
 common_tasks: [binary_classification, multiclass_classification, regression]
+roster_status: candidates_pending_protocol_and_experiment_0_acceptance
+text_comparison_rule: distinguish_text_encoders_from_categorical_string_encoding
+excluded_frameworks: [autogluon]  # Owner decision: avoid its compute/dependency stack.
 models:
   tabpfn_3_5:
     name: TabPFN-3.5
@@ -12,6 +15,9 @@ models:
     extra: models
     device_proposal: cuda
     source: https://github.com/PriorLabs/TabPFN
+    raw_text: optional_shared_TFIDF_SVD_preprocessing_off_by_default
+    text_configuration: 'inference_config={"TRANSFORM_TEXT": true}; pandas_string_dtype'
+    hosted_3_5_plus: separate_service_not_the_local_checkpoint
   tabpfn_3:
     name: TabPFN-3
     priority: requested
@@ -20,6 +26,7 @@ models:
     extra: models
     device_proposal: cuda
     source: https://github.com/PriorLabs/TabPFN
+    raw_text: same_optional_TFIDF_SVD_preprocessing_in_tabpfn_9
   catboost:
     name: CatBoost
     priority: requested
@@ -27,6 +34,8 @@ models:
     extra: baselines
     device_proposal: cpu
     source: https://catboost.ai/docs/
+    raw_text: built_in_tokenizers_dictionaries_and_feature_calcers
+    text_review: regression_calcer_support_and_empty_dictionary_edge_cases
   linear:
     name: Logistic regression for classification; linear regression for regression
     priority: requested
@@ -36,6 +45,7 @@ models:
     regularization: unresolved  # OLS versus Ridge; fix/tune regularization inside train only.
     preprocessing: training_fold_imputation_one_hot_encoding_and_scaling
     source: https://scikit-learn.org/stable/modules/linear_model.html
+    raw_text: requires_explicit_TFIDF_or_embeddings
   tabicl_v2:
     name: TabICL v2
     priority: requested
@@ -45,6 +55,8 @@ models:
     extra: tabicl
     device_proposal: cuda
     source: https://github.com/soda-inria/tabicl
+    raw_text: no_semantic_encoder_use_external_embeddings
+    many_classes: support_many_classes_true_wrapper
   tabdpt_1_3:
     name: TabDPT 1.3
     priority: proposed
@@ -53,15 +65,61 @@ models:
     device_proposal: cuda
     review: [real_data_pretraining_overlap, faiss_platform_support, context_budget]
     source: https://github.com/layer6ai-labs/TabDPT-inference
-  mitra:
-    name: Mitra
-    priority: proposed
-    package: autogluon.tabular[mitra]==1.6.3
-    extra: mitra
+    raw_text: numeric_input_requires_external_encoding
+  mitra_v2:
+    name: Mitra-v2
+    priority: deferred_no_autogluon_route_verified
+    package: null
+    extra: null
     device_proposal: cuda
-    version_and_checkpoint: unresolved  # Do not confuse the MITRA adapter with a Mitra-v2 release.
-    review: [separate_environment, single_model_no_automl_ensemble, class_limits, memory]
-    source: https://auto.gluon.ai/stable/tutorials/tabular/tabular-foundational-models.html
+    classification_checkpoint: autogluon/mitra-classifier-2
+    regression_checkpoint: autogluon/mitra-regressor-2
+    checkpoint_revision: null
+    model_configuration: unresolved_without_autogluon
+    paper_recipe: separate_50_step_finetuning_and_8_fold_bagging_not_stock_AutoGluon
+    raw_text: no_semantic_encoder
+    review: [supported_standalone_interface_required, class_limits, memory]
+    source: https://huggingface.co/autogluon/mitra-classifier-2
+    regression_source: https://huggingface.co/autogluon/mitra-regressor-2
+  limix_2:
+    name: LimiX-2
+    priority: requested
+    package: null  # Source install in a separate environment after an immutable pin is agreed.
+    extra: null
+    checkpoint: LimiX-2.ckpt
+    parameters: 400000000
+    interface: inference.predictor.LimiXPredictor
+    raw_text: no_documented_semantic_encoder_external_encoding_required
+    environment: Python_3_12_or_later_Torch_2_9_1_separate_from_models_extra
+    weight_license: StableAI_LimiX_Non_Commercial
+    review: [source_and_checkpoint_hash, categorical_preprocessing, many_class_coverage, v2_configuration, CUDA]
+    source: https://github.com/limix-ldm-ai/LimiX
+  causilo:
+    name: Causilo
+    priority: requested
+    package: causilo  # Catalog reference only; freeze version before installation.
+    extra: null
+    interface: CausiloClassifier_and_CausiloRegressor
+    raw_text: strings_are_categories_not_semantic_text
+    many_classes: native_10_class_head_with_ECOC_wrapper
+    environment: Python_3_10_to_3_14_Torch_at_least_2_13_separate_environment
+    weight_license: Causilo_License_v1_0_noncommercial_research
+    review: [package_and_checkpoint_hash, research_license, many_class_cost, CUDA]
+    source: https://github.com/nums-ai/causilo
+  exaone_tabular:
+    name: EXAONE Tabular 1.0
+    priority: requested
+    package: null  # Distribution exaonetabular, official Git source; pin before installation.
+    extra: null
+    interface: EXAONETabularClassifier_and_EXAONETabularRegressor
+    raw_text: unsupported_numeric_numpy_arrays_only
+    categorical_features: training_fold_numeric_encoding_required
+    missing_values: built_in_mean_imputation
+    many_classes: native_10_class_head_with_ECOC_wrapper
+    environment: Python_at_least_3_11_Torch_2_6_to_below_3_NumPy_at_least_2_3_5
+    weight_license: EXAONE_AI_Model_License_1_2_NC
+    review: [source_and_checkpoint_hash, no_sklearn_clone_interface, support_subsampling, many_class_cost]
+    source: https://github.com/LGAI-Research/EXAONE-Tabular
   tabfm:
     name: Google Research TabFM
     priority: proposed
@@ -71,6 +129,17 @@ models:
     device_proposal: cuda
     review: [weight_license, context_sampling, checkpoint_hash, class_limits]
     source: https://github.com/google-research/tabfm
+    raw_text: ordinal_categorical_encoding_not_semantic_text
+    many_classes: released_v1_head_10_class_limit_needs_explicit_coverage_decision
+  tabm:
+    name: TabM
+    priority: proposed_multabench_neural_baseline
+    package: null
+    extra: null
+    raw_text: requires_external_TFIDF_or_embeddings
+    interface: pytabkit_or_official_tabm_backend_to_be_pinned
+    review: [matched_training_budget, training_fold_encoding]
+    source: https://github.com/yandex-research/tabm
   tabstar:
     name: TabSTAR
     priority: proposed_native_text_comparator
@@ -79,6 +148,16 @@ models:
     device_proposal: cuda
     review: [real_data_pretraining_overlap, target_task_finetuning_budget, text_encoder_weights]
     source: https://github.com/alanarazi7/TabSTAR
+    raw_text: pretrained_language_encoder_and_supervised_task_adaptation
+  contexttab:
+    name: ConTextTab (SAP RPT-1 OSS)
+    priority: optional_native_text_comparator
+    package: null
+    extra: null
+    raw_text: embedded_column_names_and_cell_values_in_semantic_ICL
+    interface: SAP_RPT_OSS_Classifier_and_SAP_RPT_OSS_Regressor
+    review: [real_data_overlap, checkpoint_terms, text_encoder, context_budget, GPU_memory, Python_3_11_reference_environment]
+    source: https://github.com/SAP-samples/sap-rpt-1-oss
 acceptance_before_benchmark:
   - immutable_checkpoint_hashes_and_licenses
   - all_task_and_class_limits_including_114_class_spotify

@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.utils.files import atomic_text
+
 
 def scalar(value):
     """Preserve types; missing/nonfinite CSV values become JSON null, never 'nan'."""
@@ -47,20 +49,7 @@ def file_sha256(path: Path) -> str:
 
 def write_json(path: Path, value) -> Path:
     """Atomic replacement prevents interrupted output from appearing complete."""
-    import os
-    import tempfile
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False
-    ) as handle:
-        temp = Path(handle.name)
-        json.dump(value, handle, indent=2, ensure_ascii=False, allow_nan=False)
-        handle.write("\n")
-    try:
-        os.replace(temp, path)
-    finally:
-        temp.unlink(missing_ok=True)
+    atomic_text(path, json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + "\n")
     return path
 
 

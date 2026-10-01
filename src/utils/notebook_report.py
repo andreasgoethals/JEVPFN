@@ -7,14 +7,13 @@ partial reruns; rebuilding the combined report never requires rerunning the note
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from src.utils import paths
+from src.utils.files import atomic_text
 
 _sections: list[str] = []
 
@@ -93,33 +92,25 @@ def record_figure(fig, name: str, caption: str) -> None:
                 if hasattr(collection, "get_segments")
                 else {"offsets": collection.get_offsets().tolist()}
             )
+        item["images"] = [np.asarray(im.get_array()) for im in ax.images]
+        item["tables"] = [
+            {str(key): cell.get_text().get_text() for key, cell in table.get_celld().items()}
+            for table in ax.tables
+        ]
         axes.append(item)
     record({"caption": caption, "axes": axes}, f"Figure: {name}")
 
 
-def atomic_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False
-    ) as f:
-        temp = Path(f.name)
-        f.write(text)
-    try:
-        os.replace(temp, path)
-    finally:
-        temp.unlink(missing_ok=True)
-
-
 def finish_report(notebook: str, summary: str = "") -> None:
     """Print the complete report in the last cell and save it for interactive/parallel use."""
-    from src.data.audit import audit_lock
+    from src.utils.locking import file_lock
     from src.utils.run_notebooks import discover, write_all_results, write_captions
 
     text = f"{notebook}\n" + "\n\n".join(_sections) + "\n\n" + summary
     print(text)
     atomic_text(paths.reports_dir(notebook), text)
     # Independent notebook processes finish concurrently. Protect aggregate replacement on Windows.
-    with audit_lock(paths.outputs_dir() / "report_lock"):
+    with file_lock(paths.outputs_dir() / ".reports.lock"):
         names = discover()
         write_captions(names)
         write_all_results(names)

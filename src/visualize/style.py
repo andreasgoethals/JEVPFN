@@ -118,6 +118,22 @@ P95_COLOR = "#C37929"
 TOTAL_COLOR = "#54765A"
 AUDIT_MARKER_SIZE = 18
 
+# Screen/large-format inspection dashboards: do not shrink these onto a paper page.
+OVERVIEW_SIZE = (18.0, 10.5)
+DASHBOARD_SIZE = (12.0, 8.0)
+FLOW_SIZE = (12.0, 5.0)
+OVERVIEW_FONT = 9
+OVERVIEW_CMAP = "Blues"
+GRID_COLOR = "#D9E2E8"
+TEXT_COLOR = "black"
+BACKGROUND_COLOR = "white"
+MISSING_COLOR = "#846C9C"
+TASK_COLORS = {
+    "binary_classification": MEDIAN_COLOR,
+    "multiclass_classification": P95_COLOR,
+    "regression": TOTAL_COLOR,
+}
+
 
 def apply() -> None:
     """Install the style. Call once, at the top of every notebook and plotting script."""

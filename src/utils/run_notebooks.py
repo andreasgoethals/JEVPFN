@@ -1,16 +1,16 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only exploration  just these, by stem
+    python -m src.utils.run_notebooks --only exploration/01_data_exploration
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
     output_JEVPFN/figures/<phase>/<notebook>/*.pdf   written by the notebooks themselves
     output_JEVPFN/Captions.md                       all figure captions
-    output_JEVPFN/Allresults.md             every notebook's printed summary, alphabetical
+    output_JEVPFN/All Results.md             every notebook's printed summary, alphabetical
 
-SEPARATE PROCESSES, NOT THREADS: matplotlib's figure registry is global, so two notebooks in
-one interpreter would capture each other's figures — silently, giving plausible figures
-attributed to the wrong notebook.
+Each notebook executes in a separate Python subprocess: matplotlib's figure registry must
+never be shared between notebooks. Lightweight coordinator threads launch those subprocesses,
+avoiding an extra Python process pool and its Windows startup/memory overhead.
 
 A FLATTENED SCRIPT, NOT A JUPYTER KERNEL: nothing extra to install, identical on the cluster,
 and a traceback points at a line number instead of a cell index. Magics are stripped, which is
@@ -32,7 +32,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +46,7 @@ from src.utils.paths import (
     logs_dir,
     manifests_dir,
     notebook_phase,
+    notebook_stem,
     notebooks_dir,
     reports_dir,
 )
@@ -59,6 +61,23 @@ DEFAULT_TIMEOUT = 1800
 STDOUT_FILE = "_stdout.txt"
 
 
+def worker_count(n_notebooks: int, requested: int | None = None) -> int:
+    """Use available CPUs automatically, including affinity and Slurm allocation limits."""
+    available = os.cpu_count() or 1
+    if hasattr(os, "sched_getaffinity"):
+        # Some hosts expose affinity without allowing it to be queried.
+        with suppress(OSError):
+            available = min(available, len(os.sched_getaffinity(0)))
+    allocated = os.environ.get("SLURM_CPUS_PER_TASK")
+    if allocated is not None:
+        if not allocated.isdigit() or int(allocated) < 1:
+            raise ValueError("SLURM_CPUS_PER_TASK must be a positive integer")
+        available = min(available, int(allocated))
+    if requested is not None and requested < 1:
+        raise ValueError("workers must be positive")
+    return max(1, min(n_notebooks, available, requested or available))
+
+
 @dataclass
 class NotebookResult:
     name: str
@@ -69,10 +88,24 @@ class NotebookResult:
 
 
 def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    """Notebook stems, alphabetical. `names` overrides discovery for a partial rerun."""
-    if names:
-        return tuple(names)
-    return tuple(sorted(p.stem for p in notebooks_dir().glob("*.ipynb")))
+    """Recursively discover phase/name identifiers; accept an unambiguous legacy stem."""
+    found = tuple(
+        sorted(
+            p.relative_to(notebooks_dir()).with_suffix("").as_posix()
+            for p in notebooks_dir().rglob("*.ipynb")
+            if ".ipynb_checkpoints" not in p.parts
+        )
+    )
+    if not names:
+        return found
+    selected = []
+    for name in names:
+        notebook_phase(name)  # Reject absolute paths and traversal before resolution.
+        matches = [n for n in found if n == name or notebook_stem(n) == name]
+        if len(matches) > 1:
+            raise ValueError(f"Ambiguous notebook {name}; use phase/name: {matches}")
+        selected.append(matches[0] if matches else name)
+    return tuple(dict.fromkeys(selected))
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +115,7 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
 
 def _prelude() -> str:
     """Injected above every flattened notebook. `Agg` because a compute node has no display, and
-    stdout is captured so `Allresults.md` can be built without the notebook knowing."""
+    stdout is captured so `All Results.md` can be built without the notebook knowing."""
     return (
         "import matplotlib\n"
         'matplotlib.use("Agg")\n'
@@ -116,6 +149,8 @@ def _build_script(nb_path: Path, text_path: Path) -> str:
 def run_one(name: str, timeout: int = DEFAULT_TIMEOUT) -> NotebookResult:
     """Execute one notebook in a fresh process. Never raises — it reports."""
     started = time.time()
+    name = discover((name,))[0]
+    stem = notebook_stem(name)
     nb_path = notebooks_dir() / f"{name}.ipynb"
     if not nb_path.is_file():
         return NotebookResult(name, False, 0.0, 0, f"{nb_path} not found")
@@ -125,13 +160,13 @@ def run_one(name: str, timeout: int = DEFAULT_TIMEOUT) -> NotebookResult:
     phase = notebook_phase(name)
     log_dir = logs_dir(phase)
     log_dir.mkdir(parents=True, exist_ok=True)
-    text_path = log_dir / f"{name}.stdout.txt"
+    text_path = log_dir / f"{stem}.stdout.txt"
     atomic_text(reports_dir(name), f"RUNNING: {name}; previous report superseded.")
 
     # The generated script goes to the system temp dir, NOT into the figure folder: the
     # notebook clears that folder as its first act, and on Windows a directory cannot be
     # modified while it holds the script currently being executed from it.
-    with tempfile.NamedTemporaryFile(prefix=f"nbrun_{name}_", suffix=".py", delete=False) as handle:
+    with tempfile.NamedTemporaryFile(prefix=f"nbrun_{stem}_", suffix=".py", delete=False) as handle:
         tmp = Path(handle.name)
     tmp.write_text(_build_script(nb_path, text_path), encoding="utf-8")
     try:
@@ -155,16 +190,16 @@ def run_one(name: str, timeout: int = DEFAULT_TIMEOUT) -> NotebookResult:
     except subprocess.TimeoutExpired:
         atomic_text(reports_dir(name), f"FAILED: {name}; timed out after {timeout}s")
         write_json(
-            manifests_dir(phase) / f"{name}_run.json",
+            manifests_dir(phase) / f"{stem}_run.json",
             {"name": name, "ok": False, "error": "timeout"},
         )
         return NotebookResult(name, False, time.time() - started, 0, f"timed out after {timeout}s")
     finally:
         tmp.unlink(missing_ok=True)
 
-    atomic_text(log_dir / f"{name}.stderr.txt", proc.stderr or "")
+    atomic_text(log_dir / f"{stem}.stderr.txt", proc.stderr or "")
     write_json(
-        manifests_dir(phase) / f"{name}_run.json",
+        manifests_dir(phase) / f"{stem}_run.json",
         {
             "name": name,
             "ok": proc.returncode == 0,
@@ -215,8 +250,8 @@ def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> P
         "These are the paper's captions: paste one straight under its figure. Pure description",
         "— what is plotted, on what axes, from how much data. No interpretation.",
         "",
-        "Figures are PDFs, drawn at the width they will occupy on an A4 page; never rescale one",
-        "in the document, because that rescales its text with it.",
+        "Figures are PDFs. Inspection dashboards use a larger canvas for readable labels;",
+        "do not shrink those dashboards to fit a paper page.",
         "",
     ]
     for name in notebooks:
@@ -253,7 +288,7 @@ def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -
     """
     names = tuple(sorted(notebooks))
     lines = [
-        "# All results",
+        "# All Results",
         "",
         "Every notebook's printed summary, verbatim, one block per notebook in alphabetical",
         "order. Each block follows that notebook's own section order.",
@@ -292,22 +327,18 @@ def run_all(
     names = discover(notebooks)
     if not names:
         return []
-    # Default to four separate processes and one BLAS thread per process.
-    # Users can choose a lower worker count to reduce peak memory.
-    workers = min(len(names), 4) if max_workers is None else max_workers
-    if workers < 1:
-        raise ValueError("workers must be positive")
+    workers = worker_count(len(names), max_workers)
 
     results: list[NotebookResult] = []
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(run_one, name, timeout): name for name in names}
         for fut in as_completed(futures):
             results.append(fut.result())
 
-    from src.data.audit import audit_lock
+    from src.utils.locking import file_lock
     from src.utils.paths import outputs_dir
 
-    with audit_lock(outputs_dir() / "report_lock"):
+    with file_lock(outputs_dir() / ".reports.lock"):
         all_names = tuple(sorted(set(discover()) | set(names)))
         write_captions(all_names)
         write_all_results(all_names)
@@ -350,7 +381,12 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--only", nargs="+", metavar="STEM", help="notebook stems to run")
-    parser.add_argument("--workers", type=int, default=None, help="parallel processes")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="optional cap; defaults to available CPUs/notebooks",
+    )
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="seconds per notebook")
     parser.add_argument(
         "--summaries-only",
@@ -365,13 +401,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.summaries_only:
+        from src.utils.locking import file_lock
+        from src.utils.paths import outputs_dir
+
         print(f"Rebuilding summaries from disk for: {', '.join(names)}")
         all_names = tuple(sorted(set(discover()) | set(names)))
-        print(f"  captions  -> {write_captions(all_names)}")
-        print(f"  summaries -> {write_all_results(all_names)}")
+        with file_lock(outputs_dir() / ".reports.lock"):
+            print(f"  captions  -> {write_captions(all_names)}")
+            print(f"  summaries -> {write_all_results(all_names)}")
         return 0
 
-    print(f"Running {len(names)} notebook(s): {', '.join(names)}")
+    print(
+        f"Running {len(names)} notebook(s) with {worker_count(len(names), args.workers)} parallel processes: {', '.join(names)}",
+        flush=True,
+    )
     results = run_all(names, max_workers=args.workers, timeout=args.timeout)
     print(summarise(results))
     return 0 if all(r.ok for r in results) else 1

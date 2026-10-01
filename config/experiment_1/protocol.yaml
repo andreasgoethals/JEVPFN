@@ -21,20 +21,70 @@ evaluation:
     positive_class: unresolved  # Agree semantics; never choose from test performance.
     tie_break: unresolved
     refit_after_threshold_selection: unresolved
-    secondary_metrics: []
+    record_probability_metrics: [roc_auc, average_precision, pr_auc_trapezoidal, log_loss, brier, ece, maximum_calibration_error]
+    record_decision_metrics: [f1, precision, recall, specificity, negative_predictive_value, accuracy, balanced_accuracy, f1_macro, f1_micro, f1_weighted, precision_macro, precision_micro, precision_weighted, recall_macro, recall_micro, recall_weighted, mcc, cohen_kappa]
+    record_thresholds: [default_0_5, validation_selected]
+    record_confusion_matrix_and_per_class_scores: true
   multiclass:
     decision_rule_proposal: argmax
     primary_metric_proposal: f1_macro
     per_class_threshold_tuning: false  # Needs a separate design if later requested.
+    secondary_metrics_proposal: [log_loss, accuracy, roc_auc_ovr_macro]
+    record_probability_metrics: [log_loss, brier_multiclass_sum, roc_auc_ovr_macro, roc_auc_ovr_weighted, roc_auc_ovo_macro, roc_auc_ovo_weighted, average_precision_macro, average_precision_micro, average_precision_weighted, ece, maximum_calibration_error]
+    record_decision_metrics: [accuracy, balanced_accuracy, f1_macro, f1_micro, f1_weighted, precision_macro, precision_micro, precision_weighted, recall_macro, recall_micro, recall_weighted, mcc, cohen_kappa]
+    record_top_k_accuracy: [2, 3, 5]  # Null when k >= number of classes (trivial metric).
+    record_confusion_matrix_and_per_class_scores: true
+    probability_columns: fixed_class_vocabulary_aligned_across_folds
+    rare_classes: review_split_feasibility_never_silently_merge_or_drop
   regression:
     primary_metric: null
+    primary_metric_proposal: rmse
+    secondary_metrics_proposal: [mae, r2]
     candidate_metrics: [rmse, mae, r2]
     classification_threshold: not_applicable
+    record_point_metrics: [rmse, mse, mae, median_absolute_error, max_absolute_error, r2, explained_variance, mean_error, pearson_r, spearman_rho]
+    conditional_metrics: [mape_pct, rmsle]  # Require explicitly declared meaningful ratio scale.
+    optional_quantile_metrics: [pinball_loss, observed_fraction_below, interval_coverage, mean_interval_width, interval_score]
+    unsupported_distribution_metrics: [crps, negative_log_likelihood]  # No common distribution contract yet; never fabricate from point predictions.
+    target_scale: declared_per_dataset_no_automatic_inverse_transform
+  metric_conventions:
+    implementation: src.evaluation.metrics
+    version: prediction-metrics-v1
+    primary_metrics_still_require_agreement: [multiclass, regression]
+    record_all_configured_metrics: true
+    never_select_primary_metric_after_results: true
+    undefined_metric: null_with_reason
+    invalid_probabilities: reject_never_renormalize
+    binary_brier: mean_squared_positive_class_probability_error_range_0_1
+    multiclass_brier: mean_sum_of_squared_class_probability_errors_range_0_2
+    average_precision_is_not_trapezoidal_pr_auc: true
+    calibration_bins: 15
+    calibration_binning: equal_width
+    calibration_error: diagnostic_not_a_proper_scoring_rule
+    decision_zero_division: 0
+    constant_target_or_decision_mcc: null
+    class_order: explicit_fixed_vocabulary
+    save_reliability_bins_and_per_class_support: true
+  recording:
+    implementation: src.evaluation.records
+    save_predictions: true  # Row ID, target, full probabilities or point/quantile predictions.
+    save_prediction_hash: true
+    required_identity: [dataset_id, model_id, feature_set, outer_fold, split_id, checkpoint_id, n_train, n_validation, target_scale]
+    timing_stages: [data_loading, text_encoding, model_loading, preprocessing_fit, preprocessing_transform, inner_fit, threshold_selection, hyperparameter_search, fit, predict, metric_evaluation, prediction_serialization]
+    clocks: [wall_seconds, current_process_cpu_seconds]
+    cuda_synchronize_before_and_after_timing: true
+    record_fit_attempts_and_failures: true
+    resources: [peak_rss_bytes, peak_gpu_allocated_bytes, peak_gpu_reserved_bytes]
+    unavailable_resource_measurement: null_not_zero
+    adapter_metadata: [package_versions, checkpoint_hash, device, hardware, thread_count, prediction_batch_size, cold_or_warm, cache_hit, effective_context_rows, n_features, feature_artifact_id, code_hash, config_hash]
+    feature_creation_cost: recorded_once_separately_not_charged_to_every_cv_fold
   preprocessing_fit_scope: training_partition_only
   model_tuning_budget: unresolved
   calibration: unresolved
   small_n: unresolved
   statistical_tests: unresolved
+  aggregation_proposal: per_dataset_mean_and_sd_then_equal_dataset_weighted_ranks_or_paired_deltas
+  pool_raw_classification_and_regression_metrics: forbidden
   failed_or_unsupported_runs: record_explicitly_never_silently_drop
   cached_jev_features_are_fold_independent: true
   native_text_preprocessing_is_fold_specific: true
