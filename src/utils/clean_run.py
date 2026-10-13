@@ -24,7 +24,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src.utils.paths import large_outputs_dir, outputs_dir, processed_dir
+from src.utils.paths import (
+    large_outputs_dir,
+    notebook_outputs_dir,
+    outputs_dir,
+    processed_dir,
+)
 
 #: Tracked so an empty directory survives a clone. Not run output, so never counted or deleted —
 #: removing them would leave a fresh clone with nowhere to write.
@@ -41,8 +46,13 @@ def roots(*, processed: bool = False) -> list[Path]:
     results = large_outputs_dir()
     if not results.is_relative_to(found[0]):
         found.append(results)
+    local = notebook_outputs_dir()
+    if not any(local.is_relative_to(root) for root in found):
+        found.append(local)
     if processed:
         found.append(processed_dir())
+        # Notebook intermediates are owned TemporaryDirectories, automatically removed.
+        # Never add a temporary directory's parent: that could be the system TEMP root.
     return found
 
 
@@ -69,8 +79,9 @@ def wipe(root: Path) -> int:
         if path.is_file() and path.name not in KEEP:
             path.unlink()
             removed += 1
-    for path in sorted((p for p in root.rglob("*") if p.is_dir()),
-                       key=lambda p: len(p.parts), reverse=True):
+    for path in sorted(
+        (p for p in root.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True
+    ):
         if not any(path.iterdir()):
             path.rmdir()
     return removed
@@ -81,8 +92,11 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--clean", action="store_true", help="actually delete; default lists only")
-    parser.add_argument("--processed", action="store_true",
-                        help="also clear data/processed/, the preprocessing cache")
+    parser.add_argument(
+        "--processed",
+        action="store_true",
+        help="also clear data/processed/, the preprocessing cache",
+    )
     args = parser.parse_args(argv)
 
     targets = roots(processed=args.processed)

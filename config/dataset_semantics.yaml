@@ -1,0 +1,506 @@
+# Source-backed meanings for the selected 18 datasets. Never rename raw data or labels.
+version: dataset-semantics-v1
+verified_on: '2026-10-13'
+policy: Documentary definitions only; no row targets, target statistics or prediction results. Raw labels and column
+  names are preserved.
+datasets:
+  BIN_TEXT_FAKE_JOB_POSTING:
+    raw_target: fraudulent
+    task_type: binary_classification
+    dataset_display_name: Employment Scam Aegean job advertisements
+    observation_unit: one online job advertisement
+    target_display_name: job-advertisement authenticity
+    target_definition: whether the job advertisement is fraudulent
+    text_column_definitions:
+      title: advertised job title
+      salary_range: advertised salary range, as written
+      description: job advertisement description
+    classes:
+    - value: 0
+      description: legitimate job advertisement
+    - value: 1
+      description: fraudulent job advertisement
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/BIN_TEXT_PROFESSIONAL_FAKE_JOB_POSTING.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: d626ea93acc82c50b8b8ceb15125ee768ed39310f0c97a16a076366f0daf0016
+    - url: https://www.kaggle.com/datasets/shivamb/real-or-fake-fake-jobposting-prediction
+      evidence: 'Original dataset card: fake versus legitimate job advertisements; fraudulent is the binary indicator.'
+    review_notes: []
+  BIN_TEXT_JIGSAW_TOXICITY:
+    raw_target: Is Toxic
+    task_type: binary_classification
+    dataset_display_name: Jigsaw online comment toxicity
+    observation_unit: one online comment
+    target_display_name: comment toxicity
+    target_definition: whether the comment is toxic
+    text_column_definitions:
+      comment_text: comment text
+    classes:
+    - value: false
+      description: non-toxic comment
+    - value: true
+      description: toxic comment
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/BIN_TEXT_SOCIAL_JIGSAW_TOXICITY.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: ff9c3d2a6e91b0b181933199c230b68304c0d86fc719602aeb9e330a4bfe7e46
+    - url: https://github.com/sxjscience/automl_multimodal_benchmark/blob/77edc53ef7e8a91ea4cfdaa336b353af66e3db00/multimodal_text_benchmark/scripts/data_processing/process_jigsaw.py
+      evidence: The benchmark preparation defines target as the original toxicity annotation > 0.5. MulTaBench renames
+        it Is Toxic.
+    review_notes: []
+  BIN_TEXT_KICKSTARTER_FUNDING:
+    raw_target: Funding Status
+    task_type: binary_classification
+    dataset_display_name: Kickstarter project funding
+    observation_unit: one Kickstarter project
+    target_display_name: project funding outcome
+    target_definition: whether the project achieved its funding goal
+    text_column_definitions:
+      name: project title
+      desc: project description
+      keywords: project keywords
+    classes:
+    - value: Failed
+      description: funding goal not achieved
+    - value: Successful
+      description: funding goal achieved
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/BIN_TEXT_PROFESSIONAL_KICKSTARTER_FUNDING.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 55d5acc8af8965f6a98e1ede508157f8957461756fcdec13281cda37541fad28
+    review_notes: []
+  MUL_TEXT_DATA_SCIENTIST_SALARY:
+    raw_target: salary
+    task_type: multiclass_classification
+    dataset_display_name: Indian data-science job salary bands
+    observation_unit: one job advertisement for a data-science or analytics role in India
+    target_display_name: advertised annual salary band in lakh Indian rupees
+    target_definition: advertised annual salary band in lakh Indian rupees
+    text_column_definitions:
+      experience: required experience
+      job_description: job description
+      job_desig: job designation or position title
+      key_skills: required skills
+      location: job location
+    classes:
+    - value: 0-3
+      description: annual salary band 0-3 lakh Indian rupees
+    - value: 10-15
+      description: annual salary band 10-15 lakh Indian rupees
+    - value: 15-25
+      description: annual salary band 15-25 lakh Indian rupees
+    - value: 25-50
+      description: annual salary band 25-50 lakh Indian rupees
+    - value: 3-6
+      description: annual salary band 3-6 lakh Indian rupees
+    - value: 6-10
+      description: annual salary band 6-10 lakh Indian rupees
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/MUL_TEXT_PROFESSIONAL_DATA_SCIENTIST_SALARY.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 799b325d4e9c983fbc249bd355cba0685ee291f00204beb2c313739c07fb3143
+    - url: https://www.kaggle.com/datasets/ankitkalauni/predict-the-data-scientists-salary-in-india
+      evidence: 'Dataset mirror reproduces the MachineHack description: salary in rupees lakhs; annual salary context.'
+    - url: https://github.com/chetanambi/Predict-The-Data-Scientists-Salary-In-India-Hackathon
+      evidence: Original competition participant reproduces the task and field definitions, including salary in
+        rupees lakhs.
+    review_notes:
+    - The original MachineHack page is unavailable. Units are corroborated by its reproduced description and competition
+      participant; class endpoint inclusivity is undocumented.
+    target_unit: lakh INR per year; one lakh is 100,000 rupees
+  MUL_TEXT_MICHELIN_RESTAURANTS:
+    raw_target: Award
+    task_type: multiclass_classification
+    dataset_display_name: MICHELIN Guide restaurant distinctions
+    observation_unit: one restaurant listed in the MICHELIN Guide
+    target_display_name: MICHELIN culinary distinction
+    target_definition: MICHELIN culinary distinction
+    text_column_definitions:
+      Name: restaurant name
+      Address: street address
+      Location: location
+      Cuisine: cuisine types
+      FacilitiesAndServices: listed facilities and services
+      Description: restaurant description
+    classes:
+    - value: 1 Star
+      description: 'one MICHELIN star: consistently high-quality cooking'
+    - value: 2 Stars
+      description: 'two MICHELIN stars: refined cooking worth a detour'
+    - value: 3 Stars
+      description: 'three MICHELIN stars: exceptional cooking worth a dedicated trip'
+    - value: Bib Gourmand
+      description: 'Bib Gourmand: good cooking at a good price'
+    - value: Selected Restaurants
+      description: selected by MICHELIN, without a star or Bib Gourmand distinction
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/MUL_TEXT_FOOD_MICHELIN_GUIDE_RESTAURANTS.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 4e2baa49138375e52c3fbd01c640ade819b38492de426011a0dfb953a06e7326
+    - url: https://guide.michelin.com/us/en/article/features/the-michelin-guide-101
+      evidence: MICHELIN defines its stars, Bib Gourmand and selected restaurants.
+    review_notes: []
+  MUL_TEXT_PRODUCT_SENTIMENT:
+    raw_target: Sentiment
+    task_type: multiclass_classification
+    dataset_display_name: MachineHack product-review sentiment
+    observation_unit: one user product review
+    target_display_name: sentiment expressed in the product review
+    target_definition: sentiment expressed in the product review
+    text_column_definitions:
+      Product_Description: user-written product review, not a product specification
+    classes:
+    - value: Cannot Say
+      description: sentiment cannot be determined
+    - value: Negative
+      description: negative sentiment
+    - value: No Sentiment
+      description: no sentiment expressed
+    - value: Positive
+      description: positive sentiment
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/MUL_TEXT_CONSUMER_PRODUCT_SENTIMENT.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: c278cba8ae2cf15096c2556a343292635cf7d9b7689b3353c364009dc84b42dd
+    review_notes:
+    - Cannot Say and No Sentiment remain separate source classes; no new annotation rules are invented.
+  MUL_TEXT_US_ACCIDENTS:
+    raw_target: Severity
+    task_type: multiclass_classification
+    dataset_display_name: US road-accident traffic impact
+    observation_unit: one reported road accident in the United States
+    target_display_name: accident severity in terms of impact on traffic
+    target_definition: accident severity in terms of impact on traffic
+    text_column_definitions:
+      Description: traffic-incident description
+      Street: street or road name
+      City: city
+      County: county
+      Zipcode: postal ZIP code
+      Airport_Code: associated airport/weather-station code
+    classes:
+    - value: 1
+      description: traffic-impact severity level 1, the lowest level
+    - value: 2
+      description: traffic-impact severity level 2 of 4
+    - value: 3
+      description: traffic-impact severity level 3 of 4
+    - value: 4
+      description: traffic-impact severity level 4, the highest level
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/MUL_TEXT_TRANSPORTATION_US_ACCIDENTS_MARCH23.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: aa2f5846b47b0a6c18eb5419d909a31df8e302291e2dae96fdfd528af499096d
+    - url: https://www.kaggle.com/datasets/sobhanmoosavi/us-accidents
+      evidence: Publisher data dictionary describes a 1-4 traffic-impact scale; not an injury or fatality count.
+    - url: https://arxiv.org/html/1906.05409
+      evidence: Dataset authors document traffic-report collection and severity as a traffic attribute.
+    review_notes:
+    - Do not invent delay cutoffs or fatality meanings for levels 1-4. No distinct verbal boundaries for levels
+      2 and 3 were verified.
+  MUL_TEXT_WINE_REVIEW:
+    raw_target: variety
+    task_type: multiclass_classification
+    dataset_display_name: Wine Enthusiast wine-variety reviews
+    observation_unit: one reviewed wine
+    target_display_name: wine variety or blend category
+    target_definition: wine variety or blend category
+    text_column_definitions:
+      description: wine tasting description
+      province: province where the wine was produced
+    classes:
+    - value: Bordeaux-style Red Blend
+      description: Bordeaux-style Red Blend
+    - value: Bordeaux-style White Blend
+      description: Bordeaux-style White Blend
+    - value: Cabernet Franc
+      description: Cabernet Franc
+    - value: Cabernet Sauvignon
+      description: Cabernet Sauvignon
+    - value: Champagne Blend
+      description: Champagne Blend
+    - value: Chardonnay
+      description: Chardonnay
+    - value: Gamay
+      description: Gamay
+    - value: Gewürztraminer
+      description: Gewürztraminer
+    - value: Grüner Veltliner
+      description: Grüner Veltliner
+    - value: Malbec
+      description: Malbec
+    - value: Merlot
+      description: Merlot
+    - value: Nebbiolo
+      description: Nebbiolo
+    - value: Pinot Grigio
+      description: Pinot Grigio
+    - value: Pinot Gris
+      description: Pinot Gris
+    - value: Pinot Noir
+      description: Pinot Noir
+    - value: Portuguese Red
+      description: Portuguese Red
+    - value: Portuguese White
+      description: Portuguese White
+    - value: Red Blend
+      description: Red Blend
+    - value: Rhône-style Red Blend
+      description: Rhône-style Red Blend
+    - value: Riesling
+      description: Riesling
+    - value: Rosé
+      description: Rosé
+    - value: Sangiovese
+      description: Sangiovese
+    - value: Sauvignon Blanc
+      description: Sauvignon Blanc
+    - value: Shiraz
+      description: Shiraz
+    - value: Sparkling Blend
+      description: Sparkling Blend
+    - value: Syrah
+      description: Syrah
+    - value: Tempranillo
+      description: Tempranillo
+    - value: Viognier
+      description: Viognier
+    - value: White Blend
+      description: White Blend
+    - value: Zinfandel
+      description: Zinfandel
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/MUL_TEXT_FOOD_WINE_REVIEW.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 04a4f6eb3c00c3b3bd0c012a7881fb0cadcc25206706ab054e4db3a1a7228e54
+    review_notes: []
+  MUL_TEXT_WOMEN_CLOTHING_REVIEW:
+    raw_target: Rating
+    task_type: multiclass_classification
+    dataset_display_name: Women's e-commerce clothing reviews
+    observation_unit: one customer review of a clothing item
+    target_display_name: customer rating of the clothing item
+    target_definition: customer rating of the clothing item
+    text_column_definitions:
+      Title: review headline
+      Review Text: review body
+    classes:
+    - value: 1
+      description: rating 1 of 5, worst
+    - value: 2
+      description: rating 2 of 5
+    - value: 3
+      description: rating 3 of 5
+    - value: 4
+      description: rating 4 of 5
+    - value: 5
+      description: rating 5 of 5, best
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/MUL_TEXT_CONSUMER_WOMEN_ECOMMERCE_CLOTHING_REVIEW.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: ae0bdf9ad68908226d294d8b4c7771ae8638be130c1d03e80122724080e35a9e
+    - url: https://www.kaggle.com/datasets/nicapotato/womens-ecommerce-clothing-reviews
+      evidence: Original data card defines Rating as product score, 1 worst to 5 best.
+    review_notes: []
+  REG_TEXT_BABIES_PRICES:
+    raw_target: price
+    task_type: regression
+    dataset_display_name: Babies R Us product prices
+    observation_unit: one baby-product listing
+    target_display_name: listed baby-product price
+    target_definition: listed baby-product price
+    text_column_definitions:
+      title: product title
+      company_struct: 'company_struct: source company field; extraction convention undocumented'
+      company_free: 'company_free: source company field; extraction convention undocumented'
+      colors: listed product colors
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_CONSUMER_BABIES_R_US_PRICES.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 7a9ad5f2d657fcc0a65b3e57d7d1de002eea11f2666649f64fd4ef612e9eb4b5
+    review_notes:
+    - The source annotation does not establish the currency or the distinction between company_struct and company_free.
+      No unsupported expansion is sent.
+  REG_TEXT_BOOK_PRICE:
+    raw_target: Price in USD
+    task_type: regression
+    dataset_display_name: Book sale prices on the benchmark log scale
+    observation_unit: one book listing
+    target_display_name: log-transformed book sale price
+    target_definition: log-transformed book sale price
+    text_column_definitions:
+      Title: book title
+      Author: book author
+      Edition: book edition information
+      Synopsis: book synopsis
+      Genre: book genre
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_CONSUMER_BOOK_PRICE_PREDICTION.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 2f049c3366d663db0757ea78cf968842df6fca51b3d5f8e20a9c99b49a03e20e
+    - url: https://github.com/sxjscience/automl_multimodal_benchmark/blob/77edc53ef7e8a91ea4cfdaa336b353af66e3db00/multimodal_text_benchmark/src/auto_mm_bench/datasets.py
+      evidence: BookPricePrediction.postprocess_label documents log10(original Price + 1). MulTaBench annotation
+        only renames Price to Price in USD.
+    review_notes:
+    - 'Raw column name Price in USD is misleading: upstream code describes log10(Price + 1), not a verified currency
+      conversion. Preserve CSV values and use log-price wording; do not claim these numbers are USD.'
+    target_unit: log10(original price + 1); original currency not asserted
+  REG_TEXT_BOOK_READABILITY:
+    raw_target: New Dale Chall Readability Formula
+    task_type: regression
+    dataset_display_name: CLEAR passage readability
+    observation_unit: one reading passage in the CLEAR corpus
+    target_display_name: New Dale-Chall reading-difficulty score
+    target_definition: New Dale-Chall reading-difficulty score
+    text_column_definitions:
+      Author: passage author
+      Title: passage title
+      Anthology: source anthology
+      URL: source URL
+      Excerpt: reading passage
+      British Words: 'British Words: original CLEAR field; precise annotation rule unverified'
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_SOCIAL_BOOK_READABILITY_CLEAR.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 39e7444cdb470e4681f6c9ecde7212b59813a357dadd53dc87649763bc1d6495
+    - url: https://github.com/scrosseye/CLEAR-Corpus
+      evidence: Dataset authors provide passage metadata and multiple readability indices; the benchmark target
+        is New Dale-Chall, not BT Easiness.
+    review_notes:
+    - Do not conflate the chosen formula target with CLEAR human-rated BT Easiness. British Words definition needs
+      further source confirmation.
+    target_unit: New Dale-Chall formula score
+  REG_TEXT_MERCARI_MARKETPLACE:
+    raw_target: log_price
+    task_type: regression
+    dataset_display_name: Mercari marketplace listing prices
+    observation_unit: one item listing on Mercari
+    target_display_name: natural logarithm of one plus item price
+    target_definition: natural logarithm of one plus item price
+    text_column_definitions:
+      name: item title
+      category_name: full hierarchical category path
+      brand_name: brand name
+      item_description: seller item description
+      cat2: second level of the category path
+      cat3: third level of the category path
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_CONSUMER_MERCARI_ONLINE_MARKETPLACE.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: ca0e3b63b00fb1b979e536007968ca6ff794425a58be26c04a07d73cd3dd80b9
+    - url: https://github.com/sxjscience/automl_multimodal_benchmark/blob/77edc53ef7e8a91ea4cfdaa336b353af66e3db00/multimodal_text_benchmark/scripts/data_processing/process_mercari_price_suggestion.py
+      evidence: Creates cat1/cat2/cat3 from the slash-delimited category path and log_price = np.log(price + 1).
+    review_notes: []
+    target_unit: ln(original price + 1)
+  REG_TEXT_MONTGOMERY_SALARIES:
+    raw_target: current_annual_salary
+    task_type: regression
+    dataset_display_name: Montgomery County employee annual salaries
+    observation_unit: one employee salary record for Montgomery County, Maryland
+    target_display_name: current annual employee salary
+    target_definition: current annual employee salary
+    text_column_definitions:
+      full_name: employee full name
+      division: organizational division
+      employee_position_title: employee position title
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_PROFESSIONAL_EMPLOYEE_SALARY_MONTGOMERY.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 0a1f03f18ee404d3e172bf643e28672e24c104633f2d2e32ddaf5ca7dc00db33
+    review_notes: []
+  REG_TEXT_ROTTEN_TOMATOES:
+    raw_target: RatingValue
+    task_type: regression
+    dataset_display_name: Movie ratings in the Rotten Tomatoes-named source file
+    observation_unit: one movie record
+    target_display_name: recorded movie rating value
+    target_definition: recorded movie rating value
+    text_column_definitions:
+      Name: movie title
+      Release Date: release-date text
+      Director: director names
+      Creator: creator credits
+      Actors: actor names
+      Cast: cast names
+      Language: movie languages
+      Country: countries
+      RatingCount: number of ratings, stored as text
+      ReviewCount: review counts, stored as text
+      Genre: movie genres
+      Filming Locations: filming locations
+      Description: movie description
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_SOCIAL_MOVIES_ROTTEN_TOMATOES.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: d5c19fd1dc66a632a474826a123e51eb0369581c880864da3b0ada5d0b67a0bd
+    review_notes:
+    - The legacy source file is named rotten_tomatoes.csv but the annotation does not establish whether RatingValue
+      is a Tomatometer, audience or IMDb scale. Do not call it a percentage or impose a rating denominator.
+  REG_TEXT_SCIMAGOJR_IMPACT:
+    raw_target: H index
+    task_type: regression
+    dataset_display_name: SCImago journal H-index
+    observation_unit: one academic-journal record
+    target_display_name: journal H-index
+    target_definition: journal H-index
+    text_column_definitions:
+      Title: journal title
+      Issn: International Standard Serial Number identifiers
+      SJR: SCImago Journal Rank indicator, stored as text
+      Citations / Doc  (2years): citations per document over two years, stored as text
+      'Ref  / Doc ': references per document, stored as text
+      Country: journal country
+      Publisher: publisher
+      Coverage: publication coverage years
+      Categories: subject categories
+      Areas: subject areas
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_PROFESSIONAL_SCIMAGOJR_ACADEMIC_IMPACT.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 840a9dc2c05a485dc62095d4f8c8b923b4b5c5d4c1465bbbd02a0adc447f3095
+    review_notes: []
+    target_unit: journal H-index
+  REG_TEXT_VANCOUVER_SALARIES:
+    raw_target: remuneration
+    task_type: regression
+    dataset_display_name: City of Vancouver employee remuneration
+    observation_unit: one employee remuneration record for a reporting year
+    target_display_name: annual employee remuneration in Canadian dollars
+    target_definition: annual employee remuneration in Canadian dollars
+    text_column_definitions:
+      name: employee name
+      title: employee job title
+    classes: []
+    sources:
+    - url: https://opendata.vancouver.ca/explore/dataset/employee-remuneration-and-expenses-earning-over-75000/information/
+      evidence: 'City documentation: amounts in Canadian dollars; remuneration may include specified payouts. Expenses
+        are a separate field.'
+    review_notes: []
+    target_unit: Canadian dollars
+  REG_TEXT_VIDEO_GAMES_SALES:
+    raw_target: Global_Sales
+    task_type: regression
+    dataset_display_name: Worldwide video-game sales
+    observation_unit: one video-game release record
+    target_display_name: worldwide video-game sales in millions of copies
+    target_definition: worldwide video-game sales in millions of copies
+    text_column_definitions:
+      Name: video-game title
+      Publisher: video-game publisher
+    classes: []
+    sources:
+    - url: https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/datasets/annotated/REG_TEXT_SOCIAL_VIDEO_GAMES_SALES.py
+      evidence: 'Pinned MulTaBench dataset annotation: task, raw fields and source lineage.'
+      sha256: 6553a3caed945c3318d45e53db12aa1e00e5f0f39edb27cd2b6bed60be436c97
+    - url: https://www.kaggle.com/datasets/gregorut/videogamesales
+      evidence: Dataset publisher documents worldwide/regional sales and original VGChartz scrape.
+    review_notes: []
+    target_unit: millions of copies

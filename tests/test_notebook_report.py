@@ -34,7 +34,7 @@ def test_complete_tables_json_and_plot_values_are_printed_and_saved(
     assert "Two plotted observations." in paths.captions_path().read_text(encoding="utf-8")
 
 
-def test_rebuild_keeps_other_notebook_summaries_and_phase_files(isolated_output):
+def test_rebuild_keeps_other_summaries_without_non_experiment_output_folders(isolated_output):
     names = ("01_data_exploration", "03_feature_creation")
     report.atomic_text(paths.reports_dir(names[0]), "Complete exploration detail")
     report.atomic_text(paths.reports_dir(names[1]), "Complete feature detail")

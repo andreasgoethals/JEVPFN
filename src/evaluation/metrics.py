@@ -12,7 +12,8 @@ from sklearn import metrics as sk
 
 from src.utils.serialization import canonical_json, scalar
 
-METRICS_VERSION = "prediction-metrics-v1"
+METRICS_VERSION = "prediction-metrics-v2"
+PROBABILITY_SUM_ATOL = 1e-5
 
 
 def _put(result, name, value, reason="Metric is undefined for these observations"):
@@ -143,16 +144,29 @@ def classification_metrics(
         raise ValueError("Expected nonempty n-by-K probabilities matching targets/classes")
     if not np.isfinite(p).all() or (p < 0).any() or (p > 1).any():
         raise ValueError("Probabilities must be finite and in [0, 1]")
-    if not np.allclose(p.sum(axis=1), 1, atol=1e-8, rtol=0):
+    row_sums = p.sum(axis=1)
+    # Model adapters may return float32 probabilities before conversion to float64.
+    # Match the CV adapter's tolerance while preserving the supplied values exactly.
+    if not np.allclose(row_sums, 1, atol=PROBABILITY_SUM_ATOL, rtol=0):
         raise ValueError("Probability rows must sum to one; never silently renormalize")
     result = _report()
     result.update(
         task="binary_classification" if k == 2 else "multiclass_classification",
         n_observations=len(y),
         class_order=classes,
+        probability_validation={
+            "sum_absolute_tolerance": PROBABILITY_SUM_ATOL,
+            "maximum_sum_error": float(np.max(np.abs(row_sums - 1))),
+            "renormalized": False,
+        },
     )
     onehot = np.eye(k)[y]
-    _put(result, "log_loss", sk.log_loss(y, p, labels=np.arange(k)))
+    # The standard negative log probability of the observed class, using sklearn's
+    # float64 endpoint clipping. Its separate float64 sum check would warn about
+    # valid float32 roundoff after our already-completed probability validation.
+    epsilon = np.finfo(float).eps
+    observed_probability = np.clip(p[np.arange(len(y)), y], epsilon, 1 - epsilon)
+    _put(result, "log_loss", -np.log(observed_probability).mean())
     _put(result, "brier_multiclass_sum", np.square(p - onehot).sum(axis=1).mean())
     result["brier_multiclass_range"] = [0, 2]
     all_present = len(np.unique(y)) == k

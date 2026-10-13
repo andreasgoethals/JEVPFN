@@ -1,11 +1,15 @@
-# Candidate catalog, reviewed against primary sources on 2026-09-30.
+# Interface references reviewed against primary sources on 2026-09-30.
+# Only candidate_models in main.yaml participate; other catalog entries are deferred.
 # Packages can be declared without importing, downloading weights, or fitting models.
 enabled: false
 adapters_implemented: false
 common_tasks: [binary_classification, multiclass_classification, regression]
-roster_status: candidates_pending_protocol_and_experiment_0_acceptance
+roster_status: focused_four_model_proposal_pending_experiment_0_acceptance
 text_comparison_rule: distinguish_text_encoders_from_categorical_string_encoding
 excluded_frameworks: [autogluon]  # Owner decision: avoid its compute/dependency stack.
+excluded_models: [TabM, Google_Research_TabFM]  # Owner decision: keep the Jev comparison focused.
+model_selection_objective: check_Jev_feature_benefit_not_rank_prediction_engines
+hyperparameter_search: false
 models:
   tabpfn_3_5:
     name: TabPFN-3.5
@@ -42,13 +46,15 @@ models:
     package: scikit-learn==1.9.1
     extra: baselines
     device_proposal: cpu
-    regularization: unresolved  # OLS versus Ridge; fix/tune regularization inside train only.
+    regression_estimator: LinearRegression
+    classification_estimator: LogisticRegression
+    regularization: library_defaults_no_search
     preprocessing: training_fold_imputation_one_hot_encoding_and_scaling
     source: https://scikit-learn.org/stable/modules/linear_model.html
     raw_text: requires_explicit_TFIDF_or_embeddings
   tabicl_v2:
     name: TabICL v2
-    priority: requested
+    priority: deferred_outside_focused_roster
     package: tabicl==2.2.0
     classification_checkpoint: tabicl-classifier-v2-20260212.ckpt
     regression_checkpoint: tabicl-regressor-v2-20260212.ckpt
@@ -59,7 +65,7 @@ models:
     many_classes: support_many_classes_true_wrapper
   tabdpt_1_3:
     name: TabDPT 1.3
-    priority: proposed
+    priority: deferred_outside_focused_roster
     package: tabdpt==1.3.1
     extra: tabdpt
     device_proposal: cuda
@@ -83,7 +89,7 @@ models:
     regression_source: https://huggingface.co/autogluon/mitra-regressor-2
   limix_2:
     name: LimiX-2
-    priority: requested
+    priority: deferred_outside_focused_roster
     package: null  # Source install in a separate environment after an immutable pin is agreed.
     extra: null
     checkpoint: LimiX-2.ckpt
@@ -96,7 +102,7 @@ models:
     source: https://github.com/limix-ldm-ai/LimiX
   causilo:
     name: Causilo
-    priority: requested
+    priority: deferred_outside_focused_roster
     package: causilo  # Catalog reference only; freeze version before installation.
     extra: null
     interface: CausiloClassifier_and_CausiloRegressor
@@ -108,7 +114,7 @@ models:
     source: https://github.com/nums-ai/causilo
   exaone_tabular:
     name: EXAONE Tabular 1.0
-    priority: requested
+    priority: deferred_outside_focused_roster
     package: null  # Distribution exaonetabular, official Git source; pin before installation.
     extra: null
     interface: EXAONETabularClassifier_and_EXAONETabularRegressor
@@ -120,29 +126,9 @@ models:
     weight_license: EXAONE_AI_Model_License_1_2_NC
     review: [source_and_checkpoint_hash, no_sklearn_clone_interface, support_subsampling, many_class_cost]
     source: https://github.com/LGAI-Research/EXAONE-Tabular
-  tabfm:
-    name: Google Research TabFM
-    priority: proposed
-    package: null  # Pin a source commit and backend before adding a dependency.
-    extra: null
-    model_release: v1.0.0
-    device_proposal: cuda
-    review: [weight_license, context_sampling, checkpoint_hash, class_limits]
-    source: https://github.com/google-research/tabfm
-    raw_text: ordinal_categorical_encoding_not_semantic_text
-    many_classes: released_v1_head_10_class_limit_needs_explicit_coverage_decision
-  tabm:
-    name: TabM
-    priority: proposed_multabench_neural_baseline
-    package: null
-    extra: null
-    raw_text: requires_external_TFIDF_or_embeddings
-    interface: pytabkit_or_official_tabm_backend_to_be_pinned
-    review: [matched_training_budget, training_fold_encoding]
-    source: https://github.com/yandex-research/tabm
   tabstar:
     name: TabSTAR
-    priority: proposed_native_text_comparator
+    priority: deferred_outside_focused_roster
     package: tabstar==1.1.16
     extra: tabstar
     device_proposal: cuda
@@ -151,7 +137,7 @@ models:
     raw_text: pretrained_language_encoder_and_supervised_task_adaptation
   contexttab:
     name: ConTextTab (SAP RPT-1 OSS)
-    priority: optional_native_text_comparator
+    priority: deferred_outside_focused_roster
     package: null
     extra: null
     raw_text: embedded_column_names_and_cell_values_in_semantic_ICL

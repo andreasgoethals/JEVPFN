@@ -110,7 +110,7 @@ def finish_report(notebook: str, summary: str = "") -> None:
     print(text)
     atomic_text(paths.reports_dir(notebook), text)
     # Independent notebook processes finish concurrently. Protect aggregate replacement on Windows.
-    with file_lock(paths.outputs_dir() / ".reports.lock"):
+    with file_lock(paths.notebook_outputs_dir() / ".reports.lock"):
         names = discover()
         write_captions(names)
         write_all_results(names)

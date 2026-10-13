@@ -21,13 +21,23 @@ def api_preview(request: IntendedRequest) -> dict:
     """Build a JSON body without sending it or reading a credential."""
     payload = json.loads(request.payload_json)
     settings = json.loads(request.settings_json)
+    if settings.get("provider") != "jev":
+        raise ValueError("This response/request adapter supports Jev only")
     if not settings["version"] or settings["model"] != f"jev-{settings['version']}":
         raise ValueError("An explicit, matching model/version pin is required; no moving aliases.")
     if settings.get("api_mapping_version") != MAPPING_VERSION:
         raise ValueError("Unknown provider mapping version.")
     if settings["request_configuration"]:
         raise ValueError("Additional provider parameters have not been verified.")
-    question = payload["question"]
+    return {
+        "model": settings["model"],
+        "state": payload["state"],
+        "questions": {QUESTION_ID: semantic_question(payload["question"])},
+    }
+
+
+def semantic_question(question: dict) -> dict:
+    """The shared Noul/Choice/Score question semantics, independent of HTTP transport."""
     mapped = {"instructions": question["text"]}
     if question["kind"] == "binary_probability":
         mapped["type"] = "noul"
@@ -35,8 +45,18 @@ def api_preview(request: IntendedRequest) -> dict:
         choices = question["allowed_answers"]
         if not 2 <= len(choices) <= 255:
             raise ValueError("The documented Choice limit is 2–255 options.")
+        descriptions = question.get("answer_descriptions")
+        if descriptions is not None and (
+            len(descriptions) != len(choices)
+            or any(not isinstance(d, str) or not d.strip() for d in descriptions)
+        ):
+            raise ValueError("Each raw class needs exactly one nonempty description")
         mapped.update(
-            type="choice", criteria={f"c{i:03d}": canonical_json(c) for i, c in enumerate(choices)}
+            type="choice",
+            criteria={
+                f"c{i:03d}": canonical_json(c) + (" — " + descriptions[i] if descriptions else "")
+                for i, c in enumerate(choices)
+            },
         )
     elif question["kind"] == "ordered_choice":
         if [level["score"] for level in question["allowed_answers"]] != list(range(-4, 5)):
@@ -46,11 +66,7 @@ def api_preview(request: IntendedRequest) -> dict:
         )
     else:
         raise ValueError("Unsupported question kind.")
-    return {
-        "model": settings["model"],
-        "state": payload["state"],
-        "questions": {QUESTION_ID: mapped},
-    }
+    return mapped
 
 
 def _number(value, low: float, high: float) -> float:

@@ -30,16 +30,16 @@ import matplotlib as mpl
 # legible on paper. So the point sizes in `_RC` are the point sizes ON THE PRINTED PAGE.
 # ---------------------------------------------------------------------------
 
-WIDTH_FULL = 6.30   # 160 mm — the full A4 text width
-WIDTH_HALF = 3.05   # two side by side, with a ~5 mm gutter
+WIDTH_FULL = 6.30  # 160 mm — the full A4 text width
+WIDTH_HALF = 3.05  # two side by side, with a ~5 mm gutter
 WIDTH_THIRD = 1.95  # three side by side. Label sparingly at this width.
 
 #: The A4 text block is 247 mm tall, but a figure taking all of it leaves no room for its caption
 #: and pushes every surrounding paragraph onto another page. Half a page is the practical ceiling,
 #: and `figsize` clamps to it rather than letting a tall panel grid silently overflow.
-MAX_HEIGHT = 4.80   # 122 mm
+MAX_HEIGHT = 4.80  # 122 mm
 
-GOLDEN = 0.618      # height = width * GOLDEN, unless the data wants otherwise
+GOLDEN = 0.618  # height = width * GOLDEN, unless the data wants otherwise
 
 
 def figsize(width: float = WIDTH_FULL, ratio: float = GOLDEN) -> tuple[float, float]:
@@ -67,7 +67,6 @@ _RC = {
     # right size for the page.
     "figure.figsize": figsize(),
     "figure.dpi": 110,
-
     # constrained_layout, and NOT savefig.bbox="tight". Tight-bbox crops to the drawn content, so
     # two figures declared at the same width come out at different widths and the paper's font
     # sizes stop matching between them. constrained_layout fits the content INSIDE the declared
@@ -76,12 +75,10 @@ _RC = {
     "savefig.bbox": None,
     "savefig.facecolor": "white",
     "savefig.transparent": False,
-
     # TrueType, not the default Type 3: Type 3 is rejected by several journal submission systems
     # and cannot be searched or copied out of the PDF.
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
-
     # Point sizes ON THE PRINTED A4 PAGE, since the figure is drawn at final width. 9pt sits just
     # under a paper's own 10-11pt, which reads as "part of the document" rather than shrunken;
     # 7pt is the floor below which small print stops being legible on paper.
@@ -119,9 +116,19 @@ TOTAL_COLOR = "#54765A"
 AUDIT_MARKER_SIZE = 18
 
 # Screen/large-format inspection dashboards: do not shrink these onto a paper page.
-OVERVIEW_SIZE = (18.0, 10.5)
+OVERVIEW_SIZE = (25.0, 12.0)
+OVERVIEW_ROW_RATIOS = (0.9, 10.0, 1.1)
+OVERVIEW_TITLE_FONT = 14
 DASHBOARD_SIZE = (12.0, 8.0)
 FLOW_SIZE = (12.0, 5.0)
+LONG_TEXT_SIZE = (15.0, 11.0)
+LONG_TEXT_PAGE_SIZE = (WIDTH_FULL, 9.10)  # A4 full-page diagnostic, with room for a caption.
+REGRESSION_RUBRIC_SIZE = (12.0, 8.0)
+RUBRIC_FONT = 8
+LONG_TEXT_COLUMNS_SIZE = (24.0, 22.0)
+LONG_TEXT_COLUMNS_SHAPE = (5, 4)
+LONG_TEXT_LABEL_FONT = 8
+LONG_TEXT_PAGE_FONT = 7
 OVERVIEW_FONT = 9
 OVERVIEW_CMAP = "Blues"
 GRID_COLOR = "#D9E2E8"

@@ -2,7 +2,8 @@ phase: experiment_0
 name: debugging
 enabled: false  # Prepared checks only; no allocation has been submitted.
 execution_site: vsc_compute_node
-feature_config: feature_creation/default
+local_preparation_command: python -m src.cluster.preflight --local --verify-data --tests
+feature_config: feature_creation
 cluster:
   account: lp_verbekelab  # Same account as CreditPFN; verify current association on VSC.
   cpu: {name: wice, partition: interactive}
@@ -18,11 +19,54 @@ checks:
   - response_validation_and_probability_mass
   - cache_reuse_after_restart
   - feature_artifact_integrity
+  - predictions_and_large_outputs_on_project_storage
+  - compact_manifests_and_logs_on_data_storage
+  - inner_oof_and_outer_test_predictions_saved_with_row_ids
   - tabpfn_3_5_import_and_cuda
   - proposed_model_imports_and_task_class_limits
+  - full_outer_training_fold_resource_feasibility_no_silent_row_cap
   - same_five_fold_split_manifest_across_arms
   - binary_threshold_uses_inner_validation_only
   - fold_specific_non_text_and_native_text_preprocessing
   - identical_single_text_views_not_fitted_twice
   - later_small_inference_smoke_after_weights_are_prepared
-acceptance: unresolved  # Preflight success alone is not experiment-0 acceptance.
+acceptance: pending_real_runtime_evidence  # Preflight success is not full experiment-0 acceptance.
+# Preflights report these as pending even if synthetic contract tests pass. They do
+# not load checkpoints, invoke a provider, fit a predictor or acquire an allocation.
+acceptance_checks:
+  - id: provider_task_contracts
+    site: local_or_approved_self_hosted_allocation
+    evidence: All selected providers pass binary, multiclass and nine-option score requests; full probabilities, option order, expected direction, usage and version are validated.
+  - id: context_and_request_robustness
+    site: local_or_approved_self_hosted_allocation
+    evidence: Actual tokenizer counts, maximum accepted input/options, missing text, Unicode, embedded instructions, refusal, paraphrase and answer-order checks pass without silent truncation.
+  - id: extraction_recovery_and_budget
+    site: local_or_approved_self_hosted_allocation
+    evidence: Rate limiting, timeout ambiguity, bounded retry, interruption/resume, deduplication, spending stop and model-version drift are exercised against the selected transport.
+  - id: feature_campaign_coverage
+    site: local_and_vsc
+    evidence: Every selected dataset/provider/question version has complete numeric tables, all original row IDs, declared missing inputs, source hashes and explicit immutable artifact selections.
+  - id: consistent_transfer_and_backup
+    site: local_and_vsc
+    evidence: Closed dataset stores survive transfer and independent restore with matching checksums; interrupted transfer cannot be accepted as complete.
+  - id: allocation_and_native_storage
+    site: vsc_compute_node
+    evidence: Current account/partition association, native Lustre or GPFS, quota, write access and independent backup policy are verified; capacity is not confused with personal quota.
+  - id: runtime_and_checkpoint_identity
+    site: vsc_compute_node
+    evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.
+  - id: predictor_task_compatibility
+    site: vsc_compute_node
+    evidence: Every selected prediction engine supports all assigned task/class counts, missing values and chosen feature widths on small actual fits; class probability order is checked.
+  - id: predictive_pipeline_boundaries
+    site: local_and_vsc
+    evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds, fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.
+  - id: full_fold_resource_profile
+    site: vsc_compute_node
+    evidence: Representative full outer-training folds fit memory/time limits without hidden row caps, checkpoint downloads, extra HPO or fine-tuning; fit/predict timings synchronize CUDA.
+  - id: real_run_output_and_resume
+    site: vsc_compute_node
+    evidence: Real interrupted/restarted prediction jobs preserve immutable outputs; large tables stay on PROJECT and compact logs/indexes stay on DATA; failed arms remain explicit.
+
+dataset_selection:
+  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]

@@ -8,20 +8,20 @@ length at configurable character/token ratios. These are not billing-token count
 from __future__ import annotations
 
 import copy
+import json
 
 import numpy as np
 import pandas as pd
 
 from src.data.audit import request_lengths
 from src.data.loaders import load_catalog, load_dataset
+from src.data.selection import selected_entries
 from src.data.text_reuse import semantic_codes
 from src.jev.cost import group_lengths
 from src.jev.provider import api_preview
 from src.jev.requests import build_requests, text_groups
-from src.utils import paths
 from src.utils.config import load_config
-from src.utils.provenance import code_identity
-from src.utils.serialization import canonical_json, write_json
+from src.utils.serialization import canonical_json
 
 
 def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
@@ -56,6 +56,7 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
                     estimates.append(
                         {
                             "dataset": metadata.dataset_name,
+                            "dataset_id": metadata.dataset_id,
                             "mode": mode,
                             "include_non_text_features": context,
                             "text_columns": canonical_json(list(group)),
@@ -67,6 +68,20 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
                             "wire_tokens_logical_approx": int(tokens[active].sum()),
                             "wire_tokens_unique_approx": unique_tokens,
                             "wire_tokens_combined_approx": int(tokens[combined_keep].sum()),
+                            "wire_tokens_nonempty_max_approx": int(tokens[active].max())
+                            if active.any()
+                            else 0,
+                            "wire_tokens_nonempty_p99_approx": float(
+                                np.quantile(tokens[active], 0.99)
+                            )
+                            if active.any()
+                            else 0,
+                            **{
+                                f"combined_requests_above_{limit}_approx": int(
+                                    (combined_keep & (tokens > limit)).sum()
+                                )
+                                for limit in (4096, 8192, 24576, 32000, 32768)
+                            },
                             "cost_unique_usd": None
                             if price is None
                             else unique_tokens * price / 1e6,
@@ -89,17 +104,71 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
     return estimates, pilot
 
 
-def main() -> None:
-    cfg = load_config("feature_creation/default")
+def review_collection(
+    cfg: dict, *, include_excluded: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Recalculate selected-dataset costs from real values, retaining nothing on disk."""
     records, pilot = [], []
-    for entry in load_catalog(cfg["catalog"])["datasets"]:
+    catalog = load_catalog(cfg["catalog"])
+    for entry in catalog["datasets"] if include_excluded else selected_entries(catalog, cfg):
         dataset = load_dataset(entry, allow_download=False)
         part, sample = review_dataset(dataset, cfg)
         records.extend(part)
         pilot.extend(sample)
         print(f"Reviewed {entry['name']}", flush=True)
-    estimates = pd.DataFrame(records)
-    pilot = pd.DataFrame(pilot)
+    return pd.DataFrame(records), pd.DataFrame(pilot)
+
+
+def context_screen_examples(dataset, cfg, *, limit=4096, characters_per_token=3):
+    """Trace distinct combined-build inputs above an approximate size threshold.
+
+    Each record is a complete text group (column or joint), not an output class.
+    Do not equate this screen with the provider tokenizer or a live API rejection.
+    """
+    if limit <= 0 or characters_per_token <= 0:
+        raise ValueError("Context limit and approximation ratio must be positive")
+    metadata, features = dataset.metadata, dataset.features
+    lengths = request_lengths(dataset)
+    codes = semantic_codes(features.loc[:, list(metadata.text_columns)])
+    records = []
+    for mode in ("per_column", "joint"):
+        variant = copy.deepcopy(cfg)
+        variant["jev"]["representation"] = mode
+        for slot, group in enumerate(text_groups(metadata, mode)):
+            sample = features.iloc[:1].copy()
+            for column in metadata.text_columns:
+                sample[column] = "preview"
+            body = api_preview(build_requests(sample, metadata, 0, variant)[slot])
+            body["state"]["text"] = {}
+            chars, present = group_lengths(metadata, lengths, group, len(canonical_json(body)))
+            keep = (present > 0) & ~codes[list(group)].duplicated().to_numpy()
+            if mode == "joint":
+                keep &= present > 1
+            tokens = np.ceil(chars / characters_per_token).astype(np.int64)
+            for position in np.flatnonzero(keep & (tokens > limit)):
+                request = next(
+                    r
+                    for r in build_requests(features, metadata, int(position), variant)
+                    if json.loads(r.provenance_json)["source_text_columns"] == list(group)
+                )
+                trace = request.to_dict()["provenance"]
+                records.append(
+                    {
+                        "dataset": metadata.dataset_name,
+                        "dataset_id": metadata.dataset_id,
+                        "row_id": trace["row_id"],
+                        "mode": mode,
+                        "text_columns": list(group),
+                        "request_key": request.cache_key,
+                        "input_tokens_proxy": int(tokens[position]),
+                        "context_reference": limit,
+                        "characters_per_token": characters_per_token,
+                    }
+                )
+    return pd.DataFrame(records)
+
+
+def review_totals(estimates: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     totals = (
         estimates.groupby("characters_per_token")[
             [
@@ -113,6 +182,15 @@ def main() -> None:
         .sum()
         .reset_index()
     )
+    price = cfg["cost"]["input_price_per_million"]
+    totals["cost_usd"] = None if price is None else totals.wire_tokens_combined_approx * price / 1e6
+    return totals
+
+
+def main() -> None:
+    cfg = load_config("feature_creation")
+    estimates, pilot = review_collection(cfg)
+    totals = review_totals(estimates, cfg)
     sensitivity = []
     price = cfg["cost"]["input_price_per_million"]
     for row in totals.to_dict("records"):
@@ -131,41 +209,13 @@ def main() -> None:
                         "cost_usd": None if price is None else tokens * price / 1e6,
                     }
                 )
-    folder = paths.results_dir("review", phase="feature_creation")
-    folder.mkdir(parents=True, exist_ok=True)
-    estimates.to_csv(folder / "dataset_group_budget.csv", index=False)
-    pd.DataFrame(sensitivity).to_csv(folder / "sensitivity.csv", index=False)
-    pilot.to_csv(folder / "pilot_preview_budget.csv", index=False)
-    unique_pilot = pilot.drop_duplicates("request_key")
-    write_json(
-        folder / "manifest.json",
-        {
-            "status": "offline_review_only",
-            "code_sha256": code_identity(),
-            "config": cfg,
-            "dataset_hashes": {
-                e["id"]: e["sha256"] for e in load_catalog(cfg["catalog"])["datasets"]
-            },
-            "caveats": [
-                "Character approximation, not provider billing tokenizer.",
-                "Empty inputs excluded; inputs over the context limit still included as a budget scenario.",
-                "Identical canonical field values deduplicated within groups; joint reuses per-column whenever only one field is available.",
-                "No change to prompt wording or long-text policy; no requests sent.",
-            ],
-            "totals": totals.to_dict("records"),
-            "pilot": {
-                "positions": "first, middle, last CSV rows per dataset; illustrative only",
-                "logical_requests": len(pilot),
-                "unique_requests": len(unique_pilot),
-                "wire_tokens_approx": int(unique_pilot.wire_tokens_approx.sum()),
-                "cost_usd": None
-                if price is None
-                else float(unique_pilot.wire_tokens_approx.sum() * price / 1e6),
-            },
-        },
-    )
     print(totals.to_string(index=False))
-    print(f"Saved review to {folder}")
+    print(pd.DataFrame(sensitivity).to_string(index=False))
+    unique_pilot = pilot.drop_duplicates("request_key")
+    print(
+        f"Illustrative pilot: {len(unique_pilot):,} unique requests; {int(unique_pilot.wire_tokens_approx.sum()):,} approximate input tokens."
+    )
+    print("Offline review only; no budget files retained and no requests sent.")
 
 
 if __name__ == "__main__":

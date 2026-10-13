@@ -34,7 +34,7 @@ def test_reuse_matches_full_request_keys(task, labels):
     )
     dataset = LoadedDataset(frame, metadata, official, {}, [])
     profile = text_reuse_profile(dataset.features[["a", "b"]], dataset_id="test")
-    cfg = load_config("feature_creation/default")
+    cfg = load_config("feature_creation")
     requests = [
         r for i in range(len(frame)) for r in build_requests(dataset.features, metadata, i, cfg)
     ]

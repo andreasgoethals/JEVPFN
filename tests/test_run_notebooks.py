@@ -89,42 +89,6 @@ def test_recursive_discovery_resolves_unique_stems_and_rejects_ambiguity(tmp_pat
         rn.discover(("../outside",))
 
 
-def test_magics_are_stripped_from_the_flattened_script(tmp_path) -> None:
-    """`%matplotlib inline` is a syntax error in a plain interpreter, and a notebook that
-    needs a magic to run cannot be executed non-interactively at all."""
-    nb = tmp_path / "nb.ipynb"
-    make_notebook(nb, ["%matplotlib inline\nprint('hello')", "!ls\nprint('two')"])
-    script = rn._build_script(nb, tmp_path / "out.txt")
-    assert "%matplotlib" not in script and "!ls" not in script
-    assert "print('hello')" in script and "print('two')" in script
-
-
-def test_markdown_cells_are_skipped(tmp_path) -> None:
-    nb = tmp_path / "nb.ipynb"
-    nb.write_text(
-        json.dumps(
-            {
-                "cells": [
-                    {"cell_type": "markdown", "source": ["# a heading"]},
-                    {
-                        "cell_type": "code",
-                        "source": ["print('code')"],
-                        "outputs": [],
-                        "execution_count": None,
-                        "metadata": {},
-                    },
-                ],
-                "metadata": {},
-                "nbformat": 4,
-                "nbformat_minor": 5,
-            }
-        ),
-        encoding="utf-8",
-    )
-    script = rn._build_script(nb, tmp_path / "out.txt")
-    assert "a heading" not in script and "print('code')" in script
-
-
 def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch) -> None:
     """ONE Captions.md for the project, built from each notebook's manifest — so it can be
     regenerated after an interactive run without executing anything."""
@@ -197,7 +161,7 @@ def test_summarise_says_where_everything_went() -> None:
 
 
 @pytest.mark.slow
-def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch) -> None:
+def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch, capsys) -> None:
     """The property the whole design rests on: the NOTEBOOK writes the files, so a runner
     execution and an interactive Run All produce the same thing.
 
@@ -221,12 +185,24 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
             "fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_HALF))\n"
             "ax.plot([0, 1], [0, 1])\n"
             "save(fig, 'line', caption='A line from (0,0) to (1,1).')\n"
+            "from IPython.display import display\n"
+            "display(fig)\n"
             "print('SMOKE SUMMARY: 1 figure')\n"
         ],
     )
     result = rn.run_one("smoke")
     assert result.ok, result.error
     assert result.n_figures == 1
+    executed = json.loads((nb_dir / "smoke.ipynb").read_text(encoding="utf-8"))
+    assert executed["cells"][0]["execution_count"] == 1
+    assert any("image/png" in output.get("data", {}) for output in executed["cells"][0]["outputs"])
+    assert any(
+        "SMOKE SUMMARY" in "".join(output.get("text", ""))
+        for output in executed["cells"][0]["outputs"]
+    )
+    progress = capsys.readouterr().out
+    assert "cell 1/1" in progress and "saved executed outputs" in progress
+
     folder = figures_dir("smoke")
     assert (folder / "01_line.pdf").is_file()
     assert not list(folder.glob("*.png"))  # PDF only
@@ -237,3 +213,20 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
     rn.write_all_results(("smoke",))
     assert "A line from (0,0) to (1,1)." in captions_path().read_text(encoding="utf-8")
     assert "SMOKE SUMMARY: 1 figure" in all_results_path().read_text(encoding="utf-8")
+
+
+@pytest.mark.slow
+def test_cell_failure_saves_partial_outputs_and_error(isolated_output, monkeypatch):
+    nb_dir = isolated_output / "notebooks"
+    monkeypatch.setattr(rn, "notebooks_dir", lambda: nb_dir)
+    target = nb_dir / "failure.ipynb"
+    make_notebook(
+        target,
+        ["print('before error')", "raise ValueError('expected failure')", "print('must not run')"],
+    )
+    result = rn.run_one("failure")
+    assert not result.ok
+    executed = json.loads(target.read_text(encoding="utf-8"))
+    assert "before error" in "".join(executed["cells"][0]["outputs"][0]["text"])
+    assert executed["cells"][1]["outputs"][0]["output_type"] == "error"
+    assert executed["cells"][2]["execution_count"] is None

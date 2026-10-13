@@ -15,7 +15,5 @@ set -euo pipefail
 export JEVPFN_PHASE=experiment_0
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.preflight
-python -m src.data.prepare --offline
-python -m pytest -q
+python -m src.cluster.preflight --verify-data --tests
 echo 'CPU preflight finished; this is not acceptance of the full experiment 0.'

@@ -102,6 +102,7 @@ def test_response_cache_survives_disposable_cleanup_roots(isolated_output):
     from src.utils.clean_run import roots
 
     cache = paths.jev_cache_path()
+    assert cache.name == "jev_cache"  # A directory, never an obsolete global response file.
     assert not any(cache.is_relative_to(p.resolve()) for p in roots(processed=True))
     with pytest.raises(ValueError):
         paths.jev_cache_path("processed/paid.sqlite3")

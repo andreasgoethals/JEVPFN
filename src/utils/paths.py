@@ -12,9 +12,10 @@ The VSC documentation lists personal DATA backups, but does not establish the ba
 of this project's staging allocation. Verify it before storing paid responses. Use Lustre for
 wICE I/O; select native GPFS through the staging override before Mindwell bulk I/O.
 
-`output_JEVPFN/<phase>/results/` is therefore the one part of `output_JEVPFN/` on project storage: per-row predictions
-reach gigabytes. Everything else stays where you can read it without a download, and project
-storage wants few big files rather than thousands of small ones anyway.
+Experiment tables and predictions use project storage. Notebooks always run locally; their
+figures/reports ignore VSC experiment storage variables. Only compact summaries,
+experiment manifests and bounded operational logs use personal DATA. Portable artifacts may
+carry a small manifest beside their data as well as a DATA summary/index.
 
 OFF-CLUSTER EVERY TIER COLLAPSES INTO THE REPO. Pretending `/lustre1` exists on a laptop would
 mean two code paths, and the one that only runs on the cluster is the one that breaks.
@@ -24,7 +25,10 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from pathlib import Path
+
+_NOTEBOOK_SCRATCH = None
 
 #: The per-project folder name on BOTH shared tiers.
 PROJECT_NAME = "JEVPFN"
@@ -122,6 +126,7 @@ def _under(root: Path, *parts: str) -> Path:
 OUTPUT_DIR_NAME = "output_JEVPFN"
 PHASES = (
     "exploration",
+    "question_preparation",
     "feature_creation",
     "experiment_0",
     "experiment_1",
@@ -167,11 +172,35 @@ def large_outputs_dir() -> Path:
 
 
 def phase_dir(phase: str | None = None) -> Path:
-    return outputs_dir() / phase_name(phase)
+    selected = phase_name(phase)
+    if selected == "exploration":
+        return notebook_cache_dir("exploration")
+    if selected == "feature_creation":
+        return outputs_dir() / selected
+    return outputs_dir() / selected
 
 
 def results_dir(*parts: str, phase: str | None = None) -> Path:
-    return large_outputs_dir().joinpath(phase_name(phase), "results", *parts)
+    selected = phase_name(phase)
+    if selected in {"exploration", "feature_creation"}:
+        return notebook_cache_dir(selected, "results", *parts)
+    return large_outputs_dir().joinpath(selected, "results", *parts)
+
+
+def notebook_outputs_dir() -> Path:
+    """Notebooks always run locally, regardless of experiment storage variables."""
+    return (_env_path("JEVPFN_LOCAL_STORAGE_ROOT") or REPO_ROOT) / OUTPUT_DIR_NAME
+
+
+def notebook_cache_dir(*parts: str) -> Path:
+    """Disposable audit/budget intermediates; shared by kernels in a runner invocation."""
+    global _NOTEBOOK_SCRATCH
+    root = _env_path("JEVPFN_NOTEBOOK_SCRATCH")
+    if root is None:
+        if _NOTEBOOK_SCRATCH is None:
+            _NOTEBOOK_SCRATCH = tempfile.TemporaryDirectory(prefix="jevpfn-notebooks-")
+        root = Path(_NOTEBOOK_SCRATCH.name)
+    return root.joinpath(*parts)
 
 
 def logs_dir(phase: str | None = None) -> Path:
@@ -184,7 +213,7 @@ def manifests_dir(phase: str | None = None) -> Path:
 
 def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
     """All figures share one root, then phase and notebook subdirectories."""
-    root = outputs_dir() / "figures"
+    root = notebook_outputs_dir() / "figures"
     if notebook is not None:
         inferred_phase = notebook_phase(notebook)  # Also validate a plain notebook name.
         root = root / phase_name(phase or inferred_phase)
@@ -194,16 +223,62 @@ def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
 
 
 def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
-    root = phase_dir(phase or (notebook_phase(notebook) if notebook else None)) / "reports"
-    return root / f"{notebook_stem(notebook)}.txt" if notebook else root
+    root = figures_dir(notebook, phase=phase)
+    return root / "_report.txt" if notebook else root
 
 
 def captions_path(phase: str | None = None) -> Path:
-    return (phase_dir(phase) if phase else outputs_dir()) / "Captions.md"
+    root = figures_dir()
+    if phase and phase_name(phase).startswith("experiment_"):
+        root /= phase
+    return root / "Captions.md"
 
 
 def all_results_path(phase: str | None = None) -> Path:
-    return (phase_dir(phase) if phase else outputs_dir()) / "All Results.md"
+    root = notebook_outputs_dir()
+    if phase and phase_name(phase).startswith("experiment_"):
+        root /= phase
+    return root / "All Results.md"
+
+
+def output_component(value: str) -> str:
+    """A readable artifact/run identifier, never an absolute path or traversal."""
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value):
+        raise ValueError("Output identifier must be a single safe path component")
+    return value
+
+
+def require_project_output(folder: Path) -> Path:
+    """Prevent explicit large-output overrides from filling DATA on VSC."""
+    folder = Path(folder).resolve()
+    if _use_staging() and not folder.is_relative_to(_under(staging_root()).resolve()):
+        raise ValueError("Large outputs must remain on configured project storage")
+    return folder
+
+
+def prediction_dir(run_id: str, *, phase: str) -> Path:
+    return results_dir("predictions", output_component(run_id), phase=phase)
+
+
+def feature_artifact_dir(dataset_id: str, representation: str, artifact_id: str) -> Path:
+    parts = [output_component(v) for v in (dataset_id, representation, artifact_id)]
+    return jev_cache_path("/".join(["jev_cache", "features", *parts]))
+
+
+def dataset_cache_path(dataset_id: str) -> Path:
+    """One durable file per dataset, containing responses and all feature versions."""
+    return jev_cache_path(f"jev_cache/{output_component(dataset_id)}.sqlite3")
+
+
+def question_bank_path(bank_id: str) -> Path:
+    """Immutable shared task questions, outside disposable notebook output."""
+    return jev_cache_path(f"decision_inputs/questions/{output_component(bank_id)}.json")
+
+
+def dataset_question_path(bank_id: str, dataset_id: str) -> Path:
+    return jev_cache_path(
+        f"decision_inputs/questions/{output_component(bank_id)}/{output_component(dataset_id)}.json"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +337,7 @@ def config_path(name: str) -> Path:
     return path
 
 
-def jev_cache_path(relative: str = "jev_cache/responses.sqlite3") -> Path:
+def jev_cache_path(relative: str = "jev_cache") -> Path:
     """Paid responses survive both ordinary output cleanup and --processed cleanup."""
     root = _under(staging_root(), "data") if _use_staging() else REPO_ROOT / "data"
     path = (root / relative).resolve()

@@ -66,7 +66,7 @@ def design_summary(audit, requests, totals, cfg) -> str:
             "Empty inputs skipped; remaining request counts precede deduplication; output tokens, unknown wrappers and retries are excluded.",
             "5. Cache and open choices",
             "The mock acknowledgement uses a temporary cache, removed when the demonstration finishes; no persistent cache is created.",
-            "Current API documentation is mapped in Notebook 3; live validation, final feature views, context policy and evaluation remain open.",
+            "Main numeric features are fixed; live API validation, context-overflow policy and execution approval remain pending.",
             f"Audit and workload: {audit.folder}",
             f"Request previews: {paths.results_dir('jev_design', 'representative_requests.json')}",
         ]

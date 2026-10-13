@@ -1,0 +1,13 @@
+# Proposals for label-blind inspection, not changes to the accepted extraction templates.
+enabled: false
+candidate_version: direct-evidence-review-v2
+accepted_version: directional-v2
+implementation: src.jev.design
+semantics_catalog: dataset_semantics
+documented_version: documented-task-v1
+inspection_variant: documented
+documentary_definitions: {}  # Only sourced definitions; no guesses for opaque class codes.
+context_candidates: [current_metadata, sourced_task_definitions]
+robustness_checks: [meaning_preserving_paraphrase, class_option_order, repeated_input, embedded_instruction]
+wording_selection: human_semantic_review_not_prediction_performance
+regression_reference: typical_case_of_documented_observation_unit_not_dataset_target_mean

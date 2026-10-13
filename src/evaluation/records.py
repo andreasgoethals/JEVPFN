@@ -12,8 +12,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.utils import paths
+from src.utils.events import append_event
 from src.utils.files import atomic_replace
-from src.utils.serialization import file_sha256, write_json
+from src.utils.serialization import digest, file_sha256, write_json
 
 
 class PhaseTimer:
@@ -73,13 +75,15 @@ class PhaseTimer:
 
 
 def save_evaluation(
-    folder: Path,
+    folder: Path | None = None,
     *,
     scores: dict,
     predictions: pd.DataFrame,
     timer: PhaseTimer,
     metadata: dict,
     resources: dict | None = None,
+    run_id: str | None = None,
+    phase: str = "experiment_1",
 ) -> Path:
     """Save raw predictions first and a completion record last, with their checksum.
 
@@ -88,6 +92,7 @@ def save_evaluation(
     """
     required = {
         "dataset_id",
+        "data_identity",
         "model_id",
         "feature_set",
         "outer_fold",
@@ -106,7 +111,11 @@ def save_evaluation(
     if len(predictions) != scores["n_observations"]:
         raise ValueError("Prediction row count differs from the metric report")
     timer.to_dict()  # Reject an active/nested stage before writing anything.
-    folder = Path(folder)
+    paths.phase_name(phase)
+    if folder is None and run_id is None:
+        raise ValueError("Supply a run_id for automatically routed prediction storage")
+    run_id = paths.output_component(run_id) if run_id else digest(metadata)
+    folder = paths.require_project_output(folder or paths.prediction_dir(run_id, phase=phase))
     folder.mkdir(parents=True, exist_ok=True)
     record_path = folder / "record.json"
     from src.utils.locking import file_lock
@@ -122,7 +131,7 @@ def save_evaluation(
         with timer.measure("prediction_serialization"):
             predictions.to_parquet(temporary, index=False)
             atomic_replace(temporary, destination)
-        return write_json(
+        record = write_json(
             record_path,
             {
                 "schema_version": 1,
@@ -148,3 +157,38 @@ def save_evaluation(
                 },
             },
         )
+        # Full probability arrays, confusion matrices and reliability tables stay on PROJECT.
+        compact_scores = {
+            "task": scores["task"],
+            "n_observations": scores["n_observations"],
+            "metrics": scores["metrics"],
+            "undefined": scores["undefined"],
+            "decisions": {
+                name: {
+                    key: value
+                    for key, value in decision.items()
+                    if key in {"metrics", "undefined", "threshold"}
+                }
+                for name, decision in scores.get("decisions", {}).items()
+            },
+        }
+        write_json(
+            paths.manifests_dir(phase) / "evaluations" / f"{run_id}.json",
+            {
+                "status": "complete",
+                "metadata": metadata,
+                "scores": compact_scores,
+                "timing": timer.to_dict(),
+                "record_path": str(record),
+                "predictions_path": str(destination),
+                "predictions_sha256": file_sha256(destination),
+            },
+        )
+        append_event(
+            paths.logs_dir(phase) / "evaluations.jsonl",
+            "evaluation_saved",
+            run_id=run_id,
+            rows=len(predictions),
+            record_path=str(record),
+        )
+        return record

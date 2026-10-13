@@ -42,8 +42,14 @@ def test_text_stays_legible_on_paper() -> None:
     """Point sizes are the sizes on the printed page, so none may drop under the ~7pt print floor
     or above the paper's own body text."""
     style.apply()
-    for key in ("font.size", "axes.titlesize", "axes.labelsize",
-                "xtick.labelsize", "ytick.labelsize", "legend.fontsize"):
+    for key in (
+        "font.size",
+        "axes.titlesize",
+        "axes.labelsize",
+        "xtick.labelsize",
+        "ytick.labelsize",
+        "legend.fontsize",
+    ):
         assert 7 <= float(mpl.rcParams[key]) <= 11, key
 
 

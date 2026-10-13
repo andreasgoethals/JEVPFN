@@ -21,7 +21,7 @@ from src.utils import paths
 from src.utils.files import atomic_replace, atomic_text
 from src.utils.serialization import canonical_json, digest, scalar, text_value, write_json
 
-AUDIT_VERSION = "audit-v3-exact-text-reuse"
+AUDIT_VERSION = "audit-v4-long-text"
 
 
 @dataclass
@@ -73,6 +73,7 @@ def _length_stats(values: pd.Series, prefix: str) -> dict:
         f"{prefix}_mean": scalar(values.mean()),
         f"{prefix}_median": scalar(values.median()),
         f"{prefix}_p95": scalar(values.quantile(0.95)),
+        f"{prefix}_p99": scalar(values.quantile(0.99)),
         f"{prefix}_max": scalar(values.max()),
     }
 
@@ -109,6 +110,14 @@ def request_lengths(dataset: LoadedDataset) -> dict[str, np.ndarray]:
     for i, col in enumerate(m.text_columns):
         lengths[f"text_{i}"] = len(canonical_json(col)) + 1 + _value_lengths(dataset.frame[col])
         lengths[f"present_{i}"] = dataset.frame[col].map(text_value).notna().to_numpy()
+        lengths[f"characters_{i}"] = (
+            dataset.frame[col]
+            .map(text_value)
+            .fillna("")
+            .astype(str)
+            .str.len()
+            .to_numpy(dtype=np.int64)
+        )
     return lengths
 
 
@@ -125,6 +134,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         r["text_columns"][0]: r for r in reuse["groups"] if r["mode"] == "per_column"
     }
     columns, texts, numeric, categorical, examples = [], [], [], [], {}
+    longest_examples = {}
     combined_chars = pd.Series(np.zeros(n, dtype=np.int64), index=frame.index)
     cell_tokens_total = 0
     for col in frame:
@@ -174,12 +184,36 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
                 **_length_stats(chars[chars > 0], "nonempty_characters"),
                 **_length_stats(words, "words"),
                 **_length_stats(tokens, "tokens"),
+                **_length_stats(tokens[chars > 0], "nonempty_tokens"),
                 "empty_or_whitespace_pct": float(100 * values.str.strip().eq("").mean()),
             }
             texts.append(text_stats)
             examples[col] = _examples(
                 series, cfg["audit"]["examples_per_column"], cfg["audit"]["example_character_limit"]
             )
+            if (chars > 0).any():
+                row = chars.idxmax()  # First CSV row resolves equal-length ties.
+                text = values.loc[row]
+                limit = cfg["audit"]["long_text_example_character_limit"]
+                if len(text) <= limit:
+                    preview = text
+                else:
+                    width = limit // 3
+                    middle = len(text) // 2
+                    preview = (
+                        text[:width]
+                        + "\n[... middle excerpt ...]\n"
+                        + text[middle : middle + width]
+                        + "\n[... final excerpt ...]\n"
+                        + text[-width:]
+                    )
+                longest_examples[col] = {
+                    "row_id": f"csv:{row}",
+                    "characters": int(chars.loc[row]),
+                    "tokens_approx": int(tokens.loc[row]),
+                    "text_preview": preview,
+                    "truncated_for_display": len(text) > limit,
+                }
         elif kind == "numerical":
             numeric.append({**base, **_stats(series)})
         elif kind == "categorical":
@@ -233,6 +267,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         "task_metadata": asdict(m),
         "target_audit_only": target,
         "text_examples": examples,
+        "longest_text_examples": longest_examples,
         "source": dataset.source,
         "issues": dataset.issues,
     }
@@ -329,6 +364,7 @@ def _collect_audit(cfg, catalog, identity, folder, *, refresh):
     }
     details = {}
     for entry in catalog["datasets"]:
+        print(f"Audit: {entry['name'] if 'name' in entry else entry['id']}", flush=True)
         marker = folder / f"{entry['id']}.json"
         length_path = folder / f"{entry['id']}_lengths.npz"
         if marker.exists() and length_path.exists() and not refresh:
@@ -337,6 +373,9 @@ def _collect_audit(cfg, catalog, identity, folder, *, refresh):
         else:
             dataset = load_dataset(entry, allow_download=cfg["allow_download"])
             table, detail = audit_dataset(dataset, cfg)
+            # Full values remain in the protected raw CSV; do not persist duplicate text files.
+            for example in detail["longest_text_examples"].values():
+                example["source_csv"] = str(paths.dataset_file(entry["directory"], "data.csv"))
             _save_lengths(length_path, request_lengths(dataset))
             write_json(marker, {"tables": table, "details": detail})
         details[entry["id"]] = detail
@@ -409,8 +448,9 @@ def audit_summary(audit: AuditCollection) -> str:
         s[
             ["dataset", "combined_tokens_median", "combined_tokens_p95", "total_text_tokens"]
         ].to_string(index=False),
-        "7. Saved outputs",
-        str(audit.folder),
+        "7. Long text: see the complete dataset/column p99/max tables and longest-cell examples above.",
+        "8. Saved outputs",
+        "All tables are retained in the notebook/full report; intermediate arrays and tables are temporary.",
         "No Jev calls, model training or evaluation were performed.",
     ]
     return "\n".join(lines)

@@ -82,7 +82,7 @@ def estimate_workload(audit: AuditCollection, cfg: dict) -> pd.DataFrame:
 
 
 def workload_totals(estimates: pd.DataFrame) -> pd.DataFrame:
-    return (
+    result = (
         estimates.groupby(["mode", "include_non_text_features"], sort=False)[
             [
                 "requests",
@@ -95,6 +95,8 @@ def workload_totals(estimates: pd.DataFrame) -> pd.DataFrame:
         .sum(min_count=1)
         .reset_index()
     )
+    result["estimate_basis"] = "nonempty slots BEFORE exact reuse; intended JSON"
+    return result
 
 
 def budget_scenarios(estimates: pd.DataFrame, cfg: dict) -> pd.DataFrame:

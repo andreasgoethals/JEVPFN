@@ -5,16 +5,15 @@
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
     output_JEVPFN/figures/<phase>/<notebook>/*.pdf   written by the notebooks themselves
-    output_JEVPFN/Captions.md                       all figure captions
+    output_JEVPFN/figures/Captions.md               all figure captions
     output_JEVPFN/All Results.md             every notebook's printed summary, alphabetical
 
 Each notebook executes in a separate Python subprocess: matplotlib's figure registry must
 never be shared between notebooks. Lightweight coordinator threads launch those subprocesses,
 avoiding an extra Python process pool and its Windows startup/memory overhead.
 
-A FLATTENED SCRIPT, NOT A JUPYTER KERNEL: nothing extra to install, identical on the cluster,
-and a traceback points at a line number instead of a cell index. Magics are stripped, which is
-deliberate — a notebook needing one cannot be executed non-interactively at all.
+REAL JUPYTER KERNELS: each notebook uses the invoking Python environment. Executed
+outputs are saved back into its .ipynb, with cell progress printed during execution.
 
 THE RUNNER DOES NOT SAVE FIGURES; each notebook does, through `FigureSaver`, so an interactive
 *Run All* produces exactly the same PDFs. The runner adds parallelism and the two documents.
@@ -25,9 +24,7 @@ documents. A hard-coded list silently stops covering a notebook someone added.
 
 from __future__ import annotations
 
-import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -43,8 +40,9 @@ from src.utils.paths import (
     all_results_path,
     captions_path,
     figures_dir,
-    logs_dir,
     manifests_dir,
+    notebook_cache_dir,
+    notebook_outputs_dir,
     notebook_phase,
     notebook_stem,
     notebooks_dir,
@@ -52,12 +50,10 @@ from src.utils.paths import (
 )
 from src.utils.serialization import write_json
 
-#: Per-notebook wall-clock limit. A notebook summarises a finished computation; one needing
-#: longer is doing work that belongs in a script.
+#: Per-cell execution timeout; notebook kernels are shut down after failures.
 DEFAULT_TIMEOUT = 1800
 
-#: Legacy capture filename, still readable by the summary builder. New reports are durable
-#: under each phase's reports/, with process stdout/stderr in logs/.
+#: Per-notebook text capture, alongside local figures and rich .ipynb outputs.
 STDOUT_FILE = "_stdout.txt"
 
 
@@ -113,110 +109,91 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
 # ---------------------------------------------------------------------------
 
 
-def _prelude() -> str:
-    """Injected above every flattened notebook. `Agg` because a compute node has no display, and
-    stdout is captured so `All Results.md` can be built without the notebook knowing."""
-    return (
-        "import matplotlib\n"
-        'matplotlib.use("Agg")\n'
-        "import io as _io\n"
-        "from contextlib import redirect_stdout as _redirect\n"
-        "_TEXT = _io.StringIO()\n"
-    )
-
-
-def _build_script(nb_path: Path, text_path: Path) -> str:
-    """Flatten a notebook's code cells into one script under the capture prelude."""
-    nb = json.loads(nb_path.read_text(encoding="utf-8"))
-    parts = [_prelude(), "\nwith _redirect(_TEXT):\n"]
-    for i, cell in enumerate(nb.get("cells", []), start=1):
-        if cell.get("cell_type") != "code":
-            continue
-        source = "".join(cell.get("source", []))
-        # Strip IPython magics and shell escapes: they are syntax errors in a plain
-        # interpreter. A notebook that depends on one cannot be run non-interactively,
-        # which the compliance rules already forbid.
-        source = re.sub(r"^\s*[%!].*$", "", source, flags=re.M)
-        body = "\n".join(f"    {line}" for line in source.split("\n"))
-        parts.append(f"\n    # ---- cell {i} ----\n{body}\n")
-    parts.append(
-        "\nimport pathlib as _pl\n"
-        f"_pl.Path(r{str(text_path)!r}).write_text(_TEXT.getvalue(), encoding='utf-8')\n"
-    )
-    return "".join(parts)
-
-
-def run_one(name: str, timeout: int = DEFAULT_TIMEOUT) -> NotebookResult:
-    """Execute one notebook in a fresh process. Never raises — it reports."""
-    started = time.time()
+def run_one(
+    name: str, timeout: int = DEFAULT_TIMEOUT, scratch: str | None = None
+) -> NotebookResult:
+    """Execute one actual notebook, persist outputs and stream compact progress."""
+    started = time.monotonic()
     name = discover((name,))[0]
-    stem = notebook_stem(name)
     nb_path = notebooks_dir() / f"{name}.ipynb"
     if not nb_path.is_file():
         return NotebookResult(name, False, 0.0, 0, f"{nb_path} not found")
-
     out_dir = figures_dir(name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    phase = notebook_phase(name)
-    log_dir = logs_dir(phase)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    text_path = log_dir / f"{stem}.stdout.txt"
+    text_path = out_dir / "_stdout.txt"
+    stderr_path = out_dir / "_stderr.txt"
     atomic_text(reports_dir(name), f"RUNNING: {name}; previous report superseded.")
-
-    # The generated script goes to the system temp dir, NOT into the figure folder: the
-    # notebook clears that folder as its first act, and on Windows a directory cannot be
-    # modified while it holds the script currently being executed from it.
-    with tempfile.NamedTemporaryFile(prefix=f"nbrun_{stem}_", suffix=".py", delete=False) as handle:
-        tmp = Path(handle.name)
-    tmp.write_text(_build_script(nb_path, text_path), encoding="utf-8")
-    try:
-        proc = subprocess.run(
-            [sys.executable, str(tmp)],
-            cwd=str(REPO_ROOT),  # so `from src...` resolves without an install
-            capture_output=True,
+    backup = out_dir / "_previous.ipynb"
+    command = [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-u",
+        "-m",
+        "src.utils.execute_notebook",
+        str(nb_path),
+        "--root",
+        str(REPO_ROOT),
+        "--capture",
+        str(text_path),
+        "--backup",
+        str(backup),
+        "--timeout",
+        str(timeout),
+    ]
+    # Kernel execution has a per-cell timeout and emits a heartbeat during long cells.
+    # stderr goes directly to disk, avoiding pipe deadlocks and retaining full diagnostics.
+    with (
+        stderr_path.open("w", encoding="utf-8") as errors,
+        subprocess.Popen(
+            command,
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=errors,
             text=True,
             encoding="utf-8",
             env={
                 **os.environ,
+                "JEVPFN_NOTEBOOK_SCRATCH": scratch or str(notebook_cache_dir()),
                 "PYTHONIOENCODING": "utf-8",
                 "OMP_NUM_THREADS": "1",
                 "MKL_NUM_THREADS": "1",
                 "OPENBLAS_NUM_THREADS": "1",
                 "NUMEXPR_NUM_THREADS": "1",
             },
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        atomic_text(reports_dir(name), f"FAILED: {name}; timed out after {timeout}s")
-        write_json(
-            manifests_dir(phase) / f"{stem}_run.json",
-            {"name": name, "ok": False, "error": "timeout"},
-        )
-        return NotebookResult(name, False, time.time() - started, 0, f"timed out after {timeout}s")
-    finally:
-        tmp.unlink(missing_ok=True)
-
-    atomic_text(log_dir / f"{stem}.stderr.txt", proc.stderr or "")
+        ) as proc,
+    ):
+        for line in proc.stdout:
+            print(line.rstrip(), flush=True)
+        returncode = proc.wait()
+    seconds = time.monotonic() - started
+    stderr = stderr_path.read_text(encoding="utf-8")
+    n_figs = len(list(out_dir.glob("*.pdf")))
+    tail = "\n".join(stderr.strip().splitlines()[-12:]) if returncode else ""
+    if returncode:
+        atomic_text(reports_dir(name), f"FAILED: {name}\n{tail}")
+    elif reports_dir(name).read_text(encoding="utf-8").startswith("RUNNING:"):
+        atomic_text(reports_dir(name), text_path.read_text(encoding="utf-8"))
     write_json(
-        manifests_dir(phase) / f"{stem}_run.json",
+        out_dir / "_run.json",
         {
             "name": name,
-            "ok": proc.returncode == 0,
-            "seconds": time.time() - started,
+            "ok": returncode == 0,
+            "seconds": seconds,
             "interpreter": sys.executable,
-            "phase": phase,
+            "notebook": str(nb_path),
+            "backup": str(backup),
+            "full_stdout": str(text_path),
+            "full_stderr": str(stderr_path),
+            "full_report": str(reports_dir(name)),
+            "figures": str(out_dir),
         },
     )
-    n_figs = len(list(out_dir.glob("*.pdf")))
-    if proc.returncode != 0:
-        # Only the tail: a full traceback from twelve notebooks buries the one that matters.
-        tail = "\n".join((proc.stderr or "").strip().splitlines()[-12:])
-        atomic_text(reports_dir(name), f"FAILED: {name}\n{tail}")
-        return NotebookResult(name, False, time.time() - started, n_figs, tail)
-    if reports_dir(name).read_text(encoding="utf-8").startswith("RUNNING:"):
-        atomic_text(reports_dir(name), text_path.read_text(encoding="utf-8"))
-    return NotebookResult(name, True, time.time() - started, n_figs)
+    print(
+        f"[{name}] {'OK' if returncode == 0 else 'FAILED'}: {seconds:.1f}s, {n_figs} figures",
+        flush=True,
+    )
+    return NotebookResult(name, returncode == 0, seconds, n_figs, tail)
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +246,13 @@ def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> P
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_text(path, "\n".join(lines))
     if phase is None:
-        for group in sorted({notebook_phase(name) for name in notebooks}):
+        for group in sorted(
+            {
+                notebook_phase(name)
+                for name in notebooks
+                if notebook_phase(name).startswith("experiment_")
+            }
+        ):
             write_captions(
                 tuple(name for name in notebooks if notebook_phase(name) == group), phase=group
             )
@@ -301,8 +284,24 @@ def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -
     path = all_results_path(phase)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_text(path, "\n".join(lines))
+    if phase is not None:
+        write_json(
+            manifests_dir(phase) / "reports.json",
+            {
+                "full_phase_report": str(path),
+                "full_project_report": str(all_results_path()),
+                "captions": str(captions_path(phase)),
+                "notebooks": {name: str(reports_dir(name)) for name in names},
+            },
+        )
     if phase is None:
-        for group in sorted({notebook_phase(name) for name in notebooks}):
+        for group in sorted(
+            {
+                notebook_phase(name)
+                for name in notebooks
+                if notebook_phase(name).startswith("experiment_")
+            }
+        ):
             write_all_results(
                 tuple(name for name in notebooks if notebook_phase(name) == group), phase=group
             )
@@ -330,15 +329,17 @@ def run_all(
     workers = worker_count(len(names), max_workers)
 
     results: list[NotebookResult] = []
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(run_one, name, timeout): name for name in names}
+    with (
+        tempfile.TemporaryDirectory(prefix="jevpfn-run-") as scratch,
+        ThreadPoolExecutor(max_workers=workers) as pool,
+    ):
+        futures = {pool.submit(run_one, name, timeout, scratch): name for name in names}
         for fut in as_completed(futures):
             results.append(fut.result())
 
     from src.utils.locking import file_lock
-    from src.utils.paths import outputs_dir
 
-    with file_lock(outputs_dir() / ".reports.lock"):
+    with file_lock(notebook_outputs_dir() / ".reports.lock"):
         all_names = tuple(sorted(set(discover()) | set(names)))
         write_captions(all_names)
         write_all_results(all_names)
@@ -387,7 +388,9 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="optional cap; defaults to available CPUs/notebooks",
     )
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="seconds per notebook")
+    parser.add_argument(
+        "--timeout", type=int, default=DEFAULT_TIMEOUT, help="timeout in seconds per notebook cell"
+    )
     parser.add_argument(
         "--summaries-only",
         action="store_true",
@@ -402,11 +405,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.summaries_only:
         from src.utils.locking import file_lock
-        from src.utils.paths import outputs_dir
 
         print(f"Rebuilding summaries from disk for: {', '.join(names)}")
         all_names = tuple(sorted(set(discover()) | set(names)))
-        with file_lock(outputs_dir() / ".reports.lock"):
+        with file_lock(notebook_outputs_dir() / ".reports.lock"):
             print(f"  captions  -> {write_captions(all_names)}")
             print(f"  summaries -> {write_all_results(all_names)}")
         return 0

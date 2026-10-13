@@ -1,6 +1,6 @@
 """Read and validate the initial research configuration using the template's YAML convention.
 
-Resolved copies go to output_JEVPFN/<phase>/manifests/. Live Jev and modelling switches remain disabled.
+Resolved notebook copies go beside their local figures. Live Jev and modelling switches remain disabled.
 Phase configs may extend one other YAML file; package and credential loading stay separate.
 """
 
@@ -42,7 +42,7 @@ def _merge(parent: dict, child: dict) -> dict:
     return result
 
 
-def load_config(name: str = "exploration/audit") -> dict:
+def load_config(name: str = "audit") -> dict:
     """Load an exploration/feature config; never read credentials or load .env."""
     cfg = load_yaml(name)
     price = os.environ.get("JEV_INPUT_PRICE_PER_MILLION")
@@ -98,10 +98,5 @@ def save_resolved_config(cfg: dict, notebook: str) -> str:
     resolved = copy.deepcopy(cfg)
     resolved["resolved_cache_path"] = str(paths.jev_cache_path(cfg["jev"]["cache_location"]))
     resolved["config_sha256"] = digest(cfg)
-    write_json(
-        paths.manifest_path(
-            f"{paths.notebook_stem(notebook)}_config", phase=cfg.get("phase", "exploration")
-        ),
-        resolved,
-    )
+    write_json(paths.figures_dir(notebook) / "_config.json", resolved)
     return resolved["config_sha256"]

@@ -44,7 +44,7 @@ notebooks = [
     "ipython>=8,<10",         # Rich local notebook displays.
     "ipykernel>=6.29,<8",     # Required even when dev is not installed.
     "jupyterlab>=4,<5",
-    "nbclient>=0.10,<1",      # Execute the actual notebook kernel for verification.
+    "nbclient>=0.10,<1",      # Execute and save real notebook kernels.
     "nbformat>=5.10,<6",
 ]
 jev = ["typesafe-sdk==0.7.2"]  # Optional future transport; no live client is enabled.
@@ -56,7 +56,6 @@ baselines = ["scikit-learn==1.9.1", "catboost==1.2.10"]
 tabicl = ["tabicl==2.2.0", "torch==2.12.1"]
 tabdpt = ["tabdpt==1.3.1", "torch==2.12.1"]
 tabstar = ["tabstar==1.1.16", "torch==2.12.1"]
-# TabFM remains catalog-only until its source revision/backend is agreed.
 
 [project.urls]
 Repository = "https://github.com/andreasgoethals/JEVPFN"

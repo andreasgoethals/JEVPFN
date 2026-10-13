@@ -27,26 +27,28 @@ def test_off_cluster_everything_collapses_into_the_repo(monkeypatch) -> None:
     assert paths.on_vsc() is False
     assert paths.outputs_dir() == paths.REPO_ROOT / "output_JEVPFN"
     # results/ is a plain subdirectory locally; the tier split is invisible off-cluster.
-    assert paths.results_dir() == paths.REPO_ROOT / "output_JEVPFN" / "exploration" / "results"
+    assert paths.results_dir() == paths.notebook_cache_dir("exploration", "results")
     assert paths.checkpoints_dir() == paths.REPO_ROOT / "checkpoints"
 
 
 def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> None:
-    """The one rule that matters on VSC: `output/results/` is on project storage, the rest
-    of `output/` is on the backed-up 75 GiB tier."""
+    """Large artifacts stay on PROJECT; compact operational records stay on DATA."""
     monkeypatch.setenv("VSC_DATA", str(tmp_path / "data"))
     monkeypatch.setenv(paths.STAGING_ENV_VARS[0], str(tmp_path / "staging"))
 
     assert paths.on_vsc() is True
     assert paths.outputs_dir() == tmp_path / "data" / paths.PROJECT_NAME / "output_JEVPFN"
     assert (
-        paths.results_dir()
-        == tmp_path / "staging" / paths.PROJECT_NAME / "output_JEVPFN" / "exploration" / "results"
+        paths.results_dir(phase="experiment_1")
+        == tmp_path / "staging" / paths.PROJECT_NAME / "output_JEVPFN" / "experiment_1" / "results"
     )
-    # Everything else under output/ stays on $VSC_DATA — few inodes on staging.
-    assert paths.logs_dir().is_relative_to(tmp_path / "data")
-    assert paths.figures_dir().is_relative_to(tmp_path / "data")
-    assert paths.manifests_dir().is_relative_to(tmp_path / "data")
+    # Figures and complete reports can be large; only compact records belong on DATA.
+    assert paths.logs_dir("experiment_1").is_relative_to(tmp_path / "data")
+    assert paths.figures_dir().is_relative_to(paths.REPO_ROOT)
+    assert paths.reports_dir().is_relative_to(paths.REPO_ROOT)
+    assert paths.all_results_path().is_relative_to(paths.REPO_ROOT)
+    assert paths.captions_path().is_relative_to(paths.REPO_ROOT)
+    assert paths.manifests_dir("experiment_1").is_relative_to(tmp_path / "data")
 
 
 def test_project_name_is_inserted_only_on_shared_tiers(tmp_path, monkeypatch) -> None:
@@ -73,7 +75,7 @@ def test_figures_dir_is_per_notebook() -> None:
     root = paths.figures_dir()
     assert root == paths.outputs_dir() / "figures"
     assert paths.figures_dir("some_notebook") == root / "exploration" / "some_notebook"
-    assert paths.captions_path() == paths.outputs_dir() / "Captions.md"
+    assert paths.captions_path() == paths.figures_dir() / "Captions.md"
     assert paths.all_results_path() == paths.outputs_dir() / "All Results.md"
     assert paths.figures_dir(phase="experiment_1") == root / "experiment_1"
     assert paths.figures_dir("experiment_1_models") == root / "experiment_1" / "experiment_1_models"
@@ -82,8 +84,10 @@ def test_figures_dir_is_per_notebook() -> None:
 def test_phase_notebook_ids_keep_output_layout_and_cannot_escape():
     import pytest
 
-    assert paths.figures_dir("feature_creation/03_feature_creation") == paths.figures_dir("03_feature_creation")
-    assert paths.reports_dir("experiment_2/01_results").name == "01_results.txt"
+    assert paths.figures_dir("feature_creation/03_feature_creation") == paths.figures_dir(
+        "03_feature_creation"
+    )
+    assert paths.reports_dir("experiment_2/01_results").name == "_report.txt"
     assert paths.notebook_phase("experiment_2/01_results") == "experiment_2"
     for name in ("../escape", "exploration/../escape", "/escape", "C:/escape", "exploration\\bad"):
         with pytest.raises(ValueError):
@@ -149,7 +153,7 @@ def test_touch_tree_refreshes_access_times(tmp_path) -> None:
     assert Path(f).stat().st_atime > old
 
 
-def test_phases_separate_large_results_and_small_reports(isolated_output):
+def test_phases_separate_large_results_and_small_logs(isolated_output):
     assert paths.results_dir(phase="experiment_1").parts[-2:] == ("experiment_1", "results")
     assert "staging" in str(paths.results_dir(phase="experiment_1"))
     assert "vsc_data" in str(paths.logs_dir("experiment_0"))
@@ -160,8 +164,8 @@ def test_phases_separate_large_results_and_small_reports(isolated_output):
     )
     assert paths.reports_dir("01_data_exploration").parts[-3:] == (
         "exploration",
-        "reports",
-        "01_data_exploration.txt",
+        "01_data_exploration",
+        "_report.txt",
     )
 
 
@@ -172,3 +176,11 @@ def test_future_experiment_numbers_are_supported():
     assert paths.results_dir(phase="experiment_12").parts[-2:] == ("experiment_12", "results")
     with pytest.raises(ValueError):
         paths.results_dir(phase="../raw")
+
+
+def test_non_experiment_outputs_never_create_output_phase_folders(isolated_output):
+    assert paths.results_dir(phase="exploration").is_relative_to(paths.notebook_cache_dir())
+    assert paths.results_dir(phase="feature_creation").is_relative_to(paths.notebook_cache_dir())
+    assert paths.all_results_path("exploration") == paths.all_results_path()
+    assert paths.captions_path("feature_creation") == paths.captions_path()
+    assert paths.logs_dir("feature_creation") == paths.outputs_dir() / "feature_creation" / "logs"

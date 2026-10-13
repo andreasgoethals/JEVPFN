@@ -1,0 +1,50 @@
+extends: audit
+name: semantic_feature_creation
+phase: feature_creation
+allow_download: false
+feature_creation:
+  enabled: false
+  execution_site: local  # Owner decision: all Jev feature creation precedes VSC experiment 0.
+  scope: selected_18_datasets_all_text_columns
+  modes: [per_column, joint]
+  cache_namespace: verified_response
+  retain: [raw_response, complete_probability_vector, confidence_if_available]
+  main_numeric_features:
+    binary_classification: positive_class_probability
+    multiclass_classification: full_class_probability_vector
+    regression: expected_direction
+  feature_schema_version: 2
+  feature_directory: jev_cache  # One <dataset_id>.sqlite3 per dataset.
+  pilot_rows_per_dataset: 3  # Proposed pilot size, deterministic CSV positions, no calls yet.
+  full_build_requires_local_pilot_pass: true
+  context_overflow_policy: unresolved  # Fail before paid execution; never silently truncate.
+  missing_text_policy: skip_empty_store_nan
+dataset_selection:
+  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]
+  reason: zomato_extreme_text_burden_and_spotify_114_class_representation_size
+throughput_review:
+  proposed_requests_per_second: 20
+  proposed_input_tokens_per_second: 25000
+  account_limits_verified: false
+budget_review:
+  # Sensitivity assumptions, not provider tokenizer or retry guarantees.
+  characters_per_token_scenarios: [3, 4, 5]
+  extra_tokens_per_unique_request_scenarios: [0, 50, 100]
+  billed_retry_fraction_scenarios: [0.0, 0.05, 0.10]
+live_extraction:
+  enabled: false
+  pilot_authorized: false
+  pilot_accepted: false
+  account_limits_verified: false
+  billing_bound_verified: false
+  context_policy_reviewed: false
+  price_verified: false
+  dataset_budget_allocations_usd: {}  # Sum must remain below the approved campaign limit.
+  campaign_spending_limit_usd: null
+  max_billed_input_tokens_per_attempt: null  # Verified upper bound, never a char/4 estimate.
+  requests_per_second: null
+  input_tokens_per_second: null
+  workers: 1
+  reservation_ledger: each_dataset_sqlite_file
+  ambiguous_response_policy: stop_and_review_never_automatically_repay
+  dispatcher: src.jev.extraction

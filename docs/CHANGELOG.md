@@ -1,5 +1,52 @@
 # Changelog
 
+## 13-10-2026
+
+- Verified 222 offline tests, four executed notebooks/18 figures and the saved-question pilot preparation on 130 rows; six candidates remain disabled.
+
+- Added source-backed definitions for 18 tasks/80 text columns, a question-preparation notebook and per-dataset JSON exports; connected frozen Jev questions to feature builds and explicit provider/version/question feature selection.
+
+- Verified 214 tests, all three notebooks/17 active figures, all 18 full request galleries and local data/CV preflight; six candidates remain disabled and real VSC/provider acceptance pending.
+- Isolated synthetic tests from inherited Slurm/storage/phase variables; removed the obsolete global-cache filename from path diagnostics.
+
+- Added shared immutable question catalogs and all-18-dataset/six-provider exact request galleries; clarified that each request describes one dataset row.
+- Rechecked six provider contracts; corrected Perplexity's offline call and recorded Strands strict-window/serial-inference requirements.
+- Expanded offline local/VSC Experiment 0 preflights and explicit pending runtime acceptance; protected input paths and native PROJECT placement.
+- Fixed float32 probability rejection, evaluation identity collisions and overlapping fold model lifetimes; preserve feature provenance in evaluation inputs.
+
+- Verified 176 tests, all three saved notebooks/17 figures, the rendered multiclass plot, offline pilot preparation, lint and dependency consistency; no paid/model runs or Git publication.
+- Added all-dataset numeric feature counts, multiclass expansion figure, traced context exceptions and review-only shorter questions/documentary context; accepted templates unchanged.
+- Prepared and ran the offline six-provider pilot manifest on 130 real-data rows; full traces use PROJECT, compact summaries/logs DATA; no API calls, weights or Slurm jobs.
+- Verified Microsoft OpenRouter's 32,768-token listing and model-drift caveat; read the existing VSC snapshot for self-hosted extractor hardware/storage guidance.
+
+## 12-10-2026
+
+- Verified 163 tests, all three saved notebooks/16 figures, rendered removal labels, lint and dependency consistency; no paid/model runs or Git publication. Single-text combined arms reuse one numeric block.
+- Excluded Spotify alongside Zomato from all extraction/experiment configs, preserving 20 raw datasets and marking audit-only rows REMOVED; added six-provider context/cost screens.
+
+- Moved aggregate captions into figures; added text-statistics/control features, explicit numeric views, guarded extraction and fake-tested CV orchestration.
+- Verified Microsoft-Decision-1 and prepared six disabled extractor mappings; preserved prior-art and live-pilot limitations.
+- Reviewed direct Jev/tabular prior art and ten decision-model preprints; refreshed release, licence and context evidence.
+- Fixed acceptance of feature artifacts with missing or unexpected text-group traces; verified 144 tests and focused lint.
+- Verified 141 tests, all three executed notebooks/16 figures, lint and dependency consistency; no paid or model runs.
+- Prepared per-dataset SQLite feature stores, output feature-build logs, temporary audits and explicit Zomato exclusion.
+- Rebuilt request/build notebooks, simplified the overview and split long-text plots; refreshed decision-model literature.
+
+## 01-10-2026
+
+- Verified 138 tests, 20 offline datasets and persisted notebook outputs; visually checked the overview and long-text figures.
+
+- Executed notebooks through real local kernels, saved cell outputs in place and added live cell progress/heartbeats.
+- Flattened preparation configs; moved audit/budget caches out of output phase folders and kept notebook output local.
+- Added nonempty p99/max long-text tables, dataset/column boxplots and longest-cell examples; fixed the agreed main numeric views.
+
+- Verified 136 tests, all 20 datasets, four parallel notebooks/16 figures and Notebook 01 in the actual JEVPFN kernel; no paid or model runs.
+- Focused the disabled benchmark on within-model Jev improvements; removed TabM/TabFM, HPO and row caps, and recorded agreed outer/inner CV.
+- Routed predictions, full reports/captures and figures to PROJECT; added compact DATA indexes/logs and per-dataset permanent feature paths.
+- Implemented the accepted nine-level evidence rubric as directional-v2 and separated pre-reuse budgets from unique-request estimates.
+- Expanded/reordered the text-focused dataset overview and separated annotations from its notebook-rendered table.
+- Documented the paper's repeated holdouts and the printed-table versus pinned-code text-column discrepancy.
+
 ## 30-09-2026
 
 - Verified 136 tests, dependency consistency and all four notebooks through the no-argument parallel runner (16 figures, about 65 seconds).

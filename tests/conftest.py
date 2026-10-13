@@ -19,6 +19,31 @@ if str(REPO_ROOT) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_routing_environment(monkeypatch):
+    """Synthetic tests choose their own tiers; never inherit a real job's output roots.
+
+    The Exp0 parent verifies actual host paths before invoking pytest. Unit tests
+    must not mistake its experiment phase for exploration or write into real VSC
+    allocations. Cluster-path tests explicitly set their own temporary variables.
+    """
+    for variable in (
+        "JEVPFN_PHASE",
+        "JEVPFN_STAGING_ROOT",
+        "VSC_STAGING_ROOT",
+        "JEVPFN_LOCAL_STORAGE_ROOT",
+        "JEVPFN_NOTEBOOK_SCRATCH",
+        "VSC_DATA",
+        "VSC_SCRATCH",
+        "VSC_SCRATCH_NODE",
+        "VSC_PROJECT_LUSTRE1",
+        "VSC_PROJECT_GPFS1",
+        "SLURM_JOB_ID",
+        "SLURM_CLUSTER_NAME",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _headless_matplotlib() -> None:
     """Force the Agg backend. A compute node has no display, and the default backend either
     fails there or opens a window that blocks the run."""
@@ -28,7 +53,7 @@ def _headless_matplotlib() -> None:
 
 
 @pytest.fixture
-def isolated_output(tmp_path, monkeypatch):
+def isolated_output(tmp_path, monkeypatch, _isolate_routing_environment):
     """Point every resolved path at `tmp_path` for the duration of one test.
 
     Setting `VSC_DATA` and the staging override is how the cluster's own two-tier layout is
@@ -39,4 +64,5 @@ def isolated_output(tmp_path, monkeypatch):
 
     monkeypatch.setenv("VSC_DATA", str(tmp_path / "vsc_data"))
     monkeypatch.setenv(paths.STAGING_ENV_VARS[0], str(tmp_path / "staging"))
+    monkeypatch.setenv("JEVPFN_LOCAL_STORAGE_ROOT", str(tmp_path / "local"))
     return tmp_path

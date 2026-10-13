@@ -71,17 +71,17 @@ def task_outputs_figure():
     descriptions = [
         (
             "Binary · Noul",
-            "One probability\np(positive class), from 0 to 1\n\n1 compact feature per input",
+            "One probability\np(positive class), from 0 to 1\n\n1 main feature per input",
             style.MEDIAN_COLOR,
         ),
         (
             "Multiclass · Choice",
-            "One probability per class\np₁, p₂, …, pK\n\nK compact features per input",
+            "One probability per class\np₁, p₂, …, pK\n\nK main features per input",
             style.P95_COLOR,
         ),
         (
             "Regression · Score",
-            "Nine probabilities: p(−4), …, p(+4)\nExpected direction = Σ level × p(level)\n\n1 compact feature, or 9 probabilities",
+            "Nine probabilities: p(−4), …, p(+4)\nExpected direction = Σ level × p(level)\n\n1 main feature; all 9 probabilities retained",
             style.TOTAL_COLOR,
         ),
     ]
@@ -89,7 +89,7 @@ def task_outputs_figure():
         ax.set_axis_off()
         ax.set_title(title, color=color)
         ax.text(0.5, 0.6, text, ha="center", va="center", transform=ax.transAxes, linespacing=2)
-    fig.suptitle("Numeric output shapes · compact views are proposals; full responses are retained")
+    fig.suptitle("Agreed main numeric features · full responses are also retained")
     return (
         fig,
         "task_specific_feature_shapes",
@@ -133,7 +133,7 @@ def request_counts_figure(summary):
         fig,
         "requests_before_and_after_reuse",
         (
-            "Nonempty request slots and distinct complete inputs across the 20 core text datasets. "
+            f"Nonempty request slots and distinct complete inputs across the {len(summary)} inspected text datasets. "
             "Labels show avoided calls in absolute counts and percentages. Both modes use a shared "
             "cache, including single-available-field overlap; the three alternatives must not be added."
         ),
@@ -148,7 +148,7 @@ def feature_dimensions_figure(plan):
         ("joint", 0.17, style.P95_COLOR),
     ]:
         table = plan[plan["mode"] == mode].set_index("dataset").loc[datasets]
-        for ax, col in zip(axes, ["proposed_compact_numeric_columns", "retained_numeric_columns"]):
+        for ax, col in zip(axes, ["main_numeric_columns", "retained_numeric_columns"]):
             ax.barh(
                 np.arange(len(table)) + offset,
                 table[col],
@@ -158,7 +158,7 @@ def feature_dimensions_figure(plan):
             )
     axes[0].set_yticks(range(len(datasets)), datasets)
     axes[0].invert_yaxis()
-    axes[0].set_xlabel("Numeric columns in the proposed compact view")
+    axes[0].set_xlabel("Numeric columns in the agreed main view")
     axes[1].set_xlabel("Numeric columns retained in the cached table")
     axes[0].legend(loc="lower right")
     return (

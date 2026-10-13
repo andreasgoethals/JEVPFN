@@ -9,8 +9,10 @@ import pytest
 
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
+from src.evaluation.features import assemble_feature_set
 from src.jev.cache import ResponseCache
 from src.jev.features import (
+    _validate_block,
     assemble_features,
     block_identity,
     load_block,
@@ -19,7 +21,13 @@ from src.jev.features import (
 )
 from src.jev.provider import api_preview, response_features
 from src.jev.requests import build_requests
+from src.utils import paths
 from src.utils.config import load_config
+
+
+@pytest.fixture(autouse=True)
+def _isolate_feature_outputs(isolated_output):
+    """Exercise DATA/PROJECT routing without leaving synthetic artifacts in the project."""
 
 
 @pytest.fixture
@@ -36,7 +44,7 @@ def dataset():
 
 @pytest.fixture
 def cfg():
-    result = load_config("feature_creation/default")
+    result = load_config("feature_creation")
     result["jev"]["representation"] = "per_column"
     return result
 
@@ -65,6 +73,22 @@ def test_binary_mapping_is_label_free(dataset, cfg):
     assert body["state"]["text"] == {"text": "alpha"}
     assert set(body["state"]) == {"task", "text"}
     assert response_features(request, response(request)) == {"p_positive": 0.25}
+
+
+def test_combined_single_text_reuses_one_feature_block(dataset, cfg, tmp_path):
+    cache = ResponseCache(tmp_path / "fixture.sqlite3", "fixture")
+    populate(dataset, cfg, cache)
+    per_column = materialize_cached_block(dataset, cfg, cache)
+    joint_cfg = copy.deepcopy(cfg)
+    joint_cfg["jev"]["representation"] = "joint"
+    joint = materialize_cached_block(dataset, joint_cfg, cache)
+    combined = assemble_feature_set(dataset, [per_column, joint], "non_text_plus_both")
+    separate = assemble_feature_set(dataset, [per_column], "non_text_plus_per_column")
+    pd.testing.assert_frame_equal(combined, separate)
+    assert len([c for c in combined if c.startswith("jev__")]) == 1
+    joint.values.loc[0, joint.manifest["feature_columns"][0]] = 0.9
+    with pytest.raises(ValueError, match="inconsistent"):
+        assemble_feature_set(dataset, [per_column, joint], "non_text_plus_both")
 
 
 @pytest.mark.parametrize("bad", [True, None, -0.01, 1.01, float("nan"), float("inf"), "0.5"])
@@ -119,7 +143,10 @@ def test_regression_preserves_nine_probabilities_and_maps_index(dataset, cfg):
     request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
     criteria = api_preview(request)["questions"]["semantic"]["criteria"]
     assert len(criteria) == 9
-    assert "no meaningful" in criteria[4]
+    assert "No directional evidence" in criteria[4]
+    assert "indirect hint" in criteria[3] and "qualifications" in criteria[2]
+    assert "concrete" in criteria[1] and "explicit" in criteria[0]
+    assert "target units" in api_preview(request)["questions"]["semantic"]["instructions"]
     probabilities = {str(i): 0.0 for i in range(9)}
     probabilities.update({"2": 0.25, "6": 0.75})
     answer = {
@@ -157,19 +184,42 @@ def test_features_require_verified_complete_cache(dataset, cfg, tmp_path):
     assert block.values.row_id.tolist() == ["csv:0", "csv:1", "csv:2"]
 
 
-def test_parquet_roundtrip_idempotence_and_corruption(dataset, cfg, tmp_path):
+def test_dataset_sqlite_roundtrip_idempotence_and_corruption(dataset, cfg, tmp_path):
     cache = ResponseCache(tmp_path / "responses.sqlite3")
     populate(dataset, cfg, cache)
     block = materialize_cached_block(dataset, cfg, cache)
-    folder = save_block(block, tmp_path / "feature-block")
+    folder = save_block(block)
+    assert folder == paths.dataset_cache_path("fixture")
+    assert folder.is_relative_to(tmp_path / "staging")
+    index = (
+        paths.manifests_dir("feature_creation")
+        / "features"
+        / f"{block.manifest['artifact_id']}.json"
+    )
+    assert json.loads(index.read_text())["artifact_path"] == str(folder)
+    events = (
+        paths.logs_dir("feature_creation") / "builds" / f"{block.manifest['artifact_id']}.jsonl"
+    )
+    assert {json.loads(line)["event"] for line in events.read_text().splitlines()} >= {
+        "materialization_started",
+        "materialization_complete",
+        "artifact_saved",
+    }
+    assert not list((tmp_path / "vsc_data").rglob("*.parquet"))
+    with pytest.raises(ValueError, match="project storage"):
+        save_block(block, paths.outputs_dir() / "wrong_tier")
     pd.testing.assert_frame_equal(load_block(folder).values, block.values)
     assert save_block(block, folder) == folder
     changed = copy.deepcopy(block)
     changed.values.iloc[0, 1] = 0.99
     with pytest.raises(ValueError, match="overwrite"):
         save_block(changed, folder)
-    with (folder / "features.parquet").open("ab") as handle:
-        handle.write(b"corrupt")
+    import sqlite3
+
+    with sqlite3.connect(folder) as db:
+        assert db.execute("SELECT COUNT(*) FROM responses").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM origins").fetchone()[0] >= 3
+        db.execute("UPDATE feature_artifacts SET features_parquet=?", (b"corrupt",))
     with pytest.raises(ValueError, match="checksum"):
         load_block(folder)
 
@@ -193,6 +243,30 @@ def test_join_uses_row_ids_and_rejects_wrong_artifacts(dataset, cfg, tmp_path):
         assemble_features(dataset, [block])
 
 
+@pytest.mark.parametrize("damage", ["missing_group", "unexpected_group", "no_features"])
+def test_complete_artifact_requires_every_expected_text_group(dataset, cfg, tmp_path, damage):
+    dataset.frame["text2"] = ["gamma", "delta", "gamma"]
+    dataset.metadata = replace(dataset.metadata, text_columns=("text", "text2"))
+    cache = ResponseCache(tmp_path / "responses.sqlite3")
+    for i in range(len(dataset.frame)):
+        for request in build_requests(
+            dataset.features, dataset.metadata, i, cfg, source=dataset.source
+        ):
+            cache.put(request, response(request), kind="verified_response")
+    block = materialize_cached_block(dataset, cfg, cache)
+    _validate_block(block.values, block.requests, block.manifest)
+    if damage == "missing_group":
+        block.requests = block.requests.loc[block.requests.group.eq("text_000")].copy()
+    elif damage == "unexpected_group":
+        block.requests.loc[block.requests.group.eq("text_001"), "group"] = "unexpected"
+    else:
+        columns = [c for c in block.values.columns if "__text_001__" in c]
+        block.values = block.values.drop(columns=columns)
+        block.manifest["feature_columns"] = list(block.values.columns.drop("row_id"))
+    with pytest.raises(ValueError, match="[Tt]ext-group"):
+        _validate_block(block.values, block.requests, block.manifest)
+
+
 def test_feature_identity_excludes_experiments_and_pricing(dataset, cfg):
     before = block_identity(dataset.metadata, "fixture", cfg)
     cfg["experiment"] = 3
@@ -213,5 +287,30 @@ def test_missing_text_features_are_nan_and_traceable(dataset, cfg, tmp_path):
     assert block.values.iloc[1, 1] == 0.25
     assert block.requests.status.tolist() == ["missing_text", "verified_response", "missing_text"]
     assert block.requests.loc[[0, 2], "request_key"].isna().all()
-    restored = load_block(save_block(block, tmp_path / "features"))
+    restored = load_block(save_block(block))
     assert assemble_features(dataset, [restored]).iloc[[0, 2], -1].isna().all()
+
+
+def test_dataset_cache_binding_and_multiple_artifacts(dataset, cfg, tmp_path):
+    from dataclasses import replace
+
+    cache = ResponseCache.for_dataset("fixture")
+    populate(dataset, cfg, cache)
+    per = materialize_cached_block(dataset, cfg, cache)
+    path = save_block(per)
+    joint_cfg = copy.deepcopy(cfg)
+    joint_cfg["jev"]["representation"] = "joint"
+    joint = materialize_cached_block(dataset, joint_cfg, cache)
+    assert save_block(joint) == path
+    with pytest.raises(ValueError, match="explicit artifact_id"):
+        load_block(path)
+    pd.testing.assert_frame_equal(load_block(path, per.manifest["artifact_id"]).values, per.values)
+    pd.testing.assert_frame_equal(
+        load_block(path, joint.manifest["artifact_id"]).values, joint.values
+    )
+    with pytest.raises(ValueError, match="different dataset"):
+        ResponseCache(path, dataset_id="another")
+    other = replace(dataset.metadata, dataset_id="another")
+    request = build_requests(dataset.features, other, 0, cfg)[0]
+    with pytest.raises(ValueError, match="different dataset"):
+        cache.put(request, response(request), kind="verified_response")

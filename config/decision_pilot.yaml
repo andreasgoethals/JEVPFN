@@ -1,0 +1,23 @@
+# Offline preparation. This file grants no network, checkpoint or Slurm execution.
+enabled: false
+providers: [jev, liquid, perplexity, cloudflare, strands, microsoft]
+extractor_catalog: extractors
+feature_config: feature_creation
+question_design: question_design
+manifest_stage: feature_creation
+question_variants: [documented]
+question_variant_note: current_source_backed_review_candidate_no_inference_authorized
+sample_positions: first_middle_last_and_longest_per_column
+hosted_execution_site: local
+self_hosted_execution_site: vsc_proposed_requires_separate_allocation_and_environment
+spending_limit_usd: null
+context_policy: reject_and_report_no_silent_truncation
+live_contract_checks:
+  - all_three_question_types
+  - complete_probability_vectors_and_stable_option_order
+  - model_identity_token_usage_and_latency
+  - missing_text_skips_without_calls
+  - exact_cache_reuse_row_alignment_and_resume
+  - timeouts_rate_limits_and_spending_stops
+  - long_input_behavior_refusals_and_embedded_instructions
+  - label_blind_paraphrase_and_option_order_sensitivity

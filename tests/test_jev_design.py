@@ -93,9 +93,7 @@ def test_regression_scale_and_neutral_label(cfg):
     dataset = example("reg")
     question = make_question(dataset.metadata)
     assert [a["score"] for a in question["allowed_answers"]] == list(range(-4, 5))
-    assert (
-        question["allowed_answers"][4]["meaning"] == "provides no meaningful directional evidence"
-    )
+    assert question["allowed_answers"][4]["meaning"].startswith("No directional evidence:")
     assert "relatively lower or higher" in question["text"]
     with pytest.raises(ValueError):
         make_question(dataset.metadata, scores=[-1, 0, 1])

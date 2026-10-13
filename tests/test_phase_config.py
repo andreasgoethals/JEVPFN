@@ -7,7 +7,7 @@ from src.utils.config import load_config, load_yaml, validate_config
 
 
 def test_phase_inheritance_preserves_defaults():
-    cfg = load_config("feature_creation/default")
+    cfg = load_config("feature_creation")
     assert cfg["phase"] == "feature_creation"
     assert cfg["allow_download"] is False
     assert cfg["jev"]["model"] == "jev-1.13.0"
@@ -38,7 +38,7 @@ def test_inheritance_cycle_and_escape_fail(tmp_path, monkeypatch):
 
 
 def test_cannot_enable_live_features():
-    cfg = load_config("feature_creation/default")
+    cfg = load_config("feature_creation")
     cfg["feature_creation"]["enabled"] = True
     with pytest.raises(ValueError, match="disabled"):
         validate_config(cfg)
@@ -53,7 +53,47 @@ def test_shared_experiment_proposals_preserve_validation_boundary_and_catalog():
         evaluation = cfg["evaluation"]
         assert evaluation["outer_folds"] == 5
         assert evaluation["inner_validation"]["source"] == "outer_training_only"
+        assert evaluation["inner_validation"]["strategy"] == "stratified_out_of_fold"
+        assert evaluation["inner_validation"]["folds"] == 3
+        assert evaluation["binary"]["refit_after_threshold_selection"] is True
+        assert evaluation["classification_split"] == "stratified_kfold"
+        assert evaluation["regression_split"] == "kfold" and evaluation["shuffle"] is True
+        assert evaluation["group_or_time_policy"] == "not_used_in_this_benchmark"
+        assert evaluation["training_row_cap"] is None
+        assert evaluation["model_tuning_budget"] == 0
         assert evaluation["binary"]["test_threshold_tuning"] == "forbidden"
         assert evaluation["binary"]["threshold_objective"] == "f1"
         assert evaluation["regression"]["classification_threshold"] == "not_applicable"
         assert evaluation["preprocessing_fit_scope"] == "training_partition_only"
+    assert set(load_yaml("experiment_1/main")["candidate_models"]) == {
+        "tabpfn_3",
+        "tabpfn_3_5",
+        "catboost",
+        "linear",
+    }
+    assert "tabm" not in models and "tabfm" not in models
+
+
+def test_experiment_selection_excludes_zomato_but_audit_keeps_it():
+    from src.data.loaders import load_catalog
+    from src.data.selection import selected_entries
+
+    catalog = load_catalog()
+    assert len(catalog["datasets"]) == 20
+    for name in (
+        "feature_creation",
+        "experiment_0/debug",
+        "experiment_1/main",
+        "experiment_2/native_text",
+        "experiment_3/output_ablation",
+        "experiment_4/decision_models",
+    ):
+        entries = selected_entries(catalog, load_yaml(name))
+        assert len(entries) == 18
+        assert not {"REG_TEXT_ZOMATO_RESTAURANTS", "MUL_TEXT_SPOTIFY_GENRES"} & {
+            entry["id"] for entry in entries
+        }
+    cfg = load_config("feature_creation")
+    cfg["dataset_selection"]["exclude"] = ["unknown"]
+    with pytest.raises(ValueError, match="Unknown excluded"):
+        selected_entries(catalog, cfg)

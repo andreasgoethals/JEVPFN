@@ -42,7 +42,7 @@ class LoadedDataset:
         return self.frame.drop(columns=[self.metadata.target])
 
 
-def load_catalog(name: str = "exploration/datasets") -> dict:
+def load_catalog(name: str = "datasets") -> dict:
     with paths.config_path(name).open(encoding="utf-8") as handle:
         catalog = yaml.safe_load(handle)
     if len(catalog["datasets"]) != 20 or any("_TEXT_" not in d["id"] for d in catalog["datasets"]):

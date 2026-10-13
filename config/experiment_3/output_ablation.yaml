@@ -2,6 +2,14 @@ extends: experiment_1/protocol
 phase: experiment_3
 name: proposed_output_ablation
 enabled: false
+negative_control:
+  enabled: false
+  proposed: true
+  name: shuffled_jev_features
+  implementation: src.evaluation.features.shuffle_feature_block
+  shuffle_scope: independent_training_and_test_partitions_whole_feature_vectors
+  non_text_features: unchanged
+  purpose: test_whether_gains_require_text_to_row_correspondence
 proposal: true
 feature_artifacts: []
 candidate_views: [probability_vectors, scalar_summary, probability_vectors_plus_uncertainty]
@@ -14,3 +22,6 @@ candidate_models: [tabpfn_3_5, catboost]
 fixed_feature_mode_proposal: per_column_and_joint
 new_jev_calls_required: false
 notes: Freeze this experiment before viewing test results; reuse identical experiment-1 fits.
+
+dataset_selection:
+  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]

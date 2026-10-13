@@ -44,7 +44,7 @@ def test_budget_matches_real_wire_and_cache_identity(texts, task, labels):
         frame, official, dataset_id="fixture", dataset_name="Fixture", text_columns=text_columns
     )
     dataset = LoadedDataset(frame, metadata, official, {}, [])
-    cfg = load_config("feature_creation/default")
+    cfg = load_config("feature_creation")
     records, _ = review_dataset(dataset, cfg)
     all_requests = []
     for context in (False,):

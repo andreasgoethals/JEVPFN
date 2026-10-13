@@ -15,7 +15,28 @@ This project is initialised; the owner requested removal of the inherited `_temp
 Current phase layout and setup instructions live in `README.md`, not in that directory.
 The owner selected text-only per-column and joint Jev inputs, skipping empty inputs and storing
 missing features. All Jev feature creation is local before VSC experiment 0. Generated full
-reports contain raw examples and are gitignored under `output_JEVPFN/<phase>/`.
+reports contain raw examples and are gitignored under `output_JEVPFN/`. All notebooks run
+locally and save executed outputs into their .ipynb files. Figure/report/config/run artifacts
+are under local figures/<phase>/<notebook>, with global output_JEVPFN/All Results.md
+and output_JEVPFN/figures/Captions.md.
+Non-experiment config YAMLs live directly in config/. Exploration has no top-level phase output
+folder. Audit/budget intermediates use run-scoped temporary storage; notebook reports and figures
+are retained. Feature-build logs/manifests use output_JEVPFN/feature_creation/. Permanent raw
+responses and embedded feature tables use one data/jev_cache/<dataset_id>.sqlite3 per dataset.
+Shared questions are immutable data/decision_inputs/questions/<bank_id>/<dataset_id>.json inputs,
+with a complete bank JSON beside the directory. Question preparation has its own notebook and
+per-dataset output review copies; dataset_semantics.yaml stores source-backed meanings and
+explicit unknowns. accepted/proposed_direct/documented variants remain distinct. Jev
+materialization accepts frozen banks; provider/version/question feature selection is explicit.
+Alternate-provider response adapters and provider/campaign spending accounting remain pending.
+Explore all 20 datasets; exclude Zomato and Spotify from feature creation and predictive experiments based
+on text burden and 114-class representation size, not predictive results. Preserve both raw datasets
+and mark them REMOVED on selected exploration overviews; do not keep a Spotify stress-test arm. VSC experiment predictions and
+large outputs use PROJECT; compact manifests and operational logs use DATA. The comparison is
+Jev feature benefit within each fixed predictor, not a model leaderboard: no HPO, arbitrary
+training-row cap, optional fine-tuning, time/group splitting or expanded model campaign.
+Five shuffled stratified folds for classification, shuffled KFold for regression; binary
+thresholds use three inner OOF folds, then refit on the full outer training fold.
 Do not stage, commit, or push changes. The owner handles Git publication; this supersedes earlier
 publication authorization. Read-only Git inspection is allowed.
 Give proposed plans and answers in chat, not in temporary documents. Keep `docs/` limited to
@@ -56,6 +77,8 @@ Distinguish what a paper *evaluated* from what its code merely *supports*; what 
 represent from how *often* it occurs; a library annotation from the primary source it summarises.
 
 ## 4. Honor the authorized stage
+
+Main Jev features are settled: binary probability, full multiclass probability vector, expected regression direction. Jev version is pinned to jev-1.13.0. Headline metric selection does not block recording all metrics.
 
 No paid extraction, model runs or VSC allocations are authorized in exploration. Do not enable
 them as part of a refactor. Honor existing owner authorization for environment setup;

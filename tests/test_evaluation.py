@@ -40,6 +40,29 @@ def test_multiclass_metrics_keep_declared_vocabulary_and_brier_scale():
     assert "top_3_accuracy" in result["undefined"]
 
 
+@pytest.mark.parametrize("as_float64", [False, True])
+def test_float32_probability_roundoff_is_accepted_without_changing_values(as_float64):
+    # Conversion by the CV adapter preserves float32 rounding, not exact row sums.
+    p = np.tile(np.array([0.1, 0.3, 0.6], dtype=np.float32), (3, 1))
+    if as_float64:
+        p = p.astype(np.float64)
+    original = p.copy()
+    result = classification_metrics([0, 1, 2], p, classes=[0, 1, 2])
+    expected = p.astype(float)
+    assert result["metrics"]["log_loss"] == pytest.approx(-np.log(expected.diagonal()).mean())
+    assert result["metrics"]["brier_multiclass_sum"] == pytest.approx(
+        np.square(expected - np.eye(3)).sum(axis=1).mean()
+    )
+    assert result["probability_validation"]["maximum_sum_error"] > 1e-8
+    assert result["probability_validation"]["renormalized"] is False
+    np.testing.assert_array_equal(p, original)
+
+
+def test_probability_sum_error_above_roundoff_tolerance_is_rejected():
+    with pytest.raises(ValueError, match="sum to one"):
+        classification_metrics([0, 1, 2], [[0.1, 0.3, 0.6001]] * 3, classes=[0, 1, 2])
+
+
 def test_absent_classes_and_constant_targets_are_explicitly_undefined():
     r = classification_metrics(["a", "a"], [[0.7, 0.2, 0.1]] * 2, classes=["a", "b", "c"])
     assert r["metrics"]["roc_auc_ovr_macro"] is None
@@ -111,7 +134,9 @@ def test_timing_synchronizes_cuda_and_records_failed_attempts(monkeypatch):
         PhaseTimer(device="cuda")
 
 
-def test_result_record_preserves_predictions_timings_and_undefined_values(tmp_path):
+def test_result_record_preserves_predictions_timings_and_undefined_values(isolated_output):
+    from src.utils import paths
+
     predictions = pd.DataFrame(
         {"row_id": ["csv:0", "csv:1"], "y_true": [1.0, 1.0], "prediction": [1.0, 2.0]}
     )
@@ -121,6 +146,7 @@ def test_result_record_preserves_predictions_timings_and_undefined_values(tmp_pa
         pass
     metadata = dict(
         dataset_id="test",
+        data_identity="sha256:fixture",
         model_id="no_model_fixture",
         feature_set="non_text",
         outer_fold=0,
@@ -131,14 +157,37 @@ def test_result_record_preserves_predictions_timings_and_undefined_values(tmp_pa
         target_scale="original",
     )
     path = save_evaluation(
-        tmp_path, scores=scores, predictions=predictions, timer=timer, metadata=metadata
+        run_id="fixture-fold-0",
+        scores=scores,
+        predictions=predictions,
+        timer=timer,
+        metadata=metadata,
     )
     data = json.loads(path.read_text())
     assert data["scores"]["metrics"]["r2"] is None
     assert "fit" not in data["timing"]["stages"]  # No fabricated zero fit time.
     assert data["resources"]["peak_rss_bytes"] is None
-    pd.testing.assert_frame_equal(pd.read_parquet(tmp_path / "predictions.parquet"), predictions)
+    assert path.is_relative_to(isolated_output / "staging")
+    pd.testing.assert_frame_equal(pd.read_parquet(path.parent / "predictions.parquet"), predictions)
+    manifest = paths.manifests_dir("experiment_1") / "evaluations" / "fixture-fold-0.json"
+    compact = json.loads(manifest.read_text())
+    assert compact["predictions_path"] == str(path.parent / "predictions.parquet")
+    assert compact["scores"]["metrics"] == scores["metrics"]
+    assert paths.logs_dir("experiment_1").joinpath("evaluations.jsonl").is_file()
+    assert not list((isolated_output / "vsc_data").rglob("*.parquet"))
+    with pytest.raises(ValueError, match="project storage"):
+        save_evaluation(
+            paths.outputs_dir() / "wrong-tier",
+            scores=scores,
+            predictions=predictions,
+            timer=timer,
+            metadata=metadata,
+        )
     with pytest.raises(FileExistsError):
         save_evaluation(
-            tmp_path, scores=scores, predictions=predictions, timer=timer, metadata=metadata
+            run_id="fixture-fold-0",
+            scores=scores,
+            predictions=predictions,
+            timer=timer,
+            metadata=metadata,
         )

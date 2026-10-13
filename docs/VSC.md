@@ -4,6 +4,31 @@ Current status: no JEVPFN allocation or model run has been submitted. Local Jev 
 creation precedes experiment 0. VSC prediction consumes completed feature tables offline;
 Jev API access from compute nodes is unnecessary for this workflow and remains unverified.
 
+## Self-hosted decision extractors
+
+Self-hosting Liquid d1-3B, Strands Decider 2B or Perplexity Decider 27B removes the vendor
+API token fee; it does not remove weight licence conditions, Slurm credit charges, setup,
+storage or inference time. The six-provider comparison remains disabled. Hosted extraction
+can run locally; a separate VSC extraction job for an open checkpoint is a proposed exception
+to the local-only workflow, not an allocation that has been launched.
+
+The read-only snapshot `VSC Documentation.txt` was checked 13 October at the existing library
+pin `de324efcca55be392feb0c01830b3b6ce364587f`: `wice_hardware.rst` lists 80 GiB A100/H100
+GPUs and `mindwell_hardware.rst` lists 192 GiB B200 GPUs. One wICE A100 is the first resource
+to profile for the 27B extractor's approximately 49 GiB BF16 weights; full request memory,
+attention kernels and throughput are unmeasured. Start at batch size one, measure peak GPU/RAM,
+then increase batches from measurements. Use H100 for demonstrated throughput benefit or
+Mindwell B200 if 80 GiB proves insufficient; do not require B200 solely because it is newer.
+Liquid/Strands can also be profiled on one A100. Keep each incompatible/custom-code model
+in its own frozen Python environment and audit the pinned inference code before loading it.
+
+Approved checkpoints, raw inputs and permanent dataset feature files belong on PROJECT;
+compact extraction logs/manifests belong on DATA. Use Lustre on wICE and native GPFS on
+Mindwell, with the existing project-root override. Node scratch is disposable. These are
+batch extraction jobs, not notebooks or public inference servers. Prepare checkpoints on a
+connected setup host and run offline inside Slurm, so self-hosted inference needs no external
+API connectivity. Actual account access, quota, backup and CUDA compatibility remain untested.
+
 ## Environment
 
 Use the CreditPFN Conda bootstrap with a separate Python 3.12 environment named **JEVPFN**.
@@ -29,14 +54,15 @@ Neither has been validated for JEVPFN on the cluster. Check `nvidia-smi` in an a
 ```bash
 # Later, after driver compatibility is confirmed; not needed for exploration:
 python -m pip install 'torch==2.12.1' --index-url https://download.pytorch.org/whl/cu126
-python -m pip install -e '.[dev,notebooks,models,baselines,tabicl]'
+python -m pip install -e '.[dev,notebooks,models,baselines]'
 python -m pip check
 mkdir -p output_JEVPFN/experiment_0/manifests
 python -m pip freeze > output_JEVPFN/experiment_0/manifests/environment.txt
 ```
 
-`models` supplies TabPFN-3/3.5, `baselines` supplies CatBoost/scikit-learn, and `tabicl` supplies
-TabICL v2. Optional `tabdpt` and `tabstar` extras are declared separately. Package
+`models` supplies TabPFN-3/3.5 and `baselines` supplies CatBoost/scikit-learn for the focused
+Jev comparison. The `tabicl`, `tabdpt` and `tabstar` extras are deferred interface options;
+do not install them for the current main comparison. Package
 metadata was checked on 30-09-2026; this is not a tested joint environment. Validate imports
 and tiny task examples on VSC before selecting the final roster. TabDPT also needs compatible
 FAISS wheels. Prefer a separate Python environment for heavier/conflicting integrations,
@@ -45,12 +71,12 @@ with its own frozen manifest, rather than changing a working notebook environmen
 AutoGluon is excluded by the owner. No environment using its MITRA runtime is prepared;
 Mitra-v2 remains deferred until an independent supported integration is verified. Its `autogluon/` checkpoint
 namespace is a publisher name; the actual runtime dependency was verified in the official
-`mitra_finetune.api.MitraFinetune` and runner code. TabFM still needs a source pin/backend.
+`mitra_finetune.api.MitraFinetune` and runner code. TabM and Google TabFM are excluded.
 Installing packages must not trigger model
 weights during notebook execution. Prepare approved weights on a connected host before
 using offline compute; use explicit checkpoint paths and record their hashes.
 
-New catalog entries need separate environment acceptance, not a single installation of every extra:
+Deferred catalog entries would need separate environment acceptance if later restored to scope:
 
 | Model | Documented environment/interface difference |
 |---|---|
@@ -63,8 +89,8 @@ Primary references and model capabilities are in [Literature Review](LITERATURE_
 The notebook environment stays Python 3.12 with no model imports. Prepare one frozen environment
 per compatible model group, record its interpreter and full dependency manifest, and select that
 environment explicitly in each future Slurm job. No new model environment has been installed here.
-The notebook runner selects parallelism automatically, respecting CPU affinity and
-`SLURM_CPUS_PER_TASK`. No worker argument is needed. Metric utilities use the lightweight
+Notebooks run only locally; their runner automatically chooses parallelism and saves actual
+Jupyter outputs into the source files. No worker argument is needed. Metric utilities use the lightweight
 `evaluation` extra; fit/prediction timing must include explicit CUDA synchronization.
 
 ## Two storage tiers, both under JEVPFN
@@ -72,10 +98,12 @@ The notebook runner selects parallelism automatically, respecting CPU affinity a
 | Location | Contents |
 |---|---|
 | `$VSC_DATA/JEVPFN/` | Git checkout and Python environment metadata. |
-| `$VSC_DATA/JEVPFN/output_JEVPFN/` | `All Results.md`, `Captions.md`, shared `figures/<phase>/<notebook>/`, phase logs/reports/manifests. |
+| `$VSC_DATA/JEVPFN/output_JEVPFN/` | Compact experiment logs/manifests, scalar metric summaries and pointers to large outputs. |
 | `$JEVPFN_STAGING_ROOT/JEVPFN/data/` | Raw data, durable paid responses and feature tables. |
 | `$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/` | Large model weights. |
-| `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/` | Large audit tables, predictions and experiment results. |
+| `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/` | Large prediction/metric tables, feature matrices and experiment results. |
+| `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/predictions/<run_id>/` | Every individual outer-test or inner-OOF prediction in `predictions.parquet`, plus the full immutable evaluation record. |
+| Local `output_JEVPFN/` | Notebook figures/reports, root `All Results.md` and `figures/Captions.md`; notebooks never run on VSC. |
 
 `JEVPFN_STAGING_ROOT` is the **allocation parent**, not its JEVPFN child. The path resolver
 inserts the project name exactly once. The current wICE default is inherited from CreditPFN;
@@ -90,12 +118,47 @@ python -c 'from src.utils.paths import describe; print(describe())'
 Large-file writes never fall back to limited personal DATA. Slurm activation directs
 TabPFN, Hugging Face and Torch weight caches to project storage. Other future adapters must
 use explicit paths from `checkpoints_dir`, not package defaults under HOME. Node scratch is disposable; never keep the only paid cache there.
+Compiler/runtime caches use scratch with a PROJECT fallback, never personal DATA.
 Confirm allocation backup policy and test an independent backup of paid responses.
-Transfer a closed/consistent SQLite database and complete immutable feature folders. Verify
+Transfer closed/consistent per-dataset SQLite files, including their embedded feature tables. Verify
 `python -m src.data.prepare --offline` after copying the numbered raw folders; do not recreate
 `v1` wrappers. GitHub synchronizes code, not datasets or generated features.
 
+Local feature artifacts are permanent in `data/jev_cache/<dataset_id>.sqlite3`: raw responses,
+all source origins, compressed numeric/row-request tables and embedded immutable manifests.
+Copy each closed file to PROJECT's equivalent `JEVPFN/data/jev_cache/` location and verify its
+feature checksums after transfer. Source CSV fingerprints and original `csv:N` row IDs must
+match before a join. Select each block explicitly by artifact ID; experiment-0 `feature_artifacts`
+accepts `dataset_id`/`artifact_id` mappings. DATA holds compact discovery indexes and logs under
+`output_JEVPFN/feature_creation/`. Ordinary output cleanup never touches paid dataset files.
+
+The prediction writer rejects explicit DATA destinations on VSC. Notebook stdout/stderr and
+rich outputs stay local; Slurm experiment logs use DATA. No per-row
+probabilities or raw Jev text belong in operational logs. This routing has local simulated-tier
+tests; actual allocation access/quota and interrupted transfer checks belong to experiment 0.
+
 ## Experiment 0
+
+Before any allocation, run the local offline preparation in the project environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.cluster.preflight --local --verify-data --tests
+```
+
+This verifies all 18 selected datasets, shared five-fold feasibility and synthetic contracts.
+It saves a unique `preflight_<id>.json` and test log under `experiment_0/manifests` and `logs`.
+It does not probe-write raw inputs or paid caches. Corrupt feature references are recorded as
+failures without losing the rest of the report. Explicit pending acceptance checks in
+`config/experiment_0/debug.yaml` cover real provider contracts, context/robustness, budgets and
+recovery, complete artifacts, transfer/backup, allocation/storage, checkpoint/runtime identity,
+real predictor tasks, CV boundaries, full-fold resources and interrupted output recovery.
+These checks require real evidence; a preflight never sets full Experiment 0 acceptance true.
+
+Shared questions are permanent inputs at `data/decision_inputs/questions/<bank_id>/<dataset_id>.json`,
+with the complete `<bank_id>.json` beside that directory, on
+PROJECT when running on VSC. Transfer the chosen immutable bank alongside closed dataset
+feature stores. Raw responses from different providers remain distinct, and every future
+provider-specific feature artifact must identify the question and checkpoint used.
 
 Use the existing CreditPFN login/account convention and verify the current Slurm association.
 The prepared account/partitions are in `config/experiment_0/debug.yaml` and the Slurm scripts.

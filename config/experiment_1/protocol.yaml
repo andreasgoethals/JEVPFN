@@ -1,4 +1,4 @@
-# Design contract only: no estimator or benchmark runner is implemented.
+# Injectable evaluation runner exists; model/checkpoint selection and execution remain disabled.
 enabled: false
 proposal: true
 random_seed: 20260929
@@ -6,21 +6,29 @@ evaluation:
   outer_folds: 5  # Owner requested five-fold CV; repeated CV was not requested.
   repeats: 1
   identical_splits_across_models_and_features: true
-  split_manifest: null  # Freeze after dataset group/time/duplicate review.
-  classification_split_proposal: stratified
-  regression_split_proposal: shuffled_kfold
-  group_or_time_policy: unresolved
+  split_manifest: null  # Generate once from row IDs and the pinned dataset version.
+  classification_split: stratified_kfold  # Binary AND multiclass.
+  regression_split: kfold
+  shuffle: true
+  group_or_time_policy: not_used_in_this_benchmark  # Owner decision, not a deployment claim.
+  training_rows: all_outer_training_rows
+  training_row_cap: null
+  silent_subsampling: forbidden
+  unsupported_full_training_set: record_resource_limit_and_review_never_silently_cap
   inner_validation:
     source: outer_training_only
-    strategy: unresolved  # Held-out fraction versus inner out-of-fold predictions.
-    fraction: null
+    strategy: stratified_out_of_fold
+    folds: 3
+    shuffle: true
+    applies_to: binary_threshold_selection_only
+    preprocessing_fit_scope: each_inner_training_partition
   binary:
     threshold_objective: f1
     threshold_source: inner_validation_predictions_only
     test_threshold_tuning: forbidden
-    positive_class: unresolved  # Agree semantics; never choose from test performance.
-    tie_break: unresolved
-    refit_after_threshold_selection: unresolved
+    positive_class: canonical_last  # Same fixed class orientation as Jev templates.
+    tie_break_proposal: closest_to_0_5_then_larger_threshold
+    refit_after_threshold_selection: true  # Refit on the full outer training fold; freeze threshold.
     record_probability_metrics: [roc_auc, average_precision, pr_auc_trapezoidal, log_loss, brier, ece, maximum_calibration_error]
     record_decision_metrics: [f1, precision, recall, specificity, negative_predictive_value, accuracy, balanced_accuracy, f1_macro, f1_micro, f1_weighted, precision_macro, precision_micro, precision_weighted, recall_macro, recall_micro, recall_weighted, mcc, cohen_kappa]
     record_thresholds: [default_0_5, validation_selected]
@@ -50,7 +58,8 @@ evaluation:
   metric_conventions:
     implementation: src.evaluation.metrics
     version: prediction-metrics-v1
-    primary_metrics_still_require_agreement: [multiclass, regression]
+    headline_metric_selection: deferred_until_before_reviewing_feature_comparison_results
+    headline_metric_does_not_block_metric_recording: true
     record_all_configured_metrics: true
     never_select_primary_metric_after_results: true
     undefined_metric: null_with_reason
@@ -67,9 +76,16 @@ evaluation:
     save_reliability_bins_and_per_class_support: true
   recording:
     implementation: src.evaluation.records
+    runner: src.evaluation.protocol.evaluate_cv
     save_predictions: true  # Row ID, target, full probabilities or point/quantile predictions.
+    prediction_roles: [outer_test, inner_oof_binary_threshold]
+    prediction_storage: project
+    row_level_split_assignments_storage: project
+    materialized_feature_matrices_storage: project
+    full_metric_tables_storage: project
+    compact_manifests_and_logs_storage: data
     save_prediction_hash: true
-    required_identity: [dataset_id, model_id, feature_set, outer_fold, split_id, checkpoint_id, n_train, n_validation, target_scale]
+    required_identity: [dataset_id, data_identity, model_id, feature_set, feature_input_identity, feature_artifact_ids, estimator_settings, outer_fold, split_id, checkpoint_id, n_train, n_validation, target_scale]
     timing_stages: [data_loading, text_encoding, model_loading, preprocessing_fit, preprocessing_transform, inner_fit, threshold_selection, hyperparameter_search, fit, predict, metric_evaluation, prediction_serialization]
     clocks: [wall_seconds, current_process_cpu_seconds]
     cuda_synchronize_before_and_after_timing: true
@@ -79,11 +95,16 @@ evaluation:
     adapter_metadata: [package_versions, checkpoint_hash, device, hardware, thread_count, prediction_batch_size, cold_or_warm, cache_hit, effective_context_rows, n_features, feature_artifact_id, code_hash, config_hash]
     feature_creation_cost: recorded_once_separately_not_charged_to_every_cv_fold
   preprocessing_fit_scope: training_partition_only
-  model_tuning_budget: unresolved
-  calibration: unresolved
-  small_n: unresolved
-  statistical_tests: unresolved
-  aggregation_proposal: per_dataset_mean_and_sd_then_equal_dataset_weighted_ranks_or_paired_deltas
+  model_tuning_budget: 0
+  hyperparameters: pinned_library_defaults_with_explicit_seed_device_and_resource_settings
+  optional_finetuning: disabled
+  optional_automl_or_bagging: disabled
+  calibration: none
+  small_n: outside_current_scope
+  statistical_tests: none_required_for_initial_benchmark
+  comparison: jev_feature_combinations_within_the_same_model_on_identical_folds
+  aggregation: per_dataset_mean_and_sd_and_paired_feature_deltas_within_model
+  model_leaderboard: outside_research_objective
   pool_raw_classification_and_regression_metrics: forbidden
   failed_or_unsupported_runs: record_explicitly_never_silently_drop
   cached_jev_features_are_fold_independent: true

@@ -43,7 +43,7 @@ def _assignment(tree, name):
 
 
 def create_catalog() -> None:
-    target = paths.config_path("exploration/datasets")
+    target = paths.config_path("datasets")
     if target.exists():
         raise FileExistsError("Catalog already exists; review updates explicitly.")
     texts, sources = {}, {}
@@ -145,7 +145,7 @@ def main() -> int:
         for entry, result in zip(catalog["datasets"], status):
             entry["text_columns"] = result["text_columns"]
             entry["sha256"] = result["source"]["sha256"]
-        paths.config_path("exploration/datasets").write_text(
+        paths.config_path("datasets").write_text(
             yaml.safe_dump(catalog, sort_keys=False, allow_unicode=True),
             encoding="utf-8",
             newline="\n",
