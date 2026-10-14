@@ -16,7 +16,7 @@
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
 export JEVPFN_PROVIDER="${JEVPFN_PROVIDER:-liquid}"
-export JEVPFN_CONDA_ENV="${JEVPFN_CONDA_ENV:-JEVPFN-liquid}"
+export JEVPFN_CONDA_ENV="${JEVPFN_CONDA_ENV:?Select the provider environment on PROJECT first}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.preflight --gpu --stage before_extraction

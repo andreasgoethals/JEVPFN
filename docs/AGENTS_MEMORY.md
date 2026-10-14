@@ -15,6 +15,19 @@ The owner handles Git commits/pushes. Proposed plans belong in chat, not tempora
 
 ## Avoid repeating these failures
 
+- **VSC installation shadowing (14-10-2026):** the owner's transcript shows a newly created
+  Conda JEVPFN environment, but pip ran in TabPFNCredit's inherited venv and upgraded packages
+  there. JEVPFN's clone, PROJECT write probe and tokenizer staging succeeded; no Slurm run
+  is shown. Setup and jobs now share `scripts/activate_conda.sh`, which clears aliases,
+  functions and inherited Python overrides, then checks the resolved prefix before exporting
+  `JEVPFN_PYTHON`. Use that explicit interpreter for pip. Repair the other project's environment
+  separately from its own requirements, with authorization; do not guess a rollback.
+  Large CUDA environments and package caches belong on PROJECT, not personal DATA.
+
+- **Hybrid cache transfer:** separate local API and VSC GPU extractions share dataset filenames
+  but contain different providers. No cache-merge command exists yet. Do not SCP one populated
+  database over the other; require validated import/backup tests before hybrid full extraction.
+
 - **Exact token formatting (14-10-2026):** character proxies flagged Fake Job Postings rows
   that fit all three actual open-model tokenizers. Liquid encodes a complete rendered turn;
   Strands encodes state (special tokens enabled) and question separately; Perplexity uses

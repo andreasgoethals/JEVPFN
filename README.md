@@ -58,8 +58,9 @@ This downloads about 58 MB of tokenizer/source files, **no weights**, then count
 nonempty input in all 18 selected datasets. Subsequent `python -m src.cluster.token_audit`
 runs are offline and resume committed batches. Per-input counts use PROJECT on VSC; compact
 summaries/logs use DATA under `output_JEVPFN/3. experiment_0/`, with `before_extraction`
-subfolders. No raw rows are removed. Jev, Clef and Microsoft remain explicitly unverified:
-their complete hosted tokenization is not available for this offline check. A base model's
+subfolders. No raw rows are removed. Jev, Clef and Microsoft hosted counts remain unverified.
+Clef now publishes a complete open-weight renderer/tokenizer, but its offline audit and GPU
+adapter have not yet been integrated. A base model's
 tokenizer is not a substitute. Every self-hosted inference also checks the runtime's reported
 token count against the audited format. No silent truncation is allowed.
 The 14-10-2026 audit counted all 1,698,127 unique prepared inputs for each of the three open

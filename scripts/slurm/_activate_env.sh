@@ -1,14 +1,7 @@
 #!/bin/bash
 # Follow CreditPFN's Conda activation and interpreter verification, with a separate env.
 set -euo pipefail
-if declare -F deactivate >/dev/null; then deactivate; fi
-# An inherited local venv variable must not describe the selected Conda interpreter.
-unset VIRTUAL_ENV
-source "${VSC_DATA:?}/miniconda3/etc/profile.d/conda.sh"
-conda activate "${JEVPFN_CONDA_ENV:-JEVPFN}"
-export PATH="${CONDA_PREFIX:?}/bin:$PATH"
-hash -r
-python -c 'import os,sys; from pathlib import Path; assert Path(sys.prefix) == Path(os.environ["CONDA_PREFIX"]); assert sys.version_info[:2] == (3,12)'
+source scripts/activate_conda.sh
 # Fail before any cache creation if PROJECT is missing or uses the other cluster's filesystem.
 python -c 'import os; from src.cluster.preflight import storage_policy_failures; failures = storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME")); assert not failures, "\n".join(failures)'
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
