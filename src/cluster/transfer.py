@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from src.jev.merge import merge_cache, snapshot, validate_cache
 from src.utils import paths
+from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import file_sha256, write_json
 
@@ -191,7 +192,9 @@ def _combine_token_reports(source, destination):
         **existing,
         "self_hosted": list(records.values()),
         "hosted_unverified": {
-            k: v for k, v in HOSTED_UNAVAILABLE.items() if k in {"jev", "microsoft"}
+            k: v
+            for k, v in HOSTED_UNAVAILABLE.items()
+            if k in load_yaml("extractors")["candidates"]
         },
         "imported_utc": datetime.now(UTC).isoformat(),
     }

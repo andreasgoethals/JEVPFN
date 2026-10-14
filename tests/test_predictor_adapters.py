@@ -134,7 +134,7 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
 def test_plan_four_arms_six_engines_two_original_text_baselines():
     plan = benchmark_plan()
     assert len({a["dataset_id"] for a in plan}) == 18
-    assert len(plan) == 18 * (6 * (1 + 7 * 3) + 2)
+    assert len(plan) == 18 * (6 * (1 + 6 * 3) + 2)
     for model in MAIN_MODELS:
         row = [a for a in plan if a["dataset_id"] == plan[0]["dataset_id"] and a["model"] == model]
         assert len([a for a in row if a["provider"] is None]) == 1

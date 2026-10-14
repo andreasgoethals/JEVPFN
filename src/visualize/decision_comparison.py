@@ -21,7 +21,6 @@ LABELS = {
     "cloudflare": "Clef-flash",
     "intern": "Intern-Decision-4B",
     "strands": "Strands",
-    "microsoft": "Microsoft",
 }
 TASKS = {
     "binary_classification": "Binary",

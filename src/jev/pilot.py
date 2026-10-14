@@ -26,15 +26,6 @@ from src.utils.events import append_event
 from src.utils.provenance import code_identity
 from src.utils.serialization import canonical_json, digest, file_sha256, write_json
 
-CONTEXT_REFERENCES = {
-    "jev": 32000,
-    "liquid": 32768,
-    "perplexity": 8192,
-    "cloudflare": 16384,
-    "intern": 8192,
-    "strands": 4096,
-}
-
 
 def dataset_pilot_requests(dataset, cfg):
     """Select by CSV position and text length, never target values or performance."""
@@ -99,7 +90,7 @@ def prepare_pilot(cfg, pilot_cfg, catalog, *, entries=None, question_bank=None):
                     candidate = catalog["candidates"][provider]
                     if candidate["enabled"] is not False:
                         raise ValueError("Every candidate must remain disabled")
-                    mapping = preview(request, provider, deployment_name="<pilot-deployment>")
+                    mapping = preview(request, provider)
                     identity = {
                         "provider": provider,
                         "model": candidate["model"],
@@ -108,9 +99,7 @@ def prepare_pilot(cfg, pilot_cfg, catalog, *, entries=None, question_bank=None):
                         "semantic_payload_sha256": digest(json.loads(request.payload_json)),
                         "mapping_sha256": digest(mapping),
                     }
-                    limit = CONTEXT_REFERENCES.get(
-                        provider, candidate.get("context_tokens_reference")
-                    )
+                    limit = candidate["context_tokens"]
                     records.append(
                         {
                             "dataset_id": dataset.metadata.dataset_id,

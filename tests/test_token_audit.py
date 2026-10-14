@@ -92,7 +92,7 @@ def test_interrupted_token_audit_resumes_committed_batch(inputs):
     assert len(list(iter_prepared_inputs(inputs[0]["path"], after_input_no=1))) == 1
 
 
-@pytest.mark.parametrize("provider", ["jev", "microsoft"])
+@pytest.mark.parametrize("provider", ["jev"])
 def test_hosted_tokenizers_are_not_faked(provider):
     with pytest.raises(ValueError, match="unverified|unavailable"):
         ExactCounter(provider)

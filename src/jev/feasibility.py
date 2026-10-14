@@ -3,28 +3,20 @@
 import pandas as pd
 
 
-def comparison_feasibility(estimates, catalog):
+def comparison_feasibility(estimates, catalog, cfg=None):
     """Use the exact deduplicated input workload, approximated at 3/4/5 chars per token.
 
-    Provider tokenizers/serialization differ. Context screens use conservative 3-char
-    estimates and include the current Jev JSON body as a common proxy. Microsoft's
-    ceiling is the OpenRouter listing; deployed Foundry accounting is unverified.
+    Provider tokenizers/serialization differ. The 3-character sensitivity scenario
+    uses the Jev JSON body as a proxy; it is not an upper bound on any tokenizer.
     """
     central = estimates[estimates.characters_per_token.eq(4)]
     conservative = estimates[estimates.characters_per_token.eq(3)]
-    limits = {
-        "jev": 32000,
-        "liquid": 32768,
-        "perplexity": 8192,
-        "cloudflare": 16384,
-        "intern": 8192,
-        "strands": 4096,
-        "microsoft": catalog["candidates"]["microsoft"].get("context_tokens_reference"),
-    }
     records = []
     for name, candidate in catalog["candidates"].items():
         price = candidate.get("input_price_per_million_usd")
-        ceiling = limits[name]
+        if name == "jev" and cfg is not None:
+            price = cfg["cost"]["input_price_per_million"]
+        ceiling = candidate["context_tokens"]
         above = (
             None
             if ceiling is None

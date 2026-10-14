@@ -1,4 +1,4 @@
-"""Read and validate the initial research configuration using the template's YAML convention.
+"""Read and validate inspection configuration using the repository's YAML convention.
 
 Resolved notebook copies go beside their local figures. Live Jev and modelling switches remain disabled.
 Phase configs may extend one other YAML file; package and credential loading stay separate.
@@ -57,11 +57,11 @@ def load_config(name: str = "audit") -> dict:
 
 def validate_config(cfg: dict) -> None:
     if cfg["dataset_collection"] != "multabench_core_text":
-        raise ValueError("Only the 20 core text datasets are enabled in this phase.")
+        raise ValueError("The dataset collection must remain the core MulTaBench text collection.")
     if cfg["jev"]["enabled"] is not False or cfg["downstream"]["enabled"] is not False:
-        raise ValueError("Jev API calls and modelling are disabled in the initial phase.")
+        raise ValueError("Jev API calls and modelling are disabled in inspection configuration.")
     if cfg.get("feature_creation", {}).get("enabled", False) is not False:
-        raise ValueError("Live feature creation is disabled in the initial phase.")
+        raise ValueError("Live feature creation is disabled in inspection configuration.")
     if "feature_creation" in cfg:
         feature = cfg["feature_creation"]
         modes = feature["modes"]

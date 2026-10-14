@@ -97,7 +97,7 @@ def test_all_six_share_saved_semantics_but_not_cache_entries(dataset, tmp_path):
     request = build_requests(dataset.features, dataset.metadata, 1, load_config())[0]
     store = ResponseCache(tmp_path / "fixture.sqlite3", dataset_id="fixture")
     bound = {name: bind_provider(request, name, catalog) for name in catalog["candidates"]}
-    assert len({r.cache_key for r in bound.values()}) == 7
+    assert len({r.cache_key for r in bound.values()}) == 6
     assert len({r.payload_json for r in bound.values()}) == 1
     for name, candidate in bound.items():
         store.put(candidate, {"mock_provider": name}, kind="mock")
@@ -129,9 +129,46 @@ def test_gallery_uses_exact_row_text_all_groups_and_no_true_target(dataset, monk
     assert "123456789" not in json.dumps(example)
     for group in example["groups"]:
         for variant in group["variants"].values():
-            assert len(variant["provider_previews"]) == 7
+            assert len(variant["provider_previews"]) == 6
             assert "row_id" not in variant["semantic_payload"]["state"]
             assert set(variant["semantic_payload"]["state"]) == {"task", "text"}
     changed = copy.deepcopy(dataset)
     changed.frame["target"] = [1, 0, 1]
     assert dataset_example(changed, load_config(), bank, load_yaml("extractors")) == example
+
+
+def test_short_examples_use_only_the_selected_question_bank_members(dataset, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.jev import inspection
+
+    cfg = load_config("feature_creation")
+    cfg["dataset_selection"]["exclude"] = ["removed"]
+    catalog = {"datasets": [{"id": "fixture"}, {"id": "removed"}]}
+    summary = pd.DataFrame(
+        [
+            {
+                "dataset_id": "fixture",
+                "text_columns": 2,
+                "rows": 4,
+                "task_type": "binary_classification",
+            },
+            {
+                "dataset_id": "removed",
+                "text_columns": 1,
+                "rows": 2,
+                "task_type": "binary_classification",
+            },
+        ]
+    )
+    audit = SimpleNamespace(summary=summary, metadata=lambda _: dataset.metadata)
+    members = []
+    monkeypatch.setattr(inspection, "load_catalog", lambda _: catalog)
+    monkeypatch.setattr(inspection, "load_dataset", lambda *a, **k: dataset)
+    monkeypatch.setattr(
+        inspection, "build_question_bank", lambda metadata, _: members.extend(metadata) or {}
+    )
+    monkeypatch.setattr(inspection, "compile_frozen_question", lambda *a: lambda r: r)
+    monkeypatch.setattr(inspection, "code_identity", lambda: "fixture")
+    inspection.representative_requests(audit, cfg)
+    assert members == [dataset.metadata]

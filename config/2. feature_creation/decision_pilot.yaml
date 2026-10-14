@@ -1,6 +1,6 @@
 # Offline preparation. This file grants no network, checkpoint or Slurm execution.
 enabled: false
-providers: [jev, liquid, perplexity, cloudflare, strands, microsoft, intern]
+providers: [jev, liquid, perplexity, cloudflare, strands, intern]
 extractor_catalog: extractors
 feature_config: feature_creation
 question_design: question_design

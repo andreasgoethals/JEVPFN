@@ -43,15 +43,6 @@ models:
         regression:
           path: null
           sha256: null
-  tabpfn_3:
-    name: TabPFN-3
-    priority: historical_reference_outside_latest_roster
-    package: tabpfn==9.0.0
-    model_selector: ModelVersion.V3
-    extra: models
-    device_proposal: cuda
-    source: https://github.com/PriorLabs/TabPFN
-    raw_text: same_optional_TFIDF_SVD_preprocessing_in_tabpfn_9
   catboost:
     name: CatBoost
     priority: selected_four_feature_arms
@@ -117,36 +108,6 @@ models:
         regression:
           path: null
           sha256: null
-  tabdpt_1_3:
-    name: TabDPT 1.3
-    priority: deferred_outside_focused_roster
-    package: tabdpt==1.3.1
-    extra: tabdpt
-    device_proposal: cuda
-    review:
-    - real_data_pretraining_overlap
-    - faiss_platform_support
-    - context_budget
-    source: https://github.com/layer6ai-labs/TabDPT-inference
-    raw_text: numeric_input_requires_external_encoding
-  mitra_v2:
-    name: Mitra-v2
-    priority: deferred_no_autogluon_route_verified
-    package: null
-    extra: null
-    device_proposal: cuda
-    classification_checkpoint: autogluon/mitra-classifier-2
-    regression_checkpoint: autogluon/mitra-regressor-2
-    checkpoint_revision: null
-    model_configuration: unresolved_without_autogluon
-    paper_recipe: separate_50_step_finetuning_and_8_fold_bagging_not_stock_AutoGluon
-    raw_text: no_semantic_encoder
-    review:
-    - supported_standalone_interface_required
-    - class_limits
-    - memory
-    source: https://huggingface.co/autogluon/mitra-classifier-2
-    regression_source: https://huggingface.co/autogluon/mitra-regressor-2
   limix_2:
     name: LimiX-2
     priority: selected_four_feature_arms
@@ -192,40 +153,6 @@ models:
         regression:
           path: null
           sha256: null
-  causilo:
-    name: Causilo
-    priority: deferred_outside_focused_roster
-    package: causilo
-    extra: null
-    interface: CausiloClassifier_and_CausiloRegressor
-    raw_text: strings_are_categories_not_semantic_text
-    many_classes: native_10_class_head_with_ECOC_wrapper
-    environment: Python_3_10_to_3_14_Torch_at_least_2_13_separate_environment
-    weight_license: Causilo_License_v1_0_noncommercial_research
-    review:
-    - package_and_checkpoint_hash
-    - research_license
-    - many_class_cost
-    - CUDA
-    source: https://github.com/nums-ai/causilo
-  exaone_tabular:
-    name: EXAONE Tabular 1.0
-    priority: deferred_outside_focused_roster
-    package: null
-    extra: null
-    interface: EXAONETabularClassifier_and_EXAONETabularRegressor
-    raw_text: unsupported_numeric_numpy_arrays_only
-    categorical_features: training_fold_numeric_encoding_required
-    missing_values: built_in_mean_imputation
-    many_classes: native_10_class_head_with_ECOC_wrapper
-    environment: Python_at_least_3_11_Torch_2_6_to_below_3_NumPy_at_least_2_3_5
-    weight_license: EXAONE_AI_Model_License_1_2_NC
-    review:
-    - source_and_checkpoint_hash
-    - no_sklearn_clone_interface
-    - support_subsampling
-    - many_class_cost
-    source: https://github.com/LGAI-Research/EXAONE-Tabular
   tabstar:
     name: TabSTAR
     priority: selected_original_text_baseline

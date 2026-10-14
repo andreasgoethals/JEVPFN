@@ -1,25 +1,11 @@
-# Literature Review
+# Literature review
 
-Tabular model evidence checked 30 September 2026; split code checked 1 October.
-Decision-model releases, probability papers and Jev limits refreshed 12 October 2026;
-wording evidence, Microsoft context listing and VSC resources checked 13 October.
-Open-weight availability and additional decision interfaces refreshed 14 October 2026.
-This is a durable reference for the research question,
-published evidence, model interfaces and methodological limitations. It is not an experiment
-schedule. Agreed project constraints live in [README](../README.md), data definitions in
-[DATA_SOURCES](DATA_SOURCES.md), runtime/storage instructions in [VSC](VSC.md), and the candidate
-roster and unresolved evaluation settings in `config/4. experiment_1/`.
-
-The current read-only TFM Library checkout is `de324efcca55be392feb0c01830b3b6ce364587f`
-(existing index/checkout verified 13 October; no submodule change here). The 12 October
-review used `5b6c24dd9337c6e7bef45733730bf52ee280e61c`. Earlier tabular
-interface review used `1ac6e6783f24b2d5cd058af7ad8cad7c1bfaf7ae`; the current checkout
-also contains MulTaBench v2, dated 27 September, inspected for the representation/curation claims.
-Its `papers/text/2026/` contains the TabPFN-3, TabPFN-3.5, TabICLv2, LimiX-2, Causilo,
-Mitra-v2 and EXAONE reports; `repositories/TabPFN .txt` contains the source snapshot.
-For code evidence, refer to symbols such as `TextTransformer` and `InferenceConfig`, not
-snapshot line numbers. Live upstream references below supplement that pin; they must be
-rechecked when freezing package and checkpoint revisions.
+Primary-source findings checked through 14 October 2026. This reference records prior art,
+published evidence and limits of interpretation; it is not a run plan or acceptance report.
+Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
+execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
+The read-only library pin is `de324efcca55be392feb0c01830b3b6ce364587f`; cite code snapshots
+by symbol rather than drifting line numbers. Linked live sources need rechecking when pins change.
 
 ## 1. Why text-derived features are a meaningful comparison
 
@@ -69,21 +55,16 @@ must not be described as an unconditional 80/10/10 split or standard five-fold K
 [Pinned split implementation](https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/preprocessing/splits.py),
 [paper setup, Appendix A.2](https://arxiv.org/html/2605.10616v1#A2)
 
-JEVPFN instead uses the owner's five-fold stratified classification / shuffled regression CV,
-all outer-training rows, fixed model settings and no HPO. This retains a controlled comparison
-between Jev feature combinations without reproducing the paper's limited-data scores. The
-paper's CatBoost setup is not literally the library default: it specifies 2,000 iterations
-and early-stopping parameters. JEVPFN uses pinned library defaults instead. Current `master`
-also has a changing living-benchmark protocol; neither should silently replace this setup.
-[Paper release](https://github.com/alanarazi7/MulTaBench/tree/paper_version),
-[current repository protocol](https://github.com/alanarazi7/MulTaBench#protocol-and-tabarena)
+The project's shared shuffled CV/all-row protocol differs from those published holdouts;
+compare feature combinations on our fixed folds rather than treating paper scores as directly
+replicated. Pinned library defaults also differ from the paper's 2,000-iteration/early-stopped
+CatBoost. [Paper release](https://github.com/alanarazi7/MulTaBench/tree/paper_version)
 
 The pinned paper result tables distinguish frozen joint representations (`all`) from
 fine-tuned representations (`ft`). A read-only inspection of the core TEXT tables and
 `more_baselines/` identifies strong TabICLv2, TabM, AutoGluon-MM and TabSTAR results.
 AutoGluon and TabM are excluded from this project's roster by owner decision; these published
-results remain literature context only. A high leaderboard rank is not a reason to expand
-the focused Jev study.
+results remain literature context only. Published ranks do not isolate the benefit of decision-derived features.
 Older TabPFN-v2/v2.5 results cover only 18 of the 20 text datasets in the frozen comparison;
 coverage must accompany any rank. Rank within each dataset before averaging; never average
 raw AUC and R² together or pool text and image leaderboards. Published CSVs contain run
@@ -138,21 +119,14 @@ separate experimental accounting. [Official model source](https://github.com/Pri
 
 ### Other numeric and categorical predictors
 
-The selected main predictors are CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular
-and logistic/linear regression. Each compares four feature configurations on shared folds:
-non-text only, plus joint, plus per-column, plus both decision representations. TabPFN-3 and
-the additional interfaces below remain research references, outside this selected roster.
-Google TabFM, TabM and AutoGluon are excluded.
+The selected numeric predictors require explicit handling of categorical inputs and missing
+values. Their raw-text capabilities are separate from receiving numeric decision features.
 
 | Engine | Tasks and text treatment | Relevant interface limitation |
 |---|---|---|
 | TabICL v2 | Classification and regression; no built-in semantic text encoder. Strings/categories need the wrapper's encoding or explicit text embeddings. | Separate classifier/regressor checkpoints; `support_many_classes=True` enables the many-class wrapper. |
 | LimiX-2 | Classification, regression and missing-value imputation. Numeric/categorical array interface; no documented raw-language encoder. | 400M model, distinct from the older 2M-parameter LimiX-2M; `LimiXPredictor` and V2 configs. |
 | NVIDIA Kumo Tabular | Classification/regression over numeric and categorical tables through SDM; no native language encoder. | Task-specific checkpoints, many-class decomposition; regression point prediction is the mean of 999 predicted quantiles. Default preprocessing selects at most 500 columns. |
-| Causilo | Classification and regression. Strings/booleans are categorical, not language embeddings; missing feature values are accepted. | Native 10-class head, automatic error-correcting output-code decomposition for larger vocabularies. |
-| Mitra-v2 | Classification and regression with synthetic pretraining; no model-level semantic text encoder. | Explicit v2 task checkpoints; many-class hierarchical handling and the paper's adaptation recipe require the corresponding wrapper. |
-| EXAONE Tabular 1.0 | Classification, point and distributional regression. Raw text unsupported; numeric NumPy inputs only. | Encode categories using training data; built-in mean imputation and automatic many-class ECOC. |
-| TabDPT 1.3 | Classification and regression; numeric tabular representation, requiring external text encoding. | Real-table pretraining, retrieval/context and FAISS environment need explicit accounting. |
 | CatBoost | Classification and regression; built-in text tokenizers, dictionaries and feature calculators, separate from categorical features. | BoW, NaiveBayes and BM25 are different encodings; validate regression-compatible calculators and empty vocabularies. |
 | Logistic / linear regression | Classification / regression respectively; no raw-language input. | Training-only imputation, category encoding, scaling and optional TF-IDF/embeddings. |
 
@@ -171,22 +145,10 @@ Spotify's 114 classes motivated its exclusion from extraction and all experiment
 increase inference cost considerably. Declare context subsampling and failure coverage,
 and keep missing values distinct from failed responses.
 
-Mitra's published v2 recipe uses 50-step adaptation and eight-fold bagging. Inspection of
-`mitra_finetune.api.MitraFinetune` and its runner confirms runtime imports of AutoGluon's
-MITRA implementation even though package metadata lists AutoGluon as an optional extra.
-No supported independent v2 runtime was verified. Mitra-v2 is therefore deferred under the
-owner's no-AutoGluon constraint, without substituting v1 checkpoints or copying internals.
-[Official model card](https://huggingface.co/autogluon/mitra-classifier-2),
-[runtime source](https://huggingface.co/autogluon/mitra-finetune/blob/main/src/mitra_finetune/api.py)
-
-Current LimiX-2 source requires Python ≥3.12 and Torch ≥2.9.1; the older exact-2.9.1 statement
-was stale. Causilo requires Torch ≥2.13 and cannot use our existing 2.12.1 pin unchanged. EXAONE needs
-NumPy ≥2.3.5 and a custom estimator lifecycle: it exposes fit/predict but not all cloning/grid
-search methods. Model weights for these deferred engines have separate noncommercial
-terms; code licenses alone do not describe weight rights. These are dependency and provenance
-facts, not reasons to silently omit a model. Use isolated frozen environments.
-[LimiX documentation](https://www.limix.ai/doc/), [Causilo requirements/license](https://github.com/nums-ai/causilo),
-[EXAONE interface](https://github.com/LGAI-Research/EXAONE-Tabular#requirements)
+Mitra-v2's reviewed runtime imports AutoGluon despite marking it optional; no supported
+independent route was verified. Causilo, Mitra-v2, EXAONE and TabDPT remain literature
+references, outside the executable catalog. Weight licences and runtime constraints need
+independent review when any model is selected.
 
 ### Predictors with language encoders
 
@@ -202,9 +164,8 @@ Python 3.11; the recommended 8,192-row context and bagging can require 80GB GPUs
 derive from real-table data with research restrictions.
 [ConTextTab implementation](https://github.com/SAP-samples/sap-rpt-1-oss)
 
-The selected original-text baselines are TabSTAR and ConTextTab only; they receive all original
-features without decision-model outputs. This is not a claim that they are the three highest
-scoring MulTaBench methods. AutoGluon-MM remains excluded by owner choice.
+TabSTAR and ConTextTab provide original-text controls with language encoders; their supervised
+adaptation and training-context policies must be distinguished from cached label-free features.
 
 Source audit on 13 October: TabSTAR `BaseTabSTAR.fit` performs supervised adaptation and
 creates internal validation from the supplied training fold when none is passed; its verbalizer
@@ -233,7 +194,7 @@ A related 8 October preprint, [Estimating Uncoded Crash Factors with Tabular Fou
 System One Models](https://arxiv.org/abs/2610.10321), uses Kumo on coded crash records and Jev
 on narratives, with human recalibration and population-estimation methods. This was checked
 at abstract level. It is relevant prior art for combining tabular and decision systems, not
-evidence that this project's seven-extractor/four-representation MulTaBench comparison has
+evidence that this project's six-extractor/four-configuration MulTaBench comparison has
 already been evaluated. Novelty must rest on the controlled representation comparison,
 coverage and reproducible extraction evidence rather than merely mentioning Jev plus a TFM.
 
@@ -263,9 +224,8 @@ dataset mean, quantile or target unit. Explicit wording is not automatically str
 than accurate indirect information. A nine-level rubric therefore needs label-blind semantic
 checks, including negation, unsupported assertions, conflicting cues and irrelevant text.
 Whether nine distinctions work reliably is an empirical question, not guaranteed by Score's
-ability to return nine probabilities. The owner accepted the evidence rubric on 1 October;
-`directional-v2` now implements it centrally with symmetric lower/higher descriptions and
-zero for no favored direction. Acceptance of wording is not validation of model behaviour.
+ability to return nine probabilities. Acceptance of wording is not validation of model behavior; the concrete rubric is centralized
+in the source rather than maintained in this literature review.
 
 The documented weaknesses include numeric/date reasoning, multi-step indirection and long
 states with irrelevant details. Officially designated text fields can contain identifiers,
@@ -281,67 +241,13 @@ features therefore do not depend on an unverified promise of bit-identical repea
 Pin model IDs, not moving aliases; retain the actual response model and usage. This makes
 the experiment reproduce the saved representation even if provider execution changes later.
 
-The main retained view is already selected: a binary Noul probability, the complete multiclass
-Choice probability vector, and the regression expectation over −4..+4. Raw responses/full
-probabilities and available confidence are retained independently for inspection or later
-ablations. A headline metric can be deferred while all configured metrics are recorded;
-choose it before reviewing comparative outcomes, or explicitly label later selection exploratory.
+### Deployment evidence
 
-### Transport, volume and cost
-
-The current reference is `jev-1.13.0`, USD 0.042 per million input tokens, output free.
-Published limits checked 12 October are 80 requests/s and 100K tokens/s, adjustable without
-notice; context is 64K overall and 32K for state plus the longest question. Current extraction
-counts and cost scenarios belong in generated reports, rather than a fixed historical total
-here. Published ceilings are not completion estimates or verified account allowances.
-[Current model reference](https://docs.typesafe.ai/models)
-
-The official SDK calls `client.system_one(state, questions)`. Construct the client with
-`model="jev-1.13.0"` and an environment-supplied API key; use `Noul(instructions=...)`,
-`Choice(instructions=..., criteria={...})`, or `Score(instructions=..., criteria=[...])`.
-The numeric pin is selected at the client/request layer, not by loading local model weights.
-Version changes invalidate request keys and require a new feature artifact. Existing paid
-features remain reusable from their original pinned cache; SDK transport remains disabled here.
-[Python SDK usage](https://docs.typesafe.ai/sdk/python/usage)
-
-Use the official asynchronous Python client with a reused HTTP connection and bounded
-concurrency. Its SDK supports HTTP/2, configurable retry policies, request IDs, and usage
-accounting. Rate-limit and overload errors require backoff and the returned retry delay.
-Retrying a lost response can incur duplicate billing unless the provider confirms idempotency;
-a local completed-response cache alone cannot close that interruption window.
-[SDK usage](https://docs.typesafe.ai/sdk/python/usage),
-[retry policy](https://docs.typesafe.ai/sdk/python/api/retries)
-
-A future extractor needs one owner per request key, a resumable queue, durable response
-commits, a global rate budget including retries, bounded retry counts, timeouts, and a hard
-spending stop driven by measured usage. Keep debug bodies out of shared logs. No provider
-batch endpoint or billing-idempotency guarantee is assumed. The guarded
-`src/jev/extraction.py` wrapper disables hidden SDK retries and prepares persistent dataset
-reservations, measured usage, bounded concurrency and spending allocations. Unknown
-response/billing outcomes stop rather than automatically retry. This was exercised with fake
-transports only; account throughput, tokenizer/context validation and actual billing behavior
-remain live-pilot questions. Initial configurations enable no network extraction.
-
-Offline budget totals depend on template wording as well as text. The accepted expanded
-regression rubric supersedes the earlier draft's token estimate; current numbers belong in
-generated reports. Three-to-five-character tokenization and extra per-request tokens can move
-the bill materially at two million requests. Calibrate against returned usage in an approved
-pilot. Over-limit text needs an explicit policy before this is an executable workload.
-Regenerate figures with `python -m src.jev.review`; they remain scenarios, not price quotes.
-
-The 32K state-plus-longest-question limit binds a one-question request before the 64K
-overall limit does. Character-based estimates are suitable for budgeting, not proof that a
-request fits. Truncation/chunking changes the feature definition and must be deterministic,
-versioned, included in request identity, and accompanied by retained-text coverage. Research
-on other language models shows position-sensitive long-context retrieval; it motivates
-checking beginning/middle/end evidence, but does not establish a best truncation policy for
-Jev. [Lost in the Middle](https://arxiv.org/abs/2307.03172)
-
-The verified public contacts relevant to access and research support are
-`hello@typesafe.ai` (general), `sales@typesafe.ai` (volume/custom arrangements), and
-`support@typesafe.ai` (technical support). No public research-credit entitlement was found.
-[Company site](https://typesafe.ai/), [volume contact](https://docs.typesafe.ai/models),
-[support contact](https://typesafe.ai/legal/mca)
+The publisher's [model reference](https://docs.typesafe.ai/models) documents Jev's version,
+price and dynamic limits. Those references do not establish our account's allowance or bill.
+Calibration against returned usage, explicit version identity and ambiguous-response handling
+are empirical requirements. Current configuration and connection steps live in VSC/config;
+character-based estimates must never be treated as exact counts or safe context bounds.
 
 ## 4. Evaluation implications
 
@@ -407,7 +313,6 @@ not automatically the best controlled baseline for this study.
 If formal multi-dataset testing is later justified, Demšar discusses paired Wilcoxon comparisons
 for two methods and Friedman/post-hoc comparisons for several methods, using datasets as
 comparison units. This is background, not a required model-ranking campaign for JEVPFN.
-The initial comparison reports per-dataset Jev deltas and fold mean/SD with coverage.
 Raw RMSE differences across unrelated target units should not be pooled; neither should raw
 F1 and RMSE. Small task families (here only three binary datasets) have weak inferential power.
 [Demšar (2006)](https://www.jmlr.org/papers/v7/demsar06a.html)
@@ -430,88 +335,28 @@ establish improvement on MulTaBench or equivalence of calibration across provide
 | Extractor | Verified primary evidence | Relevance and limitation |
 |---|---|---|
 | Jev 1.13 | [TypeSafe model reference](https://docs.typesafe.ai/models), checked 12 October: $0.042/M input tokens, output free; published 80 RPS/100k TPS, dynamic. | Main extractor stays pinned; confirm organization-specific limits with TypeSafe. The owner's direct correspondence confirms the price but offers no research exemption. |
-| Microsoft-Decision-1 | [9 October release](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/): post-trained Qwen3.5-9B, single-pass option probabilities; $0.042/M input, output free. [Foundry API](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision) documents Noul/Choice/Score, model version 1 and public-preview deployment. | Selected hosted candidate for the same text-to-probability protocol. Reads text/JSON but does not generate prose. Deployment name differs from response model identity. Open Qwen weights do not establish availability of Microsoft's post-trained weights. Publisher quality/latency results do not establish MulTaBench gains; verify refusals, context behavior, account access and version immutability. Future MAI/OpenAI backbones are announced plans. |
+| Microsoft-Decision-1 | [9 October release](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/): hosted Qwen3.5-9B decision head, Noul/Choice/Score. | Excluded by owner decision for practical access/throughput constraints before comparative outcomes; no inference adapter or evaluation arm. This is not evidence of inferior quality. |
 | Liquid d1-3B | [7 October open-weight release](https://www.liquid.ai/blog/d1-open); [publisher model card](https://huggingface.co/LiquidAI/d1-3B). Approximately 3B parameters, not 13B. Noul/Choice/Score, full probabilities, 32,768 context. | Close schema match and small self-hosted comparator. The [LFM Open License](https://huggingface.co/LiquidAI/d1-3B/blob/main/LICENSE) explicitly exempts qualifying nonprofits' noncommercial/research use from its commercial revenue threshold; attribution/redistribution conditions remain. Use its custom decision interface, not generated chat examples. No model downloaded. |
-| Cloudflare Clef-flash | [Hosted reference](https://developers.cloudflare.com/workers-ai/models/clef-flash/): $0.038/M input, 24,576 tokens. The [public Apache-2.0 checkpoint](https://huggingface.co/Cloudflare/clef-flash) is now available, including the Qwen3.5-9B backbone, joint schema head and complete encoding/inference source. Hub revision observed 14 October: `8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3` (public, ungated). | Selected for self-hosting only; pinned counter and GPU adapter are implemented, with live pilot pending. `joint_schema_model.encode_record` renders state/questions; the joint head supplies logits for every option, normalized per question. The official runtime was tested on H200; an A100 pilot is still required. The pinned local encoder defaults to 16,384 tokens and silently slices the state. Our precheck rejects overflow and retains full-precision softmax instead of the convenience API's four-decimal rounding. Full-dataset counting is pending; do not infer hosted parity. |
+| Cloudflare Clef-flash | [Hosted reference](https://developers.cloudflare.com/workers-ai/models/clef-flash/): $0.038/M input, 24,576 tokens. The [public Apache-2.0 checkpoint](https://huggingface.co/Cloudflare/clef-flash) is publicly available, including the Qwen3.5-9B backbone, joint schema head and complete encoding/inference source. Hub revision observed 14 October: `8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3` (public, ungated). | Selected for self-hosting only. `joint_schema_model.encode_record` renders state/questions; the joint head supplies logits for every option, normalized per question. The official runtime was tested on H200; an A100 pilot is still required. The pinned local encoder defaults to 16,384 tokens and silently slices the state. Our precheck rejects overflow and retains full-precision softmax instead of the convenience API's four-decimal rounding. Do not infer parity between the hosted and local context limits. |
 | AWS Strands Decider | [1 October launch](https://strandsagents.com/blog/introducing-strands-decider/); [official repository](https://github.com/strands-labs/strands-decider). Apache-2.0, Noul/Choice/Score, full probability vectors; pointer readout over supplied options. | Small self-hosted comparator. The newer [Qwen3.5 2B checkpoint](https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610) was created 9 October and saves a 4,096-token window. Original launch and updated checkpoint are different revisions. Verify complete input and the remaining class vocabularies; published latency is hardware-specific. |
-| Perplexity Decider v1.1-27B | Original [v1 model](https://huggingface.co/perplexity-ai/pplx-decider-v1-27b) repository created 1 October; [v1.1 announcement](https://community.perplexity.ai/t/pplx-decider-v1-1-27b-our-updated-open-weights-multimodal-decision-model-is-now-available/6286), 6 October. Apache-2.0, native decision head, noncausal full attention, saved calibration temperature; Noul/Choice/Score supported by supplied inference code. | [Current card](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) reports stronger Decision Index results, not MulTaBench gains. Local weights require about 49 GiB plus working memory; preparation rejects over 8,192 tokens. Public Hub metadata is currently private=false/gated=false, despite stale private-access wording in the card; no weight download was attempted. Check tasksource training overlap. Publisher announced hosted pricing of $0.02/M for v1.1; hosted access and version pin still require verification. |
+| Perplexity Decider v1.1-27B | Original [v1 model](https://huggingface.co/perplexity-ai/pplx-decider-v1-27b) repository created 1 October; [v1.1 announcement](https://community.perplexity.ai/t/pplx-decider-v1-1-27b-our-updated-open-weights-multimodal-decision-model-is-now-available/6286), 6 October. Apache-2.0, native decision head, noncausal full attention, saved calibration temperature; Noul/Choice/Score supported by supplied inference code. | [Publisher card](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) reports stronger Decision Index results, not MulTaBench gains. Local weights require about 49 GiB plus working memory; preparation rejects over 8,192 tokens. Public Hub metadata is currently private=false/gated=false, despite stale private-access wording in the card; Check tasksource training overlap. Publisher announced hosted pricing of $0.02/M for v1.1; hosted access and version pin still require verification. |
 | Fastino GLiNER2.5-Decide | [Publisher release](https://fastino.ai/blog/gliner-2-5-decide-open-weight-decision-model): 340M encoder, Apache-2.0. However, current [deployment capabilities](https://docs.fastino.ai/concepts/gliner-2-5-decide-capabilities) describe unordered classification labels without label-description objects and direct ordered scoring to GLiDE. | Do not equate release claims with the current hosted schema. Complete probability mapping and long-input behavior of the selected local runtime need verification. `max_position_embeddings=512` in its DeBERTa config alone does not prove a 512-token hard cutoff for this relative-position architecture. Not admitted to the uniform extraction protocol yet. |
 | Fastino GLiDE | [Publisher release](https://fastino.ai/blog/introducing-glide-the-first-thinking-decision-model), dated 30 September; adaptive reasoning and full probabilities. [Capabilities](https://docs.fastino.ai/concepts/glide-capabilities): 40,000 tokens per rendered state/question, 2–255 choice options, up to 255 score levels; overlong input is rejected. [Pricing](https://docs.fastino.ai/pricing): $0.15/M input, output free. | Excluded by owner choice; retained here only as related work. Hosted only in the checked evidence. Reported input usage can sum multiple internal passes, so externally counted text tokens cannot establish the bill. Freeze the version and measure account throughput, latency and billed usage in a pilot. Publisher benchmark claims are not downstream tabular evidence. |
 | OpenAI Decisions / GPT-6 Luna | [Official guide](https://developers.openai.com/api/docs/guides/decisions): public beta, `POST /v1/decisions`; predicate, choice and ordered score with full distributions. $0.10/M input, no output/cache fees on this endpoint; regional/long-context adjustments can apply. | Excluded by owner choice and cost; related work only, with no adapter or campaign entry. Map nine ordered indices 0–8 back to −4…+4 (expected score minus four); preserve all probabilities and treat refusals as failures requiring review, not empty text. The model's general context specification does not replace testing this endpoint's actual limits/usage. Snapshot pin and account throughput remain to verify. |
-| Intern-Decision-4B | [Publisher card/source](https://huggingface.co/internlm/Intern-Decision-4B): Apache-2.0, Qwen3.5-4B, one forward pass over candidate-symbol logits followed by checkpoint calibration; Noul/Choice/Score. Default complete-input limit 8,192, 62 options, strict rejection. | Selected seventh candidate, pinned at `0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd`. All retained tasks have at most 30 classes or nine ordered levels; option capacity fits. The exact renderer, staging and guarded adapter are implemented; full-data counts and live GPU validation remain pending. Preserve published calibration; do not fit it with benchmark targets. Author-run accuracy/latency do not establish our task performance. |
+| Intern-Decision-4B | [Publisher card/source](https://huggingface.co/internlm/Intern-Decision-4B): Apache-2.0, Qwen3.5-4B, one forward pass over candidate-symbol logits followed by checkpoint calibration; Noul/Choice/Score. Default complete-input limit 8,192, 62 options, strict rejection. | Selected open-weight candidate, pinned at `0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd`. All retained tasks have at most 30 classes or nine ordered levels; option capacity fits. Exact rendering and real hardware compatibility require independent verification. Preserve published calibration; do not fit it with benchmark targets. Author-run accuracy/latency do not establish our task performance. |
 | Torchcast Decision 27B | [Publisher card/source](https://huggingface.co/torchcast-ai/torchcast-decision-27b): all three typed outputs, full probabilities, published context up to 262,144; weights CC BY-NC 4.0 and code Apache-2.0. Choices above 26 options take additional rounds. | Excluded by owner choice; no adapter or exact token audit here. Adds another large GPU runtime; the 30-class Wine Review task must exercise its multi-round path. Published Decision Index results are author-run and guided model development; inspect training overlap and actual GPU throughput rather than using the headline to select it. |
 
-Microsoft context evidence was refreshed 13 October: [OpenRouter's model listing](https://openrouter.ai/microsoft/microsoft-decision-1)
-specifies 32,768 tokens. The earlier unknown ceiling meant unverified documentation, not
-unlimited context. Deployed Foundry input accounting still needs verification. The same
-listing says weights are continually updated, so an unchanged model alias or API version
-does not establish immutable weights. Capture provider/version/date and complete responses;
-seek an immutable deployment before a campaign and disclose unresolved model drift.
+The six selected interfaces can represent binary probabilities, complete class vectors and
+ordered regression probabilities. This does not establish coverage or calibrated target-unit
+prediction. Runtime-specific rendering and calibration must be preserved for fair comparison.
 
-The seven selected interfaces remain compatible with one binary probability, a complete
-multiclass vector and an expected nine-level direction. This is schema compatibility;
-their accuracy, numerical behavior, account access and throughput on these datasets remain
-unverified. Score is an ordinal readout, not a continuous-target regression model.
+Native rendering, attention, option encoding and calibration differ despite shared typed
+semantics. Strands' reviewed engine has mutable option offsets, so concurrency is not assumed.
+Clef's convenience response rounds probabilities and its local renderer truncates state;
+retain precise probabilities and enforce complete-input counts before inference. Connection
+recipes and acceptance evidence live in VSC/run reports rather than this literature record.
 
-The pinned [Perplexity inference source](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b/blob/14c9d90137962d300f3de95633f7b6535e80c5ce/source/src/autojev/model.py)
-requires one singular `question` per row: `DecisionModel.predict([row], batch_size=1)[0]`,
-then `answer(question, probabilities)`. Preserve its saved noncausal attention and calibrated
-temperature; `prepare` rejects over 8,192 tokens. A map of named `questions` is the other
-providers' interface, not this Python method's argument. The offline preview now shows
-these exact arguments without importing the model or downloading weights.
-
-[Strands serving documentation](https://github.com/strands-labs/strands-decider/blob/main/docs/inference.md)
-specifies `--strict-window` to reject overlong inputs; default serving truncates the state.
-It also reports shared mutable option offsets and unverified concurrent behavior, so future
-calls must be serialized per engine until the pinned runtime passes concurrency checks.
-Keep its unauthenticated server on loopback. The checkpoint contains an adapter/readout;
-stage the separate Qwen base too. Its pinned `provenance.json` names base revision
-`b1485b2fa6dfa1287294f269f5fb618e03d52d7c`, with an explicit caveat that the publisher inferred
-this training-time revision because the training hosts had not pinned it. Pin both artifacts
-and the runtime, retaining that provenance limitation. [Pinned checkpoint provenance](https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610/blob/216d1ccb46a9e9b036eb9187b248db98480f77d4/provenance.json).
-
-Cloudflare also [documents automatic state truncation](https://developers.cloudflare.com/workers-ai/models/clef-flash/);
-local token validation must prevent silent differences in input coverage. Microsoft's returned
-model name can differ from the requested deployment alias. Liquid returns an answers/usage
-object without requiring Jev's model field. Provider-specific response normalization and
-provenance validation are therefore required; the Jev response validator cannot simply be
-reused unchanged for all extractors.
-
-Token accounting checked 14 October against the same pinned sources: Liquid's single-question
-route encodes the complete `prompt.render` result without adding special tokens again.
-Strands `_fit(strict_window=True)` separately encodes the state with special tokens and the
-question without them; tokenizing their concatenation can give a different count. Perplexity
-`prepare` renders `decision_messages` with its saved chat template and disables thinking.
-The project now executes these weight-free formats with the actual staged tokenizers.
-The checked hosted API references expose response usage, but do not establish the exact
-hosted bill from these open-model counts. Clef and Intern now have two additional exact offline counters with synthetic-task
-publisher-format parity checks. Their full-dataset token audits remain pending. Jev and Microsoft
-hosted counts remain unverified. The saved 18-dataset audit contains 1,698,127 unique inputs
-per provider: Liquid 821,257,572, Strands 1,141,530,844 and Perplexity 960,172,532 tokens,
-all within their configured windows. These totals are measurements for those three formats,
-not confidence bounds on other providers' token usage. Hosted cost estimates must state their
-token assumption and then be replaced by pilot billing measurements.
-
-### Hosted throughput and public benchmarks
-
-Checked 14 October: Jev publishes 80 requests/s and 100,000 input tokens/s, explicitly
-subject to change. Microsoft publishes 60, 150, 225, 360, 500 and 900 requests/minute for
-tiers 1-6, with allocation-dependent deployment limits. For 1,698,127 unique single-question
-calls, request-only lower bounds are 5.90 hours at Jev's published 80 RPS, and 19.65 days
-(tier 1) to 31.45 hours (tier 6) for Microsoft. These exclude latency, retries, token limits
-and outages. Confirm actual quota; another model's generic quota table is not evidence.
-[Jev limits](https://docs.typesafe.ai/models),
-[Microsoft quotas](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/quotas-limits#microsoft-decision-1-quotas).
-
-Microsoft's [general Foundry quota-tier policy](https://learn.microsoft.com/en-us/azure/foundry/openai/quotas-limits#quota-tiers)
-ties tier assignment/upgrades to consumption, enterprise relationships and payment history;
-it does not publish a fixed purchase price or spending threshold for tier 6. Additional quota
-can be requested without changing tier, subject to approval. The model's published inference
-price remains $0.042/M input tokens, output free: one billion billed input tokens would cost
-$42, independent of any unverified account-specific agreement. This is an illustrative token
-assumption, not a measured Microsoft bill. Throughput eligibility and inference pricing are
-different questions. Practical access exclusions must be declared before inspecting accuracy;
-they do not establish an excluded model's quality.
+### Public decision benchmarks
 
 Public comparisons already exist. [Decision Index](https://github.com/apolinario/decision-index)
 has a reproducible 37-benchmark public component; its full score also uses private tests.
@@ -527,22 +372,6 @@ prediction benefit, coverage, probability behavior and extraction cost. It must 
 framed as the first general decision-model benchmark.
 
 ### Research evidence and its limits
-
-The Microsoft announcement's current text reports 2.5 times the speed of H2O-Lightning-4B
-and 35 times GPT-6 Sol in its own experiment; it does not currently support the newsletter's
-specific 2.8-times-Jev claim. Those are publisher measurements with workload/hardware caveats,
-not an independently reproduced comparison. Using a pre-trained backbone is standard transfer
-learning and does not establish the vendor's confidence, commitment or motives. Funding and
-geopolitical commentary are not scientific evidence for selecting this project's extractors.
-
-`src/jev/alternatives.py` provides offline previews of the shared question semantics and
-documented provider transports. API endpoints/deployments/auth differ even when semantics
-match. Score maps probabilities over indices 0..8 to expected direction by subtracting 4;
-it is not native prediction in target units. Self-hosted weights avoid API token fees but
-still incur compute/storage cost. A controlled comparison needs matched input text and
-declared coverage; differing context limits must not silently change the inputs. Compare
-within fixed downstream predictors, retaining cheap text statistics and conventional text
-encodings as controls. A seven-provider catalog is preparation, not proof of novelty or readiness.
 
 The following are arXiv preprints as checked on 12 October, not verified peer-reviewed
 acceptances. Main methods, results and limitations were inspected for the ten core papers
@@ -570,19 +399,11 @@ a general extractor on heterogeneous table datasets. Likewise, the [network-traf
 Jev configurations on numerical packet data; supervision budgets differ, so this does not
 isolate architecture as the cause or test our text-augmentation method.
 
-All four requested alternative families were released after Jev's 15 September launch;
-first family releases and later checkpoint updates are different dates. Their shared typed
-schemas establish interface feasibility, not successful coverage of our longest inputs,
-remaining class vocabularies, or continuous targets. Spotify's 114-class task remains exploration-only. Score predicts an ordered rubric, not a target measured
-in salary, price or other dataset units. Provider/checkpoint identity must enter request keys
-before sharing a cache across extractors. Jev and the three selected self-hosted adapters
-have offline contract tests, including Clef/Intern; the Microsoft response adapter is pending. No extractor has
-been enabled or executed on these datasets.
-
-The reviewed evidence supports evaluating a separately approved comparator, not automatically
-replacing Jev or expanding into a broad model leaderboard. This is a dated primary-source
-review, not an exhaustive claim that no other papers exist. The local TFM resource was read
-without modification; the current pin is recorded at the start of this document.
+Family release dates and checkpoint update dates differ; these are vendor releases, not
+independent demonstrations of tabular benefit. Uniform typed schemas establish representation
+feasibility, while actual GPU coverage/quality must be tested. The reviewed papers support
+measuring incremental predictive utility, probability behavior and cost under a fixed protocol;
+they do not guarantee publishability or justify claiming the first decision-model benchmark.
 
 ## 6. Question wording, task definitions and context comparability
 
@@ -614,7 +435,7 @@ requires human provenance/leakage review; field validation cannot certify its co
 find that instructive-looking prompts need not be the cause of good NLI performance.
 [Sclar et al. (ICLR 2024)](https://proceedings.iclr.cc/paper_files/paper/2024/hash/6c0e99d736da621403018ca7b32b1a4d-Abstract-Conference.html)
 find substantial sensitivity to meaning-preserving prompt formatting and weak cross-model
-correlation of formats. Those experiments study generative/prompt-based models, not all seven
+correlation of formats. Those experiments study generative/prompt-based models, not all six
 extractors here. Their relevance is methodological: freeze common semantics and inspect several
 predeclared paraphrases/orderings on a small shared pilot, without selecting prompts from final
 CV performance. Distinguish probability changes, class flips and extraction failures.

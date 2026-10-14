@@ -1,6 +1,3 @@
-# Came with the template, and worth keeping: `src/utils/clean_run.py` is identical in every
-# project, and it deletes things. The one behaviour worth pinning is that a wipe leaves the tracked
-# `.gitkeep` markers and their directories behind — without them a fresh clone has nowhere to write.
 """`src/utils/clean_run.py` — the wipe."""
 
 from __future__ import annotations
@@ -26,7 +23,7 @@ def test_lists_by_default_and_deletes_only_when_asked(isolated_output, capsys) -
 
 def test_a_wipe_keeps_the_directory_skeleton(isolated_output) -> None:
     """`rmtree` would take `output/figures/.gitkeep` with it, and the next clone would have
-    nowhere to write."""
+    nodirectory markers."""
     from src.utils.paths import figures_dir, logs_dir
 
     for folder in (logs_dir("experiment_1"), figures_dir()):

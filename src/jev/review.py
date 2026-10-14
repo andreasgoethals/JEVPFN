@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import copy
 import json
+import sqlite3
+from contextlib import closing
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -18,13 +21,48 @@ from src.data.loaders import load_catalog, load_dataset
 from src.data.selection import selected_entries
 from src.data.text_reuse import semantic_codes
 from src.jev.cost import group_lengths
+from src.jev.inputs import _read_set
 from src.jev.provider import api_preview
+from src.jev.question_bank import payload_from_text
 from src.jev.requests import build_requests, text_groups
+from src.utils import paths
 from src.utils.config import load_config
 from src.utils.serialization import canonical_json
 
 
-def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
+def _wire_body(request, entry, question_variant):
+    if entry is not None:
+        text = json.loads(request.payload_json)["state"]["text"]
+        request = replace(
+            request, payload_json=canonical_json(payload_from_text(entry, question_variant, text))
+        )
+    return api_preview(request)
+
+
+def _group_sizes(metadata, lengths, group, body):
+    """Count the exact wire characters, including definitions of present fields only."""
+    body["state"]["text"] = {}
+    definitions = (
+        body["state"]["task"].get("documentary_definition", {}).get("text_column_definitions")
+    )
+    field_sizes = (
+        {c: len(canonical_json({c: v})) - 2 for c, v in definitions.items()}
+        if definitions is not None
+        else {}
+    )
+    if definitions is not None:
+        definitions.clear()
+    chars, present = group_lengths(metadata, lengths, group, len(canonical_json(body)))
+    for column, size in field_sizes.items():
+        chars += np.where(lengths[f"present_{metadata.text_columns.index(column)}"], size, 0)
+    if field_sizes:
+        chars += np.maximum(present - 1, 0)  # Commas between supplied field definitions.
+    return chars, present
+
+
+def review_dataset(
+    dataset, cfg: dict, *, question_entry=None, question_variant="accepted"
+) -> tuple[list[dict], list[dict]]:
     features, metadata = dataset.features, dataset.metadata
     lengths = request_lengths(dataset)
     codes = semantic_codes(features.loc[:, list(metadata.text_columns)])
@@ -43,9 +81,8 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
                 for col in metadata.text_columns:
                     preview_features[col] = "preview"
                 preview = build_requests(preview_features, metadata, 0, variant)[slot]
-                body = api_preview(preview)
-                body["state"]["text"] = {}
-                chars, present = group_lengths(metadata, lengths, group, len(canonical_json(body)))
+                body = _wire_body(preview, question_entry, question_variant)
+                chars, present = _group_sizes(metadata, lengths, group, body)
                 active = present > 0
                 keep = active & ~codes[list(group)].duplicated().to_numpy()
                 # A joint request with only one available field equals that field's per-column request.
@@ -57,6 +94,7 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
                         {
                             "dataset": metadata.dataset_name,
                             "dataset_id": metadata.dataset_id,
+                            "question_variant": question_variant,
                             "mode": mode,
                             "include_non_text_features": context,
                             "text_columns": canonical_json(list(group)),
@@ -97,7 +135,14 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
                             "include_non_text_features": context,
                             "request_key": request.cache_key,
                             "wire_tokens_approx": int(
-                                np.ceil(len(canonical_json(api_preview(request))) / 4)
+                                np.ceil(
+                                    len(
+                                        canonical_json(
+                                            _wire_body(request, question_entry, question_variant)
+                                        )
+                                    )
+                                    / 4
+                                )
                             ),
                         }
                     )
@@ -110,9 +155,27 @@ def review_collection(
     """Recalculate selected-dataset costs from real values, retaining nothing on disk."""
     records, pilot = [], []
     catalog = load_catalog(cfg["catalog"])
+    selected = {e["id"] for e in selected_entries(catalog, cfg)}
     for entry in catalog["datasets"] if include_excluded else selected_entries(catalog, cfg):
         dataset = load_dataset(entry, allow_download=False)
-        part, sample = review_dataset(dataset, cfg)
+        question_entry, variant = None, "accepted_audit_only"
+        if entry["id"] in selected:
+            path = paths.dataset_question_path(entry["id"])
+            if not path.is_file():
+                raise FileNotFoundError(
+                    "Run src.jev.preparation before reviewing the extraction workload"
+                )
+            with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+                _, recipe, _, question_entry = _read_set(db, None)
+            if (
+                recipe["data_identity"] != dataset.source["data_identity"]
+                or recipe["task_schema_sha256"] != dataset.metadata.fingerprint
+            ):
+                raise ValueError("Prepared questions and loaded dataset identities differ")
+            variant = recipe["question_variant"]
+        part, sample = review_dataset(
+            dataset, cfg, question_entry=question_entry, question_variant=variant
+        )
         records.extend(part)
         pilot.extend(sample)
         print(f"Reviewed {entry['name']}", flush=True)

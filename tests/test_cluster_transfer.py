@@ -84,8 +84,11 @@ def test_import_not_allowed_on_vsc(isolated_output, tmp_path):
 
 def test_token_summary_rebases_and_retains_other_provider(tmp_path, monkeypatch):
     from src.cluster.transfer import _combine_token_reports
+    from src.utils.config import load_yaml
     from src.utils.serialization import write_json
 
+    catalog = load_yaml("extractors")
+    monkeypatch.setattr("src.cluster.transfer.load_yaml", lambda _: catalog)
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
     local, incoming = tmp_path / "local.json", tmp_path / "incoming.json"
     record = {"provider": "liquid", "audit_id": "fixed", "counts_database": "/remote/file.sqlite3"}

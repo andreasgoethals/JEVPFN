@@ -41,7 +41,6 @@ candidate_extractors:
 - perplexity
 - cloudflare
 - strands
-- microsoft
 - intern
 non_text_columns: all_original_numerical_and_categorical_features
 additional_controls:
@@ -52,5 +51,4 @@ feature_selectors:
   perplexity: null
   cloudflare: null
   strands: null
-  microsoft: null
   intern: null

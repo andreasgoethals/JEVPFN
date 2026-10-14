@@ -1,7 +1,7 @@
 extends: feature_creation
 name: saved_decision_feature_comparison
 comparison:
-  providers: [jev, liquid, perplexity, cloudflare, strands, microsoft, intern]
+  providers: [jev, liquid, perplexity, cloudflare, strands, intern]
   representations: [per_column, joint]
   # With one artifact per provider/representation it is selected and recorded.
   # If several versions exist, stop: pin dataset -> provider -> representation -> artifact_id here.

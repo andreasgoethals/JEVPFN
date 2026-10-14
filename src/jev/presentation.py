@@ -33,7 +33,7 @@ def show_request(request):
             f"<p><b>Source row:</b> {escape(str(origin['row_id']))} · <b>Target name:</b> {escape(str(task['target']))}</p>"
             + text
             + f"<p><b>Fixed question:</b> {escape(question['instructions'])}</p>"
-            + f"<p><b>Output:</b> {feature} No Jev output has been generated.</p>"
+            + f"<p><b>Output:</b> {feature} This preview performs no inference.</p>"
             + "<details><summary>Complete API body, including answer options</summary><pre>"
             + escape(json.dumps(body, ensure_ascii=False, indent=2))
             + "</pre></details>"
@@ -107,6 +107,7 @@ def mode_budget(estimates, cfg, ratio=4):
 
 def throughput_table(requests, tokens, cfg):
     tps = cfg["throughput_review"]["proposed_input_tokens_per_second"]
+    proposed_rps = cfg["throughput_review"]["proposed_requests_per_second"]
     return pd.DataFrame(
         [
             {
@@ -116,6 +117,6 @@ def throughput_table(requests, tokens, cfg):
                 "token_bound_hours": tokens / tps / 3600,
                 "ideal_minimum_hours": max(requests / rps, tokens / tps) / 3600,
             }
-            for rps in (10, 20, 40)
+            for rps in (proposed_rps / 2, proposed_rps, proposed_rps * 2)
         ]
     )

@@ -279,11 +279,6 @@ def prediction_dir(run_id: str, *, phase: str) -> Path:
     return results_dir("predictions", output_component(run_id), phase=phase)
 
 
-def feature_artifact_dir(dataset_id: str, representation: str, artifact_id: str) -> Path:
-    parts = [output_component(v) for v in (dataset_id, representation, artifact_id)]
-    return jev_cache_path("/".join(["jev_cache", "features", *parts]))
-
-
 def dataset_cache_path(dataset_id: str) -> Path:
     """One durable file per dataset, containing responses and all feature versions."""
     return jev_cache_path(f"jev_cache/{output_component(dataset_id)}.sqlite3")
@@ -358,7 +353,6 @@ def config_path(name: str) -> Path:
     prerequisites = {
         "audit": "exploration",
         "datasets": "exploration",
-        "template_example": "exploration",
         "question_design": "question_preparation",
         "dataset_semantics": "question_preparation",
         "question_preparation": "question_preparation",

@@ -35,6 +35,13 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import canonical_json, digest, file_sha256, write_json
 
+# Keep the fingerprinted tokenizer implementations stable while filtering the active roster.
+HOSTED_UNAVAILABLE = {
+    provider: reason
+    for provider, reason in HOSTED_UNAVAILABLE.items()
+    if provider in load_yaml("extractors")["candidates"]
+}
+
 
 def selected_inputs():
     entries = selected_entries(load_catalog(), load_yaml("feature_creation"))

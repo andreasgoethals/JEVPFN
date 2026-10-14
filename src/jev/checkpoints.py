@@ -30,7 +30,7 @@ def checkpoint_files(folder):
 
 def verify_checkpoint(provider):
     folder = checkpoint_path(provider)
-    manifest = json.loads((folder / "_JEVPFN_CHECKPOINT.json").read_text())
+    manifest = json.loads((folder / "_JEVPFN_CHECKPOINT.json").read_text(encoding="utf-8"))
     if (
         manifest["provider"] != provider
         or manifest["revision"] != PINS[provider]
@@ -102,7 +102,7 @@ def stage(provider):
             "files": checkpoint_files(base),
         }
     destination = folder / "_JEVPFN_CHECKPOINT.json"
-    if destination.exists() and json.loads(destination.read_text()) != manifest:
+    if destination.exists() and json.loads(destination.read_text(encoding="utf-8")) != manifest:
         raise ValueError("Checkpoint manifest changed; preserve the old checkpoint separately")
     write_json(destination, manifest)
     print(f"Staged and fingerprinted {provider}: {folder}", flush=True)

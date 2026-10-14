@@ -57,7 +57,7 @@ evaluation:
     target_scale: declared_per_dataset_no_automatic_inverse_transform
   metric_conventions:
     implementation: src.evaluation.metrics
-    version: prediction-metrics-v1
+    version: prediction-metrics-v2
     headline_metric_selection: deferred_until_before_reviewing_feature_comparison_results
     headline_metric_does_not_block_metric_recording: true
     record_all_configured_metrics: true

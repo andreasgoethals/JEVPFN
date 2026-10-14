@@ -320,17 +320,17 @@ def test_recorded_raw_response_recovers_without_another_call(tmp_path, intended_
 
 def test_six_offline_mappings_share_identical_questions(intended_request):
     catalog = load_yaml("extractors")
-    assert len(catalog["candidates"]) == 7 and catalog["enabled"] is False
+    assert len(catalog["candidates"]) == 6 and catalog["enabled"] is False
     original = preview(intended_request, "jev")["body"]["questions"]
     for provider, candidate in catalog["candidates"].items():
         assert candidate["enabled"] is False
-        mapped = preview(intended_request, provider, deployment_name="research-deployment")
+        mapped = preview(intended_request, provider)
         if provider == "perplexity":
             assert mapped["arguments"]["rows"][0]["question"] == original["semantic"]
         else:
             body = mapped.get("body", mapped.get("arguments"))
             assert body["questions"] == original
-    with pytest.raises(ValueError, match="deployment"):
+    with pytest.raises(ValueError, match="Unknown extractor"):
         preview(intended_request, "microsoft")
 
 

@@ -206,7 +206,7 @@ def cached_evaluate(cache, client, request):
 
 def token_evidence(provider, counter):
     path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
-    combined = json.loads(path.read_text())
+    combined = json.loads(path.read_text(encoding="utf-8"))
     matches = [r for r in combined["self_hosted"] if r["provider"] == provider]
     if len(matches) != 1:
         raise ValueError("Run the exact tokenizer audit for this provider first")
@@ -301,7 +301,9 @@ def run(provider, *, execute=False, full=False):
     # All cheap checks precede weight loading. GPU runtime is created once per job.
     client = SelfHostedClient(provider, allow_model_runs=True)
     if full:
-        acceptance = json.loads(Path(cfg["accepted_before_extraction_manifest"]).read_text())
+        acceptance = json.loads(
+            Path(cfg["accepted_before_extraction_manifest"]).read_text(encoding="utf-8")
+        )
         if (
             acceptance.get("accepted") is not True
             or acceptance.get("settings_sha256") != digest(client.settings)

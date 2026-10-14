@@ -1,113 +1,53 @@
-# Operational notes
+# Operational evidence
 
-- **Source meanings:** `dataset_semantics.yaml` is the maintained dictionary. Preserve raw labels; never infer units from label magnitudes. Book Price has a misleading USD column name despite documented upstream log-price. Jev and five self-hosted decoders/materializers are implemented but live GPU compatibility and hosted multi-provider spending remain unverified.
+Current stage: Experiment 0A. Full extraction and predictive runs remain disabled; GPU
+contract execution is implemented but no VSC model result has been supplied. Project/data
+write access and the CPU preflight are verified. Storage quota and independent backup remain
+unverified. The read-only library pin is `de324efcca55be392feb0c01830b3b6ce364587f`.
+Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
 
-## Current state
+## VSC runs
 
-Experiment 0A preparation and offline tokenizer testing. Guarded SDK transport, self-hosted
-GPU pilot/extraction adapters and injectable CV orchestration
-are prepared; no paid calls/features or model fitting have been verified. The owner's VSC
-CPU/token jobs failed on missing optional dependencies (see table). A bounded real GPU
-contract job is implemented but has not run on VSC. Full extraction/benchmark switches
-remain disabled. The public GitHub repository is connected; generated outputs and raw data stay ignored.
-The literature submodule is read-only at the existing index/checkout pin
-de324efcca55be392feb0c01830b3b6ce364587f (existing index/checkout verified 13-10-2026; not modified here).
-Durable method constraints are in README.md; interface evidence is in LITERATURE_REVIEW.md.
-The owner handles Git commits/pushes. Proposed plans belong in chat, not temporary documents.
-
-## Avoid repeating these failures
-
-| Date | Cluster / job | Configuration | Observed outcome |
+| Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
-| 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | FAILED, exit 1, 1m30s. All dataset checks passed; 309 tests passed, 3 notebook tests failed (IPython/nbformat absent), 1 platform skip. |
-| 14-10-2026 | wICE / 62312903 | experiment_0_tokens.slurm | FAILED, exit 1, 1h06m02s. Perplexity chat rendering lacked Jinja2. Liquid/Strands logged all dataset completions; committed count databases remain resumable. Only the original three providers were submitted. |
+| 14-10-2026 | wICE / 62316611 | experiment_0_cpu.slurm | COMPLETED, exit 0, 1m25s; MaxRSS 1,065,032K. Owner supplied sacct after the dependency/test-scope repair. |
+| 14-10-2026 | wICE / 62316685 | experiment_0_tokens.slurm | RUNNING at 15:24 CEST, 3m24s. Owner verified dependency install and all five tokenizer format checks first. Completion not supplied. |
+| 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | FAILED, exit 1, 1m30s; 309 tests passed, 3 notebook tests lacked IPython/nbformat, 1 platform skip; dataset checks passed. |
+| 14-10-2026 | wICE / 62312903 | experiment_0_tokens.slurm | FAILED, exit 1, 1h06m02s; Perplexity lacked Jinja2; Liquid/Strands completed counting; committed databases survive. |
 
-Do not update the VSC checkout while jobs use it. Record final status after inspecting
-`sacct` and logs, not from submission alone. PROJECT write access is verified; quota and
-independent backup remain unverified. `sam-balance` confirms account credit availability,
-not storage quota or successful execution.
+Submission/RUNNING are not successful completion. Do not update a checkout/environment while
+jobs use it. Record final status from sacct and logs. Account balance is not storage quota.
 
-- **Optional dependencies (14-10-2026):** `pip check` cannot detect undeclared optional
-  imports. Pin Jinja2 in `token-audit` and render all task formats before starting the long
-  audit. Publish each completed provider independently. The VSC CPU suite excludes only
-  `notebook`-marked tests; the complete local suite retains them. Never delete count databases
-  to repair dependencies. The tokenization.py file hash is part of the original three
-  counter identities: do not reformat it casually and invalidate an expensive audit.
-- **GPU contract scope:** `gpu_contracts --execute` requires a VSC allocation and exact
-  token evidence, and plans at most 67 forwards (100 ceiling). Synthetic features belong
-  under PROJECT Experiment 0 results; real first/longest responses belong in the permanent
-  per-dataset cache. Preserve the DATA logs/manifests. No synthetic test proves CUDA/checkpoint
-  compatibility, and no bounded test automatically grants full extraction acceptance.
+## Reusable failure lessons
 
-- **VSC installation shadowing (14-10-2026):** the owner's transcript shows a newly created
-  Conda JEVPFN environment, but pip ran in TabPFNCredit's inherited venv and upgraded packages
-  there. JEVPFN's clone, PROJECT write probe and tokenizer staging succeeded; no Slurm run
-  is shown. Setup and jobs now share `scripts/activate_conda.sh`, which clears aliases,
-  functions and inherited Python overrides, then checks the resolved prefix before exporting
-  `JEVPFN_PYTHON`. Use that explicit interpreter for pip. Repair the other project's environment
-  separately from its own requirements, with authorization; do not guess a rollback.
-  Large CUDA environments and package caches belong on PROJECT, not personal DATA.
+- **Interpreter shadowing:** a JEVPFN Conda prompt did not prevent pip from using another
+  project's inherited venv. Use the shared activation helper and its explicit verified
+  interpreter; repair any affected external environment only from its own requirements.
+- **Optional imports:** pip check missed undeclared Jinja2 and absent notebook extras.
+  Token-audit now requires Jinja2 and checks every task format before full counting.
+  VSC excludes only local notebook tests; the complete local suite retains them.
+- **Audit fingerprints:** tokenization.py and decision_tokenization.py are frozen implementations
+  used by ongoing audits. Retain their byte identities; filter the active roster outside them.
+  Their historical availability constants are not active model selection. Never substitute a
+  base tokenizer or character estimate for a complete publisher prompt.
+- **Protected data:** earlier recursive empty-folder cleanup deleted raw data; all 20 pinned
+  datasets were restored. Never recursively clean raw/prepared inputs, permanent caches or
+  weights. Cleanup tools must not target a temporary directory's parent/system TEMP root.
+- **Concurrent notebook reports:** Windows sharing violations require atomic replacement,
+  bounded retries and recovery copies. Readers/writers share OS locks; keep the report lock.
+  Execute real kernels and persist rich/partial .ipynb outputs; preserve edits made during a run.
+- **Figure verification:** an inline overview overlapped despite a correct PDF. Separate
+  table/header/footer axes and inspect notebook-kernel output, not PDF alone.
+- **Artifact completeness:** checking only trace groups present in a file missed an entirely
+  deleted group. Require every expected text group and every original row; failure is not
+  missing text. Input hashes, class order and provider/checkpoint identities must match.
+- **Transfer recovery:** merge validated dataset stores transactionally with backups;
+  never overwrite populated caches. Preserve conflicts, bundles and historical spending rows.
+- **Test isolation:** clear ambient phase/job variables in synthetic fixtures; otherwise local
+  tests can inherit VSC routing. Real host checks happen outside synthetic fixtures.
+- **Scope of evidence:** approximate character screens flagged inputs that fitted the first
+  three exact tokenizers. Current local counts and VSC results have separate provenance.
+  GPU contracts/predictor fits/full-fold resources require real allocation evidence; synthetic
+  tests or CUDA tensors alone do not establish compatibility.
 
-- **Hybrid cache transfer:** `src.cluster.transfer export/import` now snapshots both tiers,
-  validates checksums and merges each dataset transactionally. Conflict means rollback, never
-  replacement; retries reuse rows. Preserve original bundles and pre-merge backups. Imported
-  spending records are historical evidence, never a replacement for local budgets/queues.
-
-- **Exact token formatting (14-10-2026):** character proxies flagged Fake Job Postings rows
-  that fit all three actual open-model tokenizers. Liquid encodes a complete rendered turn;
-  Strands encodes state (special tokens enabled) and question separately; Perplexity uses
-  its saved chat template and answer codes. Never count bare text or substitute a base tokenizer
-  for an unavailable hosted tokenizer. Keep token counts resumable and traceable to input hashes.
-  All 1,698,127 selected unique inputs fit: maxima Liquid 3,104, Strands 3,244 and Perplexity
-  3,154 tokens. Actual GPU count parity remains a separate test; hosted counts are unverified.
-  Hugging Face/Xet cache variables must be set before its first import, including during staging.
-
-- **Preflight test environment:** the combined local preflight exposed inherited
-  `JEVPFN_PHASE=experiment_0` in tests expecting exploration. Synthetic tests now clear
-  ambient routing/job variables and explicitly simulate their own temporary storage;
-  real host checks run outside that fixture. This also prevents writes to real VSC allocations.
-
-- **Provider preparation boundaries:** all seven previews share semantic questions; five
-  self-hosted adapters now use pinned runtimes. Perplexity uses singular `question` in each prediction row.
-  Strands requires strict-window rejection and serialized inference until concurrency is verified.
-- **Evaluation identity and memory:** include exact matrix/schema/row hashes, feature artifact
-  IDs and resolved estimator settings in run IDs. Release each fold's estimator before loading
-  its successor. Allow documented float32 probability roundoff without renormalizing outputs.
-
-- **Temporary audit storage:** cleanup must never include a temporary directory's parent
-  (the system TEMP root). Runner-owned temporary directories remove themselves; paid data remains protected.
-
-- **Blank executed notebooks (01-10-2026):** flattening cells to a Python script never updates
-  `.ipynb` outputs. Use real kernels in the invoking venv, persist successful/partial outputs,
-  retain backups, and do not overwrite notebooks edited during execution.
-
-- **Inline overview overlap (01-10-2026):** the PDF looked correct while Jupyter placed
-  figure-level title/notes over cells. Keep header/table/footer in separate layout axes and
-  verify an actual notebook-kernel render, not just the saved PDF.
-- **Raw-data loss (30-09-2026):** the owner reported data deletion after an earlier empty-folder
-  cleanup command. All 20 pinned releases were restored and hash-checked. The command is now
-  an error-only stub. Never revive it or recursively clean input/cache folders.
-- **Parallel audit race on Windows:** atomic replacement alone cannot replace an open NPZ.
-  Retain the OS-backed audit lock for writers and readers, and the report aggregation lock.
-- **Notebook report sharing violation (30-09-2026):** an interactive final cell failed at
-  `os.replace` on `feature_creation/Captions.md`. Retry transient access errors, skip unchanged
-  content and preserve a recovery copy on persistent failure. Aggregate writes share `.reports.lock`.
-  The parallel notebook check also reproduced this on audit `text.csv`; the same atomic writer
-  now protects CSV, JSON and reports, with replacement retries for NPZ outputs as well.
-- **Wrong Python:** the default runtime was Python 3.14/pandas 3. Use this project's
-  `.venv/Scripts/python.exe` (Python 3.12), including actual Jupyter-kernel verification.
-- **Windows ReadOnly directories:** relocation/case-only renaming may fail. Resolve exact
-  workspace paths and verify contents before a native PowerShell move/removal. Do not combine
-  filesystem operations across shells. The dataset folders and pinned source snapshots are protected.
-- **VSC environment shadowing:** explicitly use the activated Conda interpreter; an inherited
-  local venv can otherwise take precedence. Keep JEVPFN and CreditPFN environments separate.
-- **Cluster account:** reuse the configured CreditPFN account after checking association.
-  The former Mindwell pilot account is not a fallback. Submitted jobs are recorded above.
-
-- **Whole-group trace loss (12-10-2026):** checking only groups present in `requests` accepted
-  a feature artifact after all traces for one text column were removed. Validate the expected
-  group set from representation/text columns and require numeric columns for every group.
-  Synthetic fault checks reproduced this; 144 tests pass after the validation fix.
-
-Historical details remain in Git history. Keep this file short and record only reusable
-operational evidence; put current task results in generated reports and edits in CHANGELOG.md.
+Historical change details belong in CHANGELOG/Git, not duplicated status narratives here.

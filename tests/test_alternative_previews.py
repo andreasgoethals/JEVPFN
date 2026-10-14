@@ -41,18 +41,18 @@ def test_perplexity_uses_singular_question_and_saved_calibration(request_by_task
     assert mapped["live_verified"] is False
 
 
-def test_local_server_preview_requires_strict_window_and_serialization(request_by_task):
+def test_direct_strands_preview_requires_strict_window_and_serialization(request_by_task):
     mapped = preview(request_by_task, "strands")
-    assert "--strict-window" in mapped["server_command"]
-    assert "<staged-pinned-checkpoint>" in mapped["server_command"]
+    assert "strict_window=True" in mapped["initialization"]
+    assert "SystemOneRequest(**arguments)" in mapped["call"]
     assert any("Serialize" in requirement for requirement in mapped["runtime_requirements"])
-    assert mapped["body"]["questions"] == api_preview(request_by_task)["questions"]
+    assert mapped["arguments"]["questions"] == api_preview(request_by_task)["questions"]
 
 
 def test_all_previews_are_inspectable_json_and_explicitly_unverified(request_by_task):
     before = request_by_task.to_json()
-    for provider in ("jev", "liquid", "perplexity", "cloudflare", "strands", "microsoft", "intern"):
-        mapped = preview(request_by_task, provider, deployment_name="<deployment-name>")
+    for provider in ("jev", "liquid", "perplexity", "cloudflare", "strands", "intern"):
+        mapped = preview(request_by_task, provider)
         assert json.loads(json.dumps(mapped)) == mapped
         assert mapped["live_verified"] is False
         assert mapped["reference"].startswith("https://")

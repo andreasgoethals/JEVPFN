@@ -72,7 +72,7 @@ def test_two_providers_coexist_and_are_selected_explicitly(tmp_path, isolated_ou
     with pytest.raises(ValueError, match="Ambiguous"):
         assemble_feature_set(dataset, [jev, liquid], "non_text_plus_per_column")
     with pytest.raises(ValueError, match="exactly one"):
-        load_feature_selection(path, {"provider": "microsoft"}, ("per_column",))
+        load_feature_selection(path, {"provider": "unselected_provider"}, ("per_column",))
 
 
 def test_inventory_never_creates_empty_dataset_cache(tmp_path):

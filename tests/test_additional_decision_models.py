@@ -15,7 +15,6 @@ def test_owner_selected_roster_and_delivery():
     candidates = load_yaml("extractors")["candidates"]
     assert set(candidates) == {
         "jev",
-        "microsoft",
         "liquid",
         "strands",
         "perplexity",
@@ -100,9 +99,7 @@ def test_intern_preserves_published_calibration(monkeypatch, tmp_path, publisher
     from src.jev import open_runtimes
 
     engine = Mock()
-    publisher = SimpleNamespace(
-        DEFAULT_TEMPERATURE=publisher_temperature, DecisionEngine=engine
-    )
+    publisher = SimpleNamespace(DEFAULT_TEMPERATURE=publisher_temperature, DecisionEngine=engine)
     monkeypatch.setattr(open_runtimes, "_module", lambda *args: publisher)
     if publisher_temperature != 1.99241824:
         with pytest.raises(ValueError, match="calibration"):

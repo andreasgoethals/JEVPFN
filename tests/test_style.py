@@ -1,7 +1,3 @@
-# Came with the template, and worth keeping: `src/visualize/style.py` ships mostly empty — a
-# project fills in its own look — but the A4 geometry and the print settings are the same
-# everywhere, and they are what these pin. A figure that comes out the wrong size, or with Type 3
-# fonts, is a figure the paper cannot use.
 """`src/visualize/style.py` — the A4 half of the shared style."""
 
 from __future__ import annotations

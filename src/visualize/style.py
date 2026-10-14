@@ -149,7 +149,6 @@ DECISION_COLORS = {
     "cloudflare": "#846C9C",
     "intern": "#8C6D31",
     "strands": "#AF4C59",
-    "microsoft": "#627C93",
 }
 COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, 7.5)

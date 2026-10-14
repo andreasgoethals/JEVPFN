@@ -57,7 +57,7 @@ def test_all_empty_inputs_no_calls_all_derived_values_missing(
 
 
 @pytest.mark.parametrize(
-    "provider", ["jev", "liquid", "perplexity", "strands", "cloudflare", "microsoft", "intern"]
+    "provider", ["jev", "liquid", "perplexity", "strands", "cloudflare", "intern"]
 )
 def test_even_hand_built_empty_request_is_rejected_for_every_provider(provider):
     request = IntendedRequest(
@@ -66,7 +66,7 @@ def test_even_hand_built_empty_request_is_rejected_for_every_provider(provider):
         "{}",
     )
     with pytest.raises(ValueError, match="Empty text"):
-        preview(request, provider, deployment_name="placeholder")
+        preview(request, provider)
 
 
 def test_exact_context_guard_fails_before_truncation_or_dispatch():

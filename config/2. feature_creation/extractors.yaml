@@ -14,6 +14,7 @@ candidates:
     model: jev-1.13.0
     version: 1.13.0
     delivery: hosted_typesafe
+    context_tokens: 32000
     input_price_per_million_usd: 0.042
     output_price_per_million_usd: 0
     published_requests_per_second: 80
@@ -26,6 +27,7 @@ candidates:
     model: LiquidAI/d1-3B
     revision: 051bcc464b01b9f92942b364d9586b0ef5912432
     delivery: self_hosted
+    context_tokens: 32768
     license: LFM_Open_License
     input_price_per_million_usd: null
     reference: https://huggingface.co/LiquidAI/d1-3B
@@ -34,8 +36,9 @@ candidates:
     model: perplexity-ai/pplx-decider-v1.1-27b
     revision: 14c9d90137962d300f3de95633f7b6535e80c5ce
     delivery: self_hosted
+    context_tokens: 8192
     license: Apache-2.0
-    announced_hosted_input_price_per_million_usd: 0.02
+    input_price_per_million_usd: null
     reference: https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b
   cloudflare:
     enabled: false
@@ -68,27 +71,11 @@ candidates:
     runtime_revision: b9fc83626bcca822d00f822d6c2e151b8d244ee9
     strict_window_required: true
     serialize_calls_per_engine: true
-    loopback_only: true
     delivery: self_hosted
     license: Apache-2.0
     input_price_per_million_usd: null
     reference: https://github.com/strands-labs/strands-decider
-  microsoft:
-    enabled: false
-    model: Microsoft-Decision-1
-    version: '1'
-    deployment_name: null
-    delivery: hosted_foundry_public_preview
-    input_price_per_million_usd: 0.042
-    output_price_per_million_usd: 0
-    context_tokens_reference: 32768
-    context_source: https://openrouter.ai/microsoft/microsoft-decision-1
-    context_verified_for: openrouter_listing_only_not_deployed_foundry_account
-    immutable_weights_verified: false
-    published_rpm_by_tier: [60, 150, 225, 360, 500, 900]
-    quota_reference: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/quotas-limits#microsoft-decision-1-quotas
-    account_limits_verified: false
-    reference: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision
+    context_tokens: 4096
 readiness_required:
 - explicit_owner_roster_selection
 - verified_account_access_or_checkpoint_license

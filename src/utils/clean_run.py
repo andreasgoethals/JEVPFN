@@ -1,4 +1,4 @@
-"""Wipe what the previous run produced, so the next one starts clean.
+"""Wipe what the previous run produced, only when explicitly requested.
 
     python -m src.utils.clean_run                        list what is there, delete nothing
     python -m src.utils.clean_run --clean                 delete it
@@ -31,16 +31,15 @@ from src.utils.paths import (
     processed_dir,
 )
 
-#: Tracked so an empty directory survives a clone. Not run output, so never counted or deleted —
-#: removing them would leave a fresh clone with nowhere to write.
+#: Preserve any legacy directory markers; output directories are otherwise created on demand.
 KEEP = frozenset({".gitkeep", ".gitignore"})
 
 
 def roots(*, processed: bool = False) -> list[Path]:
     """Every tree to clear. Two `output_JEVPFN/` roots on the cluster, one locally, plus the cache.
 
-    `results_dir()` is listed separately because on the cluster it is the one part of `output_JEVPFN/`
-    on project storage — clearing only `outputs_dir()` there would leave the largest files behind.
+    The PROJECT output root includes expensive token audits/predictions as well as results.
+    This command is an explicit destructive reset, never routine experiment preparation.
     """
     found = [outputs_dir()]
     results = large_outputs_dir()
@@ -70,7 +69,7 @@ def wipe(root: Path) -> int:
     Two passes, and the order matters: files first, then empty directories bottom-up. That leaves
     exactly the directories holding a tracked `.gitkeep` and removes the per-run ones
     (`figures/<notebook>/`) that do not. An `rmtree` of the subtree would take
-    `output_JEVPFN/figures/<phase>/.gitkeep` with it, and the next clone would have nowhere to write.
+    `output_JEVPFN/figures/<phase>/.gitkeep` with it, and remove structure markers unnecessarily.
     """
     if not root.is_dir():
         return 0

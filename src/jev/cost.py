@@ -8,9 +8,7 @@ The character approximation is applied to the exact intended JSON, not API wire 
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 
-from src.data.audit import AuditCollection, audit_lock
 from src.jev.requests import make_payload, text_groups
 from src.utils.serialization import canonical_json
 
@@ -67,61 +65,6 @@ def estimate_dataset(metadata, lengths: dict, cfg: dict) -> list[dict]:
                 }
             )
     return estimates
-
-
-def estimate_workload(audit: AuditCollection, cfg: dict) -> pd.DataFrame:
-    records = []
-    with audit_lock(audit.folder):
-        for dataset_id in audit.summary.dataset_id:
-            with np.load(audit.folder / f"{dataset_id}_lengths.npz", allow_pickle=False) as lengths:
-                records.extend(estimate_dataset(audit.metadata(dataset_id), lengths, cfg))
-    result = pd.DataFrame(records)
-    with audit_lock(audit.folder):
-        result.to_csv(audit.folder / "jev_workload.csv", index=False)
-    return result
-
-
-def workload_totals(estimates: pd.DataFrame) -> pd.DataFrame:
-    result = (
-        estimates.groupby(["mode", "include_non_text_features"], sort=False)[
-            [
-                "requests",
-                "input_tokens_approx",
-                "hypothetical_provider_overhead_tokens",
-                "cost_per_unit_price",
-                "input_cost_estimate",
-            ]
-        ]
-        .sum(min_count=1)
-        .reset_index()
-    )
-    result["estimate_basis"] = "nonempty slots BEFORE exact reuse; intended JSON"
-    return result
-
-
-def budget_scenarios(estimates: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """One price estimate per input mode; combined already includes per-column and joint."""
-    result = workload_totals(estimates)
-    rate = cfg.get("provider_reference", {}).get("requests_per_minute_reference")
-    if rate:
-        result["ideal_hours_at_reference_rpm"] = result.requests / rate / 60
-    return result
-
-
-def full_feature_budget(totals: pd.DataFrame) -> dict:
-    """Count the text-only combined mode once; never double-count primitive modes."""
-    selected = totals.loc[totals["mode"] == "per_column_and_joint"]
-    if len(selected) != 1 or set(selected.include_non_text_features) != {False}:
-        raise ValueError("Expected the text-only combined mode.")
-    return {
-        "logical_requests": int(selected.requests.sum()),
-        "input_tokens_approx": int(selected.input_tokens_approx.sum()),
-        "input_cost_estimate": None
-        if selected.input_cost_estimate.isna().any()
-        else float(selected.input_cost_estimate.sum()),
-        "deduplication": "not deducted",
-        "context_overflow_policy": "unresolved; not an executable budget",
-    }
 
 
 def group_lengths(metadata, lengths, group, base):

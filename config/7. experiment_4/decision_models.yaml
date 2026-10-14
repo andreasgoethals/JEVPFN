@@ -10,7 +10,6 @@ candidate_extractors:
 - perplexity
 - cloudflare
 - strands
-- microsoft
 - intern
 candidate_models:
 - catboost
@@ -33,7 +32,7 @@ inputs: identical_task_metadata_and_text_only
 missing_policy: skip_empty_store_nan
 feature_view: main
 new_extraction_requires:
-- approved_local_pilot
+- approved_provider_pilot
 - verified_revision
 - reviewed_common_input_coverage
 - approved_budget

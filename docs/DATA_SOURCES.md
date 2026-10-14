@@ -1,9 +1,7 @@
-# Data sources and audit definitions
+# Data sources and definitions
 
-Source pins verified 29-09-2026; text-reuse audit updated 30-09-2026. The library is pinned read-only to
-`de324efcca55be392feb0c01830b3b6ce364587f` (existing checkout verified 13-10-2026);
-the original data/source pins below remain unchanged. Earlier source review used library pin
-`1ac6e6783f24b2d5cd058af7ad8cad7c1bfaf7ae`.
+The frozen MulTaBench data/code release below defines the audit. The current methodology
+and file contracts are in [README](../README.md); execution commands are in [VSC](VSC.md).
 
 ## Primary sources and pins
 
@@ -80,13 +78,9 @@ uses the allowed distinct class labels, never their counts or any other target-d
 
 ## Reproduction and outputs
 
-Run `python -m src.data.prepare`, then `python -m src.utils.run_notebooks` in the
-approved environment. Preparation validates all pinned hashes. The audit caches completed
-datasets, writes markers last, and fingerprints its cache with data/config/code hashes and dependency
-versions. Rich row examples are local/ignored; tracked summaries contain aggregate results only.
-An OS-backed lock coordinates shared audit construction and length-array reads between parallel
-notebooks, including release after a failed process.
-Data retain source licences; the repository does not redistribute the CSVs or raw request examples.
+Preparation validates pinned hashes; local audit tables are temporary. The source catalog
+and permanent dataset files retain download/source identities. Parallel audit construction
+and reads share an OS-backed lock. CSVs retain their source licences and are not redistributed.
 
 Raw folders now use `data/raw/01_fake_job_posting/` through
 `data/raw/20_zomato_restaurants/`. Catalog `directory` selects the local name, while `slug`
@@ -211,5 +205,6 @@ Only documentary meanings enter `documented-task-v1`. Audit frequencies, target 
 current row labels and prediction results remain excluded. API class IDs retain original class
 order and types; the human description is added alongside each raw class. The selected text
 fields keep their raw names; per-column requests include only their applicable field definitions.
-The previous notebook cost estimates describe the accepted `directional-v2` payload, so the
-expanded question/context budget must be recomputed before paid extraction.
+Selected-dataset budgets read the frozen prepared question version, including definitions of
+nonempty fields. Removed datasets retain an audit-only template for workload comparison.
+Actual billing still needs a hosted pilot.

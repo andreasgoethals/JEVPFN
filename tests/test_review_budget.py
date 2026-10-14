@@ -19,6 +19,7 @@ from src.utils.serialization import canonical_json
 
 
 @pytest.mark.parametrize("texts", [1, 2])
+@pytest.mark.parametrize("frozen", [False, True])
 @pytest.mark.parametrize(
     "task,labels",
     [
@@ -27,7 +28,7 @@ from src.utils.serialization import canonical_json
         ("reg", [0.3, -1.5, 9.0, 2.1]),
     ],
 )
-def test_budget_matches_real_wire_and_cache_identity(texts, task, labels):
+def test_budget_matches_real_wire_and_cache_identity(texts, task, labels, frozen):
     frame = pd.DataFrame(
         {
             "text": ['a"b', 'a"b', "  ", None],
@@ -45,7 +46,31 @@ def test_budget_matches_real_wire_and_cache_identity(texts, task, labels):
     )
     dataset = LoadedDataset(frame, metadata, official, {}, [])
     cfg = load_config("feature_creation")
-    records, _ = review_dataset(dataset, cfg)
+    entry, apply = None, lambda request: request
+    if frozen:
+        from src.jev.question_bank import build_question_bank, compile_frozen_question
+        from src.utils.config import load_yaml
+
+        design = load_yaml("question_design")
+        design.pop("semantics_catalog")
+        design["documentary_definitions"] = {
+            "fixture": {
+                "source_reference": "https://example.test/synthetic-data-dictionary",
+                "target_definition": "A documented target, without label statistics.",
+                "text_column_definitions": {
+                    c: f'Meaning of {c}: Résumé, 世界 and a "quote".' for c in text_columns
+                },
+            }
+        }
+        bank = build_question_bank([metadata], design)
+        entry = bank["datasets"]["fixture"]
+        apply = compile_frozen_question(metadata, bank, "proposed_direct")
+    records, _ = review_dataset(
+        dataset,
+        cfg,
+        question_entry=entry,
+        question_variant="proposed_direct" if frozen else "accepted",
+    )
     all_requests = []
     for context in (False,):
         variant = copy.deepcopy(cfg)
@@ -53,7 +78,9 @@ def test_budget_matches_real_wire_and_cache_identity(texts, task, labels):
             representation="per_column_and_joint", include_non_text_features=context
         )
         for position in range(len(frame)):
-            all_requests.extend(build_requests(dataset.features, metadata, position, variant))
+            all_requests.extend(
+                apply(r) for r in build_requests(dataset.features, metadata, position, variant)
+            )
     unique = {request.cache_key: request for request in all_requests}
     for ratio in (3, 4, 5):
         subset = [record for record in records if record["characters_per_token"] == ratio]
@@ -68,7 +95,7 @@ def test_budget_matches_real_wire_and_cache_identity(texts, task, labels):
         )
 
 
-def test_retired_cleanup_fails_without_touching_files(tmp_path):
+def test_removed_cleanup_cannot_touch_files(tmp_path):
     shell = shutil.which("pwsh") or shutil.which("powershell")
     if shell is None:
         pytest.skip("PowerShell unavailable on this platform")
@@ -86,5 +113,5 @@ def test_retired_cleanup_fails_without_touching_files(tmp_path):
         check=False,
     )
     assert result.returncode != 0
-    assert b"disabled" in result.stderr
+    assert not script.exists()
     assert source.read_bytes() == before

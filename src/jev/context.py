@@ -22,13 +22,8 @@ from src.utils.config import load_yaml
 from src.utils.serialization import canonical_json, write_json
 
 CONTEXT_LIMITS = {
-    "jev": 32000,
-    "liquid": 32768,
-    "perplexity": 8192,
-    "cloudflare": 16384,
-    "intern": 8192,
-    "strands": 4096,
-    "microsoft": 32768,
+    provider: candidate["context_tokens"]
+    for provider, candidate in load_yaml("extractors")["candidates"].items()
 }
 
 
@@ -114,7 +109,6 @@ def screen_prepared(folder=None, *, progress=print):
         "exact_token_counts": False,
         "not_a_safe_upper_bound": True,
         "provider_wrapper_overhead_included": False,
-        "microsoft_limit_status": "OpenRouter reference; Foundry deployment unverified",
         "context_limits_reference": CONTEXT_LIMITS,
         "unique_inputs": sum(d["unique_inputs"] for d in datasets),
         "overflow_proxy_counts": {
@@ -182,6 +176,7 @@ def saved_screen_tables():
             }
             for ratio, counts in report["overflow_proxy_counts"].items()
             for provider, count in counts.items()
+            if provider in CONTEXT_LIMITS
         ]
     )
     return (

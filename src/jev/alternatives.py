@@ -1,7 +1,7 @@
 """Offline adapter previews. No credentials, network or model loading.
 
-These document request mapping, not verified live response adapters. Each provider
-still needs an approved contract pilot, immutable revision and context checks.
+These match the implemented transports without loading them. Actual provider/GPU
+compatibility still requires an approved pilot and context checks.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ PERPLEXITY_SOURCE = (
 )
 
 
-def preview(request, provider, *, deployment_name=None):
+def preview(request, provider):
     """Return documentation-verified call shapes, never execute their transports.
 
     Offline placeholders name an already staged, reviewed checkpoint; constructing
@@ -39,20 +39,6 @@ def preview(request, provider, *, deployment_name=None):
             },
             "body": api_preview(request),
             "reference": "https://docs.typesafe.ai/api",
-            "live_verified": False,
-        }
-    if provider == "microsoft":
-        if not deployment_name:
-            raise ValueError("Microsoft requires an explicit Azure deployment name")
-        return {
-            "transport": "https_post",
-            "method": "POST",
-            "endpoint": "<foundry-resource-endpoint>/providers/microsoft/v1/systemone",
-            "headers": {"api-key": "<AZURE_API_KEY>", "Content-Type": "application/json"},
-            "body": {"model": deployment_name, "state": state, "questions": questions},
-            "pin_requirement": "underlying Microsoft-Decision-1 version 1, separate from deployment alias",
-            "response_note": "The returned model identifies the underlying model, not the deployment alias.",
-            "reference": "https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision",
             "live_verified": False,
         }
     if provider == "cloudflare":
@@ -83,23 +69,17 @@ def preview(request, provider, *, deployment_name=None):
         }
     if provider == "strands":
         return {
-            "transport": "self_hosted_post",
-            "method": "POST",
-            "endpoint": "<local-server>/v1/systemone",
-            "headers": {"Content-Type": "application/json"},
-            "body": {"state": state, "questions": questions},
-            "pin_requirement": "server checkpoint revision and inference package hash",
-            "server_command": (
-                "strands-decider serve <staged-pinned-checkpoint> "
-                "--device cuda --port 8000 --strict-window"
-            ),
+            "transport": "self_hosted_SystemOneEngine.evaluate",
+            "initialization": "SystemOneEngine(StrandsDeciderModel.load(checkpoint), EngineConfig(device='cuda', strict_window=True, max_batch=1, model_name=pinned_model))",
+            "call": "engine.evaluate(SystemOneRequest(**arguments)).model_dump(mode='json')",
+            "arguments": {"state": state, "questions": questions},
+            "pin_requirement": "adapter, base checkpoint and installed inference package hashes",
             "runtime_requirements": [
                 "Stage and pin both the adapter checkpoint and its separate base model.",
-                "Use --strict-window; default serving truncates long text.",
+                "Use strict_window=True; reject overlong input without truncation.",
                 "Serialize calls per engine; publisher reports shared mutable option offsets.",
-                "Keep the unauthenticated server on its default 127.0.0.1 binding.",
             ],
-            "reference": "https://github.com/strands-labs/strands-decider/blob/main/docs/inference.md",
+            "reference": "https://github.com/strands-labs/strands-decider/blob/b9fc83626bcca822d00f822d6c2e151b8d244ee9/src/strands_decider/infer.py",
             "live_verified": False,
         }
     if provider == "liquid":

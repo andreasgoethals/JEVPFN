@@ -58,23 +58,23 @@ def dataset_example(dataset, cfg, bank, catalog):
     for accepted in requests:
         trace = json.loads(accepted.provenance_json)
         variants = {}
-        for variant in bank["datasets"][meta.dataset_id]["variants"]:
+        available = bank["datasets"][meta.dataset_id]["variants"]
+        for variant in ("documented",) if "documented" in available else available:
             request = apply_frozen_question(accepted, meta, bank, variant)
+            provider_previews = {}
+            for provider in catalog["candidates"]:
+                bound = bind_provider(request, provider, catalog)
+                provider_previews[provider] = {
+                    **preview(request, provider),
+                    "cache_identity": json.loads(bound.settings_json),
+                    "request_key": bound.cache_key,
+                }
             variants[variant] = {
                 "semantic_payload": json.loads(request.payload_json),
                 "semantic_question": semantic_question(
                     json.loads(request.payload_json)["question"]
                 ),
-                "provider_previews": {
-                    provider: {
-                        **preview(request, provider, deployment_name="<azure-deployment-name>"),
-                        "cache_identity": json.loads(
-                            bind_provider(request, provider, catalog).settings_json
-                        ),
-                        "request_key": bind_provider(request, provider, catalog).cache_key,
-                    }
-                    for provider in catalog["candidates"]
-                },
+                "provider_previews": provider_previews,
             }
         groups.append(
             {
@@ -99,7 +99,7 @@ def dataset_example(dataset, cfg, bank, catalog):
         ],
         "groups": groups,
         "runtime_verified": False,
-        "notice": "Exact constructed bodies/arguments, not live-verified requests. Angle-bracket account/deployment/credential placeholders require real configuration. No actual credentials stored.",
+        "notice": "Exact constructed bodies/arguments; live provider/GPU validation remains pending. Checkpoint/credential placeholders require real configuration. No credentials stored.",
     }
 
 
@@ -109,7 +109,7 @@ def selected_examples(cfg, bank, catalog):
 
 
 def show_dataset_example(example):
-    """Nested details keep 18 datasets and seven providers readable without truncation."""
+    """Nested details retain every selected dataset's complete request previews."""
     from IPython.display import HTML, display
 
     escape = html.escape
@@ -125,14 +125,16 @@ def show_dataset_example(example):
                 for provider, mapping in variant["provider_previews"].items()
             )
             variants.append(
-                f"<details><summary>{escape(name)}: question, actual text and all seven calls</summary>"
+                f"<details><summary>{escape(name)}: question, actual text and {len(variant['provider_previews'])} calls</summary>"
                 f"<pre>{escape(body)}</pre>{providers}</details>"
             )
         title = group["mode"] + ": " + ", ".join(group["source_text_columns"])
         details.append(f"<details><summary>{escape(title)}</summary>{''.join(variants)}</details>")
     variants = example["groups"][0]["variants"] if example["groups"] else {}
     first = (
-        variants.get("documented", variants["proposed_direct"])["semantic_payload"]
+        variants["documented" if "documented" in variants else "proposed_direct"][
+            "semantic_payload"
+        ]
         if example["groups"]
         else None
     )

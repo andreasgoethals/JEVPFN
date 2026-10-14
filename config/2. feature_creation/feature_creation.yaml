@@ -4,7 +4,9 @@ phase: feature_creation
 allow_download: false
 feature_creation:
   enabled: false
-  execution_site: local  # Owner decision: all Jev feature creation precedes VSC experiment 0.
+  execution_site: provider_specific
+  hosted_execution_site: local
+  self_hosted_execution_site: vsc_gpu
   scope: selected_18_datasets_all_text_columns
   modes: [per_column, joint]
   cache_namespace: verified_response
@@ -16,7 +18,7 @@ feature_creation:
   feature_schema_version: 2
   feature_directory: jev_cache  # One <dataset_id>.sqlite3 per dataset.
   pilot_rows_per_dataset: 3  # Proposed pilot size, deterministic CSV positions, no calls yet.
-  full_build_requires_local_pilot_pass: true
+  full_build_requires_provider_pilot_pass: true
   context_overflow_policy: unresolved  # Fail before paid execution; never silently truncate.
   missing_text_policy: skip_empty_store_nan
 dataset_selection:
