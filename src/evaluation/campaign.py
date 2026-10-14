@@ -41,7 +41,7 @@ def benchmark_plan(main=None, text=None):
     rows = []
     for entry in selected_entries(load_catalog(), main):
         for model in MAIN_MODELS:
-            # Reuse the no-extractor baseline across all six decision-model comparisons.
+            # Reuse the no-extractor baseline across all selected decision-model comparisons.
             rows.append(
                 {
                     "dataset_id": entry["id"],

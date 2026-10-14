@@ -1,4 +1,4 @@
-checked_on: '2026-10-13'
+checked_on: '2026-10-14'
 enabled: false
 shared_semantics:
 - binary_probability
@@ -16,6 +16,10 @@ candidates:
     delivery: hosted_typesafe
     input_price_per_million_usd: 0.042
     output_price_per_million_usd: 0
+    published_requests_per_second: 80
+    published_input_tokens_per_second: 100000
+    limits_are_dynamic: true
+    account_limits_verified: false
     reference: https://docs.typesafe.ai/api
   liquid:
     enabled: false
@@ -29,18 +33,30 @@ candidates:
     enabled: false
     model: perplexity-ai/pplx-decider-v1.1-27b
     revision: 14c9d90137962d300f3de95633f7b6535e80c5ce
-    delivery: self_hosted_or_hosted_pending_access_verification
+    delivery: self_hosted
     license: Apache-2.0
     announced_hosted_input_price_per_million_usd: 0.02
     reference: https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b
   cloudflare:
     enabled: false
-    model: '@cf/cloudflare/clef-flash'
-    revision: null
-    delivery: hosted_workers_ai
-    input_price_per_million_usd: 0.038
-    output_price_per_million_usd: 0
-    reference: https://developers.cloudflare.com/workers-ai/models/clef-flash/
+    model: Cloudflare/clef-flash
+    revision: 8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3
+    delivery: self_hosted
+    license: Apache-2.0
+    context_tokens: 16384
+    input_price_per_million_usd: null
+    reference: https://huggingface.co/Cloudflare/clef-flash
+  intern:
+    enabled: false
+    model: internlm/Intern-Decision-4B
+    revision: 0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd
+    delivery: self_hosted
+    license: Apache-2.0
+    context_tokens: 8192
+    max_options: 62
+    calibration_temperature: 1.99241824
+    input_price_per_million_usd: null
+    reference: https://huggingface.co/internlm/Intern-Decision-4B
   strands:
     enabled: false
     model: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
@@ -69,6 +85,9 @@ candidates:
     context_source: https://openrouter.ai/microsoft/microsoft-decision-1
     context_verified_for: openrouter_listing_only_not_deployed_foundry_account
     immutable_weights_verified: false
+    published_rpm_by_tier: [60, 150, 225, 360, 500, 900]
+    quota_reference: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/quotas-limits#microsoft-decision-1-quotas
+    account_limits_verified: false
     reference: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision
 readiness_required:
 - explicit_owner_roster_selection

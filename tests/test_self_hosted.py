@@ -29,7 +29,7 @@ def settings(provider):
     }
 
 
-@pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity"])
+@pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity", "cloudflare", "intern"])
 @pytest.mark.parametrize("kind", ["binary_probability", "choice", "ordered_choice"])
 def test_all_three_provider_transports_preserve_task_vectors(provider, kind):
     question = {"kind": kind, "text": "Evaluate the supplied text."}
@@ -70,7 +70,9 @@ def test_all_three_provider_transports_preserve_task_vectors(provider, kind):
     client.model.evaluate.return_value = SimpleNamespace(model_dump=lambda **kwargs: raw)
     client.request_class = SimpleNamespace
     client.model.prepare.return_value = SimpleNamespace(input_tokens=12)
-    client.model.predict.return_value = [[0.3, 0.7]]
+    client.model.predict.return_value = (
+        raw if provider in {"cloudflare", "intern"} else [[0.3, 0.7]]
+    )
     client.decode = lambda *args: answer
     response = client.evaluate(request)
     features = response_features(request, response)
@@ -89,7 +91,7 @@ def test_disabled_model_run_never_imports_or_loads_weights():
         run("liquid")
 
 
-@pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity"])
+@pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity", "cloudflare", "intern"])
 def test_cache_resume_and_feature_materialization_for_every_provider(isolated_output, provider):
     frame = pd.DataFrame({"text": ["same", "same", None], "y": [0, 1, 0]})
     meta = extract_metadata(

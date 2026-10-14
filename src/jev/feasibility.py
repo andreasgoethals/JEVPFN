@@ -16,15 +16,14 @@ def comparison_feasibility(estimates, catalog):
         "jev": 32000,
         "liquid": 32768,
         "perplexity": 8192,
-        "cloudflare": 24576,
+        "cloudflare": 16384,
+        "intern": 8192,
         "strands": 4096,
         "microsoft": catalog["candidates"]["microsoft"].get("context_tokens_reference"),
     }
     records = []
     for name, candidate in catalog["candidates"].items():
         price = candidate.get("input_price_per_million_usd")
-        if name == "perplexity":
-            price = candidate["announced_hosted_input_price_per_million_usd"]
         ceiling = limits[name]
         above = (
             None

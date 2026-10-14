@@ -30,7 +30,8 @@ CONTEXT_REFERENCES = {
     "jev": 32000,
     "liquid": 32768,
     "perplexity": 8192,
-    "cloudflare": 24576,
+    "cloudflare": 16384,
+    "intern": 8192,
     "strands": 4096,
 }
 

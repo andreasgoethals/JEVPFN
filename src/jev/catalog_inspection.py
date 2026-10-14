@@ -109,7 +109,7 @@ def selected_examples(cfg, bank, catalog):
 
 
 def show_dataset_example(example):
-    """Nested details keep 18 datasets and six providers readable without truncation."""
+    """Nested details keep 18 datasets and seven providers readable without truncation."""
     from IPython.display import HTML, display
 
     escape = html.escape
@@ -125,7 +125,7 @@ def show_dataset_example(example):
                 for provider, mapping in variant["provider_previews"].items()
             )
             variants.append(
-                f"<details><summary>{escape(name)}: question, actual text and all six calls</summary>"
+                f"<details><summary>{escape(name)}: question, actual text and all seven calls</summary>"
                 f"<pre>{escape(body)}</pre>{providers}</details>"
             )
         title = group["mode"] + ": " + ", ".join(group["source_text_columns"])

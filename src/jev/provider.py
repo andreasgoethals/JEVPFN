@@ -88,7 +88,7 @@ def response_features(request: IntendedRequest, response: dict) -> dict[str, flo
         payload = json.loads(request.payload_json)
         require_nonempty_text(payload)
         if (
-            provider not in {"liquid", "strands", "perplexity"}
+            provider not in {"liquid", "strands", "perplexity", "cloudflare", "intern"}
             or settings.get("api_mapping_version") != f"{provider}-self-hosted-v1"
         ):
             raise ValueError("Provider response decoder is not implemented for this mapping")

@@ -3,7 +3,7 @@
 python -m src.cluster.token_audit --stage-tokenizers  # small public files, then count
 python -m src.cluster.token_audit                     # offline; resume saved counts
 
-Three open-weight tokenizers are available. The other three hosted counts remain explicitly
+Five open-weight tokenizers are available. The other two hosted counts remain explicitly
 unverified. This never removes rows, shortens text, loads weights or performs inference.
 """
 
@@ -23,8 +23,13 @@ import numpy as np
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
+from src.jev.decision_tokenization import (
+    HOSTED_UNAVAILABLE,
+    SELF_HOSTED,
+    ExactCounter,
+    stage_tokenizers,
+)
 from src.jev.inputs import _read_set, input_origins, iter_prepared_inputs
-from src.jev.tokenization import HOSTED_UNAVAILABLE, SELF_HOSTED, ExactCounter, stage_tokenizers
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import canonical_json, digest, file_sha256, write_json
@@ -94,7 +99,10 @@ def saved_exact_token_tables():
         "created_utc": combined["created_utc"],
         "datasets": len(current),
         "complete_publisher_prompt_included": True,
-        "hosted_unverified": combined["hosted_unverified"],
+        "hosted_unverified": HOSTED_UNAVAILABLE,
+        "pending_self_hosted": sorted(
+            set(SELF_HOSTED) - {r["provider"] for r in combined["self_hosted"]}
+        ),
         "scope": "Pinned publisher tokenizers and rendering; real GPU runtime parity still requires the pilot.",
         "rows_removed": False,
         "inference_executed": False,
@@ -280,7 +288,7 @@ def main():
         "--provider",
         choices=SELF_HOSTED,
         action="append",
-        help="Default: all three self-hosted tokenizers",
+        help="Default: all five self-hosted tokenizers",
     )
     args = parser.parse_args()
     from src.cluster.preflight import storage_policy_failures
@@ -306,12 +314,18 @@ def main():
     ) as pool:
         futures = [pool.submit(audit_provider, provider, inputs) for provider in providers]
         reports = [future.result() for future in futures]
+    # A targeted recount must not discard completed audits for the other providers.
+    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
+    retained = {}
+    if report_path.exists():
+        retained = {r["provider"]: r for r in json.loads(report_path.read_text())["self_hosted"]}
+    retained.update({r["provider"]: r for r in reports})
     combined = {
         "created_utc": datetime.now(UTC).isoformat(),
         "stage": "experiment_0_before_extraction",
-        "self_hosted": reports,
+        "self_hosted": list(retained.values()),
         "hosted_unverified": HOSTED_UNAVAILABLE,
-        "all_six_models_verified": False,
+        "all_selected_models_verified": False,
         "rows_removed": False,
     }
     write_json(

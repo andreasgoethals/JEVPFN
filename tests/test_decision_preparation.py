@@ -131,7 +131,7 @@ def test_offline_pilot_has_distinct_provider_identities_and_no_raw_text(monkeypa
         r["question_bank_id"] == manifest["question_bank_id"] and r["request_key"]
         for r in manifest["records"]
     )
-    assert len(manifest["providers"]) == 6
+    assert len(manifest["providers"]) == 7
     assert not any("a" * 1000 in json.dumps(record) for record in manifest["records"])
     keys = {
         provider: {

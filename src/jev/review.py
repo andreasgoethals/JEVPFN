@@ -80,7 +80,7 @@ def review_dataset(dataset, cfg: dict) -> tuple[list[dict], list[dict]]:
                                 f"combined_requests_above_{limit}_approx": int(
                                     (combined_keep & (tokens > limit)).sum()
                                 )
-                                for limit in (4096, 8192, 24576, 32000, 32768)
+                                for limit in (4096, 8192, 16384, 24576, 32000, 32768)
                             },
                             "cost_unique_usd": None
                             if price is None

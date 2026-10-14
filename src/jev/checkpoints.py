@@ -8,7 +8,7 @@ import argparse
 import json
 import os
 
-from src.jev.tokenization import PINS, SELF_HOSTED, stage_tokenizers
+from src.jev.decision_tokenization import PINS, SELF_HOSTED, stage_tokenizers
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, file_sha256, write_json

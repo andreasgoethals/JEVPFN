@@ -2,6 +2,8 @@
 
 ## 14-10-2026
 
+- Added transactional cache unions, two-tier export/local import and backups; prepared pinned Clef/Intern counters/adapters and seven-model configs. Verified 349 tests, five notebooks/21 figures, lint and package consistency; live inference remains disabled.
+
 - Unified verified Conda activation for setup/jobs after cross-project installation; documented PROJECT transfers/environments, the pending hybrid-cache import and refreshed provider evidence. Verified 313 tests and seven shell files.
 - Counted all 1,698,127 unique inputs with each pinned open-model tokenizer: zero overflows; verified 310 tests, all five notebooks/21 figures, storage routing and six Slurm scripts. No weights, inference, allocations or Git publication.
 - Split Experiment 0 into before/after-extraction checks; added resumable exact publisher-tokenizer audits, guarded self-hosted adapters/materialization, VSC setup and CPU/GPU pilot jobs; corrected PROJECT folder duplication and removed TabPFN from the extractor GPU preflight requirement.

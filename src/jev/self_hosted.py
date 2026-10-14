@@ -1,4 +1,4 @@
-"""Guarded, serial GPU pilot/extraction for the three pinned open-weight candidates.
+"""Guarded, serial GPU pilot/extraction for five pinned open-weight candidates.
 
 Default CLI only explains readiness. Actual inference requires --execute, enabled pilot
 config, a VSC GPU allocation, staged/hash-verified weights and matching complete exact
@@ -23,10 +23,10 @@ from uuid import uuid4
 
 from src.jev.cache import ResponseCache
 from src.jev.checkpoints import verify_checkpoint
+from src.jev.decision_tokenization import PINS, SELF_HOSTED, ExactCounter
 from src.jev.inputs import _read_set, iter_prepared_inputs, prepared_request
 from src.jev.provider import QUESTION_ID, response_features, semantic_question
 from src.jev.templates import TEMPLATE_VERSION
-from src.jev.tokenization import PINS, SELF_HOSTED, ExactCounter
 from src.utils import paths
 from src.utils.config import load_config, load_yaml
 from src.utils.events import append_event
@@ -114,6 +114,13 @@ class SelfHostedClient:
             ):
                 raise ValueError("Perplexity runtime differs from the audited renderer")
             self.model, self.decode = DecisionModel(folder, device="cuda"), answer
+        elif provider in {"cloudflare", "intern"}:
+            from src.jev.open_runtimes import load_runtime
+
+            self.model = load_runtime(provider, folder, self.counter.limit)
+            self.settings["request_configuration"]["additional_runtime_sha256"] = file_sha256(
+                paths.REPO_ROOT / "src/jev/open_runtimes.py"
+            )
         else:
             from strands_decider import infer, prompting
             from strands_decider.modeling import StrandsDeciderModel
@@ -156,6 +163,10 @@ class SelfHostedClient:
                 raw = self.model.evaluate(
                     self.request_class(state=payload["state"], questions={QUESTION_ID: question})
                 ).model_dump(mode="json")
+            elif self.provider in {"cloudflare", "intern"}:
+                raw = self.model.predict(
+                    {"state": payload["state"], "questions": {QUESTION_ID: question}}
+                )
             else:
                 row = {"state": canonical_json(payload["state"]), "question": question}
                 runtime_count = self.model.prepare([row]).input_tokens

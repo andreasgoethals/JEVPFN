@@ -1,10 +1,10 @@
 # VSC setup
 
-Current status: the owner's 14 October transcript confirms the checkout, writable PROJECT
-directories and staged tokenizers. It also reveals package installation into an inherited
-TabPFNCredit venv, requiring the interpreter correction below. No JEVPFN allocation or model
-run appears in that transcript. Hosted extraction runs
-locally; Liquid, Perplexity and Strands use separate VSC GPU environments after a small pilot.
+Current status: the owner's updated 14 October transcript confirms the corrected dependency
+installation, successful `pip check`, writable PROJECT directories and submissions of CPU
+job 62312865 and tokenizer job 62312903 on wICE. Completion is not yet verified. The older
+environment-shadowing issue is documented in AGENTS_MEMORY.md. Hosted extraction runs
+locally; Liquid, Perplexity, Strands, Clef and Intern use VSC GPU environments after small pilots.
 VSC prediction consumes completed feature tables offline. Hosted API access from compute
 nodes is unnecessary for this workflow and remains unverified.
 
@@ -12,7 +12,7 @@ nodes is unnecessary for this workflow and remains unverified.
 
 Self-hosting Liquid d1-3B, Strands Decider 2B or Perplexity Decider 27B removes the vendor
 API token fee; it does not remove weight licence conditions, Slurm credit charges, setup,
-storage or inference time. The six-provider comparison remains disabled. Hosted extraction
+storage or inference time. The seven-provider comparison remains disabled. Hosted extraction
 will run locally; separate VSC extraction jobs serve the selected open checkpoints after
 runtime validation. No allocation has been launched.
 
@@ -121,7 +121,7 @@ sbatch scripts/slurm/experiment_0_tokens.slurm
 ```
 
 The token job resumes after interruption. It does not remove source rows. Every self-hosted
-input includes task definitions, text, question, options and publisher formatting. Jev/Clef/
+input includes task definitions, text, question, options and publisher formatting. Jev/
 Microsoft hosted counts remain unverified until their actual server tokenization can be checked.
 
 After selecting the GPU runtime in experiment 0, optional model extras can be installed
@@ -186,13 +186,14 @@ no live integration has passed acceptance. The exact saved input can be inspecte
 ```
 
 The `state` carries task definitions and named text values; `questions` carries instructions
-and answer options. `src.jev.alternatives.preview` renders the six corresponding calls.
+and answer options. `src.jev.alternatives.preview` renders the seven corresponding calls.
 Its placeholders never contain credentials. Use saved requests instead of hand-writing prompts.
 
 | Provider | Setup and connection | Context / price reference |
 |---|---|---|
 | [Jev](https://docs.typesafe.ai/models) | Local `pip install -e '.[jev]'`; set `TYPESAFE_API_KEY` privately. Pinned `jev-1.13.0`, `POST https://api.typesafe.ai/v1/systemone`, Bearer authorization. The guarded transport uses `TypeSafeClient.system_one(state, questions)`. | 32k state + question for our one-question calls; $0.042/M input tokens. Confirm account quotas. |
-| [Cloudflare Clef-flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/) | Workers AI account, Account ID and token with inference access. POST to `/client/v4/accounts/{account_id}/ai/run/@cf/cloudflare/clef-flash`; Bearer `CLOUDFLARE_AUTH_TOKEN`; body `model`, `state`, `questions`. The [public Apache-2.0 checkpoint](https://huggingface.co/Cloudflare/clef-flash) now provides an alternative self-hosted route; this project's Clef staging/tokenizer/runtime adapter is not yet implemented. | Hosted 24,576 tokens; $0.038/M input tokens. It can silently truncate; reject overlong inputs beforehand. Self-hosting removes vendor token fees, but requires a new exact-token audit and GPU pilot. Hosted/checkpoint parity is not assumed. |
+| [Cloudflare Clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Open weights only. `.[clef]` in an isolated PROJECT environment; pinned `joint_schema_model.py` and checkpoint. Our adapter uses `encode_record`, `collate_records` and the joint-head forward pass, retaining full softmax precision. | 16,384-token default in this pinned local runtime. Explicit precheck prevents its automatic truncation. No vendor API fee; GPU cost applies. Exact full-data audit and GPU pilot pending. |
+| [Intern-Decision-4B](https://huggingface.co/internlm/Intern-Decision-4B) | `.[intern]` in an isolated PROJECT environment; pinned `inference.py`, `DecisionEngine(checkpoint, max_length=8192, temperature=1.99241824)`, then `predict(request)`. | 8,192 tokens, 62 options. All selected vocabularies fit; exact full-data audit and GPU pilot pending. No vendor API fee; GPU cost applies. |
 | [Microsoft-Decision-1](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision) | Foundry subscription/project and a version-1 deployment. POST to the resource endpoint plus `/providers/microsoft/v1/systemone`; `api-key` header, `model` set to the deployment name. Store the returned underlying model too. | 32,768 is the OpenRouter reference, not yet verified for our Foundry deployment. Published input reference $0.042/M. Hosted weight immutability remains unresolved. |
 | [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Own Python 3.12/CUDA environment, `pip install -e '.[liquid]'`. Load the staged pinned directory using `AutoModel.from_pretrained(..., trust_remote_code=True, local_files_only=True, dtype=torch.bfloat16).to('cuda')`; call `model.system_one(state, questions)`. Review custom code before loading. | 32,768 tokens. No vendor inference fee; LFM Open License and GPU credits apply. Use its decision interface, not autogenerated chat-serving examples. |
 | [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Own Python 3.12/CUDA environment; install the pinned checkpoint's `requirements.txt` and this project. Add `<checkpoint>/source/src` to Python's path; use `autojev.model.DecisionModel(checkpoint, device='cuda')`, `predict([{'state': ..., 'question': ...}])`, then `answer(question, probabilities)`. | 8,192 tokens; preserve supplied attention mode/calibration. About 49 GiB weights plus working memory. No self-hosted token fee; Apache-2.0. Public hosted access was not established. |
@@ -214,6 +215,8 @@ to PROJECT, and creates the checkpoint hash manifest required by the GPU runner:
 # Later, when preparing each model's pilot:
 "$JEVPFN_PYTHON" -m src.jev.checkpoints --provider strands
 "$JEVPFN_PYTHON" -m src.jev.checkpoints --provider perplexity
+"$JEVPFN_PYTHON" -m src.jev.checkpoints --provider cloudflare
+"$JEVPFN_PYTHON" -m src.jev.checkpoints --provider intern
 ```
 
 For Perplexity use `--provider perplexity`; install its downloaded requirements before the
@@ -238,7 +241,7 @@ and checkpoint. It uses the pinned Liquid `prompt.render`/single-question route,
 The renderer sources and tokenizer files are fingerprinted; staged weights must carry the
 same tokenizer. Runtime input-token counts must match before an answer is accepted.
 
-`src.jev.self_hosted` implements direct, serialized local inference for all three providers;
+`src.jev.self_hosted` implements direct, serialized local inference for all five open providers;
 Strands uses `SystemOneEngine` without an HTTP server. Output normalization and materialization
 have synthetic tests, but live GPU contracts remain pending. Empty inputs never enter the
 queue; all source-row links remain in the prepared dataset database. Failure is not a missing
@@ -270,7 +273,7 @@ sbatch scripts/slurm/experiment_0_decision_pilot.slurm
 The pilot covers first/middle/last rows and ten longest exact requests per dataset, capped
 by a configurable 1,000-request compute ceiling. The script requests one A100, 128 GB host
 RAM and one hour; verify account/partition access. Only one A100 debug job may be queued at
-a time. Repeat with PROJECT `environments/strands` and `environments/perplexity` and their
+a time. Repeat with PROJECT environments for the other four open models and their
 pinned runtime dependencies. `JEVPFN_CONDA_ENV` accepts either a Conda name or an absolute prefix.
 Perplexity's checkpoint requirements pin Torch 2.14.0 and Transformers 5.17.0; do not install
 the downstream TabPFN Torch pin into that environment. Strands requires its separate base
@@ -316,10 +319,10 @@ all source origins, compressed numeric/row-request tables and embedded immutable
 Copy a closed file to PROJECT's equivalent `JEVPFN/data/jev_cache/` location only when no
 independently populated destination exists, and verify its feature checksums after transfer.
 Local API and VSC GPU runs can populate different providers in the same dataset filename:
-ordinary SCP replacement would discard one side. A validated, conflict-rejecting cache import
-and backup/restore test is still required before combining those independently created files.
-Until that exists, use one authoritative file/writer at a time and do not synchronize concurrent
-copies by overwriting. Source CSV fingerprints and original `csv:N` row IDs must
+ordinary SCP replacement would discard one side. Use the tested transfer workflow below.
+It snapshots SQLite databases, validates all file checksums and unions cache rows inside a
+transaction per dataset. Different responses for an identical request cause a rollback.
+Source CSV fingerprints and original `csv:N` row IDs must
 match before a join. Select each block explicitly by artifact ID; experiment-0 `feature_artifacts`
 accepts `dataset_id`/`artifact_id` mappings. DATA holds compact discovery indexes and logs under
 `output_JEVPFN/2. feature_creation/`. Ordinary output cleanup never touches paid dataset files.
@@ -328,6 +331,51 @@ The prediction writer rejects explicit DATA destinations on VSC. Notebook stdout
 rich outputs stay local; Slurm experiment logs use DATA. No per-row
 probabilities or raw Jev text belong in operational logs. This routing has local simulated-tier
 tests; actual allocation access/quota and interrupted transfer checks belong to experiment 0.
+
+## Download results and merge with local features
+
+Wait for all extraction/evaluation writers to finish. On VSC, in the verified CPU environment:
+
+```bash
+cd "$VSC_DATA/JEVPFN"
+python -m src.cluster.transfer export
+```
+
+The printed ZIP is under PROJECT `JEVPFN/output_JEVPFN/transfers/`. It contains dataset
+response/feature snapshots, token-count databases, predictions, other numbered-phase
+outputs, and DATA logs/manifests. It excludes raw datasets and prepared inputs (already
+held locally), model weights, environments and credentials. Use the printed filename:
+
+```powershell
+New-Item -ItemType Directory -Force '.\output_JEVPFN\transfers' | Out-Null
+scp 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/output_JEVPFN/transfers/JEVPFN_<bundle-id>.zip' '.\output_JEVPFN\transfers\'
+.\.venv\Scripts\python.exe -m src.cluster.transfer import '.\output_JEVPFN\transfers\JEVPFN_<bundle-id>.zip'
+.\.venv\Scripts\python.exe -m src.utils.run_notebooks
+```
+
+`<bundle-id>` is the actual filename printed by export, not a literal folder. SCP requires
+the VSC SSH key registered for the account; Open OnDemand browser login alone does not
+configure PowerShell SSH. A failed download is rejected by archive/checksum validation.
+Retry the same import after interruption: identical rows/artifacts are reused. Each existing
+dataset database gets a recoverable snapshot in local `output_JEVPFN/transfers/cache_backups/`.
+Local and imported provider/version artifacts coexist in one `data/jev_cache/<dataset>.sqlite3`.
+Small import/export receipts use experiment-0 DATA manifests on VSC (local output otherwise).
+Conflicting non-cache outputs are preserved as `__vsc_<content-hash>` files. Compatible token
+summaries are combined and their count paths rebased locally; different audit identities remain
+versioned for review. No automatic cleanup of bundles, backups or remote results is performed.
+The whole import is resumable; atomicity is per dataset, not across all 18 files. Imported
+spending/reservation rows are historical records, never an active local queue or reset budget.
+
+## Hosted quotas
+
+Checked 14 October: [Jev](https://docs.typesafe.ai/models) publishes 80 requests/s and 100,000
+input tokens/s, explicitly dynamic. [Microsoft-Decision-1](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/quotas-limits#microsoft-decision-1-quotas)
+publishes 60/150/225/360/500/900 requests per minute for tiers 1–6 (Global or Data Zone
+Standard). Do not use another model's generic TPM/RPM table for this deployment. Confirm
+the actual allocated capacity, any token/concurrency limits and retry headers in the account.
+Published rates are descriptive config fields, never automatically accepted execution limits.
+Both hosted candidates remain disabled; Microsoft's transport/decoder and separate spending
+ledger still need implementation and a small authorized contract test.
 
 ## Experiment 0
 

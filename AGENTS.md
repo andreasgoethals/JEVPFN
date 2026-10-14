@@ -30,9 +30,14 @@ Do not export question copies under output. `python -m src.jev.preparation` crea
 includes task, question and named verbatim text, but excludes row IDs and slot names.
 Permanent responses/features use separate data/jev_cache/<dataset_id>.sqlite3 files.
 Source-backed meanings and explicit unknowns live in the question-preparation config.
-Jev and the three self-hosted response adapters/materializers are implemented; actual GPU
-contracts remain unverified. Clef/Microsoft adapters and hosted provider/campaign spending
+Jev and five self-hosted response adapters/materializers are implemented; actual GPU
+contracts remain unverified. Microsoft's adapter and hosted provider/campaign spending
 accounting remain pending. Experiment 0A precedes extraction; Experiment 0B follows it.
+Selected extractors: Jev/Microsoft hosted; Liquid/Strands/Perplexity/Clef/Intern-Decision-4B
+open weights on VSC. Do not add further models or substitute paid APIs for open weights.
+Use src.cluster.transfer export/import for VSC-to-local results: validated dataset cache
+unions, backups, collision preservation and idempotent resume. Never overwrite a populated
+cache with SCP. Download bundles go to PROJECT on VSC; compact receipts go to DATA.
 `src.cluster.token_audit` counts complete pinned open-model inputs without weights. Its large
 SQLite counts belong on PROJECT and compact summaries/logs on DATA, under experiment 0.
 Explore all 20 datasets; exclude Zomato and Spotify from feature creation and predictive experiments based

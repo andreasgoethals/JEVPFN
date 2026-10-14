@@ -10,10 +10,10 @@ import pytest
 from src.cluster import token_audit
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
+from src.jev.decision_tokenization import ExactCounter
 from src.jev.inputs import iter_prepared_inputs, prepare_dataset_inputs
 from src.jev.question_bank import build_question_bank, save_question_bank
 from src.jev.self_hosted import token_evidence
-from src.jev.tokenization import ExactCounter
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import file_sha256, write_json
@@ -91,7 +91,7 @@ def test_interrupted_token_audit_resumes_committed_batch(inputs):
     assert len(list(iter_prepared_inputs(inputs[0]["path"], after_input_no=1))) == 1
 
 
-@pytest.mark.parametrize("provider", ["jev", "microsoft", "cloudflare"])
+@pytest.mark.parametrize("provider", ["jev", "microsoft"])
 def test_hosted_tokenizers_are_not_faked(provider):
     with pytest.raises(ValueError, match="unverified|unavailable"):
         ExactCounter(provider)

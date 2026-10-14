@@ -19,6 +19,7 @@ LABELS = {
     "liquid": "Liquid",
     "perplexity": "Perplexity",
     "cloudflare": "Clef-flash",
+    "intern": "Intern-Decision-4B",
     "strands": "Strands",
     "microsoft": "Microsoft",
 }

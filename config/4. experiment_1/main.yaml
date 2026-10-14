@@ -42,6 +42,7 @@ candidate_extractors:
 - cloudflare
 - strands
 - microsoft
+- intern
 non_text_columns: all_original_numerical_and_categorical_features
 additional_controls:
   text_statistics: optional_separate_ablation_not_a_fifth_main_arm
@@ -52,3 +53,4 @@ feature_selectors:
   cloudflare: null
   strands: null
   microsoft: null
+  intern: null

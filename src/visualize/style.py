@@ -147,6 +147,7 @@ DECISION_COLORS = {
     "liquid": "#C37929",
     "perplexity": "#54765A",
     "cloudflare": "#846C9C",
+    "intern": "#8C6D31",
     "strands": "#AF4C59",
     "microsoft": "#627C93",
 }

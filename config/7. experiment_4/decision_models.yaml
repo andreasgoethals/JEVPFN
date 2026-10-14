@@ -11,6 +11,7 @@ candidate_extractors:
 - cloudflare
 - strands
 - microsoft
+- intern
 candidate_models:
 - catboost
 - tabpfn_3_5

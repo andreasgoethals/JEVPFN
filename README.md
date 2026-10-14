@@ -27,7 +27,7 @@ cached response; future experiments join different combinations of those saved f
 | Notebook | Purpose |
 |---|---|
 | [01_data_exploration](<notebooks/0. exploration/01_data_exploration.ipynb>) | All-dataset visual overview; text length, missingness, uniqueness, exact reuse, p99/max long-text boxplots and longest-cell examples. |
-| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | All 18 applicable questions, exact per-column/joint previews for six providers, shared question bank and numeric output contracts. |
+| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | All 18 applicable questions, exact per-column/joint previews for seven providers, shared question bank and numeric output contracts. |
 | [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Source-backed meanings for all 18 tasks and 80 text columns; raw class mappings, saved questions and one SQLite input file per dataset, exact text reuse and first-row previews. |
 | [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Selected-dataset feature counts, saved exact tokenizer audits, duplicate-aware costs, throughput and one-file-per-dataset storage. No API calls. |
 | [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Saved-feature coverage, agreement counts, probability/score differences, distributions, duplicate sensitivity and distance from the other models. No inference or target labels. |
@@ -47,24 +47,25 @@ With no real features, the notebook shows pending coverage only. Its local CSV t
 source manifest sit beside its PDFs; the permanent feature cache is read-only.
 
 Notebook 03's historical character screen is an approximation. Experiment 0A now counts
-the complete published input formats with the pinned Liquid, Strands and Perplexity tokenizers:
+the complete published input formats with five pinned open-weight tokenizers:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[token-audit]"
 .\.venv\Scripts\python.exe -m src.cluster.token_audit --stage-tokenizers
 ```
 
-This downloads about 58 MB of tokenizer/source files, **no weights**, then counts every unique
+This downloads small tokenizer/source files, **no weights**, then counts every unique
 nonempty input in all 18 selected datasets. Subsequent `python -m src.cluster.token_audit`
 runs are offline and resume committed batches. Per-input counts use PROJECT on VSC; compact
 summaries/logs use DATA under `output_JEVPFN/3. experiment_0/`, with `before_extraction`
-subfolders. No raw rows are removed. Jev, Clef and Microsoft hosted counts remain unverified.
-Clef now publishes a complete open-weight renderer/tokenizer, but its offline audit and GPU
-adapter have not yet been integrated. A base model's
+subfolders. No raw rows are removed. Jev and Microsoft hosted counts remain unverified.
+Clef and Intern now have pinned counters and guarded GPU adapters; their full-dataset counts
+and live GPU pilots are pending. Clef uses its 16,384-token open-runtime limit, with explicit
+overflow rejection before its publisher code can truncate. A base model's
 tokenizer is not a substitute. Every self-hosted inference also checks the runtime's reported
 token count against the audited format. No silent truncation is allowed.
-The 14-10-2026 audit counted all 1,698,127 unique prepared inputs for each of the three open
-models and found no overflows. Notebook 03 reads those saved results only when the input
+The 14-10-2026 audit counted all 1,698,127 unique prepared inputs for Liquid, Strands and
+Perplexity and found no overflows. Notebook 03 reads those saved results only when the input
 file identities still match; the earlier character warnings do not justify deleting rows.
 
 ## Local environment and notebooks
@@ -113,7 +114,7 @@ CUDA, cluster allocation and full-fold resource checks remain explicitly pending
 does not establish full Experiment 0 acceptance.
 
 `python -m src.jev.pilot` prepares a compatibility manifest from first/middle/last and
-longest-text rows of all 18 selected datasets, for six disabled providers using the saved `documented`
+longest-text rows of all 18 selected datasets, for seven disabled providers using the saved `documented`
 questions. It records no raw text or targets and makes no API calls or model loads. The manifest
 and preparation log use `output_JEVPFN/2. feature_creation/manifests/pilots/` and `logs/`.
 On VSC the full trace manifest uses PROJECT; its small `.summary.json` index and log use DATA.
@@ -186,7 +187,7 @@ a paid response key additionally includes provider/model revision and inference 
 Preparation logs and compact manifests go to `output_JEVPFN/1. question_preparation/`.
 Hosted inference is planned locally; self-hosted models need a validated VSC GPU environment
 and a small compatibility pilot first. Open weights remove per-token API charges, not GPU
-resource costs or licence requirements. All six candidates remain disabled.
+resource costs or licence requirements. All seven candidates remain disabled.
 
 Permanent extraction uses **one file per dataset**: `data/jev_cache/<dataset_id>.sqlite3`.
 `responses` stores exact request/settings, raw response, token usage and UTC timestamp;
@@ -198,10 +199,10 @@ replacing old results. No real dataset cache is created until extraction is appr
 
 `bind_provider` prepares separate provider/checkpoint cache identities while preserving the
 shared text and question. Response decoding and feature materialization now support Jev and
-the three self-hosted candidates; the latter also bind checkpoint, renderer and installed-runtime
+all five self-hosted candidates; the latter also bind checkpoint, renderer and installed-runtime
 identities. `src.jev.self_hosted` implements the guarded serial pilot/full-extraction paths,
 cache recovery and permanent dataset features. Synthetic tests do not establish actual GPU
-compatibility. Clef/Microsoft response adapters and separate hosted-provider spending accounting
+compatibility. Microsoft's response adapter and separate hosted-provider spending accounting
 remain pending. Materialization accepts `question_bank=bank, question_variant="documented"`
 and records both identities. The notebook
 shows exact constructed calls, not live-tested integrations. Hosted aliases without an
@@ -217,6 +218,8 @@ accepts verified cached responses only; `save_block` publishes the numeric table
 in the same dataset file. `load_block(path, artifact_id)` selects a specific representation/version;
 ambiguous selection fails. Legacy Parquet folders remain readable. Notebook mocks use temporary
 files. SQLite may create a transient journal while writing; transfer only after writers close.
+VSC results now use `python -m src.cluster.transfer export` and local `python -m src.cluster.transfer import <bundle.zip>`. The ZIP combines PROJECT results and DATA logs/manifests. Cache imports make backups, union provider/version artifacts, reuse identical responses and reject conflicts transactionally. They never replace a populated cache wholesale. See [VSC transfer commands](docs/VSC.md#download-results-and-merge-with-local-features).
+
 Feature-build logs go to `output_JEVPFN/2. feature_creation/logs/builds/`; compact completion indexes
 go to `output_JEVPFN/2. feature_creation/manifests/features/`. On VSC those logs/indexes use DATA;
 the dataset files use PROJECT. `src/jev/extraction.py` prepares bounded dispatch, permanent
@@ -286,10 +289,10 @@ character/word counts and missingness, plus row totals. It also supplies the pro
 control that permutes whole Jev vectors independently within training/test partitions.
 `assemble_features(..., view="main")` uses only the agreed main features; explicit views expose
 retained distributions/confidence for ablations. Neither utility reads targets or calls an API.
-The owner approved six disabled extractors. References live in
+The owner approved seven disabled extractors. References live in
 `config/2. feature_creation/extractors.yaml`; their paired comparison uses experiment 1.
 Experiment 4 is a later analysis of those outputs, requiring no duplicate fits.
-Alternative response decoders, separate spending ledgers and live pilots remain required.
+Microsoft's response decoder, separate hosted spending ledgers and live pilots remain required.
 
 ## Implemented benchmark contract
 
@@ -312,8 +315,8 @@ outer folds and binary inner-OOF threshold procedure apply to both comparisons.
 .\.venv\Scripts\python.exe -m src.jev.context
 ```
 
-Both commands are offline. The first lists the plan (2,088 dataset/model/feature/extractor
-combinations, 10,440 outer fits if all six extractors pass, plus binary inner fits). The second
+Both commands are offline. The first lists the plan (2,412 dataset/model/feature/extractor
+combinations, 12,060 outer fits if all seven extractors pass, plus binary inner fits). The second
 screens every frozen unique input and saves `2. feature_creation/manifests/context_screen.json`.
 Character-based screening is not exact tokenization or dispatch approval. It includes task
 definitions, questions and options, but not provider-internal formatting overhead.

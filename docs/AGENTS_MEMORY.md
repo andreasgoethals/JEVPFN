@@ -1,12 +1,13 @@
 # Operational notes
 
-- **Source meanings (13-10-2026):** `dataset_semantics.yaml` is the maintained dictionary. Preserve raw labels; never infer units from label magnitudes. Book Price has a misleading USD column name despite documented upstream log-price. Jev and three self-hosted decoders/materializers are implemented but live GPU compatibility and hosted multi-provider spending remain unverified.
+- **Source meanings:** `dataset_semantics.yaml` is the maintained dictionary. Preserve raw labels; never infer units from label magnitudes. Book Price has a misleading USD column name despite documented upstream log-price. Jev and five self-hosted decoders/materializers are implemented but live GPU compatibility and hosted multi-provider spending remain unverified.
 
 ## Current state
 
 Experiment 0A preparation and offline tokenizer testing. Guarded SDK transport, self-hosted
 GPU pilot/extraction adapters and injectable CV orchestration
-are prepared; no paid calls/features, model fitting or VSC jobs have been run. All live
+are prepared; no paid calls/features or model fitting have been verified. VSC CPU and token
+jobs were submitted by the owner (see table); completion is unverified. All live
 switches remain disabled. The public GitHub repository is connected; generated outputs and raw data stay ignored.
 The literature submodule is read-only at the existing index/checkout pin
 de324efcca55be392feb0c01830b3b6ce364587f (existing index/checkout verified 13-10-2026; not modified here).
@@ -14,6 +15,16 @@ Durable method constraints are in README.md; interface evidence is in LITERATURE
 The owner handles Git commits/pushes. Proposed plans belong in chat, not temporary documents.
 
 ## Avoid repeating these failures
+
+| Date | Cluster / job | Configuration | Observed outcome |
+|---|---|---|---|
+| 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | Submitted; log/exit status not supplied. Correct dependency install and `pip check` succeeded before submission. |
+| 14-10-2026 | wICE / 62312903 | experiment_0_tokens.slurm | Submitted; owner reports running. This checkout counts the original three providers, not the newly added Clef/Intern. |
+
+Do not update the VSC checkout while jobs use it. Record final status after inspecting
+`sacct` and logs, not from submission alone. PROJECT write access is verified; quota and
+independent backup remain unverified. `sam-balance` confirms account credit availability,
+not storage quota or successful execution.
 
 - **VSC installation shadowing (14-10-2026):** the owner's transcript shows a newly created
   Conda JEVPFN environment, but pip ran in TabPFNCredit's inherited venv and upgraded packages
@@ -24,9 +35,10 @@ The owner handles Git commits/pushes. Proposed plans belong in chat, not tempora
   separately from its own requirements, with authorization; do not guess a rollback.
   Large CUDA environments and package caches belong on PROJECT, not personal DATA.
 
-- **Hybrid cache transfer:** separate local API and VSC GPU extractions share dataset filenames
-  but contain different providers. No cache-merge command exists yet. Do not SCP one populated
-  database over the other; require validated import/backup tests before hybrid full extraction.
+- **Hybrid cache transfer:** `src.cluster.transfer export/import` now snapshots both tiers,
+  validates checksums and merges each dataset transactionally. Conflict means rollback, never
+  replacement; retries reuse rows. Preserve original bundles and pre-merge backups. Imported
+  spending records are historical evidence, never a replacement for local budgets/queues.
 
 - **Exact token formatting (14-10-2026):** character proxies flagged Fake Job Postings rows
   that fit all three actual open-model tokenizers. Liquid encodes a complete rendered turn;
@@ -42,7 +54,7 @@ The owner handles Git commits/pushes. Proposed plans belong in chat, not tempora
   ambient routing/job variables and explicitly simulate their own temporary storage;
   real host checks run outside that fixture. This also prevents writes to real VSC allocations.
 
-- **Provider preparation boundaries:** all six previews share semantic questions; three
+- **Provider preparation boundaries:** all seven previews share semantic questions; five
   self-hosted adapters now use pinned runtimes. Perplexity uses singular `question` in each prediction row.
   Strands requires strict-window rejection and serialized inference until concurrency is verified.
 - **Evaluation identity and memory:** include exact matrix/schema/row hashes, feature artifact
@@ -77,7 +89,7 @@ The owner handles Git commits/pushes. Proposed plans belong in chat, not tempora
 - **VSC environment shadowing:** explicitly use the activated Conda interpreter; an inherited
   local venv can otherwise take precedence. Keep JEVPFN and CreditPFN environments separate.
 - **Cluster account:** reuse the configured CreditPFN account after checking association.
-  The former Mindwell pilot account is not a fallback. No JEVPFN cluster runs exist yet.
+  The former Mindwell pilot account is not a fallback. Submitted jobs are recorded above.
 
 - **Whole-group trace loss (12-10-2026):** checking only groups present in `requests` accepted
   a feature artifact after all traces for one text column were removed. Validate the expected

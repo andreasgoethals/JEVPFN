@@ -51,7 +51,7 @@ def test_local_server_preview_requires_strict_window_and_serialization(request_b
 
 def test_all_previews_are_inspectable_json_and_explicitly_unverified(request_by_task):
     before = request_by_task.to_json()
-    for provider in ("jev", "liquid", "perplexity", "cloudflare", "strands", "microsoft"):
+    for provider in ("jev", "liquid", "perplexity", "cloudflare", "strands", "microsoft", "intern"):
         mapped = preview(request_by_task, provider, deployment_name="<deployment-name>")
         assert json.loads(json.dumps(mapped)) == mapped
         assert mapped["live_verified"] is False

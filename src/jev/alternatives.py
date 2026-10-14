@@ -57,19 +57,28 @@ def preview(request, provider, *, deployment_name=None):
         }
     if provider == "cloudflare":
         return {
-            "transport": "https_post",
-            "method": "POST",
-            "endpoint": "https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/run/@cf/cloudflare/clef-flash",
-            "headers": {
-                "Authorization": "Bearer <CLOUDFLARE_AUTH_TOKEN>",
-                "Content-Type": "application/json",
-            },
-            "body": {"model": "clef-flash", "state": state, "questions": questions},
-            "pin_requirement": "immutable hosted revision; prevent implicit truncation",
+            "transport": "self_hosted_publisher_forward",
+            "call": "ClefRuntime(checkpoint, limit=16384).predict(arguments)",
+            "arguments": {"state": state, "questions": questions},
+            "pin_requirement": "Cloudflare/clef-flash checkpoint and joint_schema_model.py hashes",
             "runtime_requirements": [
-                "Prevalidate actual token length: the service otherwise truncates text state."
+                "Reject complete input above 16384 tokens before the publisher's default truncation.",
+                "Retain full softmax precision through encode_record/collate_records/model forward.",
             ],
-            "reference": "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
+            "reference": "https://huggingface.co/Cloudflare/clef-flash",
+            "live_verified": False,
+        }
+    if provider == "intern":
+        return {
+            "transport": "self_hosted_publisher_inference",
+            "initialization": "DecisionEngine(checkpoint, device='cuda', max_length=8192, temperature=1.99241824)",
+            "call": "engine.predict(arguments)",
+            "arguments": {"state": state, "questions": questions},
+            "pin_requirement": "internlm/Intern-Decision-4B checkpoint and inference.py hashes",
+            "runtime_requirements": [
+                "At most 62 options; 8192 tokens; no truncation; retain publisher calibration."
+            ],
+            "reference": "https://huggingface.co/internlm/Intern-Decision-4B",
             "live_verified": False,
         }
     if provider == "strands":
