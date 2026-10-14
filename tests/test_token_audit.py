@@ -1,5 +1,6 @@
 """No weights/network: resume, coverage, storage and opaque-hosted-tokenizer boundaries."""
 
+import json
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -136,3 +137,71 @@ def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatc
     inputs[0]["input_file_sha256"] = "changed"
     with pytest.raises(ValueError, match="stale"):
         token_audit.saved_exact_token_tables()
+
+
+def test_missing_chat_template_dependency_fails_before_counting(monkeypatch):
+    from unittest.mock import Mock
+
+    counter = SimpleNamespace(count_many=Mock(side_effect=ImportError("jinja2 missing")))
+    monkeypatch.setattr(token_audit, "ExactCounter", lambda _: counter)
+    inputs, pool = Mock(), Mock()
+    monkeypatch.setattr(token_audit, "selected_inputs", inputs)
+    monkeypatch.setattr(token_audit, "ProcessPoolExecutor", pool)
+    monkeypatch.setattr("sys.argv", ["token_audit", "--provider", "perplexity"])
+    with pytest.raises(RuntimeError, match="Jinja2"):
+        token_audit.main()
+    inputs.assert_not_called()
+    pool.assert_not_called()
+
+
+def test_every_task_is_rendered_in_tokenizer_precheck(monkeypatch):
+    seen = []
+    counter = SimpleNamespace(
+        identity={"counter_id": "test"},
+        count_many=lambda rows: seen.extend(rows) or [5] * len(rows),
+    )
+    monkeypatch.setattr(token_audit, "ExactCounter", lambda _: counter)
+    assert token_audit.check_tokenizers(["intern"])[0]["task_counts"] == [5, 5, 5]
+    assert {r["question"]["kind"] for r in seen} == {
+        "binary_probability",
+        "choice",
+        "ordered_choice",
+    }
+
+
+def test_completed_worker_report_survives_other_worker_failure(isolated_output, monkeypatch):
+    from concurrent.futures import Future
+
+    paths.staging_root().mkdir(parents=True)
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
+    monkeypatch.setattr(token_audit, "selected_inputs", lambda: [])
+    monkeypatch.setattr(token_audit, "check_tokenizers", lambda _: None)
+    monkeypatch.setattr(
+        "sys.argv", ["token_audit", "--provider", "liquid", "--provider", "perplexity"]
+    )
+
+    class Pool:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def submit(self, function, provider, inputs):
+            future = Future()
+            if provider == "liquid":
+                future.set_result({"provider": provider, "status": "counted_all_inputs"})
+            else:
+                future.set_exception(ValueError("fixture worker failure"))
+            return future
+
+    monkeypatch.setattr(token_audit, "ProcessPoolExecutor", Pool)
+    with pytest.raises(RuntimeError, match="preserved"):
+        token_audit.main()
+    saved = json.loads(
+        (paths.manifests_dir("experiment_0") / "before_extraction/token_audit.json").read_text()
+    )
+    assert saved["self_hosted"] == [{"provider": "liquid", "status": "counted_all_inputs"}]

@@ -155,8 +155,11 @@ def _validate_artifacts(cfg: dict, report: dict) -> None:
 
 def contract_tests(run_id: str) -> dict:
     """Exercise synthetic tests only, preserving the exact test process outcome in DATA logs."""
+    command = [sys.executable, "-m", "pytest", "-q"]
+    if paths.on_vsc():
+        command += ["-m", "not notebook"]
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q"],
+        command,
         cwd=paths.REPO_ROOT,
         capture_output=True,
         text=True,
@@ -170,6 +173,7 @@ def contract_tests(run_id: str) -> dict:
         "status": "passed" if result.returncode == 0 else "failed",
         "exit_code": result.returncode,
         "log": str(log),
+        "excluded_markers": ["notebook"] if paths.on_vsc() else [],
         "scope": "Synthetic contracts; no evidence of real provider/model/cluster compatibility.",
     }
 
@@ -348,6 +352,12 @@ def main() -> int:
     )
     write_json(paths.manifests_dir("experiment_0") / f"preflight_{report['run_id']}.json", report)
     print(json.dumps(report, indent=2))
+    tests = report.get("contract_tests", {})
+    if tests.get("status") == "failed":
+        print(f"\nContract tests failed. Full log: {tests['log']}", flush=True)
+        print(
+            "\n".join(Path(tests["log"]).read_text(encoding="utf-8").splitlines()[-80:]), flush=True
+        )
     return int(bool(report["failures"]))
 
 

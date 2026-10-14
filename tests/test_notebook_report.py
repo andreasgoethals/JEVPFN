@@ -10,6 +10,7 @@ from src.utils.notebook_display import display_json, display_local
 from src.visualize.figures import FigureSaver
 
 
+@pytest.mark.notebook
 def test_complete_tables_json_and_plot_values_are_printed_and_saved(
     isolated_output, monkeypatch, capsys
 ):

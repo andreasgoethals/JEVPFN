@@ -90,6 +90,7 @@ def materialize_cached_block(
     question_bank=None,
     question_variant="accepted",
     provider_settings=None,
+    phase="feature_creation",
 ) -> FeatureBlock:
     """Fail on a missing/invalid response; mock responses can never become model features."""
     identity = block_identity(
@@ -114,7 +115,7 @@ def materialize_cached_block(
             }
         )
     artifact_id = digest(identity)
-    event_log = paths.logs_dir("feature_creation") / "builds" / f"{artifact_id}.jsonl"
+    event_log = paths.logs_dir(phase) / "builds" / f"{artifact_id}.jsonl"
     started = time.perf_counter()
     append_event(
         event_log,
@@ -264,7 +265,9 @@ def _materialize_cached_block(
     return FeatureBlock(values, pd.DataFrame(references), manifest)
 
 
-def save_block(block: FeatureBlock, directory: Path | None = None) -> Path:
+def save_block(
+    block: FeatureBlock, directory: Path | None = None, *, phase="feature_creation"
+) -> Path:
     """One transactional dataset SQLite file; compressed Parquet tables are embedded."""
     from src.jev.cache import ResponseCache
 
@@ -345,17 +348,17 @@ def save_block(block: FeatureBlock, directory: Path | None = None) -> Path:
                 ),
             )
     _record_saved_block(
-        path, json.loads(existing[0]) if existing else manifest, reused=bool(existing)
+        path, json.loads(existing[0]) if existing else manifest, reused=bool(existing), phase=phase
     )
     return path
 
 
-def _record_saved_block(folder, manifest, *, reused):
+def _record_saved_block(folder, manifest, *, reused, phase="feature_creation"):
     artifact_id = manifest["artifact_id"]
     identity = manifest["identity"]
     # The embedded manifest is portable; DATA retains only a compact discovery index.
     write_json(
-        paths.manifests_dir("feature_creation") / "features" / f"{artifact_id}.json",
+        paths.manifests_dir(phase) / "features" / f"{artifact_id}.json",
         {
             "artifact_id": artifact_id,
             "dataset_id": identity["dataset_id"],
@@ -374,7 +377,7 @@ def _record_saved_block(folder, manifest, *, reused):
         },
     )
     append_event(
-        paths.logs_dir("feature_creation") / "builds" / f"{artifact_id}.jsonl",
+        paths.logs_dir(phase) / "builds" / f"{artifact_id}.jsonl",
         "artifact_reused" if reused else "artifact_saved",
         artifact_path=str(folder),
         rows=manifest["row_count"],

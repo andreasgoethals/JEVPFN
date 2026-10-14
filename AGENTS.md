@@ -33,6 +33,11 @@ Source-backed meanings and explicit unknowns live in the question-preparation co
 Jev and five self-hosted response adapters/materializers are implemented; actual GPU
 contracts remain unverified. Microsoft's adapter and hosted provider/campaign spending
 accounting remain pending. Experiment 0A precedes extraction; Experiment 0B follows it.
+The bounded `src.cluster.gpu_contracts` job requires explicit execution, a GPU allocation,
+staged weights and complete exact token evidence. It tests real responses and saved features
+without enabling full extraction. Synthetic artifacts stay in PROJECT Experiment 0 results;
+real sampled responses are reusable in the permanent dataset caches. VSC CPU tests exclude
+only the local `notebook` tests; all tests still run locally.
 Selected extractors: Jev/Microsoft hosted; Liquid/Strands/Perplexity/Clef/Intern-Decision-4B
 open weights on VSC. Do not add further models or substitute paid APIs for open weights.
 Use src.cluster.transfer export/import for VSC-to-local results: validated dataset cache

@@ -51,7 +51,7 @@ jev = ["typesafe-sdk==0.7.2"]  # Optional future transport; no live client is en
 models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the hardware-specific Torch wheel first on VSC.
 evaluation = ["scikit-learn==1.9.1"]  # Score saved predictions without model packages.
 staging = ["huggingface-hub>=1.5,<2"]  # Explicit, separately authorized checkpoint staging.
-token-audit = ["transformers==5.17.0", "tokenizers==0.23.3"]  # CPU only; no model weights.
+token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  # CPU rendering, including publisher chat templates; no weights.
 # Proposed benchmark engines. Metadata checked 2026-09-30; not installed by notebook setup.
 # Validate each selected extra on VSC in experiment 0. AutoGluon is excluded.
 baselines = ["scikit-learn==1.9.1", "catboost==1.2.10"]
@@ -63,8 +63,8 @@ kumo = ["structured-data-models @ git+https://github.com/NVIDIA/structured-data-
 contexttab = ["sap-rpt-oss @ git+https://github.com/SAP-samples/sap-rpt-1-oss.git@a0067b3c9db56bc35a6dcab09a9223a3ff0821e0"]
 # Install custom decision runtimes in separate environments, never the notebook venv.
 liquid = ["transformers>=5.14,<6", "torch>=2.9", "torchvision", "pillow"]
-clef = ["transformers==5.17.0", "torch==2.12.1", "torchvision", "accelerate", "pillow", "safetensors"]
-intern = ["transformers==5.17.0", "torch==2.12.1", "torchvision", "pillow"]
+clef = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "accelerate", "pillow", "safetensors"]
+intern = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "pillow"]
 strands = ["strands-decider[cuda] @ git+https://github.com/strands-labs/strands-decider.git@b9fc83626bcca822d00f822d6c2e151b8d244ee9 ; sys_platform == 'linux'"]
 # Perplexity supplies a checkpoint-specific requirements.txt; see docs/VSC.md.
 
@@ -121,6 +121,7 @@ addopts = "-ra --strict-markers"
 # of packages this project does not have.
 norecursedirs = ["tfm-library", "output", "output_JEVPFN", "data", ".venv", "venv", "notebooks"]
 markers = [
+    "notebook: requires the local IPython/Jupyter environment; excluded from VSC CPU contracts",
     "slow: takes more than a few seconds",
     "gpu: requires CUDA; skipped on the local dev machine",
 ]

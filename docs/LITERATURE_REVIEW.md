@@ -503,6 +503,16 @@ and outages. Confirm actual quota; another model's generic quota table is not ev
 [Jev limits](https://docs.typesafe.ai/models),
 [Microsoft quotas](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/quotas-limits#microsoft-decision-1-quotas).
 
+Microsoft's [general Foundry quota-tier policy](https://learn.microsoft.com/en-us/azure/foundry/openai/quotas-limits#quota-tiers)
+ties tier assignment/upgrades to consumption, enterprise relationships and payment history;
+it does not publish a fixed purchase price or spending threshold for tier 6. Additional quota
+can be requested without changing tier, subject to approval. The model's published inference
+price remains $0.042/M input tokens, output free: one billion billed input tokens would cost
+$42, independent of any unverified account-specific agreement. This is an illustrative token
+assumption, not a measured Microsoft bill. Throughput eligibility and inference pricing are
+different questions. Practical access exclusions must be declared before inspecting accuracy;
+they do not establish an excluded model's quality.
+
 Public comparisons already exist. [Decision Index](https://github.com/apolinario/decision-index)
 has a reproducible 37-benchmark public component; its full score also uses private tests.
 [JevBench by Benchmark Heaven](https://huggingface.co/datasets/benchmarkheaven/jevbench)

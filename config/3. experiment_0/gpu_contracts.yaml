@@ -1,0 +1,8 @@
+phase: experiment_0
+providers: [liquid, strands, perplexity, cloudflare, intern]
+execution_site: vsc_gpu_allocation
+requires_explicit_execute: true
+max_live_requests: 100
+synthetic_fixture_version: gpu-contracts-v1
+real_sample: first_and_longest_unique_input_per_dataset
+full_extraction_authorized: false

@@ -2,6 +2,8 @@
 
 ## 14-10-2026
 
+- Fixed VSC notebook-test scope and missing Jinja2; added fail-fast/resumable tokenizer reporting and bounded real Clef/Intern GPU contracts with permanent response reuse and two-tier outputs. Verified 363 local tests, five tokenizer prechecks, lint and shell syntax; real GPU execution remains pending.
+
 - Added transactional cache unions, two-tier export/local import and backups; prepared pinned Clef/Intern counters/adapters and seven-model configs. Verified 349 tests, five notebooks/21 figures, lint and package consistency; live inference remains disabled.
 
 - Unified verified Conda activation for setup/jobs after cross-project installation; documented PROJECT transfers/environments, the pending hybrid-cache import and refreshed provider evidence. Verified 313 tests and seven shell files.

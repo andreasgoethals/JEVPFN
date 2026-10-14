@@ -1,6 +1,6 @@
 phase: experiment_0
 name: debugging
-enabled: false  # Prepared checks only; no allocation has been submitted.
+enabled: false  # Full experiment acceptance remains disabled; bounded checks are separate commands.
 execution_site: vsc_compute_node
 local_preparation_command: python -m src.cluster.preflight --local --verify-data --tests
 feature_config: feature_creation
@@ -16,6 +16,7 @@ stages:
   before_extraction:
     requires: [frozen_prepared_inputs]
     token_command: python -m src.cluster.token_audit
+    gpu_contract_command: python -m src.cluster.gpu_contracts --provider PROVIDER --execute
     acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
   after_extraction:
     requires: [complete_selected_provider_features]

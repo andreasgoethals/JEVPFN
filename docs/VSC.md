@@ -1,8 +1,10 @@
 # VSC setup
 
-Current status: the owner's updated 14 October transcript confirms the corrected dependency
-installation, successful `pip check`, writable PROJECT directories and submissions of CPU
-job 62312865 and tokenizer job 62312903 on wICE. Completion is not yet verified. The older
+Current status: the owner's 14 October logs show that CPU job 62312865 failed on three
+local-only notebook tests (IPython/nbformat missing); its dataset checks and 309 tests passed.
+Token job 62312903 failed because Perplexity's chat template requires Jinja2. These are
+dependency/test-scope failures, not evidence of damaged datasets or insufficient memory.
+Both are fixed in the local code; VSC needs the owner's published update and a rerun. The older
 environment-shadowing issue is documented in AGENTS_MEMORY.md. Hosted extraction runs
 locally; Liquid, Perplexity, Strands, Clef and Intern use VSC GPU environments after small pilots.
 VSC prediction consumes completed feature tables offline. Hosted API access from compute
@@ -10,11 +12,11 @@ nodes is unnecessary for this workflow and remains unverified.
 
 ## Self-hosted decision extractors
 
-Self-hosting Liquid d1-3B, Strands Decider 2B or Perplexity Decider 27B removes the vendor
+Self-hosting Liquid d1-3B, Strands Decider 2B, Perplexity Decider 27B, Clef-flash or Intern-Decision-4B removes the vendor
 API token fee; it does not remove weight licence conditions, Slurm credit charges, setup,
 storage or inference time. The seven-provider comparison remains disabled. Hosted extraction
 will run locally; separate VSC extraction jobs serve the selected open checkpoints after
-runtime validation. No allocation has been launched.
+runtime validation. CPU allocations were submitted by the owner; no real GPU contract result is available.
 
 The read-only snapshot `VSC Documentation.txt` was checked 13 October at the existing library
 pin `de324efcca55be392feb0c01830b3b6ce364587f`: `wice_hardware.rst` lists 80 GiB A100/H100
@@ -23,7 +25,7 @@ to profile for the 27B extractor's approximately 49 GiB BF16 weights; full reque
 attention kernels and throughput are unmeasured. Start at batch size one, measure peak GPU/RAM,
 then increase batches from measurements. Use H100 for demonstrated throughput benefit or
 Mindwell B200 if 80 GiB proves insufficient; do not require B200 solely because it is newer.
-Liquid/Strands can also be profiled on one A100. Keep each incompatible/custom-code model
+Liquid/Strands/Clef/Intern can also be profiled on one A100. Keep each incompatible/custom-code model
 in its own frozen Python environment and audit the pinned inference code before loading it.
 
 Approved checkpoints, raw inputs and permanent dataset feature files belong on PROJECT;
@@ -71,6 +73,7 @@ source scripts/activate_conda.sh && "$JEVPFN_PYTHON" -m pip install -e '.[dev,to
 "${JEVPFN_PYTHON:?Activation must succeed first}" -m pip check
 "$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
 "$JEVPFN_PYTHON" -m src.cluster.token_audit --stage-only
+"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only
 ```
 
 The activation helper clears inherited venv/Python overrides and shell aliases/functions,
@@ -82,8 +85,10 @@ affected another project's environment, restore that environment separately from
 recorded requirements; do not try arbitrary downgrades or install JEVPFN into it again.
 
 `setup` creates/probes both JEVPFN trees and the Slurm log directory, writes a compact DATA
-manifest, and submits nothing. `--stage-only` downloads about 58 MB of tokenizers/source,
-not weights. Transfer the inputs as below before submitting CPU checks.
+manifest, and submits nothing. `--stage-only` downloads the five small tokenizer/source
+bundles, not weights. `--check-only` renders binary, multiclass and nine-level requests for
+each staged tokenizer offline, catching missing chat-template dependencies before a long job.
+Transfer the inputs as below before submitting CPU checks.
 
 ## Transfer inputs when PROJECT is absent from the file browser
 
@@ -110,6 +115,28 @@ for larger or interruption-prone transfers. Use absolute remote paths in PowerSh
 `$VSC_DATA` is a remote variable and must not be expanded by Windows.
 
 ## CPU checks before downloading weights
+
+To repair the two failed jobs, first publish the local fixes yourself, wait for any old
+JEVPFN job using this checkout to stop, and then run on the connected VSC login shell:
+
+```bash
+cd "$VSC_DATA/JEVPFN"
+git pull --ff-only
+export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+export PIP_CACHE_DIR="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/pip_cache"
+export JEVPFN_CONDA_ENV=JEVPFN
+source scripts/activate_conda.sh && "$JEVPFN_PYTHON" -m pip install -e '.[dev,staging,token-audit]'
+"${JEVPFN_PYTHON:?Activation must succeed first}" -m pip check
+"$JEVPFN_PYTHON" -m src.cluster.token_audit --stage-only
+"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only
+```
+
+This installs the missing Jinja2 requirement and stages the newly added Clef/Intern
+tokenizers. The CPU suite excludes only the three `notebook`-marked tests; notebooks and
+those tests run locally. A failed test summary is printed directly in the CPU Slurm log.
+Keep every existing token-count database: completed batches and completed providers resume.
+The original three counter identities have not changed. Completed provider summaries are
+published independently even if another provider fails.
 
 The full token audit runs in a CPU job, not on the login node:
 
@@ -247,6 +274,71 @@ have synthetic tests, but live GPU contracts remain pending. Empty inputs never 
 queue; all source-row links remain in the prepared dataset database. Failure is not a missing
 text feature. Each completed response is committed before advancing; a restart reuses it.
 
+## Bounded Clef/Intern GPU contract tests
+
+Run these after a successful CPU preflight and complete exact token audit for the selected
+provider. The dedicated job loads real weights and executes real forward passes. It does
+not use the broad pilot/full-extraction switches: submitting it is an explicit bounded test.
+Leave the full-extraction configurations disabled.
+
+Stage the two pinned checkpoints directly from Hugging Face to PROJECT, using the CPU
+environment on the connected setup host. Do not download them onto the laptop first:
+
+```bash
+export JEVPFN_CONDA_ENV=JEVPFN
+source scripts/activate_conda.sh
+"${JEVPFN_PYTHON:?Activation must succeed first}" -m src.jev.checkpoints --provider cloudflare
+"$JEVPFN_PYTHON" -m src.jev.checkpoints --provider intern
+```
+
+Prepare one GPU environment at a time. For Clef use `JEVPFN_PROVIDER=cloudflare` and
+`JEVPFN_EXTRA=clef`; for Intern use `intern` for both. The following candidate uses the
+official paired Torch 2.12.1/TorchVision 0.27.1 CUDA 12.6 wheels for A100, plus the same
+Transformers version as the CPU token audit. Actual VSC compatibility is what the test
+must establish; Cloudflare's published test used H200, Torch 2.11 and Transformers 5.10.2.
+
+```bash
+cd "$VSC_DATA/JEVPFN"
+export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+export JEVPFN_PROVIDER=cloudflare
+export JEVPFN_EXTRA=clef
+export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/$JEVPFN_PROVIDER"
+export CONDA_PKGS_DIRS="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/conda_packages"
+export PIP_CACHE_DIR="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/pip_cache"
+source "$VSC_DATA/miniconda3/etc/profile.d/conda.sh"
+conda create --prefix "$JEVPFN_CONDA_ENV" python=3.12 pip  # Skip if this prefix already exists.
+source scripts/activate_conda.sh
+"${JEVPFN_PYTHON:?Activation must succeed first}" -m pip install 'torch==2.12.1' 'torchvision==0.27.1' --index-url https://download.pytorch.org/whl/cu126
+"$JEVPFN_PYTHON" -m pip install -e ".[dev,token-audit,$JEVPFN_EXTRA]"
+"$JEVPFN_PYTHON" -m pip check
+"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only --provider "$JEVPFN_PROVIDER"
+sbatch scripts/slurm/experiment_0_decision_contracts.slurm
+```
+
+Submit only after every setup command succeeds. The job requests one full A100, 128 GB host
+RAM, four CPUs and one hour in `gpu_a100_debug`; the account permits only one such debug job
+queued at a time. Wait for Clef to finish before submitting Intern. Keep other projects'
+environments unchanged. Use `sacct --clusters=wice -j JOB_ID --format=JobID,State,ExitCode,Elapsed,MaxRSS`
+and the printed report paths to inspect completion.
+
+The test runs binary, three-class and nine-level regression fixtures, plus one 30-class
+request. It checks full probabilities, expected regression direction, Unicode, duplicates,
+empty-input skipping, overflow rejection before inference, cache reopen/reuse, row identities,
+and saving/reloading both numeric feature blocks. It then tests the first and longest unique
+input in each of the 18 real datasets. This plans at most **67 forwards per provider** with
+a hard ceiling of 100; repeats already in the real cache use no new forward pass. Model and
+runtime hashes, actual token-count agreement, synchronized timings and peak GPU memory are recorded.
+
+Synthetic responses/features use PROJECT
+`output_JEVPFN/3. experiment_0/results/gpu_contracts/<run>/`. Real responses use the permanent
+PROJECT `data/jev_cache/<dataset_id>.sqlite3`, allowing later extraction to reuse them.
+Logs and compact manifests use DATA `output_JEVPFN/3. experiment_0/{logs,manifests}/before_extraction/gpu_contracts/`.
+The Slurm log is in the phase's `logs/` directory. A passing report still states
+`full_experiment_0_passed: false`: robustness review, larger throughput profiling and full
+extraction acceptance remain separate. No predictive model is fitted by this job.
+
+## Larger self-hosted pilot and full-extraction gate
+
 For the first Liquid pilot, create an isolated Python 3.12 environment on PROJECT. The
 small CPU environment can stay on DATA; CUDA environments and package/wheel caches are
 large and belong on PROJECT. For example, on the connected setup host:
@@ -376,6 +468,12 @@ the actual allocated capacity, any token/concurrency limits and retry headers in
 Published rates are descriptive config fields, never automatically accepted execution limits.
 Both hosted candidates remain disabled; Microsoft's transport/decoder and separate spending
 ledger still need implementation and a small authorized contract test.
+Tier 6 is a quota classification, not a published fixed-price package. Microsoft's
+[Foundry tier policy](https://learn.microsoft.com/en-us/azure/foundry/openai/quotas-limits#quota-tiers)
+uses consumption, enterprise relationship and payment history, and permits quota requests
+without changing tier. No guaranteed tier-6 purchase price or minimum spend is established.
+The model's listed $0.042/M input-token price would make one billion billed tokens $42;
+that illustrative cost does not establish the actual hosted token count or allocated quota.
 
 ## Experiment 0
 

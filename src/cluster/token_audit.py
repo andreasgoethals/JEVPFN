@@ -14,10 +14,11 @@ import json
 import os
 import sqlite3
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import closing
 from datetime import UTC, datetime
 from itertools import islice
+from uuid import uuid4
 
 import numpy as np
 
@@ -272,6 +273,72 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
     return report
 
 
+def check_tokenizers(providers):
+    """Render all task types before scheduling expensive counts; no weights/data writes."""
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    reports, failures = [], []
+    questions = [
+        {"kind": "binary_probability", "text": "Does the supplied text express approval?"},
+        {"kind": "choice", "text": "Which topic is supported?", "allowed_answers": ["a", "b", "c"]},
+        {
+            "kind": "ordered_choice",
+            "text": "Does the text suggest a lower or higher value?",
+            "allowed_answers": [{"score": i, "meaning": str(i)} for i in range(-4, 5)],
+        },
+    ]
+    for provider in providers:
+        try:
+            counter = ExactCounter(provider)
+            counts = counter.count_many(
+                [
+                    {"state": {"text": {"body": "Résumé: 世界. A short test."}}, "question": q}
+                    for q in questions
+                ]
+            )
+            if len(counts) != 3 or any(type(n) is not int or n <= 0 for n in counts):
+                raise ValueError("Expected positive counts for all three task types")
+            reports.append(
+                {
+                    "provider": provider,
+                    "task_counts": counts,
+                    "counter_id": counter.identity["counter_id"],
+                }
+            )
+            print(f"{provider}: tokenizer and all three request formats OK", flush=True)
+        except Exception as exc:
+            failures.append(f"{provider}: {type(exc).__name__}: {exc}")
+    if failures:
+        raise RuntimeError(
+            "Tokenizer precheck failed before full counting. Install the token-audit extra "
+            "(including Jinja2), then stage this provider's tokenizer files.\n"
+            + "\n".join(failures)
+        )
+    return reports
+
+
+def save_reports(reports):
+    """Publish completed providers even if a different worker subsequently fails."""
+    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
+    retained = {}
+    if report_path.exists():
+        retained = {
+            r["provider"]: r
+            for r in json.loads(report_path.read_text(encoding="utf-8"))["self_hosted"]
+        }
+    retained.update({r["provider"]: r for r in reports})
+    write_json(
+        report_path,
+        {
+            "created_utc": datetime.now(UTC).isoformat(),
+            "stage": "experiment_0_before_extraction",
+            "self_hosted": list(retained.values()),
+            "hosted_unverified": HOSTED_UNAVAILABLE,
+            "all_selected_models_verified": False,
+            "rows_removed": False,
+        },
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -283,6 +350,11 @@ def main():
         "--stage-only",
         action="store_true",
         help="Download tokenizer files on a connected setup host, without counting",
+    )
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Quick offline tokenizer/request-format checks; allowed on the setup host",
     )
     parser.add_argument(
         "--provider",
@@ -300,37 +372,50 @@ def main():
     if args.stage_only:
         stage_tokenizers(providers)
         return 0
-    if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
+    if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID") and not args.check_only:
         raise RuntimeError(
             "Full token counting on VSC requires a CPU allocation; stage files on the login host separately"
         )
     if args.stage_tokenizers:
         stage_tokenizers(providers)
+    check_tokenizers(providers)
+    if args.check_only:
+        return 0
     inputs = selected_inputs()
+    reports, failures = [], []
     with ProcessPoolExecutor(
         max_workers=min(
             len(providers), int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
         )
     ) as pool:
-        futures = [pool.submit(audit_provider, provider, inputs) for provider in providers]
-        reports = [future.result() for future in futures]
-    # A targeted recount must not discard completed audits for the other providers.
-    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
-    retained = {}
-    if report_path.exists():
-        retained = {r["provider"]: r for r in json.loads(report_path.read_text())["self_hosted"]}
-    retained.update({r["provider"]: r for r in reports})
-    combined = {
-        "created_utc": datetime.now(UTC).isoformat(),
-        "stage": "experiment_0_before_extraction",
-        "self_hosted": list(retained.values()),
-        "hosted_unverified": HOSTED_UNAVAILABLE,
-        "all_selected_models_verified": False,
-        "rows_removed": False,
-    }
-    write_json(
-        paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json", combined
-    )
+        futures = {pool.submit(audit_provider, p, inputs): p for p in providers}
+        for future in as_completed(futures):
+            try:
+                reports.append(future.result())
+                save_reports(reports)
+            except Exception as exc:
+                failure = {
+                    "provider": futures[future],
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+                failures.append(failure)
+                print(f"Tokenizer worker failed: {failure}", flush=True)
+    if failures:
+        write_json(
+            paths.manifests_dir("experiment_0")
+            / "before_extraction"
+            / f"token_audit_failure_{uuid4().hex}.json",
+            {
+                "created_utc": datetime.now(UTC).isoformat(),
+                "failures": failures,
+                "completed_providers": [r["provider"] for r in reports],
+                "committed_counts_preserved": True,
+            },
+        )
+        raise RuntimeError(
+            "Token audit failed; completed providers and committed count batches were preserved"
+        )
     print(
         json.dumps(
             {

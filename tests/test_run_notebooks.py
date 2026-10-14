@@ -169,6 +169,7 @@ def test_summarise_says_where_everything_went() -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.notebook
 def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch, capsys) -> None:
     """The property the whole design rests on: the NOTEBOOK writes the files, so a runner
     execution and an interactive Run All produce the same thing.
@@ -224,6 +225,7 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
 
 
 @pytest.mark.slow
+@pytest.mark.notebook
 def test_cell_failure_saves_partial_outputs_and_error(isolated_output, monkeypatch):
     nb_dir = isolated_output / "notebooks"
     monkeypatch.setattr(rn, "notebooks_dir", lambda: nb_dir)

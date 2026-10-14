@@ -6,9 +6,10 @@
 
 Experiment 0A preparation and offline tokenizer testing. Guarded SDK transport, self-hosted
 GPU pilot/extraction adapters and injectable CV orchestration
-are prepared; no paid calls/features or model fitting have been verified. VSC CPU and token
-jobs were submitted by the owner (see table); completion is unverified. All live
-switches remain disabled. The public GitHub repository is connected; generated outputs and raw data stay ignored.
+are prepared; no paid calls/features or model fitting have been verified. The owner's VSC
+CPU/token jobs failed on missing optional dependencies (see table). A bounded real GPU
+contract job is implemented but has not run on VSC. Full extraction/benchmark switches
+remain disabled. The public GitHub repository is connected; generated outputs and raw data stay ignored.
 The literature submodule is read-only at the existing index/checkout pin
 de324efcca55be392feb0c01830b3b6ce364587f (existing index/checkout verified 13-10-2026; not modified here).
 Durable method constraints are in README.md; interface evidence is in LITERATURE_REVIEW.md.
@@ -18,13 +19,25 @@ The owner handles Git commits/pushes. Proposed plans belong in chat, not tempora
 
 | Date | Cluster / job | Configuration | Observed outcome |
 |---|---|---|---|
-| 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | Submitted; log/exit status not supplied. Correct dependency install and `pip check` succeeded before submission. |
-| 14-10-2026 | wICE / 62312903 | experiment_0_tokens.slurm | Submitted; owner reports running. This checkout counts the original three providers, not the newly added Clef/Intern. |
+| 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | FAILED, exit 1, 1m30s. All dataset checks passed; 309 tests passed, 3 notebook tests failed (IPython/nbformat absent), 1 platform skip. |
+| 14-10-2026 | wICE / 62312903 | experiment_0_tokens.slurm | FAILED, exit 1, 1h06m02s. Perplexity chat rendering lacked Jinja2. Liquid/Strands logged all dataset completions; committed count databases remain resumable. Only the original three providers were submitted. |
 
 Do not update the VSC checkout while jobs use it. Record final status after inspecting
 `sacct` and logs, not from submission alone. PROJECT write access is verified; quota and
 independent backup remain unverified. `sam-balance` confirms account credit availability,
 not storage quota or successful execution.
+
+- **Optional dependencies (14-10-2026):** `pip check` cannot detect undeclared optional
+  imports. Pin Jinja2 in `token-audit` and render all task formats before starting the long
+  audit. Publish each completed provider independently. The VSC CPU suite excludes only
+  `notebook`-marked tests; the complete local suite retains them. Never delete count databases
+  to repair dependencies. The tokenization.py file hash is part of the original three
+  counter identities: do not reformat it casually and invalidate an expensive audit.
+- **GPU contract scope:** `gpu_contracts --execute` requires a VSC allocation and exact
+  token evidence, and plans at most 67 forwards (100 ceiling). Synthetic features belong
+  under PROJECT Experiment 0 results; real first/longest responses belong in the permanent
+  per-dataset cache. Preserve the DATA logs/manifests. No synthetic test proves CUDA/checkpoint
+  compatibility, and no bounded test automatically grants full extraction acceptance.
 
 - **VSC installation shadowing (14-10-2026):** the owner's transcript shows a newly created
   Conda JEVPFN environment, but pip ran in TabPFNCredit's inherited venv and upgraded packages

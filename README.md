@@ -9,7 +9,8 @@ folds. The selected predictors are **CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, N
 Tabular and logistic/linear regression**. The original-text comparators are **TabSTAR and
 ConTextTab**. AutoGluon, TabM and Google TabFM are excluded; other catalog entries are references.
 
-**Current phase: Experiment 0A preparation and offline testing. No paid calls or GPU/model experiments are enabled.**
+**Current phase: Experiment 0A testing. Paid calls, full feature extraction and predictive experiments remain disabled.**
+Explicitly submitted GPU contract tests now exercise real checkpoints; they have not yet run on VSC.
 The public repository is [andreasgoethals/JEVPFN](https://github.com/andreasgoethals/JEVPFN).
 
 ## Workflow
@@ -67,6 +68,10 @@ token count against the audited format. No silent truncation is allowed.
 The 14-10-2026 audit counted all 1,698,127 unique prepared inputs for Liquid, Strands and
 Perplexity and found no overflows. Notebook 03 reads those saved results only when the input
 file identities still match; the earlier character warnings do not justify deleting rows.
+`python -m src.cluster.token_audit --check-only` checks all three task formats for every
+staged tokenizer without weights or full counting. Full audits perform this check first and
+publish completed provider summaries independently. The `token-audit` extra explicitly includes
+Jinja2 for publisher chat templates. Committed counts survive a failed worker and are reused.
 
 ## Local environment and notebooks
 
@@ -112,6 +117,18 @@ It verifies selected dataset hashes/schema/CV feasibility and runs synthetic con
 an immutable report and test log in `output_JEVPFN/3. experiment_0/`. Real provider, checkpoint,
 CUDA, cluster allocation and full-fold resource checks remain explicitly pending; local success
 does not establish full Experiment 0 acceptance.
+VSC CPU checks exclude the three local notebook tests; the full local suite still runs them.
+Failed contract summaries also appear directly at the end of the Slurm log.
+
+`scripts/slurm/experiment_0_decision_contracts.slurm` runs a bounded real GPU test for one
+prepared provider. It covers all three tasks, all 30 probabilities of a wide classification
+case, missing/duplicate/Unicode inputs, cache reopen/reuse, feature-table round trips and
+the first/longest unique input from every selected dataset. At most 67 forwards are planned
+per provider, with a hard ceiling of 100. Synthetic outputs stay in Experiment 0 on PROJECT;
+real responses enter the permanent dataset caches for later reuse. Logs and compact manifests
+stay on DATA. The [VSC guide](docs/VSC.md#bounded-clefintern-gpu-contract-tests) gives the exact
+environment, staging and submission commands. A passing GPU test is evidence to review,
+not automatic approval for full extraction.
 
 `python -m src.jev.pilot` prepares a compatibility manifest from first/middle/last and
 longest-text rows of all 18 selected datasets, for seven disabled providers using the saved `documented`
@@ -123,7 +140,7 @@ neither enables extraction. Notebook 01 reports main numeric feature counts and 
 expansion; Notebook 02 displays the proposed shorter questions beside the accepted wording.
 Dependencies are declared in `pyproject.toml`; notebook setup installs no API/model extras.
 Optional predictor extras are `models` (TabPFN), `baselines`, `tabicl`, `limix`, `kumo`,
-`tabstar` and `contexttab`; `jev`, `liquid` and `strands` support later extractor environments.
+`tabstar` and `contexttab`; `jev`, `liquid`, `strands`, `clef` and `intern` support extractor environments.
 Perplexity supplies checkpoint-specific requirements. Custom runtimes use isolated environments,
 staged checkpoints and hashes; do not install all extras into the notebook environment.
 [The VSC guide](docs/VSC.md) records the interfaces and setup sequence. No GPU runtime has
@@ -195,7 +212,8 @@ Permanent extraction uses **one file per dataset**: `data/jev_cache/<dataset_id>
 Parquet tables as SQLite blobs: one numeric table and one row/request mapping per immutable
 representation/version, with an embedded manifest and checksums. `dataset_identity` prevents
 writing a different dataset into the file. Different Jev/template versions coexist without
-replacing old results. No real dataset cache is created until extraction is approved.
+replacing old results. Explicit bounded GPU tests may add reusable real responses; full
+dataset extraction remains separately disabled.
 
 `bind_provider` prepares separate provider/checkpoint cache identities while preserving the
 shared text and question. Response decoding and feature materialization now support Jev and
