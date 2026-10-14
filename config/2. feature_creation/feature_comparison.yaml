@@ -1,0 +1,17 @@
+extends: feature_creation
+name: saved_decision_feature_comparison
+comparison:
+  providers: [jev, liquid, perplexity, cloudflare, strands, microsoft]
+  representations: [per_column, joint]
+  # With one artifact per provider/representation it is selected and recorded.
+  # If several versions exist, stop: pin dataset -> provider -> representation -> artifact_id here.
+  artifacts: {}
+  weightings: [rows, unique_inputs]
+  regression_agreement_tolerance: 0.5  # Descriptive score difference, NOT target units.
+  regression_neutral_band: 0.0  # Sign agreement: negative / exactly zero / positive.
+  scatter_rows_per_group: 150
+  disagreement_examples_per_group: 3
+  random_seed: 42
+  # Consensus/outlier rankings require every provider above on the same inputs.
+  require_complete_roster_for_consensus: true
+  uses_target_labels: false

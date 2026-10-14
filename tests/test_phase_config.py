@@ -1,9 +1,20 @@
+import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 from src.utils import paths
 from src.utils.config import load_config, load_yaml, validate_config
+
+
+def test_optional_environment_requirements_are_valid_pep508():
+    project = tomllib.loads((paths.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+    for dependencies in [project["dependencies"], *project["optional-dependencies"].values()]:
+        for requirement in dependencies:
+            Requirement(requirement)
 
 
 def test_phase_inheritance_preserves_defaults():
@@ -66,10 +77,12 @@ def test_shared_experiment_proposals_preserve_validation_boundary_and_catalog():
         assert evaluation["regression"]["classification_threshold"] == "not_applicable"
         assert evaluation["preprocessing_fit_scope"] == "training_partition_only"
     assert set(load_yaml("experiment_1/main")["candidate_models"]) == {
-        "tabpfn_3",
         "tabpfn_3_5",
         "catboost",
         "linear",
+        "tabicl_v2",
+        "limix_2",
+        "kumo_tabular",
     }
     assert "tabm" not in models and "tabfm" not in models
 

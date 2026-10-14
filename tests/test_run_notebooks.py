@@ -89,6 +89,14 @@ def test_recursive_discovery_resolves_unique_stems_and_rejects_ambiguity(tmp_pat
         rn.discover(("../outside",))
 
 
+def test_numbered_notebooks_accept_stems_or_logical_phase_aliases(tmp_path, monkeypatch):
+    monkeypatch.setattr(rn, "notebooks_dir", lambda: tmp_path)
+    name = "1. question_preparation/01_prepare_questions"
+    make_notebook(tmp_path / f"{name}.ipynb", ["print(1)"])
+    assert rn.discover(("question_preparation/01_prepare_questions",)) == (name,)
+    assert rn.discover(("01_prepare_questions",)) == (name,)
+
+
 def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch) -> None:
     """ONE Captions.md for the project, built from each notebook's manifest — so it can be
     regenerated after an interactive run without executing anything."""

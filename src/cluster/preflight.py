@@ -181,6 +181,8 @@ def run_preflight(
     local: bool = False,
     verify_data: bool = False,
     tests: bool = False,
+    stage: str = "before_extraction",
+    predictor_imports: bool = False,
     config: str = "experiment_0/debug",
 ) -> dict:
     if local and (paths.on_vsc() or os.environ.get("SLURM_JOB_ID")):
@@ -188,9 +190,12 @@ def run_preflight(
     if not local and (not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID")):
         raise RuntimeError("Experiment 0 must run inside a VSC compute allocation.")
     cfg = load_yaml(config)
+    if stage not in cfg["stages"]:
+        raise ValueError("Unknown Experiment 0 stage")
     os.environ["JEVPFN_PHASE"] = "experiment_0"
     report = {
         "phase": "experiment_0_preflight",
+        "stage": stage,
         "run_id": uuid4().hex,
         "execution_site": "local" if local else "vsc_compute_node",
         "created_at": datetime.now(UTC).isoformat(),
@@ -218,6 +223,9 @@ def run_preflight(
             if name in required_packages:
                 report["failures"].append(f"Missing offline preflight dependency: {name}")
     report["failures"].extend(storage_policy_failures(report["cluster"]))
+    report["stage_pending_acceptance"] = [
+        c for c in cfg["acceptance_checks"] if c["id"] in cfg["stages"][stage]["acceptance_ids"]
+    ]
     for label, directory in {
         "small_outputs": paths.outputs_dir(),
         "large_outputs": paths.large_outputs_dir(),
@@ -251,14 +259,14 @@ def run_preflight(
     if gpu:
         try:
             import torch
-            from tabpfn.constants import ModelVersion
 
-            if (
-                ModelVersion.V3_5.value != "v3.5"
-                or ModelVersion.V3.value != "v3"
-                or not torch.cuda.is_available()
-            ):
-                raise RuntimeError("TabPFN-3/3.5 or CUDA is unavailable")
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA is unavailable")
+            if predictor_imports:
+                from tabpfn.constants import ModelVersion
+
+                if ModelVersion.V3_5.value != "v3.5" or ModelVersion.V3.value != "v3":
+                    raise RuntimeError("TabPFN-3/3.5 is unavailable")
             result = torch.ones((2, 2), device="cuda") @ torch.ones((2, 2), device="cuda")
             torch.cuda.synchronize()
             if result.sum().item() != 8:
@@ -281,10 +289,16 @@ def run_preflight(
                 f"{failed} selected dataset(s) failed offline data/CV checks."
             )
     _validate_artifacts(cfg, report)
+    if stage == "after_extraction" and not cfg["feature_artifacts"]:
+        report["failures"].append(
+            "Experiment 0B requires explicit complete feature artifact selections."
+        )
     report["feature_validation"] = (
         "see_per_artifact_results_not_full_campaign_acceptance"
         if cfg["feature_artifacts"]
-        else "pending_complete_local_features"
+        else "not_required_before_extraction"
+        if stage == "before_extraction"
+        else "pending_complete_features"
     )
     if tests:
         report["contract_tests"] = contract_tests(report["run_id"])
@@ -295,7 +309,8 @@ def run_preflight(
         "selected_dataset_hashes_schema_and_cv_feasibility": verify_data,
         "synthetic_contract_suite": tests,
         "unauthenticated_https_head": network,
-        "cuda_tensor_and_tabpfn_import": gpu,
+        "cuda_tensor_and_tabpfn_import": gpu and predictor_imports,
+        "cuda_tensor": gpu,
         "model_weights_loaded": False,
         "live_decision_inference": False,
         "predictive_models_fitted": False,
@@ -313,6 +328,14 @@ def main() -> int:
         "--verify-data", action="store_true", help="Read cached data; never download"
     )
     parser.add_argument("--tests", action="store_true", help="Run the deterministic pytest suite")
+    parser.add_argument(
+        "--stage", choices=["before_extraction", "after_extraction"], default="before_extraction"
+    )
+    parser.add_argument(
+        "--predictor-imports",
+        action="store_true",
+        help="Also import TabPFN in its own model environment",
+    )
     args = parser.parse_args()
     report = run_preflight(
         network=args.network,
@@ -320,6 +343,8 @@ def main() -> int:
         local=args.local,
         verify_data=args.verify_data,
         tests=args.tests,
+        stage=args.stage,
+        predictor_imports=args.predictor_imports,
     )
     write_json(paths.manifests_dir("experiment_0") / f"preflight_{report['run_id']}.json", report)
     print(json.dumps(report, indent=2))

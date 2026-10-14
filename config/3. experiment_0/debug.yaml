@@ -10,8 +10,16 @@ cluster:
   gpu: {name: wice, partition: gpu_a100_debug, gpus: 1}
   gpu_alternative: {name: mindwell, partition: gpu_b200, gpus: 1}
 environment: JEVPFN
-feature_artifacts: []  # Populate after full local feature creation and validation.
-requires: [complete_locally_created_features]
+feature_artifacts: []  # Populate after hosted-local and self-hosted-VSC extraction/validation.
+requires: []  # Infrastructure and tokenizer checks must run BEFORE features exist.
+stages:
+  before_extraction:
+    requires: [frozen_prepared_inputs]
+    token_command: python -m src.cluster.token_audit
+    acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
+  after_extraction:
+    requires: [complete_selected_provider_features]
+    acceptance_ids: [feature_campaign_coverage, consistent_transfer_and_backup, predictor_task_compatibility, predictive_pipeline_boundaries, full_fold_resource_profile, real_run_output_and_resume]
 checks:
   - python_and_dependency_versions
   - dataset_hashes_and_row_alignment
@@ -28,7 +36,7 @@ checks:
   - same_five_fold_split_manifest_across_arms
   - binary_threshold_uses_inner_validation_only
   - fold_specific_non_text_and_native_text_preprocessing
-  - identical_single_text_views_not_fitted_twice
+  - identical_single_text_columns_not_duplicated_in_combined_view
   - later_small_inference_smoke_after_weights_are_prepared
 acceptance: pending_real_runtime_evidence  # Preflight success is not full experiment-0 acceptance.
 # Preflights report these as pending even if synthetic contract tests pass. They do
@@ -63,7 +71,7 @@ acceptance_checks:
     evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds, fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.
   - id: full_fold_resource_profile
     site: vsc_compute_node
-    evidence: Representative full outer-training folds fit memory/time limits without hidden row caps, checkpoint downloads, extra HPO or fine-tuning; fit/predict timings synchronize CUDA.
+    evidence: Representative full outer-training folds fit memory/time limits without hidden row caps, checkpoint downloads or HPO; TabSTAR required adaptation is recorded separately; fit/predict timings synchronize CUDA.
   - id: real_run_output_and_resume
     site: vsc_compute_node
     evidence: Real interrupted/restarted prediction jobs preserve immutable outputs; large tables stay on PROJECT and compact logs/indexes stay on DATA; failed arms remain explicit.

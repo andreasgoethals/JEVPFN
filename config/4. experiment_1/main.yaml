@@ -1,0 +1,54 @@
+extends: experiment_1/protocol
+phase: experiment_1
+name: decision_text_feature_comparison
+enabled: false
+proposal: false
+model_catalog: experiment_1/models
+candidate_models:
+- catboost
+- tabpfn_3_5
+- tabicl_v2
+- limix_2
+- kumo_tabular
+- linear
+roster_note: six_predictors_four_arms_two_separate_original_text_baselines
+feature_artifacts: []
+candidate_combinations:
+- non_text
+- non_text_plus_joint
+- non_text_plus_per_column
+- non_text_plus_both
+text_statistics_baseline: src.evaluation.features.text_statistics
+include_non_text_features_in_jev: false
+feature_view:
+  binary_classification: positive_class_probability
+  multiclass_classification: full_class_probability_vector
+  regression: expected_direction
+deduplicate_identical_columns_in_combined_view: true
+reuse_fits_between_identical_named_arms: false
+requires:
+- accepted_experiment_0
+- complete_feature_artifacts
+- agreed_evaluation_protocol
+dataset_selection:
+  exclude:
+  - REG_TEXT_ZOMATO_RESTAURANTS
+  - MUL_TEXT_SPOTIFY_GENRES
+experiment_0_acceptance: null
+candidate_extractors:
+- jev
+- liquid
+- perplexity
+- cloudflare
+- strands
+- microsoft
+non_text_columns: all_original_numerical_and_categorical_features
+additional_controls:
+  text_statistics: optional_separate_ablation_not_a_fifth_main_arm
+feature_selectors:
+  jev: null
+  liquid: null
+  perplexity: null
+  cloudflare: null
+  strands: null
+  microsoft: null

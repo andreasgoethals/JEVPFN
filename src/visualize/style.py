@@ -141,6 +141,23 @@ TASK_COLORS = {
     "regression": TOTAL_COLOR,
 }
 
+# Saved decision-feature comparisons: consistent provider colors across all diagnostics.
+DECISION_COLORS = {
+    "jev": "#276A87",
+    "liquid": "#C37929",
+    "perplexity": "#54765A",
+    "cloudflare": "#846C9C",
+    "strands": "#AF4C59",
+    "microsoft": "#627C93",
+}
+COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, 7.5)
+COMPARISON_SCATTER_ALPHA = 0.3
+COMPARISON_SCATTER_SIZE = 6
+COMPARISON_MATRIX_FONT = 7
+AGREEMENT_CMAP = "Blues"
+DISTANCE_CMAP = "YlOrRd"
+
 
 def apply() -> None:
     """Install the style. Call once, at the top of every notebook and plotting script."""

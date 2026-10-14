@@ -1,9 +1,12 @@
-# Disabled compatibility catalog, not authorization to expand or run the benchmark.
 checked_on: '2026-10-13'
 enabled: false
-shared_semantics: [binary_probability, complete_class_probability_vector, nine_level_direction]
+shared_semantics:
+- binary_probability
+- complete_class_probability_vector
+- nine_level_direction
 input: task_metadata_and_text_only
-question_source: src.jev.templates
+question_source: data/decision_inputs/<dataset_id>.sqlite3
+question_variant: documented
 comparison_scope: downstream_text_representation_utility_not_agent_routing_leaderboard
 candidates:
   jev:
@@ -20,7 +23,7 @@ candidates:
     revision: 051bcc464b01b9f92942b364d9586b0ef5912432
     delivery: self_hosted
     license: LFM_Open_License
-    input_price_per_million_usd: null  # Compute is not free; no vendor API token fee.
+    input_price_per_million_usd: null
     reference: https://huggingface.co/LiquidAI/d1-3B
   perplexity:
     enabled: false
@@ -33,7 +36,7 @@ candidates:
   cloudflare:
     enabled: false
     model: '@cf/cloudflare/clef-flash'
-    revision: null  # Hosted alias immutability must be established before extraction.
+    revision: null
     delivery: hosted_workers_ai
     input_price_per_million_usd: 0.038
     output_price_per_million_usd: 0
@@ -46,10 +49,10 @@ candidates:
     base_model_revision: b1485b2fa6dfa1287294f269f5fb618e03d52d7c
     base_revision_source: checkpoint_provenance_json
     base_revision_caveat: publisher_inferred_training_time_revision_not_originally_pinned
-    runtime_revision: null  # Pin the reviewed inference package separately before a model run.
-    strict_window_required: true  # Server otherwise truncates the state to 4096 tokens.
-    serialize_calls_per_engine: true  # Publisher reports mutable option-offset state.
-    loopback_only: true  # Local experiment server has no authentication.
+    runtime_revision: b9fc83626bcca822d00f822d6c2e151b8d244ee9
+    strict_window_required: true
+    serialize_calls_per_engine: true
+    loopback_only: true
     delivery: self_hosted
     license: Apache-2.0
     input_price_per_million_usd: null
@@ -65,13 +68,18 @@ candidates:
     context_tokens_reference: 32768
     context_source: https://openrouter.ai/microsoft/microsoft-decision-1
     context_verified_for: openrouter_listing_only_not_deployed_foundry_account
-    immutable_weights_verified: false  # OpenRouter says weights are updated continually.
+    immutable_weights_verified: false
     reference: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision
 readiness_required:
-  - explicit_owner_roster_selection
-  - verified_account_access_or_checkpoint_license
-  - immutable_model_revision_and_separate_cache_identity
-  - live_probability_schema_and_usage_contract_pilot
-  - reviewed_context_policy_and_common_input_coverage
-  - agreed_spending_and_compute_allocation
-  - pretraining_overlap_review
+- explicit_owner_roster_selection
+- verified_account_access_or_checkpoint_license
+- immutable_model_revision_and_separate_cache_identity
+- live_probability_schema_and_usage_contract_pilot
+- reviewed_context_policy_and_common_input_coverage
+- agreed_spending_and_compute_allocation
+- pretraining_overlap_review
+context_policy:
+  dispatch: reject_until_exact_provider_counts_pass
+  silent_truncation: false
+  common_content_required: true
+  overlong_resolution: pending_review_no_automatic_shortening_or_missing_feature_substitution

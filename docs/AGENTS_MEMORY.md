@@ -1,10 +1,11 @@
 # Operational notes
 
-- **Source meanings (13-10-2026):** `dataset_semantics.yaml` is the maintained dictionary. Preserve raw labels; never infer units from label magnitudes. Book Price has a misleading USD column name despite documented upstream log-price. Question preparation and model-feature selection are offline; alternate decoders and multi-provider spending remain unfinished.
+- **Source meanings (13-10-2026):** `dataset_semantics.yaml` is the maintained dictionary. Preserve raw labels; never infer units from label magnitudes. Book Price has a misleading USD column name despite documented upstream log-price. Jev and three self-hosted decoders/materializers are implemented but live GPU compatibility and hosted multi-provider spending remain unverified.
 
 ## Current state
 
-Exploration and feature design only. Guarded SDK transport and injectable CV orchestration
+Experiment 0A preparation and offline tokenizer testing. Guarded SDK transport, self-hosted
+GPU pilot/extraction adapters and injectable CV orchestration
 are prepared; no paid calls/features, model fitting or VSC jobs have been run. All live
 switches remain disabled. The public GitHub repository is connected; generated outputs and raw data stay ignored.
 The literature submodule is read-only at the existing index/checkout pin
@@ -14,13 +15,22 @@ The owner handles Git commits/pushes. Proposed plans belong in chat, not tempora
 
 ## Avoid repeating these failures
 
+- **Exact token formatting (14-10-2026):** character proxies flagged Fake Job Postings rows
+  that fit all three actual open-model tokenizers. Liquid encodes a complete rendered turn;
+  Strands encodes state (special tokens enabled) and question separately; Perplexity uses
+  its saved chat template and answer codes. Never count bare text or substitute a base tokenizer
+  for an unavailable hosted tokenizer. Keep token counts resumable and traceable to input hashes.
+  All 1,698,127 selected unique inputs fit: maxima Liquid 3,104, Strands 3,244 and Perplexity
+  3,154 tokens. Actual GPU count parity remains a separate test; hosted counts are unverified.
+  Hugging Face/Xet cache variables must be set before its first import, including during staging.
+
 - **Preflight test environment:** the combined local preflight exposed inherited
   `JEVPFN_PHASE=experiment_0` in tests expecting exploration. Synthetic tests now clear
   ambient routing/job variables and explicitly simulate their own temporary storage;
   real host checks run outside that fixture. This also prevents writes to real VSC allocations.
 
-- **Provider preparation boundaries:** all six previews share semantic questions but need
-  separate response adapters. Perplexity uses singular `question` in each prediction row.
+- **Provider preparation boundaries:** all six previews share semantic questions; three
+  self-hosted adapters now use pinned runtimes. Perplexity uses singular `question` in each prediction row.
   Strands requires strict-window rejection and serialized inference until concurrency is verified.
 - **Evaluation identity and memory:** include exact matrix/schema/row hashes, feature artifact
   IDs and resolved estimator settings in run IDs. Release each fold's estimator before loading

@@ -1,0 +1,26 @@
+extends: experiment_1/protocol
+phase: experiment_2
+name: original_text_baselines
+enabled: false
+proposal: false
+model_catalog: experiment_1/models
+candidate_models:
+- tabstar
+- contexttab
+feature_artifacts: []
+candidate_combinations:
+- original_features
+native_text_preprocessing: inside_each_training_partition
+text_length_policy: record_publisher_encoder_limits_and_text_coverage
+new_jev_calls_required: false
+requires:
+- approved_experiment_1_protocol
+- agreed_native_text_handling
+dataset_selection:
+  exclude:
+  - REG_TEXT_ZOMATO_RESTAURANTS
+  - MUL_TEXT_SPOTIFY_GENRES
+experiment_0_acceptance: null
+input: all_original_non_text_and_text_columns_no_decision_features
+model_required_adaptation: TabSTAR_default_training_and_internal_validation_not_HPO
+contexttab_context_policy: all_training_rows_bagging_1_no_8192_row_subsampling

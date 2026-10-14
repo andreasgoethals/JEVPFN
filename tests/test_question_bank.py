@@ -2,6 +2,8 @@
 
 import copy
 import json
+import sqlite3
+from contextlib import closing
 from dataclasses import replace
 
 import pandas as pd
@@ -44,15 +46,21 @@ def dataset():
 def test_question_bank_round_trip_stability_and_tamper_rejection(dataset, isolated_output):
     bank = build_question_bank([dataset.metadata], load_yaml("question_design"))
     destination = save_question_bank(bank)
-    before = destination.stat().st_mtime_ns
+    dataset_file = paths.dataset_question_path("fixture")
+    before = dataset_file.stat().st_mtime_ns
     assert save_question_bank(bank) == destination
-    assert destination.stat().st_mtime_ns == before
+    assert dataset_file.stat().st_mtime_ns == before
     assert load_question_bank(destination) == bank
     assert destination.is_relative_to(paths.staging_root())
-    assert "123456789" not in destination.read_text(encoding="utf-8")
+    with closing(sqlite3.connect(dataset_file)) as db:
+        stored = db.execute("SELECT entry_json FROM question_banks").fetchone()[0]
+    assert "123456789" not in stored
     broken = copy.deepcopy(bank)
     broken["datasets"]["fixture"]["variants"]["accepted"]["question"]["text"] = "tampered"
-    destination.write_text(json.dumps(broken), encoding="utf-8")
+    with closing(sqlite3.connect(dataset_file)) as db, db:
+        db.execute(
+            "UPDATE question_banks SET entry_json=?", (json.dumps(broken["datasets"]["fixture"]),)
+        )
     with pytest.raises(ValueError, match="checksum"):
         load_question_bank(destination)
 

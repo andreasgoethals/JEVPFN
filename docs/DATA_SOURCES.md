@@ -24,7 +24,7 @@ the original data/source pins below remain unchanged. Earlier source review used
   [published wheel](https://pypi.org/project/tabstar/1.1.15/); no TabSTAR installation or weights
   were needed.
 
-`config/datasets.yaml` records primary-source URLs/hashes, data versions/hashes and
+`config/0. exploration/datasets.yaml` records primary-source URLs/hashes, data versions/hashes and
 the column list obtained from these rules. The public official Kaggle archives are downloaded
 through the versioned dataset-download endpoint, using only Python's standard library. Only
 `data.csv` and `metadata.json` are extracted; no arbitrary archive paths or downloaded code run.
@@ -174,7 +174,7 @@ based on input/representation feasibility before comparative predictive results.
 
 ## Source-backed question metadata (13-10-2026)
 
-`config/dataset_semantics.yaml` is the single maintained dictionary for the 18 selected datasets:
+`config/1. question_preparation/dataset_semantics.yaml` is the single maintained dictionary for the 18 selected datasets:
 raw target, task, observation unit, readable task meaning, every official text column, typed raw
 class values/descriptions, source URLs and unresolved facts. Pinned MulTaBench annotations use
 commit `3bb95079a6146ed35d45187e98bcad5b063273a1`; their inspected source hashes are recorded.

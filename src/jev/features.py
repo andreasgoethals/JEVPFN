@@ -83,7 +83,13 @@ def block_identity(
 
 
 def materialize_cached_block(
-    dataset, cfg: dict, cache, *, question_bank=None, question_variant="accepted"
+    dataset,
+    cfg: dict,
+    cache,
+    *,
+    question_bank=None,
+    question_variant="accepted",
+    provider_settings=None,
 ) -> FeatureBlock:
     """Fail on a missing/invalid response; mock responses can never become model features."""
     identity = block_identity(
@@ -93,6 +99,20 @@ def materialize_cached_block(
         question_bank=question_bank,
         question_variant=question_variant,
     )
+    if provider_settings is not None:
+        identity.update(
+            {
+                k: provider_settings[k]
+                for k in (
+                    "provider",
+                    "model",
+                    "version",
+                    "request_configuration",
+                    "api_mapping_version",
+                    "template_version",
+                )
+            }
+        )
     artifact_id = digest(identity)
     event_log = paths.logs_dir("feature_creation") / "builds" / f"{artifact_id}.jsonl"
     started = time.perf_counter()
@@ -105,7 +125,14 @@ def materialize_cached_block(
     )
     try:
         block = _materialize_cached_block(
-            dataset, cfg, cache, identity, event_log, question_bank, question_variant
+            dataset,
+            cfg,
+            cache,
+            identity,
+            event_log,
+            question_bank,
+            question_variant,
+            provider_settings,
         )
     except Exception as exc:
         append_event(
@@ -128,10 +155,17 @@ def materialize_cached_block(
 
 
 def _materialize_cached_block(
-    dataset, cfg, cache, identity, event_log, question_bank, question_variant
+    dataset,
+    cfg,
+    cache,
+    identity,
+    event_log,
+    question_bank,
+    question_variant,
+    provider_settings=None,
 ):
     mode = identity["representation"]
-    prefix = f"jev__{mode}__text_only"
+    prefix = f"{identity['provider']}__{mode}__text_only"
     features = dataset.features
     records, references = [], []
     metadata = dataset.metadata
@@ -168,6 +202,16 @@ def _materialize_cached_block(
             if transform is not None:
                 requests_batch = {
                     p: [transform(r) for r in batch] for p, batch in requests_batch.items()
+                }
+            if provider_settings is not None:
+                from dataclasses import replace
+
+                from src.utils.serialization import canonical_json
+
+                encoded_settings = canonical_json(provider_settings)
+                requests_batch = {
+                    p: [replace(r, settings_json=encoded_settings) for r in batch]
+                    for p, batch in requests_batch.items()
                 }
             cached_batch = cache.get_many(
                 (r for batch in requests_batch.values() for r in batch), kind="verified_response"
@@ -634,7 +678,7 @@ def table_schemas() -> pd.DataFrame:
                 "table": "Feature-build log / DATA manifest index",
                 "key": "artifact_id",
                 "content": "UTC progress, completion/failure, row counts, hashes and artifact location; no raw text",
-                "scope": "output_JEVPFN/feature_creation; compact DATA records on VSC",
+                "scope": "output_JEVPFN/2. feature_creation; compact DATA records on VSC",
             },
             {
                 "table": "Experiment feature matrix",

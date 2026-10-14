@@ -6,6 +6,8 @@ including answer ordering and source-backed definitions, for reuse by every extr
 
 import copy
 import json
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from src.jev.design import DESIGN_VERSION, proposed_question, reviewed_definition
@@ -14,7 +16,7 @@ from src.jev.semantics import DOCUMENTED_VERSION, dataset_semantics, documented_
 from src.jev.templates import TEMPLATE_VERSION, make_question
 from src.utils import paths
 from src.utils.config import load_yaml
-from src.utils.serialization import canonical_json, digest, write_json
+from src.utils.serialization import canonical_json, digest
 
 
 def build_question_bank(metadata, design_cfg):
@@ -74,55 +76,88 @@ def validate_bank(bank):
 
 
 def save_question_bank(bank):
-    """Content-addressed immutable file; changed wording creates a new file."""
+    """Save each entry once, inside its dataset file; older bank versions coexist."""
     validate_bank(bank)
-    destination = paths.question_bank_path(bank["bank_id"])
-    if destination.exists():
-        if load_question_bank(destination) != bank:
-            raise ValueError("Refusing to replace a different question bank")
-    else:
-        write_json(destination, bank)
-    # Durable dataset inputs live outside output cleanup. The complete bank file
-    # remains the index/replay entry point and preserves the previous reader API.
     for dataset_id, entry in bank["datasets"].items():
-        _save_dataset_question(
-            bank, dataset_id, entry, paths.dataset_question_path(bank["bank_id"], dataset_id)
-        )
-    return destination
+        destination = paths.ensure(paths.dataset_question_path(dataset_id))
+        with closing(sqlite3.connect(destination, timeout=120)) as db, db:
+            db.execute("""CREATE TABLE IF NOT EXISTS question_banks (
+                bank_id TEXT PRIMARY KEY, dataset_id TEXT NOT NULL,
+                members_json TEXT NOT NULL, entry_json TEXT NOT NULL, entry_sha256 TEXT NOT NULL
+            )""")
+            if db.execute(
+                "SELECT 1 FROM question_banks WHERE dataset_id != ?", (dataset_id,)
+            ).fetchone():
+                raise ValueError("Question file belongs to a different dataset")
+            values = (
+                bank["bank_id"],
+                dataset_id,
+                canonical_json(sorted(bank["datasets"])),
+                canonical_json(entry),
+                digest(entry),
+            )
+            existing = db.execute(
+                "SELECT * FROM question_banks WHERE bank_id=?", (bank["bank_id"],)
+            ).fetchone()
+            if existing is not None and existing != values:
+                raise ValueError("Question entry checksum/content mismatch")
+            if existing is None:
+                db.execute("INSERT INTO question_banks VALUES (?,?,?,?,?)", values)
+    return paths.decision_inputs_dir()
 
 
-def _save_dataset_question(bank, dataset_id, entry, path):
-    content = {
-        "schema": "jevpfn.dataset_questions.v1",
-        "bank_id": bank["bank_id"],
-        "dataset_id": dataset_id,
-        "entry_sha256": digest(entry),
-        "entry": entry,
-    }
-    if path.exists():
-        if json.loads(path.read_text(encoding="utf-8")) != content:
-            raise ValueError("Refusing to replace different dataset questions")
-    else:
-        write_json(path, content)
-    return path
+def load_question_bank(path, bank_id=None):
+    """Reassemble a bank from its 18 dataset files; no second catalog copy is needed.
 
-
-def export_dataset_questions(bank):
-    """Readable local outputs, one per dataset; durable originals remain under data/."""
-    validate_bank(bank)
-    folder = paths.notebook_outputs_dir() / "question_preparation" / "questions" / bank["bank_id"]
-    return [
-        _save_dataset_question(
-            bank, dataset_id, entry, folder / f"{paths.output_component(dataset_id)}.json"
-        )
-        for dataset_id, entry in bank["datasets"].items()
-    ]
-
-
-def load_question_bank(path):
-    bank = json.loads(Path(path).read_text(encoding="utf-8"))
+    A legacy JSON may still be read for provenance migration. Multiple versions require
+    an explicit bank ID, so a later extraction cannot silently select different questions.
+    """
+    path = Path(path)
+    if path.suffix == ".json":
+        bank = json.loads(path.read_text(encoding="utf-8"))
+        validate_bank(bank)
+        return bank
+    records, members = {}, None
+    candidates = sorted(path.glob("*.sqlite3"))
+    for candidate in candidates:
+        with closing(sqlite3.connect(candidate.as_uri() + "?mode=ro", uri=True)) as db:
+            rows = db.execute("SELECT * FROM question_banks").fetchall()
+        if bank_id is None:
+            available = {row[0] for row in rows}
+            if len(available) != 1:
+                raise ValueError("Specify bank_id when multiple question versions exist")
+            bank_id = next(iter(available))
+        for identity, dataset_id, membership, entry_json, sha in rows:
+            if identity != bank_id:
+                continue
+            entry = json.loads(entry_json)
+            expected = json.loads(membership)
+            if digest(entry) != sha or (members is not None and members != expected):
+                raise ValueError("Question entry checksum/membership mismatch")
+            if candidate.stem != dataset_id or dataset_id in records:
+                raise ValueError("Question filename/dataset identity mismatch")
+            records[dataset_id], members = entry, expected
+    if not members or sorted(records) != members:
+        raise ValueError("Question bank is incomplete")
+    bank = {"bank_id": bank_id, "schema": "jevpfn.question_bank.v1", "datasets": records}
     validate_bank(bank)
     return bank
+
+
+def payload_from_text(entry, variant, text):
+    """Reconstruct a provider-neutral payload from shared metadata and one unique text set."""
+    if not text or set(text) - set(entry["text_columns"]):
+        raise ValueError("Use a nonempty subset of the official text columns")
+    task = copy.deepcopy(entry["task"])
+    value = entry["variants"][variant]
+    facts = copy.deepcopy(value["documentary_definition"])
+    if facts:
+        if "text_column_definitions" in facts:
+            facts["text_column_definitions"] = {
+                k: v for k, v in facts["text_column_definitions"].items() if k in text
+            }
+        task["documentary_definition"] = facts
+    return {"state": {"task": task, "text": text}, "question": copy.deepcopy(value["question"])}
 
 
 def apply_frozen_question(request, metadata, bank, variant="accepted"):

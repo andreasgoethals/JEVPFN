@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import math
 
-from src.jev.requests import IntendedRequest
-from src.utils.serialization import canonical_json
+from src.jev.requests import IntendedRequest, require_nonempty_text
+from src.utils.serialization import canonical_json, digest
 
 MAPPING_VERSION = "typesafe-systemone-v1"
 QUESTION_ID = "semantic"
@@ -20,6 +20,7 @@ QUESTION_ID = "semantic"
 def api_preview(request: IntendedRequest) -> dict:
     """Build a JSON body without sending it or reading a credential."""
     payload = json.loads(request.payload_json)
+    require_nonempty_text(payload)
     settings = json.loads(request.settings_json)
     if settings.get("provider") != "jev":
         raise ValueError("This response/request adapter supports Jev only")
@@ -79,7 +80,28 @@ def _number(value, low: float, high: float) -> float:
 
 def response_features(request: IntendedRequest, response: dict) -> dict[str, float]:
     """Validate a supplied response and preserve all probabilities; never synthesize them."""
-    wire = api_preview(request)
+    settings = json.loads(request.settings_json)
+    provider = settings.get("provider", "jev")
+    if provider == "jev":
+        wire = api_preview(request)
+    else:
+        payload = json.loads(request.payload_json)
+        require_nonempty_text(payload)
+        if (
+            provider not in {"liquid", "strands", "perplexity"}
+            or settings.get("api_mapping_version") != f"{provider}-self-hosted-v1"
+        ):
+            raise ValueError("Provider response decoder is not implemented for this mapping")
+        if (
+            response.get("provider") != provider
+            or response.get("version") != settings["version"]
+            or response.get("settings_sha256") != digest(settings)
+        ):
+            raise ValueError("Self-hosted response differs from its pinned provider/runtime")
+        wire = {
+            "model": settings["model"],
+            "questions": {QUESTION_ID: semantic_question(payload["question"])},
+        }
     if response.get("model") != wire["model"]:
         raise ValueError("Response model differs from the pinned request model.")
     if set(response.get("answers", {})) != {QUESTION_ID}:

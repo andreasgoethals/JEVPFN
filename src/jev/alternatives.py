@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from src.jev.provider import QUESTION_ID, api_preview, semantic_question
+from src.jev.requests import require_nonempty_text
 from src.utils.serialization import canonical_json
 
 PERPLEXITY_SOURCE = (
@@ -23,6 +24,7 @@ def preview(request, provider, *, deployment_name=None):
     Offline placeholders name an already staged, reviewed checkpoint; constructing
     a preview never imports a publisher runtime or downloads a checkpoint.
     """
+    require_nonempty_text(json.loads(request.payload_json))
     state = json.loads(request.payload_json)["state"]
     question = semantic_question(json.loads(request.payload_json)["question"])
     questions = {QUESTION_ID: question}

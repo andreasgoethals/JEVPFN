@@ -56,6 +56,16 @@ def test_local_mode_cannot_bypass_compute_guard(local_preflight, monkeypatch, tm
         preflight.run_preflight(local=True)
 
 
+def test_exp0_before_and_after_features_have_distinct_requirements(local_preflight):
+    before = preflight.run_preflight(local=True, stage="before_extraction")
+    assert before["status"] == "preflight_passed"
+    assert before["feature_validation"] == "not_required_before_extraction"
+    assert "provider_task_contracts" in {c["id"] for c in before["stage_pending_acceptance"]}
+    after = preflight.run_preflight(local=True, stage="after_extraction")
+    assert after["status"] == "failed"
+    assert any("0B requires" in failure for failure in after["failures"])
+
+
 @pytest.mark.parametrize(
     ("cluster", "allocation", "message"),
     [("mindwell", "lustre1", "native GPFS"), ("wice", "gpfs1", "native Lustre")],

@@ -1,6 +1,19 @@
 # Changelog
 
+## 14-10-2026
+
+- Counted all 1,698,127 unique inputs with each pinned open-model tokenizer: zero overflows; verified 310 tests, all five notebooks/21 figures, storage routing and six Slurm scripts. No weights, inference, allocations or Git publication.
+- Split Experiment 0 into before/after-extraction checks; added resumable exact publisher-tokenizer audits, guarded self-hosted adapters/materialization, VSC setup and CPU/GPU pilot jobs; corrected PROJECT folder duplication and removed TabPFN from the extractor GPU preflight requirement.
+
 ## 13-10-2026
+
+- Added a read-only saved-feature comparison notebook with input-identity checks, agreement/counts, distribution and outlier plots, duplicate-aware weighting and equal-dataset summaries; clarified approximate context warnings and their source rows.
+- Verified 285 tests, five executed notebooks/21 figures and visual comparison fixtures; permanent feature stores remain absent and all paid/model execution stays disabled.
+- Prepared six lazy predictor adapters/four non-text feature configurations and two original-text baselines (TabSTAR, ConTextTab); full-row CV stays disabled pending real runtime acceptance.
+- Enforced empty-text rejection at every request boundary; screened all 1,698,127 frozen unique inputs and documented provider context/setup requirements without inference.
+- Verified 272 tests, four executed notebooks/19 figures, all 20 raw datasets, 18-dataset CV preflight, dependency syntax, installed-package consistency and lint; no model/API runs or Git publication.
+- Verified 229 tests, four executed notebooks/19 figures, all 18 input-file integrity checks and 294 real row/slot reconstructions; 1,698,127 unique inputs prepared without inference.
+- Numbered phase folders consistently; prepared one SQLite input file per dataset with versioned questions, exact per-column/joint text reuse and complete original-row links; stopped creating duplicate question exports.
 
 - Verified 222 offline tests, four executed notebooks/18 figures and the saved-question pilot preparation on 130 rows; six candidates remain disabled.
 

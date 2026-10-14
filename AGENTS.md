@@ -14,27 +14,38 @@ status reports were merged into these files. Preserve useful conventions without
 This project is initialised; the owner requested removal of the inherited `_template` files.
 Current phase layout and setup instructions live in `README.md`, not in that directory.
 The owner selected text-only per-column and joint Jev inputs, skipping empty inputs and storing
-missing features. All Jev feature creation is local before VSC experiment 0. Generated full
+missing features. Hosted feature creation is local; self-hosted extraction needs a VSC GPU pilot before full runs. Generated full
 reports contain raw examples and are gitignored under `output_JEVPFN/`. All notebooks run
 locally and save executed outputs into their .ipynb files. Figure/report/config/run artifacts
 are under local figures/<phase>/<notebook>, with global output_JEVPFN/All Results.md
 and output_JEVPFN/figures/Captions.md.
-Non-experiment config YAMLs live directly in config/. Exploration has no top-level phase output
-folder. Audit/budget intermediates use run-scoped temporary storage; notebook reports and figures
-are retained. Feature-build logs/manifests use output_JEVPFN/feature_creation/. Permanent raw
-responses and embedded feature tables use one data/jev_cache/<dataset_id>.sqlite3 per dataset.
-Shared questions are immutable data/decision_inputs/questions/<bank_id>/<dataset_id>.json inputs,
-with a complete bank JSON beside the directory. Question preparation has its own notebook and
-per-dataset output review copies; dataset_semantics.yaml stores source-backed meanings and
-explicit unknowns. accepted/proposed_direct/documented variants remain distinct. Jev
-materialization accepts frozen banks; provider/version/question feature selection is explicit.
-Alternate-provider response adapters and provider/campaign spending accounting remain pending.
+Config, notebook and output phases use numbered directories: 0. exploration,
+1. question_preparation, 2. feature_creation, then 3. experiment_0, 4. experiment_1, etc.
+The general figures folder is unnumbered. Exploration outputs only figures/reports.
+Audit/budget intermediates use run-scoped temporary storage. Prepared inputs are exactly one
+`data/decision_inputs/<dataset_id>.sqlite3` file for each selected dataset. Each file retains
+question versions, unique exact text groups and every original row/representation link.
+Do not export question copies under output. `python -m src.jev.preparation` creates/reuses all
+18 files locally; logs/manifests use output_JEVPFN/1. question_preparation/. Request equality
+includes task, question and named verbatim text, but excludes row IDs and slot names.
+Permanent responses/features use separate data/jev_cache/<dataset_id>.sqlite3 files.
+Source-backed meanings and explicit unknowns live in the question-preparation config.
+Jev and the three self-hosted response adapters/materializers are implemented; actual GPU
+contracts remain unverified. Clef/Microsoft adapters and hosted provider/campaign spending
+accounting remain pending. Experiment 0A precedes extraction; Experiment 0B follows it.
+`src.cluster.token_audit` counts complete pinned open-model inputs without weights. Its large
+SQLite counts belong on PROJECT and compact summaries/logs on DATA, under experiment 0.
 Explore all 20 datasets; exclude Zomato and Spotify from feature creation and predictive experiments based
 on text burden and 114-class representation size, not predictive results. Preserve both raw datasets
 and mark them REMOVED on selected exploration overviews; do not keep a Spotify stress-test arm. VSC experiment predictions and
 large outputs use PROJECT; compact manifests and operational logs use DATA. The comparison is
-Jev feature benefit within each fixed predictor, not a model leaderboard: no HPO, arbitrary
-training-row cap, optional fine-tuning, time/group splitting or expanded model campaign.
+decision-feature benefit within each fixed predictor, not a model leaderboard: no HPO,
+arbitrary training-row cap, optional fine-tuning or time/group splitting. Selected main
+predictors: CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular and linear/logistic
+regression, each with four non-text/joint/per-column/both arms. Native-text baselines are
+TabSTAR and ConTextTab only, with original features. TabSTAR's required default adaptation
+is part of its method. All original non-text columns, including categorical columns, remain.
+Lazy adapters are source-checked and synthetically tested; live runtimes are unvalidated.
 Five shuffled stratified folds for classification, shuffled KFold for regression; binary
 thresholds use three inner OOF folds, then refit on the full outer training fold.
 Do not stage, commit, or push changes. The owner handles Git publication; this supersedes earlier

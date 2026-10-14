@@ -170,7 +170,11 @@ def save_pilot_manifest(manifest):
     """
     name = digest(manifest)
     destination = (
-        paths.large_outputs_dir() / "feature_creation" / "manifests" / "pilots" / f"{name}.json"
+        paths.large_outputs_dir()
+        / paths.phase_folder("feature_creation")
+        / "manifests"
+        / "pilots"
+        / f"{name}.json"
     )
     write_json(destination, manifest)
     summary = {k: v for k, v in manifest.items() if k != "records"}

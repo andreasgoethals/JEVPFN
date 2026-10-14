@@ -40,7 +40,12 @@ def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> Non
     assert paths.outputs_dir() == tmp_path / "data" / paths.PROJECT_NAME / "output_JEVPFN"
     assert (
         paths.results_dir(phase="experiment_1")
-        == tmp_path / "staging" / paths.PROJECT_NAME / "output_JEVPFN" / "experiment_1" / "results"
+        == tmp_path
+        / "staging"
+        / paths.PROJECT_NAME
+        / "output_JEVPFN"
+        / "4. experiment_1"
+        / "results"
     )
     # Figures and complete reports can be large; only compact records belong on DATA.
     assert paths.logs_dir("experiment_1").is_relative_to(tmp_path / "data")
@@ -74,11 +79,13 @@ def test_staging_override_works_off_cluster(tmp_path, monkeypatch) -> None:
 def test_figures_dir_is_per_notebook() -> None:
     root = paths.figures_dir()
     assert root == paths.outputs_dir() / "figures"
-    assert paths.figures_dir("some_notebook") == root / "exploration" / "some_notebook"
+    assert paths.figures_dir("some_notebook") == root / "0. exploration" / "some_notebook"
     assert paths.captions_path() == paths.figures_dir() / "Captions.md"
     assert paths.all_results_path() == paths.outputs_dir() / "All Results.md"
-    assert paths.figures_dir(phase="experiment_1") == root / "experiment_1"
-    assert paths.figures_dir("experiment_1_models") == root / "experiment_1" / "experiment_1_models"
+    assert paths.figures_dir(phase="experiment_1") == root / "4. experiment_1"
+    assert (
+        paths.figures_dir("experiment_1_models") == root / "4. experiment_1" / "experiment_1_models"
+    )
 
 
 def test_phase_notebook_ids_keep_output_layout_and_cannot_escape():
@@ -97,6 +104,26 @@ def test_phase_notebook_ids_keep_output_layout_and_cannot_escape():
 def test_config_path_appends_the_suffix_once() -> None:
     assert paths.config_path("example").name == "example.yaml"
     assert paths.config_path("example.yaml").name == "example.yaml"
+
+
+def test_numbered_phases_keep_logical_config_ids_and_valid_folder_numbers(monkeypatch):
+    import pytest
+
+    assert paths.phase_folder("question_preparation") == "1. question_preparation"
+    assert paths.phase_folder("experiment_4") == "7. experiment_4"
+    assert (
+        paths.notebook_phase("1. question_preparation/01_prepare_questions")
+        == "question_preparation"
+    )
+    assert paths.config_path("question_preparation") == paths.config_path(
+        "1. question_preparation/question_preparation"
+    )
+    assert paths.config_path("experiment_1/main") == paths.config_path("4. experiment_1/main")
+    assert paths.config_path("audit").is_file()
+    monkeypatch.setenv("JEVPFN_PHASE", "3. experiment_0")
+    assert paths.phase_name() == "experiment_0"
+    with pytest.raises(ValueError, match="Incorrect phase"):
+        paths.phase_name("0. experiment_0")
 
 
 def test_data_search_paths_look_in_the_repo_first(tmp_path, monkeypatch) -> None:
@@ -154,16 +181,16 @@ def test_touch_tree_refreshes_access_times(tmp_path) -> None:
 
 
 def test_phases_separate_large_results_and_small_logs(isolated_output):
-    assert paths.results_dir(phase="experiment_1").parts[-2:] == ("experiment_1", "results")
+    assert paths.results_dir(phase="experiment_1").parts[-2:] == ("4. experiment_1", "results")
     assert "staging" in str(paths.results_dir(phase="experiment_1"))
     assert "vsc_data" in str(paths.logs_dir("experiment_0"))
     assert paths.figures_dir("03_feature_creation").parts[-3:] == (
         "figures",
-        "feature_creation",
+        "2. feature_creation",
         "03_feature_creation",
     )
     assert paths.reports_dir("01_data_exploration").parts[-3:] == (
-        "exploration",
+        "0. exploration",
         "01_data_exploration",
         "_report.txt",
     )
@@ -173,9 +200,32 @@ def test_future_experiment_numbers_are_supported():
     import pytest
 
     assert paths.notebook_phase("experiment_12_comparison") == "experiment_12"
-    assert paths.results_dir(phase="experiment_12").parts[-2:] == ("experiment_12", "results")
+    assert paths.results_dir(phase="experiment_12").parts[-2:] == ("15. experiment_12", "results")
     with pytest.raises(ValueError):
         paths.results_dir(phase="../raw")
+
+
+def test_existing_project_folder_is_not_inserted_twice(tmp_path, monkeypatch):
+    monkeypatch.setenv("VSC_DATA", str(tmp_path / "personal"))
+    monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(tmp_path / "project" / "JEVPFN"))
+    assert paths.checkpoints_dir() == tmp_path / "project" / "JEVPFN" / "checkpoints"
+    assert (
+        paths.dataset_question_path("sample")
+        == tmp_path / "project" / "JEVPFN" / "data" / "decision_inputs" / "sample.sqlite3"
+    )
+    assert paths.token_audit_dir().is_relative_to(tmp_path / "project" / "JEVPFN" / "output_JEVPFN")
+    assert paths.logs_dir("experiment_0").is_relative_to(
+        tmp_path / "personal" / "JEVPFN" / "output_JEVPFN"
+    )
+
+
+def test_large_writes_reject_a_project_root_inside_personal_data(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("VSC_DATA", str(tmp_path / "personal"))
+    monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(tmp_path / "personal" / "fake_project"))
+    with pytest.raises(ValueError, match="personal DATA"):
+        paths.require_project_output(paths.token_audit_dir())
 
 
 def test_non_experiment_outputs_never_create_output_phase_folders(isolated_output):
@@ -183,4 +233,6 @@ def test_non_experiment_outputs_never_create_output_phase_folders(isolated_outpu
     assert paths.results_dir(phase="feature_creation").is_relative_to(paths.notebook_cache_dir())
     assert paths.all_results_path("exploration") == paths.all_results_path()
     assert paths.captions_path("feature_creation") == paths.captions_path()
-    assert paths.logs_dir("feature_creation") == paths.outputs_dir() / "feature_creation" / "logs"
+    assert (
+        paths.logs_dir("feature_creation") == paths.outputs_dir() / "2. feature_creation" / "logs"
+    )

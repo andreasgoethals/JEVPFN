@@ -31,6 +31,21 @@ def text_statistics(dataset) -> pd.DataFrame:
 
 SELECTOR_FIELDS = {"provider", "model", "version", "question_bank_id", "question_variant"}
 
+MAIN_FEATURE_SETS = (
+    "non_text",
+    "non_text_plus_joint",
+    "non_text_plus_per_column",
+    "non_text_plus_both",
+)
+
+
+def original_features(dataset):
+    """One original-text comparator arm, all original features and original row IDs."""
+    matrix = dataset.features.copy()
+    matrix.index = [f"csv:{i}" for i in range(len(matrix))]
+    matrix.attrs["feature_artifact_ids"] = []
+    return matrix
+
 
 def select_feature_blocks(blocks, selector):
     """Select one extractor recipe explicitly; never silently mix models or question versions."""

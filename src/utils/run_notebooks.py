@@ -1,7 +1,7 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only exploration/01_data_exploration
+    python -m src.utils.run_notebooks --only 01_data_exploration
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
     output_JEVPFN/figures/<phase>/<notebook>/*.pdf   written by the notebooks themselves
@@ -97,7 +97,17 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
     selected = []
     for name in names:
         notebook_phase(name)  # Reject absolute paths and traversal before resolution.
-        matches = [n for n in found if n == name or notebook_stem(n) == name]
+        matches = [
+            n
+            for n in found
+            if n == name
+            or notebook_stem(n) == name
+            or (
+                "/" in name
+                and notebook_phase(n) == notebook_phase(name)
+                and notebook_stem(n) == notebook_stem(name)
+            )
+        ]
         if len(matches) > 1:
             raise ValueError(f"Ambiguous notebook {name}; use phase/name: {matches}")
         selected.append(matches[0] if matches else name)

@@ -12,6 +12,17 @@ from src.jev.templates import TEMPLATE_VERSION, make_question
 from src.utils.serialization import canonical_json, digest, text_value
 
 
+def require_nonempty_text(payload: dict) -> None:
+    """Final boundary check: metadata alone must never trigger a paid/model call.
+
+    Builders omit missing fields. Reject hand-built requests containing missing fields
+    too, so every provider receives the same nonempty input policy. Zero/False are data.
+    """
+    text = payload.get("state", {}).get("text")
+    if not isinstance(text, dict) or not text or any(text_value(v) is None for v in text.values()):
+        raise ValueError("Empty text must be skipped and stored as missing features, never sent")
+
+
 def text_groups(metadata: TaskMetadata, mode: str) -> tuple[tuple[str, ...], ...]:
     per_column = tuple((c,) for c in metadata.text_columns)
     joint = (metadata.text_columns,)

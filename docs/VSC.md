@@ -1,16 +1,17 @@
 # VSC setup
 
-Current status: no JEVPFN allocation or model run has been submitted. Local Jev feature
-creation precedes experiment 0. VSC prediction consumes completed feature tables offline;
-Jev API access from compute nodes is unnecessary for this workflow and remains unverified.
+Current status: no JEVPFN allocation or model run has been submitted. Hosted extraction runs
+locally; Liquid, Perplexity and Strands use separate VSC GPU environments after a small pilot.
+VSC prediction consumes completed feature tables offline. Hosted API access from compute
+nodes is unnecessary for this workflow and remains unverified.
 
 ## Self-hosted decision extractors
 
 Self-hosting Liquid d1-3B, Strands Decider 2B or Perplexity Decider 27B removes the vendor
 API token fee; it does not remove weight licence conditions, Slurm credit charges, setup,
 storage or inference time. The six-provider comparison remains disabled. Hosted extraction
-can run locally; a separate VSC extraction job for an open checkpoint is a proposed exception
-to the local-only workflow, not an allocation that has been launched.
+will run locally; separate VSC extraction jobs serve the selected open checkpoints after
+runtime validation. No allocation has been launched.
 
 The read-only snapshot `VSC Documentation.txt` was checked 13 October at the existing library
 pin `de324efcca55be392feb0c01830b3b6ce364587f`: `wice_hardware.rst` lists 80 GiB A100/H100
@@ -29,6 +30,26 @@ batch extraction jobs, not notebooks or public inference servers. Prepare checkp
 connected setup host and run offline inside Slurm, so self-hosted inference needs no external
 API connectivity. Actual account access, quota, backup and CUDA compatibility remain untested.
 
+## First checkout through Open OnDemand
+
+First publish the current local changes yourself. GitHub cannot supply unpushed code.
+In [KU Leuven Open OnDemand](https://ondemand.hpc.kuleuven.be/), choose **Clusters → Login
+(Server) Shell Access**. The pinned guide's `compute/portal/ondemand/login-shell.rst`
+documents that this is a login shell, not a compute allocation.
+
+For a new checkout (do not run `git clone` over an existing folder):
+
+```bash
+cd "$VSC_DATA"
+git clone --recurse-submodules https://github.com/andreasgoethals/JEVPFN.git JEVPFN
+cd "$VSC_DATA/JEVPFN"
+export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+```
+
+The clone sets `origin` automatically. Later update clean checkouts with `git pull --ff-only`
+and `git submodule update --init --recursive`. Do not reset local changes on VSC.
+The project allocation parent must exist and be accessible; setup refuses a missing mount.
+
 ## Environment
 
 Use the CreditPFN Conda bootstrap with a separate Python 3.12 environment named **JEVPFN**.
@@ -40,9 +61,28 @@ source "$VSC_DATA/miniconda3/etc/profile.d/conda.sh"
 conda create -n JEVPFN python=3.12 pip  # Skip if it already exists.
 conda activate JEVPFN
 cd "$VSC_DATA/JEVPFN"
-python -m pip install -e '.[dev,notebooks]'
+python -m pip install -e '.[dev,token-audit]'
 python -m pip check
+python -m src.cluster.setup --cluster wice
+python -m src.cluster.token_audit --stage-only
 ```
+
+`setup` creates/probes both JEVPFN trees and the Slurm log directory, writes a compact DATA
+manifest, and submits nothing. `--stage-only` downloads about 58 MB of tokenizers/source,
+not weights. Through Open OnDemand Files, transfer the local `data/raw/` and the 18 closed
+`data/decision_inputs/*.sqlite3` files into the corresponding PROJECT/JEVPFN/data locations.
+Preserve their filenames and numbered raw directories. They are ignored by Git.
+The full token audit runs in a CPU job, not on the login node:
+
+```bash
+sbatch scripts/slurm/experiment_0_cpu.slurm
+sbatch scripts/slurm/experiment_0_tokens.slurm
+squeue --me --clusters=wice
+```
+
+The token job resumes after interruption. It does not remove source rows. Every self-hosted
+input includes task definitions, text, question, options and publisher formatting. Jev/Clef/
+Microsoft hosted counts remain unverified until their actual server tokenization can be checked.
 
 After selecting the GPU runtime in experiment 0, optional model extras can be installed.
 The existing TabPFN/TabICL extras pin Torch 2.12.1. Select a CUDA wheel compatible with the allocated
@@ -54,19 +94,19 @@ Neither has been validated for JEVPFN on the cluster. Check `nvidia-smi` in an a
 ```bash
 # Later, after driver compatibility is confirmed; not needed for exploration:
 python -m pip install 'torch==2.12.1' --index-url https://download.pytorch.org/whl/cu126
-python -m pip install -e '.[dev,notebooks,models,baselines]'
+python -m pip install -e '.[dev,models,baselines]'
 python -m pip check
-mkdir -p output_JEVPFN/experiment_0/manifests
-python -m pip freeze > output_JEVPFN/experiment_0/manifests/environment.txt
+mkdir -p "output_JEVPFN/3. experiment_0/manifests"
+python -m pip freeze > "output_JEVPFN/3. experiment_0/manifests/environment.txt"
 ```
 
-`models` supplies TabPFN-3/3.5 and `baselines` supplies CatBoost/scikit-learn for the focused
-Jev comparison. The `tabicl`, `tabdpt` and `tabstar` extras are deferred interface options;
-do not install them for the current main comparison. Package
-metadata was checked on 30-09-2026; this is not a tested joint environment. Validate imports
-and tiny task examples on VSC before selecting the final roster. TabDPT also needs compatible
-FAISS wheels. Prefer a separate Python environment for heavier/conflicting integrations,
-with its own frozen manifest, rather than changing a working notebook environment.
+`models` supplies TabPFN-3.5; `baselines` supplies CatBoost/scikit-learn. The other selected
+extras are `tabicl`, `limix`, `kumo`, `tabstar` and `contexttab`. Package/source interfaces were
+rechecked on 13-10-2026; this is not a tested joint environment. Install each custom predictor
+in its own Python 3.12 environment, for example `JEVPFN-limix` with `pip install -e '.[evaluation,limix]'`.
+Set `JEVPFN_CONDA_ENV` before Slurm activation to select it. Pin task checkpoint paths/hashes
+and installed versions in `config/4. experiment_1/models.yaml`; factory validation fails
+before loading an unpinned checkpoint. Freeze the complete resolved environment after the pilot.
 
 AutoGluon is excluded by the owner. No environment using its MITRA runtime is prepared;
 Mitra-v2 remains deferred until an independent supported integration is verified. Its `autogluon/` checkpoint
@@ -76,14 +116,14 @@ Installing packages must not trigger model
 weights during notebook execution. Prepare approved weights on a connected host before
 using offline compute; use explicit checkpoint paths and record their hashes.
 
-Deferred catalog entries would need separate environment acceptance if later restored to scope:
+Selected custom predictors require these additional checks:
 
 | Model | Documented environment/interface difference |
 |---|---|
-| LimiX-2 | Python ≥3.12, Torch 2.9.1 in its official source dependencies; CUDA/attention build must match. |
-| Causilo | Python 3.10–3.14, Torch ≥2.13; incompatible with the existing 2.12.1 pin in one environment. |
-| EXAONE Tabular | Python ≥3.11, Torch ≥2.6,<3 and NumPy ≥2.3.5; numeric NumPy input and custom estimator lifecycle. |
-| ConTextTab | Python 3.11 reference requirements; text encoder plus gated weights; substantial GPU memory. |
+| LimiX-2 | Current source requires Python ≥3.12 and Torch ≥2.9.1. Use the V2 no-retrieval classifier/regressor JSON; archive its contents/hash with the run settings. |
+| NVIDIA Kumo Tabular | SDM package and local task-specific Kumo weights. Uses complete context, query batches and the publisher's eight-estimator recipe; rejects silent selection above 500 features. This is not KumoRFM. |
+| TabSTAR | Stage the task model and language encoder; standard supervised adaptation uses a validation subset inside training. Each fit writes its own PROJECT training directory. |
+| ConTextTab | Stage SAP RPT-1 OSS and its sentence encoder. The adapter overrides default 8,192-row context sampling with the full training fold and one bag; memory may exceed available VRAM. Its text encoder truncates individual strings at 512 tokens. |
 
 Primary references and model capabilities are in [Literature Review](LITERATURE_REVIEW.md).
 The notebook environment stays Python 3.12 with no model imports. Prepare one frozen environment
@@ -92,6 +132,93 @@ environment explicitly in each future Slurm job. No new model environment has be
 Notebooks run only locally; their runner automatically chooses parallelism and saves actual
 Jupyter outputs into the source files. No worker argument is needed. Metric utilities use the lightweight
 `evaluation` extra; fit/prediction timing must include explicit CUDA synchronization.
+
+## Decision-provider connection recipes
+
+Checked 13-10-2026 against publisher documentation/source. These describe later pilot setup;
+no live integration has passed acceptance. The exact saved input can be inspected now:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.jev.preparation --preview BIN_TEXT_FAKE_JOB_POSTING --row 0
+```
+
+The `state` carries task definitions and named text values; `questions` carries instructions
+and answer options. `src.jev.alternatives.preview` renders the six corresponding calls.
+Its placeholders never contain credentials. Use saved requests instead of hand-writing prompts.
+
+| Provider | Setup and connection | Context / price reference |
+|---|---|---|
+| [Jev](https://docs.typesafe.ai/models) | Local `pip install -e '.[jev]'`; set `TYPESAFE_API_KEY` privately. Pinned `jev-1.13.0`, `POST https://api.typesafe.ai/v1/systemone`, Bearer authorization. The guarded transport uses `TypeSafeClient.system_one(state, questions)`. | 32k state + question for our one-question calls; $0.042/M input tokens. Confirm account quotas. |
+| [Cloudflare Clef-flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/) | Workers AI account, Account ID and token with inference access. POST to `/client/v4/accounts/{account_id}/ai/run/@cf/cloudflare/clef-flash`; Bearer `CLOUDFLARE_AUTH_TOKEN`; body `model`, `state`, `questions`. | 24,576 tokens; $0.038/M input tokens. It can silently truncate; reject overlong inputs beforehand. Immutable hosted revision is unresolved. |
+| [Microsoft-Decision-1](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision) | Foundry subscription/project and a version-1 deployment. POST to the resource endpoint plus `/providers/microsoft/v1/systemone`; `api-key` header, `model` set to the deployment name. Store the returned underlying model too. | 32,768 is the OpenRouter reference, not yet verified for our Foundry deployment. Published input reference $0.042/M. Hosted weight immutability remains unresolved. |
+| [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Own Python 3.12/CUDA environment, `pip install -e '.[liquid]'`. Load the staged pinned directory using `AutoModel.from_pretrained(..., trust_remote_code=True, local_files_only=True, dtype=torch.bfloat16).to('cuda')`; call `model.system_one(state, questions)`. Review custom code before loading. | 32,768 tokens. No vendor inference fee; LFM Open License and GPU credits apply. Use its decision interface, not autogenerated chat-serving examples. |
+| [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Own Python 3.12/CUDA environment; install the pinned checkpoint's `requirements.txt` and this project. Add `<checkpoint>/source/src` to Python's path; use `autojev.model.DecisionModel(checkpoint, device='cuda')`, `predict([{'state': ..., 'question': ...}])`, then `answer(question, probabilities)`. | 8,192 tokens; preserve supplied attention mode/calibration. About 49 GiB weights plus working memory. No self-hosted token fee; Apache-2.0. Public hosted access was not established. |
+| [Strands Decider](https://github.com/strands-labs/strands-decider/blob/b9fc83626bcca822d00f822d6c2e151b8d244ee9/docs/inference.md) | Own Linux CUDA environment; `pip install -e '.[strands]'`, then `pip install causal-conv1d --no-build-isolation` with a matching CUDA toolkit. Stage both adapter and base checkpoint. `strands-decider serve <checkpoint> --device cuda --port 8000 --strict-window`; POST `state`/`questions` to `http://127.0.0.1:8000/v1/systemone`. | 4,096 tokens. Serialize calls per engine; loopback server has no authentication. No vendor inference fee; Apache-2.0 and GPU credits apply. |
+
+All listed prices are input-only references, to recheck before approval. API output is not
+charged under these listed plans. Self-hosted GPU hours are a separate cost. The common
+semantics are Noul P(positive), Choice P(each class), or nine Score probabilities; regression
+uses their weighted mean on -4..4. Do not use the models to generate explanatory text.
+
+For later checkpoint staging, install `.[staging]` on the connected setup host and use the
+staging utility. It pins revisions from `extractors.yaml`, redirects Hugging Face/Xet caches
+to PROJECT, and creates the checkpoint hash manifest required by the GPU runner:
+
+```bash
+# Example for the approved Liquid staging step; this downloads large weights.
+python -m src.jev.checkpoints --provider liquid
+```
+
+For Perplexity use `--provider perplexity`; install its downloaded requirements before the
+project's GPU extras. For Strands use `--provider strands`; the utility stages its configured
+adapter **and** `Qwen/Qwen3.5-2B-Base` at the two configured revisions. Its base revision is
+publisher-reconstructed provenance, not an original training pin. The base stays in the
+Hugging Face cache because the adapter loads that model ID.
+Record every staged file checksum and the complete environment. Set both `HF_HUB_OFFLINE=1`
+and `TRANSFORMERS_OFFLINE=1` in compute jobs. No inference belongs on a login node.
+
+Use one full A100 at batch size one for initial profiles. The existing 10-minute/32-GB-RAM
+GPU preflight only checks imports and tiny tensors; it is not a 27B-model Slurm allocation.
+The separate decision-pilot script uses the one-hour A100 debug partition with 128 GB host
+RAM. Use the normal GPU partition for longer profiling or full extraction after reviewing
+pilot measurements; an import check alone does not establish model feasibility.
+
+`python -m src.jev.context` retains the historical approximate screen. The actual Experiment 0
+test is `python -m src.cluster.token_audit`; CPU counts are stored transactionally per input
+and checkpoint. It uses the pinned Liquid `prompt.render`/single-question route, Strands
+`render_state` plus `render_question` and `_fit(strict_window=True)`, and Perplexity
+`decision_messages` plus its saved chat template. No generic chat prompt is substituted.
+The renderer sources and tokenizer files are fingerprinted; staged weights must carry the
+same tokenizer. Runtime input-token counts must match before an answer is accepted.
+
+`src.jev.self_hosted` implements direct, serialized local inference for all three providers;
+Strands uses `SystemOneEngine` without an HTTP server. Output normalization and materialization
+have synthetic tests, but live GPU contracts remain pending. Empty inputs never enter the
+queue; all source-row links remain in the prepared dataset database. Failure is not a missing
+text feature. Each completed response is committed before advancing; a restart reuses it.
+
+For the first Liquid pilot, create an isolated Python 3.12 environment named `JEVPFN-liquid`.
+Install the compatible CUDA Torch wheel and `.[dev,token-audit,liquid]`, then on the connected
+setup host run `python -m src.jev.checkpoints --provider liquid`. This is an explicit large
+download into PROJECT, with file hashes. Set `enabled: true` in
+`config/3. experiment_0/self_hosted.yaml` only when ready for the GPU test, then submit:
+
+```bash
+export JEVPFN_CONDA_ENV=JEVPFN-liquid
+export JEVPFN_PROVIDER=liquid
+sbatch scripts/slurm/experiment_0_decision_pilot.slurm
+```
+
+The pilot covers first/middle/last rows and ten longest exact requests per dataset, capped
+by a configurable 1,000-request compute ceiling. The script requests one A100, 128 GB host
+RAM and one hour; verify account/partition access. Only one A100 debug job may be queued at
+a time. Repeat using `JEVPFN-strands`/`JEVPFN-perplexity` and their pinned runtime dependencies.
+Perplexity's checkpoint requirements pin Torch 2.14.0 and Transformers 5.17.0; do not install
+the downstream TabPFN Torch pin into that environment. Strands requires its separate base
+checkpoint; the staging utility puts it in the PROJECT Hugging Face cache and verifies it.
+`self_hosted --full --execute` additionally requires the full-extraction switch and a reviewed
+acceptance manifest matching the runtime-settings hash and token-audit ID. No command creates
+that acceptance automatically. A completed pilot is evidence to review, not full Exp0 acceptance.
 
 ## Two storage tiers, both under JEVPFN
 
@@ -105,8 +232,8 @@ Jupyter outputs into the source files. No worker argument is needed. Metric util
 | `$JEVPFN_STAGING_ROOT/JEVPFN/output_JEVPFN/<phase>/results/predictions/<run_id>/` | Every individual outer-test or inner-OOF prediction in `predictions.parquet`, plus the full immutable evaluation record. |
 | Local `output_JEVPFN/` | Notebook figures/reports, root `All Results.md` and `figures/Captions.md`; notebooks never run on VSC. |
 
-`JEVPFN_STAGING_ROOT` is the **allocation parent**, not its JEVPFN child. The path resolver
-inserts the project name exactly once. The current wICE default is inherited from CreditPFN;
+`JEVPFN_STAGING_ROOT` normally names the **allocation parent**; its existing JEVPFN child is
+also accepted without doubling the folder name. The current wICE default is inherited from CreditPFN;
 confirm access/quota before use. Override it for a different allocation, especially native
 GPFS on Mindwell. Never use cross-mounted Lustre for sustained Mindwell I/O or GPFS for wICE I/O.
 
@@ -130,7 +257,7 @@ Copy each closed file to PROJECT's equivalent `JEVPFN/data/jev_cache/` location 
 feature checksums after transfer. Source CSV fingerprints and original `csv:N` row IDs must
 match before a join. Select each block explicitly by artifact ID; experiment-0 `feature_artifacts`
 accepts `dataset_id`/`artifact_id` mappings. DATA holds compact discovery indexes and logs under
-`output_JEVPFN/feature_creation/`. Ordinary output cleanup never touches paid dataset files.
+`output_JEVPFN/2. feature_creation/`. Ordinary output cleanup never touches paid dataset files.
 
 The prediction writer rejects explicit DATA destinations on VSC. Notebook stdout/stderr and
 rich outputs stay local; Slurm experiment logs use DATA. No per-row
@@ -146,22 +273,25 @@ Before any allocation, run the local offline preparation in the project environm
 ```
 
 This verifies all 18 selected datasets, shared five-fold feasibility and synthetic contracts.
-It saves a unique `preflight_<id>.json` and test log under `experiment_0/manifests` and `logs`.
+It saves a unique `preflight_<id>.json` and test log under `3. experiment_0/manifests` and `logs`.
 It does not probe-write raw inputs or paid caches. Corrupt feature references are recorded as
 failures without losing the rest of the report. Explicit pending acceptance checks in
-`config/experiment_0/debug.yaml` cover real provider contracts, context/robustness, budgets and
+`config/3. experiment_0/debug.yaml` cover real provider contracts, context/robustness, budgets and
 recovery, complete artifacts, transfer/backup, allocation/storage, checkpoint/runtime identity,
 real predictor tasks, CV boundaries, full-fold resources and interrupted output recovery.
 These checks require real evidence; a preflight never sets full Experiment 0 acceptance true.
 
-Shared questions are permanent inputs at `data/decision_inputs/questions/<bank_id>/<dataset_id>.json`,
-with the complete `<bank_id>.json` beside that directory, on
-PROJECT when running on VSC. Transfer the chosen immutable bank alongside closed dataset
-feature stores. Raw responses from different providers remain distinct, and every future
-provider-specific feature artifact must identify the question and checkpoint used.
+Prepared inputs are the 18 permanent `data/decision_inputs/<dataset_id>.sqlite3` files, on
+PROJECT when running on VSC. Each contains versioned questions, exact unique text groups and
+all original-row links; there is no separate bank JSON to transfer. Copy closed input files
+alongside the closed dataset feature stores. Raw responses from different providers remain
+distinct, and every future feature artifact must identify its input set, question and checkpoint.
+Hosted inference is planned locally; self-hosted extractors need a small VSC GPU compatibility
+pilot before full extraction. The later experiment-0 checks must also validate transfer and
+downstream feature joins. Open weights still consume the allocation's GPU resources.
 
 Use the existing CreditPFN login/account convention and verify the current Slurm association.
-The prepared account/partitions are in `config/experiment_0/debug.yaml` and the Slurm scripts.
+The prepared account/partitions are in `config/3. experiment_0/debug.yaml` and the Slurm scripts.
 The [wICE guide](https://docs.vscentrum.be/leuven/wice_quick_start.html) documents the resources;
 the pinned [VSC snapshot](<../tfm-library/repositories/VSC Documentation.txt>) records the source
 sections `wice_quick_start.rst`, `mindwell_quick_start.rst` and `kuleuven_storage.rst`.
@@ -174,11 +304,12 @@ sections `wice_quick_start.rst`, `mindwell_quick_start.rst` and `kuleuven_storag
 | Memory-heavy alternative | Mindwell gpu_b200 with native GPFS and compatible CUDA, if profiling justifies it. |
 
 The wICE interactive GPU slice is not a full A100. Check current availability/account limits;
-no allocation is automatically launched. After local features are complete and execution approved:
+no allocation is automatically launched. Experiment 0A runs before feature creation; 0B requires
+explicit completed artifact selections (`--stage after_extraction`). For infrastructure tests:
 
 ```bash
 cd "$VSC_DATA/JEVPFN"
-mkdir -p output_JEVPFN/experiment_0/logs
+mkdir -p "output_JEVPFN/3. experiment_0/logs"
 sinfo --clusters=wice
 sbatch scripts/slurm/experiment_0_cpu.slurm
 sbatch scripts/slurm/experiment_0_gpu.slurm

@@ -1,0 +1,11 @@
+phase: experiment_0
+enabled: false  # Enable explicitly when submitting the first authorized GPU pilot.
+execution_site: vsc_compute_node
+providers: [liquid, strands, perplexity]
+sample: first_middle_last_rows_and_ten_longest_exact_inputs_per_dataset
+max_pilot_requests: 1000
+batch_size: 1  # Profile memory and timing before increasing; serialized per model.
+full_feature_creation_enabled: false
+accepted_before_extraction_manifest: null
+dataset_selection:
+  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]

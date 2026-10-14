@@ -1,0 +1,313 @@
+enabled: false
+adapters_implemented: true
+common_tasks:
+- binary_classification
+- multiclass_classification
+- regression
+roster_status: owner_selected_six_numeric_predictors_two_original_text_models
+text_comparison_rule: distinguish_text_encoders_from_categorical_string_encoding
+excluded_frameworks:
+- autogluon
+excluded_models:
+- TabM
+- Google_Research_TabFM
+model_selection_objective: compare_decision_text_features_within_each_fixed_predictor
+hyperparameter_search: false
+models:
+  tabpfn_3_5:
+    name: TabPFN-3.5
+    priority: selected_four_feature_arms
+    package: tabpfn==9.0.0
+    model_selector: ModelVersion.V3_5
+    extra: models
+    device_proposal: cuda
+    source: https://github.com/PriorLabs/TabPFN
+    raw_text: optional_shared_TFIDF_SVD_preprocessing_off_by_default
+    main_arm_text_configuration: 'inference_config={"TRANSFORM_TEXT": false}'
+    optional_text_configuration_reference: 'inference_config={"TRANSFORM_TEXT": true}; pandas_string_dtype'
+    hosted_3_5_plus: separate_service_not_the_local_checkpoint
+    runtime:
+      packages:
+        tabpfn: 9.0.0
+      seed: 20260929
+      device: cuda
+      threads: 1
+      parameters: {}
+      checkpoints:
+        binary_classification:
+          path: null
+          sha256: null
+        multiclass_classification:
+          path: null
+          sha256: null
+        regression:
+          path: null
+          sha256: null
+  tabpfn_3:
+    name: TabPFN-3
+    priority: historical_reference_outside_latest_roster
+    package: tabpfn==9.0.0
+    model_selector: ModelVersion.V3
+    extra: models
+    device_proposal: cuda
+    source: https://github.com/PriorLabs/TabPFN
+    raw_text: same_optional_TFIDF_SVD_preprocessing_in_tabpfn_9
+  catboost:
+    name: CatBoost
+    priority: selected_four_feature_arms
+    package: catboost==1.2.10
+    extra: baselines
+    device_proposal: cpu
+    source: https://catboost.ai/docs/
+    raw_text: built_in_tokenizers_dictionaries_and_feature_calcers
+    text_review: regression_calcer_support_and_empty_dictionary_edge_cases
+    runtime:
+      packages:
+        catboost: 1.2.10
+      seed: 20260929
+      device: cpu
+      threads: 1
+      parameters: {}
+      checkpoints: {}
+  linear:
+    name: Logistic regression for classification; linear regression for regression
+    priority: selected_four_feature_arms
+    package: scikit-learn==1.9.1
+    extra: baselines
+    device_proposal: cpu
+    regression_estimator: LinearRegression
+    classification_estimator: LogisticRegression
+    regularization: library_defaults_no_search
+    preprocessing: training_fold_imputation_one_hot_encoding_and_scaling
+    source: https://scikit-learn.org/stable/modules/linear_model.html
+    raw_text: requires_explicit_TFIDF_or_embeddings
+    runtime:
+      packages:
+        scikit-learn: 1.9.1
+      seed: 20260929
+      device: cpu
+      threads: 1
+      parameters: {}
+      checkpoints: {}
+  tabicl_v2:
+    name: TabICL v2
+    priority: selected_four_feature_arms
+    package: tabicl==2.2.0
+    classification_checkpoint: tabicl-classifier-v2-20260212.ckpt
+    regression_checkpoint: tabicl-regressor-v2-20260212.ckpt
+    extra: tabicl
+    device_proposal: cuda
+    source: https://github.com/soda-inria/tabicl
+    raw_text: no_semantic_encoder_use_external_embeddings
+    many_classes: support_many_classes_true_wrapper
+    runtime:
+      packages:
+        tabicl: 2.2.0
+      seed: 20260929
+      device: cuda
+      threads: 1
+      parameters: {}
+      checkpoints:
+        binary_classification:
+          path: null
+          sha256: null
+        multiclass_classification:
+          path: null
+          sha256: null
+        regression:
+          path: null
+          sha256: null
+  tabdpt_1_3:
+    name: TabDPT 1.3
+    priority: deferred_outside_focused_roster
+    package: tabdpt==1.3.1
+    extra: tabdpt
+    device_proposal: cuda
+    review:
+    - real_data_pretraining_overlap
+    - faiss_platform_support
+    - context_budget
+    source: https://github.com/layer6ai-labs/TabDPT-inference
+    raw_text: numeric_input_requires_external_encoding
+  mitra_v2:
+    name: Mitra-v2
+    priority: deferred_no_autogluon_route_verified
+    package: null
+    extra: null
+    device_proposal: cuda
+    classification_checkpoint: autogluon/mitra-classifier-2
+    regression_checkpoint: autogluon/mitra-regressor-2
+    checkpoint_revision: null
+    model_configuration: unresolved_without_autogluon
+    paper_recipe: separate_50_step_finetuning_and_8_fold_bagging_not_stock_AutoGluon
+    raw_text: no_semantic_encoder
+    review:
+    - supported_standalone_interface_required
+    - class_limits
+    - memory
+    source: https://huggingface.co/autogluon/mitra-classifier-2
+    regression_source: https://huggingface.co/autogluon/mitra-regressor-2
+  limix_2:
+    name: LimiX-2
+    priority: selected_four_feature_arms
+    package: null
+    extra: limix
+    checkpoint: LimiX-2.ckpt
+    parameters: 400000000
+    interface: inference.predictor.LimiXPredictor
+    raw_text: no_documented_semantic_encoder_external_encoding_required
+    environment: Python_3_12_Torch_at_least_2_9_1_in_reviewed_current_source
+    weight_license: StableAI_LimiX_Non_Commercial
+    review:
+    - source_and_checkpoint_hash
+    - categorical_preprocessing
+    - many_class_coverage
+    - v2_configuration
+    - CUDA
+    source: https://github.com/limix-ldm-ai/LimiX
+    runtime:
+      packages:
+        LimiX: git:516bf396333feb3198cf7aff8a6c10421f218e24
+      seed: 20260929
+      device: cuda
+      threads: 1
+      parameters: {}
+      checkpoints:
+        binary_classification:
+          path: null
+          sha256: null
+        multiclass_classification:
+          path: null
+          sha256: null
+        regression:
+          path: null
+          sha256: null
+      inference_configs:
+        binary_classification:
+          path: null
+          sha256: null
+        multiclass_classification:
+          path: null
+          sha256: null
+        regression:
+          path: null
+          sha256: null
+  causilo:
+    name: Causilo
+    priority: deferred_outside_focused_roster
+    package: causilo
+    extra: null
+    interface: CausiloClassifier_and_CausiloRegressor
+    raw_text: strings_are_categories_not_semantic_text
+    many_classes: native_10_class_head_with_ECOC_wrapper
+    environment: Python_3_10_to_3_14_Torch_at_least_2_13_separate_environment
+    weight_license: Causilo_License_v1_0_noncommercial_research
+    review:
+    - package_and_checkpoint_hash
+    - research_license
+    - many_class_cost
+    - CUDA
+    source: https://github.com/nums-ai/causilo
+  exaone_tabular:
+    name: EXAONE Tabular 1.0
+    priority: deferred_outside_focused_roster
+    package: null
+    extra: null
+    interface: EXAONETabularClassifier_and_EXAONETabularRegressor
+    raw_text: unsupported_numeric_numpy_arrays_only
+    categorical_features: training_fold_numeric_encoding_required
+    missing_values: built_in_mean_imputation
+    many_classes: native_10_class_head_with_ECOC_wrapper
+    environment: Python_at_least_3_11_Torch_2_6_to_below_3_NumPy_at_least_2_3_5
+    weight_license: EXAONE_AI_Model_License_1_2_NC
+    review:
+    - source_and_checkpoint_hash
+    - no_sklearn_clone_interface
+    - support_subsampling
+    - many_class_cost
+    source: https://github.com/LGAI-Research/EXAONE-Tabular
+  tabstar:
+    name: TabSTAR
+    priority: selected_original_text_baseline
+    package: tabstar==1.1.16
+    extra: tabstar
+    device_proposal: cuda
+    review:
+    - real_data_pretraining_overlap
+    - target_task_finetuning_budget
+    - text_encoder_weights
+    source: https://github.com/alanarazi7/TabSTAR
+    raw_text: pretrained_language_encoder_and_supervised_task_adaptation
+    runtime:
+      packages:
+        tabstar: 1.1.16
+      seed: 20260929
+      device: cuda
+      threads: 1
+      parameters: {}
+      checkpoints: {}
+      pretrain_dataset_or_path: null
+      assets: []
+  contexttab:
+    name: ConTextTab (SAP RPT-1 OSS)
+    priority: selected_original_text_baseline
+    package: null
+    extra: contexttab
+    raw_text: embedded_column_names_and_cell_values_in_semantic_ICL
+    interface: SAP_RPT_OSS_Classifier_and_SAP_RPT_OSS_Regressor
+    review:
+    - real_data_overlap
+    - checkpoint_terms
+    - text_encoder
+    - context_budget
+    - GPU_memory
+    - Python_3_11_reference_environment
+    source: https://github.com/SAP-samples/sap-rpt-1-oss
+    runtime:
+      packages:
+        sap-rpt-oss: git:a0067b3c9db56bc35a6dcab09a9223a3ff0821e0
+      seed: 20260929
+      device: cuda
+      threads: 1
+      parameters: {}
+      checkpoints: {}
+      checkpoint_filename: null
+      assets: []
+  kumo_tabular:
+    name: NVIDIA Kumo Tabular
+    source: https://github.com/NVIDIA/structured-data-models
+    raw_text: no_semantic_encoder
+    extra: kumo
+    checkpoint_revision: v1.0.1
+    regression_point: mean_of_999_predicted_quantiles
+    priority: selected_four_feature_arms
+    runtime:
+      packages:
+        structured-data-models: git:bd2d55db104679393fcd6afe13305f37e40b5467
+      seed: 20260929
+      device: cuda
+      threads: 1
+      parameters: {}
+      checkpoints:
+        binary_classification:
+          path: null
+          sha256: null
+        multiclass_classification:
+          path: null
+          sha256: null
+        regression:
+          path: null
+          sha256: null
+      size: large
+      num_estimators: 8
+      prediction_batch_size: 256
+acceptance_before_benchmark:
+- immutable_checkpoint_hashes_and_licenses
+- all_selected_task_and_class_limits_up_to_30_classes
+- missing_value_and_categorical_handling
+- training_data_overlap_check_for_models_pretrained_on_real_tables
+- matching_row_splits_and_declared_compute_budgets
+- offline_vsc_import_and_tiny_model_smoke_after_approval
+live_runtime_verified: false
+adapter_module: src.evaluation.models
+campaign_module: src.evaluation.campaign

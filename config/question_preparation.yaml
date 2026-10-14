@@ -1,8 +1,0 @@
-extends: feature_creation
-phase: question_preparation
-question_design: question_design
-question_preparation:
-  enabled: true  # Offline metadata preparation only; no inference.
-  variant: documented
-  canonical_storage: data/decision_inputs/questions
-  review_storage: output_JEVPFN/question_preparation/questions

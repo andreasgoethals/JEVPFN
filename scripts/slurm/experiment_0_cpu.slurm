@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# Submit from $VSC_DATA/JEVPFN after creating output_JEVPFN/experiment_0/logs.
+# Submit from $VSC_DATA/JEVPFN after creating "output_JEVPFN/3. experiment_0/logs".
 #SBATCH --job-name=jevpfn-exp0-cpu
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=wice
@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=00:10:00
-#SBATCH --output=output_JEVPFN/experiment_0/logs/%x_%j.log
-#SBATCH --error=output_JEVPFN/experiment_0/logs/%x_%j.log
+#SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
 cd "${VSC_DATA:?}/JEVPFN"

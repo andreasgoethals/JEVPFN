@@ -13,7 +13,7 @@ from src.jev.provider import api_preview
 from src.jev.question_bank import (
     apply_frozen_question,
     build_question_bank,
-    export_dataset_questions,
+    load_question_bank,
     save_question_bank,
 )
 from src.jev.requests import build_requests
@@ -87,18 +87,16 @@ def test_translations_enter_wire_options_without_changing_original_classes():
     assert mapped.cache_key != request.cache_key
 
 
-def test_questions_are_saved_per_dataset_and_exports_are_not_the_only_copy(isolated_output):
+def test_questions_have_exactly_one_file_per_dataset_and_no_output_copy(isolated_output):
     bank = build_question_bank(metadata_catalog(), load_yaml("question_design"))
     path = save_question_bank(bank)
-    exports = export_dataset_questions(bank)
-    assert path.exists() and len(exports) == 18
-    for file in exports:
-        exported = json.loads(file.read_text(encoding="utf-8"))
-        canonical = paths.dataset_question_path(bank["bank_id"], exported["dataset_id"])
-        assert canonical.exists() and canonical.read_bytes() == file.read_bytes()
-    before = exports[0].stat().st_mtime_ns
-    export_dataset_questions(bank)
-    assert exports[0].stat().st_mtime_ns == before
+    files = sorted(path.iterdir())
+    assert len(files) == 18 and all(f.suffix == ".sqlite3" for f in files)
+    assert load_question_bank(path) == bank
+    assert not list(paths.notebook_outputs_dir().rglob("*questions*"))
+    before = files[0].stat().st_mtime_ns
+    save_question_bank(bank)
+    assert files[0].stat().st_mtime_ns == before
 
 
 def test_source_corrections_are_explicit_and_not_inferred_from_targets():

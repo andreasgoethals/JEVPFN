@@ -113,7 +113,7 @@ def _under(root: Path, *parts: str) -> Path:
     The shared tiers need a `<Project>/` component; the repo root already *is* the project, so
     adding it there would give `<Project>/<Project>/output`.
     """
-    if root == REPO_ROOT:
+    if root == REPO_ROOT or root.name == PROJECT_NAME:
         return root.joinpath(*parts)
     return root.joinpath(PROJECT_NAME, *parts)
 
@@ -137,9 +137,26 @@ PHASES = (
 
 def phase_name(phase: str | None = None) -> str:
     value = phase or os.environ.get("JEVPFN_PHASE", "exploration")
+    numbered = re.fullmatch(r"([0-9]+)\. (.+)", value)
+    if numbered:
+        original = value
+        value = numbered[2]
+        if phase_folder(value) != original:
+            raise ValueError(f"Incorrect phase number: {original}")
     if value not in PHASES and not re.fullmatch(r"experiment_[0-9]+", value):
         raise ValueError(f"Unknown research phase: {value}")
     return value
+
+
+def phase_folder(phase: str) -> str:
+    """Stable logical phase names; numbered folders shared by config/notebooks/output."""
+    name = phase_name(phase)
+    index = (
+        int(name.removeprefix("experiment_")) + 3
+        if name.startswith("experiment_")
+        else ("exploration", "question_preparation", "feature_creation").index(name)
+    )
+    return f"{index}. {name}"
 
 
 def notebook_phase(notebook: str) -> str:
@@ -175,16 +192,14 @@ def phase_dir(phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected == "exploration":
         return notebook_cache_dir("exploration")
-    if selected == "feature_creation":
-        return outputs_dir() / selected
-    return outputs_dir() / selected
+    return outputs_dir() / phase_folder(selected)
 
 
 def results_dir(*parts: str, phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected in {"exploration", "feature_creation"}:
         return notebook_cache_dir(selected, "results", *parts)
-    return large_outputs_dir().joinpath(selected, "results", *parts)
+    return large_outputs_dir().joinpath(phase_folder(selected), "results", *parts)
 
 
 def notebook_outputs_dir() -> Path:
@@ -216,9 +231,9 @@ def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
     root = notebook_outputs_dir() / "figures"
     if notebook is not None:
         inferred_phase = notebook_phase(notebook)  # Also validate a plain notebook name.
-        root = root / phase_name(phase or inferred_phase)
+        root = root / phase_folder(phase or inferred_phase)
     elif phase is not None:
-        root = root / phase_name(phase)
+        root = root / phase_folder(phase)
     return root / notebook_stem(notebook) if notebook else root
 
 
@@ -230,14 +245,14 @@ def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
 def captions_path(phase: str | None = None) -> Path:
     root = figures_dir()
     if phase and phase_name(phase).startswith("experiment_"):
-        root /= phase
+        root /= phase_folder(phase)
     return root / "Captions.md"
 
 
 def all_results_path(phase: str | None = None) -> Path:
     root = notebook_outputs_dir()
     if phase and phase_name(phase).startswith("experiment_"):
-        root /= phase
+        root /= phase_folder(phase)
     return root / "All Results.md"
 
 
@@ -251,6 +266,10 @@ def output_component(value: str) -> str:
 def require_project_output(folder: Path) -> Path:
     """Prevent explicit large-output overrides from filling DATA on VSC."""
     folder = Path(folder).resolve()
+    if on_vsc() and folder.is_relative_to(data_root().resolve()):
+        raise ValueError(
+            "Large outputs must use project storage outside personal DATA, including when the PROJECT root is misconfigured"
+        )
     if _use_staging() and not folder.is_relative_to(_under(staging_root()).resolve()):
         raise ValueError("Large outputs must remain on configured project storage")
     return folder
@@ -270,15 +289,13 @@ def dataset_cache_path(dataset_id: str) -> Path:
     return jev_cache_path(f"jev_cache/{output_component(dataset_id)}.sqlite3")
 
 
-def question_bank_path(bank_id: str) -> Path:
-    """Immutable shared task questions, outside disposable notebook output."""
-    return jev_cache_path(f"decision_inputs/questions/{output_component(bank_id)}.json")
+def decision_inputs_dir() -> Path:
+    return jev_cache_path("decision_inputs")
 
 
-def dataset_question_path(bank_id: str, dataset_id: str) -> Path:
-    return jev_cache_path(
-        f"decision_inputs/questions/{output_component(bank_id)}/{output_component(dataset_id)}.json"
-    )
+def dataset_question_path(dataset_id: str) -> Path:
+    """One dataset file holds versioned questions, unique texts and all source-row links."""
+    return decision_inputs_dir() / f"{output_component(dataset_id)}.sqlite3"
 
 
 # ---------------------------------------------------------------------------
@@ -327,9 +344,34 @@ def checkpoints_dir(*parts: str) -> Path:
     return REPO_ROOT.joinpath("checkpoints", *parts)
 
 
+def tokenizer_dir(provider: str) -> Path:
+    return checkpoints_dir("tokenizers", output_component(provider))
+
+
+def token_audit_dir() -> Path:
+    return results_dir("token_audit", phase="experiment_0")
+
+
 def config_path(name: str) -> Path:
-    """`config/<phase>/<name>.yaml`, confined to the configuration tree."""
+    """Resolve logical config IDs and explicit numbered paths without copying configs."""
     stem = name[:-5] if name.endswith(".yaml") else name
+    prerequisites = {
+        "audit": "exploration",
+        "datasets": "exploration",
+        "template_example": "exploration",
+        "question_design": "question_preparation",
+        "dataset_semantics": "question_preparation",
+        "question_preparation": "question_preparation",
+        "feature_creation": "feature_creation",
+        "decision_pilot": "feature_creation",
+        "extractors": "feature_creation",
+        "feature_comparison": "feature_creation",
+    }
+    if stem in prerequisites:
+        stem = f"{phase_folder(prerequisites[stem])}/{stem}"
+    elif "/" in stem and stem.split("/")[0] in PHASES or re.match(r"experiment_[0-9]+/", stem):
+        prefix, rest = stem.split("/", 1)
+        stem = f"{phase_folder(prefix)}/{rest}"
     root = (REPO_ROOT / "config").resolve()
     path = (root / f"{stem}.yaml").resolve()
     if not path.is_relative_to(root):
@@ -384,7 +426,8 @@ def repo_dir_on_cluster() -> Path:
 
 def ensure(path: Path) -> Path:
     """`mkdir -p` the directory and return it. For a file path, its parent."""
-    target = path.parent if path.suffix else path
+    # Numbered phase directories ("0. exploration") are not files despite their dot.
+    target = path.parent if path.suffix and not re.fullmatch(r"[0-9]+\. .+", path.name) else path
     target.mkdir(parents=True, exist_ok=True)
     return path
 

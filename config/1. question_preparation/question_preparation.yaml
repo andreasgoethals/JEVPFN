@@ -1,0 +1,13 @@
+extends: feature_creation
+phase: question_preparation
+question_design: question_design
+question_preparation:
+  enabled: true  # Offline questions, exact text grouping and row links; no inference.
+  variant: documented
+  canonical_storage: data/decision_inputs
+  storage_format: one_sqlite_file_per_dataset
+  input_modes: [per_column, joint]
+  equality: exact_question_task_named_text_values
+  missing_text_policy: skip_empty_store_nan
+  text_policy: verbatim_no_truncation
+  keep_prior_versions_in_dataset_file: true

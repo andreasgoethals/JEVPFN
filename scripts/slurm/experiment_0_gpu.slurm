@@ -9,8 +9,8 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=32G
 #SBATCH --time=00:10:00
-#SBATCH --output=output_JEVPFN/experiment_0/logs/%x_%j.log
-#SBATCH --error=output_JEVPFN/experiment_0/logs/%x_%j.log
+#SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
 cd "${VSC_DATA:?}/JEVPFN"

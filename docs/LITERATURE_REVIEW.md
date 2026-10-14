@@ -7,7 +7,7 @@ This is a durable reference for the research question,
 published evidence, model interfaces and methodological limitations. It is not an experiment
 schedule. Agreed project constraints live in [README](../README.md), data definitions in
 [DATA_SOURCES](DATA_SOURCES.md), runtime/storage instructions in [VSC](VSC.md), and the candidate
-roster and unresolved evaluation settings in `config/experiment_1/`.
+roster and unresolved evaluation settings in `config/4. experiment_1/`.
 
 The current read-only TFM Library checkout is `de324efcca55be392feb0c01830b3b6ce364587f`
 (existing index/checkout verified 13 October; no submodule change here). The 12 October
@@ -137,14 +137,17 @@ separate experimental accounting. [Official model source](https://github.com/Pri
 
 ### Other numeric and categorical predictors
 
-The main candidate set is TabPFN-3.5, TabPFN-3, CatBoost and logistic/linear regression.
-The other interfaces below are retained as durable research references, deferred from the
-main comparison. Google TabFM and TabM have been removed from the evaluation catalog.
+The selected main predictors are CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular
+and logistic/linear regression. Each compares four feature configurations on shared folds:
+non-text only, plus joint, plus per-column, plus both decision representations. TabPFN-3 and
+the additional interfaces below remain research references, outside this selected roster.
+Google TabFM, TabM and AutoGluon are excluded.
 
 | Engine | Tasks and text treatment | Relevant interface limitation |
 |---|---|---|
 | TabICL v2 | Classification and regression; no built-in semantic text encoder. Strings/categories need the wrapper's encoding or explicit text embeddings. | Separate classifier/regressor checkpoints; `support_many_classes=True` enables the many-class wrapper. |
 | LimiX-2 | Classification, regression and missing-value imputation. Numeric/categorical array interface; no documented raw-language encoder. | 400M model, distinct from the older 2M-parameter LimiX-2M; `LimiXPredictor` and V2 configs. |
+| NVIDIA Kumo Tabular | Classification/regression over numeric and categorical tables through SDM; no native language encoder. | Task-specific checkpoints, many-class decomposition; regression point prediction is the mean of 999 predicted quantiles. Default preprocessing selects at most 500 columns. |
 | Causilo | Classification and regression. Strings/booleans are categorical, not language embeddings; missing feature values are accepted. | Native 10-class head, automatic error-correcting output-code decomposition for larger vocabularies. |
 | Mitra-v2 | Classification and regression with synthetic pretraining; no model-level semantic text encoder. | Explicit v2 task checkpoints; many-class hierarchical handling and the paper's adaptation recipe require the corresponding wrapper. |
 | EXAONE Tabular 1.0 | Classification, point and distributional regression. Raw text unsupported; numeric NumPy inputs only. | Encode categories using training data; built-in mean imputation and automatic many-class ECOC. |
@@ -175,8 +178,8 @@ owner's no-AutoGluon constraint, without substituting v1 checkpoints or copying 
 [Official model card](https://huggingface.co/autogluon/mitra-classifier-2),
 [runtime source](https://huggingface.co/autogluon/mitra-finetune/blob/main/src/mitra_finetune/api.py)
 
-LimiX-2 requires its source environment with Torch 2.9.1; Causilo requires Torch ≥2.13.
-They cannot both be installed against our existing Torch 2.12.1 pin unchanged. EXAONE needs
+Current LimiX-2 source requires Python ≥3.12 and Torch ≥2.9.1; the older exact-2.9.1 statement
+was stale. Causilo requires Torch ≥2.13 and cannot use our existing 2.12.1 pin unchanged. EXAONE needs
 NumPy ≥2.3.5 and a custom estimator lifecycle: it exposes fit/predict but not all cloning/grid
 search methods. Model weights for these deferred engines have separate noncommercial
 terms; code licenses alone do not describe weight rights. These are dependency and provenance
@@ -197,6 +200,41 @@ learning. Both task families and missing values are supported. Its reference set
 Python 3.11; the recommended 8,192-row context and bagging can require 80GB GPUs. Weights
 derive from real-table data with research restrictions.
 [ConTextTab implementation](https://github.com/SAP-samples/sap-rpt-1-oss)
+
+The selected original-text baselines are TabSTAR and ConTextTab only; they receive all original
+features without decision-model outputs. This is not a claim that they are the three highest
+scoring MulTaBench methods. AutoGluon-MM remains excluded by owner choice.
+
+Source audit on 13 October: TabSTAR `BaseTabSTAR.fit` performs supervised adaptation and
+creates internal validation from the supplied training fold when none is passed; its verbalizer
+is fitted on that internal training subset. This required adaptation is part of TabSTAR, not
+an added HPO campaign. ConTextTab `RPT` wrappers default to 8,192-row contexts and bagging;
+our adapter explicitly uses one bag and the complete outer/inner training partition. That
+removes silent row sampling but does not prove that large contexts fit memory. `SentenceEmbedder.embed`
+truncates each embedded string to 512 tokens, which must be reported as baseline preprocessing.
+Column names and values are embedded, then labeled training rows provide prediction context.
+[Pinned TabSTAR source](https://github.com/alanarazi7/TabSTAR/tree/32b232243e06018f3d3f86f006d9337de68ac15b),
+[pinned ConTextTab source](https://github.com/SAP-samples/sap-rpt-1-oss/tree/a0067b3c9db56bc35a6dcab09a9223a3ff0821e0)
+
+NVIDIA Kumo Tabular is the single-table model in `structured-data-models`, not the relational
+KumoRFM API. The adapter follows the publisher's SDM prediction path, keeps every training
+row, batches queries, reorders class probabilities and averages predicted quantiles for point
+regression. Its default 500-column selection is rejected on overflow. LimiX uses the publisher's
+V2 no-retrieval recipes. Their `quantile_norm_all_data` name should not be treated as evidence
+of test-set fitting: inspection of `RebalanceFeatureDistribution.fit_transform` shows the
+train/test split and fitting on training rows. These interfaces are source-checked; real
+checkpoint loading, full-fold resources and pretraining overlap remain pilot requirements.
+[Pinned SDM implementation](https://github.com/NVIDIA/structured-data-models/tree/bd2d55db104679393fcd6afe13305f37e40b5467),
+[Kumo weights](https://huggingface.co/nvidia/Kumo-Tabular),
+[pinned LimiX implementation](https://github.com/limix-ldm-ai/LimiX/tree/516bf396333feb3198cf7aff8a6c10421f218e24)
+
+A related 8 October preprint, [Estimating Uncoded Crash Factors with Tabular Foundation and
+System One Models](https://arxiv.org/abs/2610.10321), uses Kumo on coded crash records and Jev
+on narratives, with human recalibration and population-estimation methods. This was checked
+at abstract level. It is relevant prior art for combining tabular and decision systems, not
+evidence that this project's six-extractor/four-representation MulTaBench comparison has
+already been evaluated. Novelty must rest on the controlled representation comparison,
+coverage and reproducible extraction evidence rather than merely mentioning Jev plus a TFM.
 
 ## 3. Jev as a probabilistic feature extractor
 
@@ -434,6 +472,15 @@ model name can differ from the requested deployment alias. Liquid returns an ans
 object without requiring Jev's model field. Provider-specific response normalization and
 provenance validation are therefore required; the Jev response validator cannot simply be
 reused unchanged for all extractors.
+
+Token accounting checked 14 October against the same pinned sources: Liquid's single-question
+route encodes the complete `prompt.render` result without adding special tokens again.
+Strands `_fit(strict_window=True)` separately encodes the state with special tokens and the
+question without them; tokenizing their concatenation can give a different count. Perplexity
+`prepare` renders `decision_messages` with its saved chat template and disables thinking.
+The project now executes these weight-free formats with the actual staged tokenizers.
+The checked hosted API references expose response usage, but did not establish a public
+offline tokenizer plus complete server prompt for Jev, Clef or Microsoft; those remain unverified.
 
 ### Research evidence and its limits
 
