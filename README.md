@@ -7,8 +7,9 @@ for exploration but are excluded from experiments for text burden and 114-class 
 
 **Current stage: Experiment 0A.** All five open-weight tokenizers counted the current version-2
 inputs with zero context overflows. Clef and Intern each passed 74 real GPU contract requests
-on wICE. The repaired CPU suite passed; the two-node storage test needs a rerun after fixing
-its worker-result collection. The combined PROJECT/DATA transfer and all five local notebooks
+on wICE. The repaired CPU suite passed; storage workers verified cross-node locking, but the
+coordinator needs a rerun after a result-file visibility fix to complete snapshot validation.
+The combined PROJECT/DATA transfer and all five local notebooks
 completed successfully. Larger pilots, the other three GPU runtimes and live Jev
 checks remain pending. Full extraction and predictive experiments stay disabled.
 Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).

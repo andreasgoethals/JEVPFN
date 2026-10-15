@@ -103,6 +103,13 @@ Repack inputs after clearing local output. Fresh token counting starts from zero
 again after tests start. Keep each stage fixed during execution; publish reviewed changes
 between stages as described above.
 
+For a final clean validation, finish diagnosing infrastructure failures first, then freeze
+the reviewed code and reset outputs once on VSC and locally. Rerun CPU/storage checks, exact
+token counts and the selected provider contracts; import the resulting validated transfer
+before rerunning local notebooks. Do not import old output bundles into that clean campaign.
+Permanent dataset caches remain reusable and are not part of output cleanup. Keep diagnostic
+logs until their failure is understood; a clean output folder alone is not evidence of success.
+
 ## Upload the prepared inputs
 
 Git does not contain data. The existing VSC raw datasets passed their hash checks and do not
@@ -182,7 +189,10 @@ Worker results use atomic JSON receipts under DATA
 `3. experiment_0/manifests/before_extraction/storage_contracts/<run>/`; each must match the
 job, lock phase and unique invocation ID. Launcher stdout/stderr are retained separately
 under DATA `3. experiment_0/logs/storage_contracts/<run>/`. Console output is not parsed as
-the result. If the test fails, inspect its top-level report and those logs before retrying.
+the result. After successful worker exit the coordinator allows up to 60 seconds for receipt
+visibility across nodes and records the observed delay. It retries only missing-file reads,
+never the worker operation; invalid receipts or other I/O errors still fail immediately.
+If the test fails, inspect its top-level report and those logs before retrying.
 
 ## Checkpoints and isolated GPU environments
 

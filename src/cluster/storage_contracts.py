@@ -11,6 +11,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import time
 from contextlib import closing
 from pathlib import Path
 from uuid import uuid4
@@ -55,6 +56,29 @@ def worker_receipt(run_id, *, expect_busy):
     )
 
 
+def read_worker_receipt(receipt, *, timeout=60):
+    """Allow bounded cross-node metadata propagation after a successful worker exit.
+
+    Only absence is transient. Atomic publication means malformed JSON, permission
+    errors and other I/O failures must propagate immediately, never become a pass.
+    Do not relaunch the worker: its database write may already have completed.
+    """
+    started = time.monotonic()
+    while True:
+        try:
+            result = json.loads(receipt.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Worker exited successfully but its receipt was not visible within "
+                    f"{timeout}s: {receipt}"
+                ) from exc
+            time.sleep(min(0.5, remaining))
+        else:
+            return result, time.monotonic() - started
+
+
 def remote_worker(command, *, run_id, expect_busy):
     """Exchange structured evidence through DATA, not the launcher's stdout stream.
 
@@ -76,9 +100,10 @@ def remote_worker(command, *, run_id, expect_busy):
         (log_dir / f"{receipt.stem}.stderr.log").open("w", encoding="utf-8") as err,
     ):
         subprocess.run(argv, stdout=out, stderr=err, check=True, timeout=60)
-    if not receipt.is_file():
-        raise RuntimeError(f"Worker wrote no receipt; inspect stdout/stderr in {log_dir}")
-    result = json.loads(receipt.read_text(encoding="utf-8"))
+    try:
+        result, visibility_wait = read_worker_receipt(receipt)
+    except TimeoutError as exc:
+        raise TimeoutError(f"{exc}; inspect stdout/stderr in {log_dir}") from exc
     expected = {
         "probe_id": probe_id,
         "job_id": os.environ["SLURM_JOB_ID"],
@@ -86,6 +111,7 @@ def remote_worker(command, *, run_id, expect_busy):
     }
     if not isinstance(result, dict) or any(result.get(k) != v for k, v in expected.items()):
         raise ValueError("Worker receipt does not match this job/probe/lock phase")
+    result["receipt_visibility_wait_seconds"] = visibility_wait
     return result
 
 

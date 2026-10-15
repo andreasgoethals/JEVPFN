@@ -6,6 +6,7 @@ import subprocess
 import sys
 from contextlib import closing
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -30,7 +31,22 @@ def test_worker_requires_visible_database_and_exclusive_lock(tmp_path, monkeypat
 
 
 @pytest.fixture
-def storage_run(isolated_output, monkeypatch):
+def receipt_clock(monkeypatch):
+    clock = {"seconds": 0, "sleeps": []}
+
+    def advance(seconds):
+        clock["sleeps"].append(seconds)
+        clock["seconds"] += seconds
+
+    # Only the receipt reader uses virtual time; real lock behavior stays intact.
+    monkeypatch.setattr(
+        probe, "time", SimpleNamespace(monotonic=lambda: clock["seconds"], sleep=advance)
+    )
+    return clock
+
+
+@pytest.fixture
+def storage_run(isolated_output, monkeypatch, receipt_clock):
     monkeypatch.setenv("SLURM_JOB_ID", "synthetic-test")
     monkeypatch.setenv("SLURM_JOB_NODELIST", "node[1-2]")
     monkeypatch.setenv("SLURMD_NODENAME", "node1")
@@ -110,7 +126,7 @@ def test_storage_probe_keeps_failed_launch_evidence(isolated_output, storage_run
     expected = {
         "exit": subprocess.CalledProcessError,
         "timeout": subprocess.TimeoutExpired,
-        "missing_receipt": RuntimeError,
+        "missing_receipt": TimeoutError,
     }[failure]
     with pytest.raises(expected):
         probe.run(execute=True)
@@ -123,6 +139,55 @@ def test_storage_probe_keeps_failed_launch_evidence(isolated_output, storage_run
     assert (Path(report["worker_logs"]) / "blocked.stdout.log").read_text() == storage_run["stdout"]
     assert (Path(report["worker_logs"]) / "blocked.stderr.log").is_file()
     assert len(storage_run["calls"]) == 1  # No release phase after a failed exclusion check.
+
+
+def test_storage_probe_waits_for_released_receipt_without_relaunching_worker(
+    isolated_output, storage_run, monkeypatch, receipt_clock
+):
+    original_read = Path.read_text
+    hidden_reads = []
+
+    def delayed_read(path, *args, **kwargs):
+        if path.name == "released.json" and len(hidden_reads) < 3:
+            assert path.is_file()  # Published on the worker, not yet visible to the parent.
+            hidden_reads.append(path)
+            raise FileNotFoundError(path)
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", delayed_read)
+    report = probe.run(execute=True)
+    assert report["status"].startswith("storage_contracts_passed")
+    assert report["snapshot_restore"]
+    assert len(storage_run["calls"]) == 2  # Each database operation executes once.
+    assert report["cross_node_exclusion"]["receipt_visibility_wait_seconds"] == 0
+    assert report["release_and_reacquire"]["receipt_visibility_wait_seconds"] == 1.5
+    assert receipt_clock["sleeps"] == [0.5, 0.5, 0.5]
+
+
+def test_receipt_reader_stops_at_deadline(tmp_path, receipt_clock):
+    with pytest.raises(TimeoutError, match="not visible within 1.25s"):
+        probe.read_worker_receipt(tmp_path / "missing.json", timeout=1.25)
+    assert receipt_clock["seconds"] == 1.25
+    assert receipt_clock["sleeps"] == [0.5, 0.5, 0.25]
+
+
+@pytest.mark.parametrize("failure", ["invalid_json", "permission", "io"])
+def test_receipt_reader_does_not_retry_corruption_or_access_errors(
+    tmp_path, monkeypatch, receipt_clock, failure
+):
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text("invalid JSON", encoding="utf-8")
+    expected = json.JSONDecodeError
+    if failure != "invalid_json":
+        expected = PermissionError if failure == "permission" else OSError
+
+        def fail(*args, **kwargs):
+            raise expected("Synthetic read failure")
+
+        monkeypatch.setattr(Path, "read_text", fail)
+    with pytest.raises(expected):
+        probe.read_worker_receipt(receipt)
+    assert not receipt_clock["sleeps"]
 
 
 @pytest.mark.parametrize("damage", ["json", "probe_id", "job_id", "expect_busy", "node", "status"])

@@ -1,14 +1,15 @@
 # Operational evidence
 
 Current stage: Experiment 0A. Current-input token audits and Clef/Intern real GPU contracts
-passed. The repaired CPU suite passed on VSC. The two-node storage job failed while decoding
-worker stdout; its result-collection fix needs a VSC rerun. Full extraction and predictive
+passed. The repaired CPU suite passed on VSC. Both storage workers completed their locking
+checks, but the coordinator missed the newly published receipt and stopped before snapshot
+validation. Its bounded visibility-wait fix needs a VSC rerun. Full extraction and predictive
 runs remain disabled. Larger pilots,
 three remaining GPU runtimes, Jev live checks, storage quota and independent backup remain
 unverified. The read-only library pin is
 `de324efcca55be392feb0c01830b3b6ce364587f`.
 Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
-Latest local verification (15-10): 481 tests and lint passed, including
+Latest local verification (15-10): 486 tests, lint and dependency consistency passed, including
 the installed TypeSafe SDK with mocked successful and rate-limited HTTP responses. This is
 not live API evidence. The owner subsequently reran all five notebooks successfully (17 figures).
 
@@ -16,6 +17,7 @@ not live API evidence. The owner subsequently reran all five notebooks successfu
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 15-10-2026 | wICE / 62333801 | experiment_0_storage.slurm at 39a39ff | Coordinator FAILED on immediate released-receipt lookup. Both workers returned valid matching receipts: held-lock exclusion and acquisition after release succeeded on r33c22n3. Receipt later readable; snapshot/restore not reached. |
 | 15-10-2026 | wICE / 62333525 | experiment_0_cpu.slurm at aaf2153 | preflight_passed; all 18 dataset/hash/CV checks passed; 457 tests passed, 10 expected skips, 3 local notebook tests deselected. |
 | 15-10-2026 | wICE / 62333541 | experiment_0_storage.slurm | FAILED with JSONDecodeError while parsing the first worker's stdout. No cross-node storage pass established. Worker stdout was not retained, so its exact contents are unknown. |
 | 15-10-2026 | wICE / 62328904 | experiment_0_cpu.slurm | Dataset/hash/CV checks passed; contract suite failed: 442 passed, 2 cleanup-fixture failures, 9 skipped, 3 local notebook tests deselected. Superseded by 62333525. |
@@ -46,10 +48,14 @@ The 15-10 setup receipt confirms access checks passed; upload receipt
 `20261015T114600Z_88790052` confirms all 18 inputs installed. Clef/Intern GPU reports retain
 runtime settings hashes; reference-kernel fallback is correct but needs sustained-throughput
 profiling before full extraction. Successful short probes do not establish campaign duration.
-The storage test now uses per-job/per-probe JSON receipts on DATA and saves launcher stdout
-and stderr separately. Empty/noisy stdout cannot replace evidence; missing, foreign or invalid
-receipts, failed steps and timeouts stop the test. Rerun only this affected VSC test before
-continuing. Tokenizer, prepared-input and GPU runtime identities are unchanged.
+The storage test uses per-job/per-probe JSON receipts on DATA and saves launcher stdout
+and stderr separately. In job 62333801 the first stdout contains the VSC banner followed by
+JSON; the second contains a successful response. Both receipts match the job, node and probe.
+The coordinator's immediate lookup falsely reported the second receipt missing. It now waits
+up to 60 seconds for cross-node visibility after successful worker exit and records the wait.
+Missing receipts still time out; malformed/foreign receipts, failed steps and permission errors
+fail immediately. Workers are never relaunched to recover a delayed receipt. Rerun this VSC
+test before continuing. Tokenizer, prepared-input and GPU runtime identities are unchanged.
 An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not live API evidence.
 
 ## Reusable failure lessons
@@ -72,6 +78,8 @@ An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not li
   without chmod/retry. The downloaded failure did not demonstrate a production cleanup bug.
 - **Slurm worker results:** do not assume captured srun stdout is a pure JSON reply. Structured
   worker receipts need job/phase/invocation identity; preserve stdout/stderr even on failure.
+  A successful remote exit does not guarantee immediate local receipt visibility. Retry only
+  missing-file reads for a bounded interval; never rerun a worker's completed database write.
   A successful export or notebook run can contain a failed test report; inspect its status.
 - **Jev policy revisions:** an immutable first-use allocation blocked reviewed pilot-to-full
   budget/price/bound changes. Versioned approvals now retain cumulative spend and history;
