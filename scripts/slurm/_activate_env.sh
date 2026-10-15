@@ -26,6 +26,7 @@ export TRITON_CACHE_DIR="$XDG_CACHE_HOME/triton"
 export CUDA_CACHE_PATH="$XDG_CACHE_HOME/nv"
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+export SLURM_EXPORT_ENV=ALL  # Propagate the prepared job environment to srun workers.
 export PYTHONUNBUFFERED=1
 export PYTHONDONTWRITEBYTECODE=1
 mkdir -p "$XDG_CACHE_HOME"

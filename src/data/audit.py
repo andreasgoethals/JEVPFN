@@ -294,7 +294,7 @@ def audit_lock(folder: Path, *, timeout: float = 600):
     """One builder/length-reader per signature; OS releases the lock after a crash.
 
     Atomic replacement alone is insufficient on Windows: an open npz reader prevents
-    another process replacing that file. Both template notebooks share this audit.
+    another process replacing that file. Exploration and workload notebooks share this audit.
     """
     folder.mkdir(parents=True, exist_ok=True)
     with (folder / ".audit.lock").open("a+b") as handle:

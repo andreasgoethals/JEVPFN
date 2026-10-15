@@ -13,6 +13,8 @@
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
+export JEVPFN_CONDA_ENV=JEVPFN
+export JEVPFN_STAGING_ROOT="${1:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.preflight --verify-data --tests

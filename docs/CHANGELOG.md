@@ -1,5 +1,14 @@
 # Changelog
 
+## 15-10-2026
+
+- Added explicit permanent output deletion, optionally including earlier output archives, for local/VSC clean runs. All tiers are checked for links/mounts before deletion; permanent inputs/features and model environments remain protected. The follow-up full suite passed 440 tests; actual local cleanup was previewed only.
+- Verified all five concrete findings in the second independent review. Slurm jobs now receive provider/environment paths as arguments and propagate their prepared environment to workers; memory requests respect A100 limits and token-job core accounting.
+- Added settings hashes to GPU-contract and extraction summaries; reordered reset, input installation and fresh checks in VSC instructions. GPU speed/batching suggestions remain unmeasured.
+- Protected cleanup against linked roots/figure folders; remove rebuildable comparison CSVs/transcripts while retaining personal notes and permanent artifacts. Added a local option to the reversible full-output reset.
+- Inspected all notebook figures; removed duplicate/empty panels, corrected long-text ordering/pagination, compacted diagrams and made 30-class/six-provider comparisons readable. Executed outputs remain in the notebooks.
+- Local verification: 429 tests, all five notebooks/17 figures, 97 synthetic comparison renders, dataset preflight, wheel build, dependency/lint checks and eleven shell syntax/LF checks passed. No VSC jobs, inference or Git publication performed.
+
 ## 14-10-2026
 
 - Added a reversible, idle-job-checked VSC output reset and a checksum-validated 18-dataset question upload bundle with backups and byte-exact installation. Added isolated Clef/Intern environment setup commands.

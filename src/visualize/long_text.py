@@ -18,7 +18,7 @@ def _box(row, prefix, label):
     }
 
 
-def _draw(ax, rows, prefix, labels, limit):
+def _draw(ax, rows, prefix, labels):
     keep = rows[f"{prefix}_median"].notna().to_numpy()
     rows = rows.loc[keep]
     labels = np.asarray(labels)[keep]
@@ -45,19 +45,16 @@ def _draw(ax, rows, prefix, labels, limit):
         s=style.AUDIT_MARKER_SIZE,
         label="Maximum",
     )
-    ax.axvline(
-        limit, color=style.MISSING_COLOR, linestyle="--", label=f"{limit:,} text-token screen"
-    )
     ax.set_xscale("log")
-    ax.invert_yaxis()
+    ax.set_ylim(len(records) + 0.5, 0.5)  # Idempotent with shared y axes.
     ax.grid(axis="x", color=style.GRID_COLOR, alpha=0.5)
     ax.tick_params(axis="y", labelsize=style.LONG_TEXT_LABEL_FONT)
 
 
-def long_text_figures(datasets, columns, limit):
+def long_text_figures(datasets, columns):
     fig, axes = plt.subplots(1, 2, figsize=style.LONG_TEXT_SIZE, sharey=True)
-    _draw(axes[0], datasets, "cell_tokens", datasets.dataset, limit)
-    _draw(axes[1], datasets, "joint_tokens", datasets.dataset, limit)
+    _draw(axes[0], datasets, "cell_tokens", datasets.dataset)
+    _draw(axes[1], datasets, "joint_tokens", datasets.dataset)
     axes[0].set_title("Individual nonempty text cells")
     axes[1].set_title("All available text in each nonempty row")
     for ax in axes:
@@ -71,17 +68,21 @@ def long_text_figures(datasets, columns, limit):
             "Nonempty text lengths across all 20 core datasets, for pooled individual cells (left) "
             "and joint row text (right). Boxes span p25–p75 with median lines; whiskers are p01 and p99, "
             "not Tukey whiskers. Diamonds mark observed maxima. Tokens use ceil(characters/4). "
-            "The dashed 32,000-token screen excludes request metadata/questions and JSON escaping."
+            "These are text-length distributions, not provider context checks; exact complete-request counts are reviewed separately."
         ),
     )
     ordered = columns.reset_index(drop=True)
-    pages = np.array_split(np.arange(len(ordered)), 2)
-    xmax = max(float(ordered.tokens_max.max()), limit) * 1.3
-    for page, indices in enumerate(pages, start=1):
-        part = ordered.iloc[indices]
+    boundaries = [
+        i for i in range(1, len(ordered)) if ordered.dataset.iloc[i] != ordered.dataset.iloc[i - 1]
+    ]
+    split = min(boundaries, key=lambda i: abs(i - len(ordered) / 2)) if boundaries else len(ordered)
+    pages = [ordered.iloc[:split], ordered.iloc[split:]]
+    pages = [part for part in pages if not part.empty]
+    xmax = float(ordered.tokens_max.max()) * 1.3
+    for page, part in enumerate(pages, start=1):
         fig, ax = plt.subplots(figsize=style.LONG_TEXT_PAGE_SIZE)
         labels = part.dataset + " · " + part.text_column
-        _draw(ax, part, "tokens", labels, limit)
+        _draw(ax, part, "tokens", labels)
         ax.tick_params(axis="y", labelsize=style.LONG_TEXT_PAGE_FONT)
         ax.set_xlim(0.7, xmax)
         active = part[part.tokens_median.notna()]
@@ -89,13 +90,13 @@ def long_text_figures(datasets, columns, limit):
             if active.dataset.iloc[position] != active.dataset.iloc[position - 1]:
                 ax.axhline(position + 0.5, color=style.GRID_COLOR, linewidth=0.6)
         ax.set_xlabel("Approximate nonempty text tokens (log scale)")
-        ax.set_title(f"All text columns — page {page} of 2")
+        ax.set_title(f"All text columns — page {page} of {len(pages)}")
         fig.legend(*ax.get_legend_handles_labels(), loc="outside lower center", ncols=2)
         yield (
             fig,
             f"long_text_columns_page_{page}",
-            "Nonempty text lengths for half of the 90 official text columns, in catalog order. "
+            "Nonempty text lengths for the official text columns, in catalog order; datasets stay together on a page. "
             "Dataset and column names label each row. Boxes show p25–p75 and medians; whiskers "
             "span p01–p99; diamonds mark maxima. The two pages share the same logarithmic axis. "
-            "The dashed line marks 32,000 approximate text tokens. Exact p99/max values remain in the tables.",
+            "Exact p99/max values remain in the tables. No provider context limit is inferred from character counts.",
         )

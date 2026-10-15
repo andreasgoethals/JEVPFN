@@ -10,7 +10,7 @@ MODE_LABELS = {"per_column": "Per-column", "joint": "Joint", "per_column_and_joi
 
 
 def input_design_figure():
-    fig, ax = plt.subplots(figsize=style.FLOW_SIZE)
+    fig, ax = plt.subplots(figsize=style.COMPACT_FLOW_SIZE)
     ax.set_axis_off()
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -18,9 +18,9 @@ def input_design_figure():
         (0.12, 0.75, "Text column A", style.MEDIAN_COLOR),
         (0.12, 0.5, "Text column B", style.MEDIAN_COLOR),
         (0.12, 0.22, "Text columns A + B", style.P95_COLOR),
-        (0.48, 0.75, "Fixed question + A\n→ Jev request", style.MEDIAN_COLOR),
-        (0.48, 0.5, "Fixed question + B\n→ Jev request", style.MEDIAN_COLOR),
-        (0.48, 0.22, "Same question + A + B\n→ Jev request", style.P95_COLOR),
+        (0.48, 0.75, "Fixed question + A\n→ decision model", style.MEDIAN_COLOR),
+        (0.48, 0.5, "Fixed question + B\n→ decision model", style.MEDIAN_COLOR),
+        (0.48, 0.22, "Same question + A + B\n→ decision model", style.P95_COLOR),
         (0.84, 0.75, "Features from A", style.MEDIAN_COLOR),
         (0.84, 0.5, "Features from B", style.MEDIAN_COLOR),
         (0.84, 0.22, "Joint features", style.P95_COLOR),
@@ -52,7 +52,7 @@ def input_design_figure():
     ax.text(
         0.5,
         0.02,
-        "Task metadata is shared. Non-text features and row targets are excluded. Both = concatenate the saved outputs.",
+        "Task metadata is shared. Non-text features and row targets are excluded. Each model: 1 binary probability, K class probabilities, or 1 expected direction per input.",
         ha="center",
     )
     return (
@@ -62,41 +62,6 @@ def input_design_figure():
             "Conceptual request construction for a row with two nonempty text columns. Two separate "
             "inputs and one joint input use the same deterministic task question. Each distinct complete "
             "request is cached once. This diagram shows the design, not executed API calls or outputs."
-        ),
-    )
-
-
-def task_outputs_figure():
-    fig, axes = plt.subplots(1, 3, figsize=style.FLOW_SIZE)
-    descriptions = [
-        (
-            "Binary · Noul",
-            "One probability\np(positive class), from 0 to 1\n\n1 main feature per input",
-            style.MEDIAN_COLOR,
-        ),
-        (
-            "Multiclass · Choice",
-            "One probability per class\np₁, p₂, …, pK\n\nK main features per input",
-            style.P95_COLOR,
-        ),
-        (
-            "Regression · Score",
-            "Nine probabilities: p(−4), …, p(+4)\nExpected direction = Σ level × p(level)\n\n1 main feature; all 9 probabilities retained",
-            style.TOTAL_COLOR,
-        ),
-    ]
-    for ax, (title, text, color) in zip(axes, descriptions):
-        ax.set_axis_off()
-        ax.set_title(title, color=color)
-        ax.text(0.5, 0.6, text, ha="center", va="center", transform=ax.transAxes, linespacing=2)
-    fig.suptitle("Agreed main numeric features · full responses are also retained")
-    return (
-        fig,
-        "task_specific_feature_shapes",
-        (
-            "Schematic of proposed numeric Jev feature views by task. Choice and Score responses also "
-            "retain their documented confidence values. No probability values have been simulated or "
-            "measured. The regression expectation is a directional score, not a prediction in target units."
         ),
     )
 
@@ -173,42 +138,30 @@ def feature_dimensions_figure(plan):
     )
 
 
-def workload_figure(totals, *, deduplicated=False):
-    token_col = "wire_tokens_combined_approx" if deduplicated else "input_tokens_approx"
-    cost_col = "cost_usd" if deduplicated else "input_cost_estimate"
-    fig, axes = plt.subplots(1, 2, figsize=style.FLOW_SIZE)
-    labels = (
-        [f"{n:g} chars/token" for n in totals.characters_per_token]
-        if deduplicated
-        else [MODE_LABELS.get(m, m) for m in totals["mode"]]
+def workload_figure(totals):
+    """One axis for token sensitivity; costs label the same bars, not a duplicate panel."""
+    fig, ax = plt.subplots(figsize=style.figsize())
+    tokens = totals.wire_tokens_combined_approx / 1e6
+    bars = ax.barh(
+        [f"{n:g} chars/token" for n in totals.characters_per_token],
+        tokens,
+        color=style.MEDIAN_COLOR,
     )
-    axes[0].barh(labels, totals[token_col] / 1e6, color=style.MEDIAN_COLOR)
-    axes[0].set_xlabel("Approximate input tokens (millions)")
-    if totals[cost_col].notna().all():
-        axes[1].barh(labels, totals[cost_col], color=style.P95_COLOR)
-        for i, cost in enumerate(totals[cost_col]):
-            axes[1].text(cost, i, f" ${cost:,.2f}", va="center")
-        axes[1].set_xlim(0, totals[cost_col].max() * 1.25)
-        axes[1].set_xlabel("Estimated input cost (USD; configured price)")
-    else:
-        axes[1].set_axis_off()
-        axes[1].text(0.5, 0.5, "Set a verified input price to display costs.", ha="center")
-    scope = "after exact reuse" if deduplicated else "before exact reuse"
-    fig.suptitle(
-        f"Workload {scope} · {'both modes; tokenizer sensitivity' if deduplicated else 'three alternative modes'}"
-    )
+    labels = [
+        f"{v:,.1f}M tokens" + (f" · ${cost:,.2f}" if np.isfinite(cost) else "")
+        for v, cost in zip(tokens, totals.cost_usd.fillna(np.nan))
+    ]
+    ax.bar_label(bars, labels=labels, padding=4)
+    ax.set_xlim(0, tokens.max() * 1.55)
+    ax.set_xlabel("Approximate input tokens (millions)")
+    ax.set_title("Jev cost sensitivity after exact reuse · both input modes")
     return (
         fig,
-        "deduplicated_budget" if deduplicated else "logical_workload_budget",
+        "deduplicated_budget",
         (
-            f"Approximate input tokens and configured-price costs {scope}. "
-            + (
-                "Bars compare 3, 4 and 5 characters per token for both input modes with exact reuse. "
-                if deduplicated
-                else "Bars compare per-column, joint and both input modes. "
-            )
-            + "Both is the complete alternative, not a third workload to add to the others. "
-            "Character-based estimates include request metadata; unknown billing overhead, retries "
-            "and unresolved over-limit input handling prevent interpreting these as a quote."
+            "Character-based input-token scenarios for both representations after exact reuse. "
+            "Each bar is labelled with its token volume and configured-price cost. These are "
+            "alternative estimates, not additive workloads or provider billing measurements. "
+            "Metadata and question text are included; unknown billing overhead and retries are excluded."
         ),
     )

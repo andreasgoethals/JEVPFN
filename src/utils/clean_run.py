@@ -25,6 +25,8 @@ def _linked(path):
 def roots() -> list[Path]:
     found = []
     for root in (outputs_dir(), large_outputs_dir(), notebook_outputs_dir()):
+        if _linked(root):
+            raise ValueError("Cleanup refuses a linked output root")
         root = root.resolve()
         if not any(root.is_relative_to(previous) for previous in found):
             found.append(root)
@@ -47,7 +49,10 @@ def candidates(root: Path):
             if (
                 (
                     relative.parts[0] == "figures"
-                    and path.suffix.lower() in {".pdf", ".png", ".svg", ".json", ".md", ".npz"}
+                    and (
+                        path.suffix.lower() in {".pdf", ".png", ".svg", ".json", ".npz", ".csv"}
+                        or name in {"Captions.md", "_report.txt", "_stdout.txt"}
+                    )
                 )
                 or relative.as_posix() in {"All Results.md", "all_results.md", "Captions.md"}
                 or (

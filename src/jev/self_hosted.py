@@ -366,6 +366,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         "run_id": run_id,
         "provider": provider,
         "settings": client.settings,
+        "settings_sha256": digest(client.settings),
         "token_audit_id": evidence["audit_id"],
         "mode": "full" if full else "pilot",
         "created_utc": datetime.now(UTC).isoformat(),

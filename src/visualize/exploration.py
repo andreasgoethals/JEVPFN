@@ -46,7 +46,6 @@ def dataset_overview(audit):
             "distinct_text_cells",
             "distinct_text_pct",
             "mean_tokens_per_nonempty_text",
-            "joint_nonempty_inputs",
             "joint_missing_or_empty_pct",
             "joint_unique_inputs",
             "joint_reuse_savings_pct",
@@ -105,7 +104,6 @@ def overview_figure(table, characters_per_token=4.0):
         ("per_column_missing_or_empty_pct", "Empty cells\n(%)", "float"),
         ("distinct_text_cells", "Distinct texts", "int"),
         ("mean_tokens_per_nonempty_text", "Mean tokens\n/ text", "float"),
-        ("joint_nonempty_inputs", "Rows\nwith text", "int"),
         ("joint_unique_inputs", "Distinct\njoint texts", "int"),
         ("joint_reuse_savings_pct", "Joint reuse\n(%)", "float"),
         ("combined_tokens_median", "Joint tokens\nmedian", "float"),
@@ -126,7 +124,7 @@ def overview_figure(table, characters_per_token=4.0):
     header.text(
         0,
         0.8,
-        "20 core datasets: text availability, repetition and Jev workload",
+        "20 core datasets: text availability, repetition and extraction workload",
         transform=header.transAxes,
         fontsize=style.OVERVIEW_TITLE_FONT,
         va="top",
@@ -181,9 +179,9 @@ def overview_figure(table, characters_per_token=4.0):
     notes = (
         "[REMOVED] = audit-only: Zomato (extreme text burden) and Spotify (114-class representation size); all 20 remain in exploration.\n"
         "Text cells = rows × text columns. Distinct texts are counted within each named column, then summed. Empty = null or whitespace-only.\n"
-        "Empty-cell percentages use all text cells; distinct percentages use nonempty text cells. Joint reuse uses rows with text.\n"
+        "Empty-cell percentages use all text cells. Joint reuse uses rows with text.\n"
         "Both-mode savings include within-mode duplicates and matching per-column/joint requests. Means exclude empty text cells; joint token summaries include all rows.\n"
-        f"Tokens ≈ ceil(characters / {characters_per_token:g}); task/question overhead is excluded. The p95/max column highlights long inputs needing a policy."
+        f"Tokens ≈ ceil(characters / {characters_per_token:g}); task/question overhead is excluded. Context acceptance requires exact provider counts."
     )
     footer.text(
         0,
@@ -254,6 +252,7 @@ def text_column_figures(audit):
     ax.set_ylim(-3, 103)
     ax.set_xlabel("Mean characters per nonempty text cell (log scale)")
     ax.set_ylabel("Unique inputs / nonempty cells (%)")
+    ax.set_title("Long text is not always unique")
     ax.legend()
     yield (
         fig,

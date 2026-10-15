@@ -50,11 +50,14 @@ def test_archive_both_tiers_preserves_every_file_and_protected_data(isolated_out
     assert paths.logs_dir("experiment_0").is_dir()
 
 
-def test_archive_requires_stopped_writers_and_refuses_busy_scheduler(isolated_output, monkeypatch):
+@pytest.mark.parametrize("delete", [False, True])
+def test_reset_requires_stopped_writers_and_refuses_busy_scheduler(
+    isolated_output, monkeypatch, delete
+):
     for root in (paths.outputs_dir(), paths.large_outputs_dir()):
         root.mkdir(parents=True)
     with pytest.raises(ValueError, match="writers"):
-        fresh_start.run(apply=True)
+        fresh_start.run(apply=True, delete=delete)
     monkeypatch.setattr(maintenance, "storage_policy_failures", lambda _: [])
     monkeypatch.setattr(
         maintenance.subprocess,
@@ -62,7 +65,7 @@ def test_archive_requires_stopped_writers_and_refuses_busy_scheduler(isolated_ou
         lambda *a, **kw: "CLUSTER: wice\n123|jevpfn-exp0-tokens|/elsewhere\n",
     )
     with pytest.raises(RuntimeError, match="123"):
-        fresh_start.run(apply=True, writers_stopped=True)
+        fresh_start.run(apply=True, writers_stopped=True, delete=delete)
     assert not list(isolated_output.rglob("archived_output_JEVPFN"))
 
 
@@ -147,3 +150,156 @@ def test_permanent_permission_failure_preserves_source(tmp_path, monkeypatch):
     assert len(attempts) == 7
     assert (source / "evidence").read_text() == "keep"
     assert not destination.exists()
+
+
+def test_local_reset_archives_outputs_without_touching_data(isolated_output, monkeypatch):
+    monkeypatch.delenv("VSC_DATA")
+    root = paths.notebook_outputs_dir()
+    root.mkdir(parents=True)
+    (root / "All Results.md").write_text("previous report")
+    data = root.parent / "data" / "raw" / "source.csv"
+    data.parent.mkdir(parents=True)
+    data.write_text("protected")
+    monkeypatch.setattr(fresh_start, "require_idle_vsc", lambda: pytest.fail("No local scheduler"))
+    assert fresh_start.run(local=True)["status"] == "preview"
+    assert (root / "All Results.md").is_file()
+    with pytest.raises(ValueError, match="writers"):
+        fresh_start.run(local=True, apply=True)
+    result = fresh_start.run(local=True, apply=True, writers_stopped=True)
+    assert result["status"] == "fresh_outputs_ready"
+    assert not list(root.iterdir())
+    assert (Path(result["moves"][0]["archive"]) / "All Results.md").read_text() == "previous report"
+    assert data.read_text() == "protected"
+
+
+def test_local_reset_cannot_bypass_vsc_checks(isolated_output):
+    with pytest.raises(RuntimeError, match="not a VSC shell"):
+        fresh_start.run(local=True, apply=True, writers_stopped=True)
+
+
+@pytest.mark.parametrize("local", [False, True])
+@pytest.mark.parametrize("include_archives", [False, True])
+def test_delete_cleans_only_output_and_explicit_archives(
+    isolated_output, monkeypatch, local, include_archives
+):
+    if local:
+        monkeypatch.delenv("VSC_DATA")
+        roots = [paths.notebook_outputs_dir()]
+        monkeypatch.setattr(fresh_start, "require_idle_vsc", lambda: pytest.fail("Local reset"))
+    else:
+        roots = [paths.outputs_dir(), paths.large_outputs_dir()]
+        monkeypatch.setattr(fresh_start, "require_idle_vsc", lambda: None)
+    protected = []
+    archives = []
+    for root in roots:
+        old_output = root / "3. experiment_0" / "results" / "old_counts.sqlite3"
+        old_output.parent.mkdir(parents=True)
+        old_output.write_bytes(b"old audit")
+        archive = root.parent / "archived_output_JEVPFN" / "old-run" / "All Results.md"
+        archive.parent.mkdir(parents=True)
+        archive.write_text("old results")
+        archives.append(archive)
+        for name in (
+            "data/raw/source.csv",
+            "data/decision_inputs/questions.sqlite3",
+            "data/jev_cache/paid_features.sqlite3",
+            "checkpoints/model.safetensors",
+            "environments/python",
+            "README.md",
+        ):
+            target = root.parent / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"must survive byte for byte")
+            protected.append(target)
+    options = dict(local=local, delete=True, include_archives=include_archives)
+    preview = fresh_start.run(**options)
+    assert preview["status"] == "preview"
+    assert all(
+        root.joinpath("3. experiment_0/results/old_counts.sqlite3").is_file() for root in roots
+    )
+    assert all(p.exists() for p in archives)
+    with pytest.raises(ValueError, match="writers"):
+        fresh_start.run(apply=True, **options)
+    result = fresh_start.run(apply=True, writers_stopped=True, **options)
+    assert result["action"] == "permanently_delete_outputs"
+    assert result["status"] == "fresh_outputs_ready"
+    assert "moves" not in result
+    assert all(entry["deleted"] for entry in result["deletions"])
+    assert all(root.is_dir() and not any(p.is_file() for p in root.rglob("*")) for root in roots)
+    assert all(p.read_bytes() == b"must survive byte for byte" for p in protected)
+    for archive in archives:
+        assert archive.exists() is (not include_archives)
+        if include_archives:
+            assert not archive.parent.parent.exists()
+    if not local:
+        assert paths.logs_dir("experiment_0").is_dir()
+    # Repeating a completed reset is safe and does not turn inputs into cleanup targets.
+    fresh_start.run(apply=True, writers_stopped=True, **options)
+    assert all(p.read_bytes() == b"must survive byte for byte" for p in protected)
+
+
+def test_archive_deletion_requires_explicit_delete_mode():
+    with pytest.raises(ValueError, match="requires --delete"):
+        fresh_start.run(include_archives=True)
+
+
+@pytest.mark.parametrize("entry_kind", ["symlink", "junction", "mount"])
+def test_delete_validates_every_tier_before_removing_any_file(
+    isolated_output, monkeypatch, entry_kind
+):
+    monkeypatch.setattr(fresh_start, "require_idle_vsc", lambda: None)
+    roots = [paths.outputs_dir(), paths.large_outputs_dir()]
+    for root in roots:
+        root.mkdir(parents=True)
+        (root / "evidence").write_bytes(b"untouched")
+    linked = roots[1] / "linked-subtree"
+    linked.mkdir()
+    attribute = {"symlink": "is_symlink", "junction": "is_junction", "mount": "is_mount"}[
+        entry_kind
+    ]
+    original = getattr(Path, attribute, lambda _: False)
+    monkeypatch.setattr(Path, attribute, lambda p: p == linked or original(p), raising=False)
+    with pytest.raises(ValueError, match="Linked|mounted"):
+        fresh_start.run(delete=True, apply=True, writers_stopped=True)
+    assert all((root / "evidence").read_bytes() == b"untouched" for root in roots)
+
+
+def test_delete_refuses_linked_archive_before_clearing_active_output(isolated_output, monkeypatch):
+    monkeypatch.delenv("VSC_DATA")
+    root = paths.notebook_outputs_dir()
+    root.mkdir(parents=True)
+    (root / "evidence").write_text("untouched")
+    archive = root.parent / "archived_output_JEVPFN"
+    original = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda p: p == archive or original(p))
+    with pytest.raises(ValueError, match="Linked"):
+        fresh_start.run(
+            local=True, delete=True, include_archives=True, apply=True, writers_stopped=True
+        )
+    assert (root / "evidence").read_text() == "untouched"
+
+
+def test_interrupted_deletion_can_be_repeated_without_touching_inputs(isolated_output, monkeypatch):
+    monkeypatch.setattr(fresh_start, "require_idle_vsc", lambda: None)
+    roots = [paths.outputs_dir(), paths.large_outputs_dir()]
+    for root in roots:
+        root.mkdir(parents=True)
+        (root / "evidence").write_text("old")
+    protected = roots[1].parent / "data" / "jev_cache" / "paid.sqlite3"
+    protected.parent.mkdir(parents=True)
+    protected.write_bytes(b"paid responses")
+    original = fresh_start.shutil.rmtree
+
+    def deny_project(path, *args, **kwargs):
+        if path == roots[1]:
+            raise PermissionError("stop writers")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(fresh_start.shutil, "rmtree", deny_project)
+    with pytest.raises(PermissionError):
+        fresh_start.run(delete=True, apply=True, writers_stopped=True)
+    assert (roots[1] / "evidence").read_text() == "old"
+    monkeypatch.setattr(fresh_start.shutil, "rmtree", original)
+    fresh_start.run(delete=True, apply=True, writers_stopped=True)
+    assert all(not (root / "evidence").exists() for root in roots)
+    assert protected.read_bytes() == b"paid responses"

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.colors import ListedColormap
+from matplotlib.ticker import MaxNLocator, PercentFormatter
 
 from src.evaluation.decision_comparison import dataset_balanced
 from src.visualize import style
@@ -31,7 +32,8 @@ MODES = {"per_column": "Separate text columns", "joint": "Joint text"}
 
 
 def _matrix(data, *, title, label, vmin=0, vmax=1, cmap=None, percent=False):
-    fig, ax = plt.subplots(figsize=style.COMPARISON_MATRIX_SIZE)
+    size = style.COMPARISON_COVERAGE_SIZE if len(data) > 9 else style.COMPARISON_MATRIX_SIZE
+    fig, ax = plt.subplots(figsize=size)
     im = ax.imshow(
         data.to_numpy(dtype=float),
         vmin=vmin,
@@ -66,6 +68,45 @@ def _matrix(data, *, title, label, vmin=0, vmax=1, cmap=None, percent=False):
 
 def coverage_figures(result, options):
     inventory = result.table("inventory")
+    if not inventory.empty and inventory.status.eq("not_created").all():
+        # A single compact status replaces two identical 18-by-6 empty heatmaps.
+        fig, ax = plt.subplots(figsize=style.COMPARISON_PENDING_SIZE)
+        ax.set_axis_off()
+        rows = []
+        for provider in options["providers"]:
+            rows.append(
+                [
+                    LABELS[provider],
+                    *[
+                        f"0 / {inventory[(inventory.provider == provider) & (inventory.representation == mode)].dataset.nunique()} datasets"
+                        for mode in options["representations"]
+                    ],
+                ]
+            )
+        table = ax.table(
+            cellText=rows,
+            colLabels=["Extractor", *[MODES[m] for m in options["representations"]]],
+            loc="center",
+            cellLoc="left",
+            colLoc="left",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1, 1.35)
+        for (row, _), cell in table.get_celld().items():
+            cell.set_edgecolor(style.GRID_COLOR)
+            if row == 0:
+                cell.set_facecolor(style.GRID_COLOR)
+        ax.set_title("Feature extraction pending · no measured agreement yet")
+        yield (
+            fig,
+            "coverage_pending",
+            (
+                "No selected decision-feature artifacts have been created. Counts give complete saved datasets "
+                "per extractor and representation. Agreement, distributions and accuracy are not yet measurable."
+            ),
+        )
+        return
     for mode in options["representations"]:
         frame = inventory[inventory.representation.eq(mode)].copy()
         frame["available"] = frame.status.eq("available").astype(int)
@@ -165,7 +206,8 @@ def pair_figures(result, options):
             ax.scatter(
                 a,
                 i,
-                color=style.MEDIAN_COLOR,
+                facecolors="none",
+                edgecolors=style.MEDIAN_COLOR,
                 s=style.AUDIT_MARKER_SIZE,
                 label="Unique inputs" if i == 0 else None,
             )
@@ -173,6 +215,7 @@ def pair_figures(result, options):
                 b,
                 i,
                 color=style.P95_COLOR,
+                marker="x",
                 s=style.AUDIT_MARKER_SIZE,
                 label="Source rows" if i == 0 else None,
             )
@@ -202,11 +245,11 @@ def consensus_figures(result, options):
         ["task", "representation"], sort=False
     ):
         frame = frame.sort_values("distance_to_others")
-        fig, axes = plt.subplots(1, 2, figsize=style.COMPARISON_MATRIX_SIZE)
+        fig, axes = plt.subplots(1, 2, sharey=True, figsize=style.COMPARISON_MATRIX_SIZE)
         for ax, metric, label in zip(
             axes,
             ["distance_to_others", "farthest_share"],
-            ["Distance from other models", "Share of inputs most different"],
+            ["Mean distance to other models", "Most different inputs (%)"],
         ):
             ax.barh(
                 [LABELS[p] for p in frame.provider],
@@ -215,6 +258,8 @@ def consensus_figures(result, options):
             )
             ax.set_xlabel(label)
             ax.set_xlim(left=0)
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=4, prune="upper"))
+        axes[1].xaxis.set_major_formatter(PercentFormatter(1))
         fig.suptitle(f"{TASKS[task]} · {MODES[mode]}\nDifferent does not mean less accurate")
         yield (
             fig,
@@ -241,6 +286,7 @@ def consensus_figures(result, options):
         for i, r in enumerate(counts.itertuples()):
             ax.text(i, r.fraction * 100 + 1, f"{int(raw[r.largest_agreeing_group]):,}", ha="center")
         ax.set_ylim(0, 110)
+        ax.set_yticks(range(0, 101, 20))
         ax.set_xlabel("Number of models sharing the most common class/direction")
         ax.set_ylabel("Inputs (%) · equal dataset weight")
         ax.set_title(f"How many agree? · {TASKS[task]} · {MODES[mode]}")
@@ -317,6 +363,7 @@ def distribution_figures(result, options):
                     **orientation,
                     patch_artist=True,
                     showfliers=False,
+                    medianprops={"color": style.TEXT_COLOR},
                 )
                 for patch, color in zip(artists["boxes"], colors[start : start + 12]):
                     patch.set_facecolor(color)
@@ -363,6 +410,9 @@ def example_figures(result, options):
         table = pd.DataFrame.from_dict(
             probabilities, orient="index", columns=[str(c) for c in json.loads(row.labels)]
         )
+        if len(table.columns) > 9:
+            # Thirty classes need rows, not thirty overlapping annotations across A4 width.
+            table = table.T
         fig = _matrix(
             table,
             title=f"{TASKS[task]} disagreement example\n{row.dataset} · {row.row_id} · {row.text_column}",
@@ -381,7 +431,7 @@ def example_figures(result, options):
         names = [p for p in options["providers"] if p in set(group.model_a) | set(group.model_b)]
         pairs = list(combinations(names, 2))
         for page, start in enumerate(range(0, len(pairs), 3), 1):
-            fig, axes = plt.subplots(1, 3, figsize=style.COMPARISON_MATRIX_SIZE)
+            fig, axes = plt.subplots(1, 3, figsize=style.COMPARISON_SCATTER_FIGURE_SIZE)
             for ax, (a, b) in zip(axes, pairs[start : start + 3]):
                 sub = group[(group.model_a == a) & (group.model_b == b)]
                 if sub.empty:

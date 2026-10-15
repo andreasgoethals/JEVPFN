@@ -1,4 +1,4 @@
-"""`src/utils/clean_run.py` — the wipe."""
+"""`src/utils/clean_run.py` â€” the wipe."""
 
 from __future__ import annotations
 
@@ -51,8 +51,7 @@ def test_gitkeep_is_never_counted(isolated_output) -> None:
 
 
 def test_both_storage_tiers_are_cleared_on_the_cluster(isolated_output) -> None:
-    """`output/results/` lives on project storage there, so clearing only `$VSC_DATA` would leave
-    the largest files behind."""
+    """Inspect both VSC output roots and the independent local notebook root."""
     roots = clean_run.roots()
     assert len(roots) == 3  # DATA, PROJECT, and independent local notebook output.
     assert any("staging" in str(r) for r in roots)
@@ -76,3 +75,37 @@ def test_processed_cleanup_never_includes_system_temp(isolated_output):
     roots = clean_run.roots()
     assert notebook_cache_dir().parent not in roots
     assert all(root.resolve() != Path(tempfile.gettempdir()).resolve() for root in roots)
+
+
+def test_linked_output_root_cannot_redirect_cleanup(isolated_output, monkeypatch):
+    import pytest
+
+    from src.utils.paths import outputs_dir
+
+    root = outputs_dir()
+    monkeypatch.setattr(clean_run, "_linked", lambda p: p == root)
+    with pytest.raises(ValueError, match="linked output root"):
+        clean_run.main(["--clean"])
+
+
+def test_rebuildable_comparison_csv_is_removed_but_inputs_are_preserved(isolated_output):
+    from src.utils.paths import figures_dir, raw_dir
+
+    figure = figures_dir("comparison") / "pairs.csv"
+    source = raw_dir("dataset", "data.csv")
+    for file in (figure, source):
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("value\n1")
+    clean_run.main(["--clean"])
+    assert not figure.exists() and source.is_file()
+
+
+def test_cleanup_removes_notebook_transcripts_but_preserves_personal_notes(isolated_output):
+    from src.utils.paths import figures_dir
+
+    folder = figures_dir("nb")
+    folder.mkdir(parents=True)
+    for name in ("_report.txt", "_stdout.txt", "Captions.md", "notes.md", "notes.txt"):
+        (folder / name).write_text("text", encoding="utf-8")
+    clean_run.main(["--clean"])
+    assert {p.name for p in folder.iterdir()} == {"notes.md", "notes.txt"}

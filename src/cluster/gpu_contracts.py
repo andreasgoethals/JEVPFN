@@ -313,6 +313,7 @@ def run(provider, *, execute=False):
         metered = MeasuredClient(client, cfg["max_live_requests"])
         report.update(
             settings=client.settings,
+            settings_sha256=digest(client.settings),
             token_audit_id=evidence["audit_id"],
             load_seconds=client.load_seconds,
             gpu={

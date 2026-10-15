@@ -41,7 +41,7 @@ def test_two_providers_coexist_and_are_selected_explicitly(tmp_path, isolated_ou
         )
     jev = materialize_cached_block(dataset, cfg, cache)
     save_block(jev, path)
-    # Stand-in for the future Liquid decoder's normalized block. Never claim the
+    # Synthetic Liquid block for provider-selection tests. Never claim the
     # synthetic raw response below is a real provider response format.
     liquid = copy.deepcopy(jev)
     bound = [bind_provider(r, "liquid", load_yaml("extractors")) for r in requests]

@@ -36,6 +36,18 @@ still unverified. Cleanup removed only rebuildable reports/figures and legacy qu
 
 ## Reusable failure lessons
 
+- **15-10-2026 local review:** 429 tests and five notebooks/17 inspected figures passed;
+  all comparison plot types were additionally rendered with synthetic six-provider data,
+  including 30-class output. Packaging, dependencies, dataset preflight, lint and shell checks
+  passed. No new cluster/inference evidence exists; rerun 0A after publishing these fixes.
+- **KU Leuven job environment:** submitting-shell exports are not inherited. Slurm scripts
+  take provider/environment/root arguments; the prepared job sets `SLURM_EXPORT_ENV=ALL`
+  for workers. Host-memory requests can increase billed cores; use the profiles in VSC.
+- **Acceptance reports:** GPU contracts and self-hosted summaries must retain the full runtime
+  settings hash. A checkpoint/version string alone cannot identify compatible evidence.
+- **Cleanup aliases:** reject linked output roots before resolving them, and linked figure
+  paths before clearing them. Routine report cleanup retains logs and personal notes;
+  an explicit full-output reset deletes them. Permanent feature stores remain protected.
 - **Interpreter shadowing:** a JEVPFN Conda prompt did not prevent pip from using another
   project's inherited venv. Use the shared activation helper and its explicit verified
   interpreter; repair any affected external environment only from its own requirements.
@@ -54,9 +66,12 @@ still unverified. Cleanup removed only rebuildable reports/figures and legacy qu
   Execute real kernels and persist rich/partial .ipynb outputs; preserve edits made during a run.
 - **Checkpoint imports:** publisher Python imports must not create bytecode inside the
   fingerprinted checkpoint tree. Disable bytecode before imports; retain strict file hashes.
-- **Fresh VSC runs:** archive outputs on each existing tier before new tests; never clean data
-  or checkpoints. Maintenance refuses active JEVPFN jobs and requires stopped manual writers.
+- **Fresh VSC runs:** the owner requests deletion, not archival, of prior generated output.
+  Use fresh_start with --delete --include-archives; never clean data or checkpoints.
+  Maintenance refuses active JEVPFN jobs and requires stopped manual writers.
   Question uploads preserve file bytes and validate every member before replacing old files.
+  The 15-10-2026 delete-mode follow-up passed all 440 tests, including 19 reset tests.
+  Actual local deletion was previewed only; the owner runs the coordinated clean start.
 - **Figure verification:** an inline overview overlapped despite a correct PDF. Separate
   table/header/footer axes and inspect notebook-kernel output, not PDF alone.
 - **Artifact completeness:** checking only trace groups present in a file missed an entirely

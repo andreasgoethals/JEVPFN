@@ -138,3 +138,26 @@ def test_cache_resume_and_feature_materialization_for_every_provider(isolated_ou
     bad["version"] = "wrong"
     with pytest.raises(ValueError, match="pinned"):
         response_features(request, bad)
+
+
+def test_pilot_summary_exposes_acceptance_identity(isolated_output, monkeypatch):
+    from src.jev import self_hosted as sh
+
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
+    config = {"enabled": True, "providers": ["intern"], "batch_size": 1, "max_pilot_requests": 1}
+    monkeypatch.setattr(sh, "load_yaml", lambda *a: config)
+    monkeypatch.setattr(sh, "inference_environment", lambda: None)
+    monkeypatch.setattr(sh, "ExactCounter", Mock())
+    monkeypatch.setattr(
+        sh, "token_evidence", lambda *a: ({"datasets": [], "audit_id": "audit"}, None)
+    )
+    monkeypatch.setattr("src.cluster.token_audit.selected_inputs", lambda: [])
+    client = SimpleNamespace(
+        settings={"provider": "intern", "revision": "fixed"},
+        load_seconds=0,
+        torch=SimpleNamespace(cuda=SimpleNamespace(max_memory_allocated=lambda: 0)),
+    )
+    monkeypatch.setattr(sh, "SelfHostedClient", lambda *a, **kw: client)
+    report = sh.run("intern", execute=True)
+    assert report["settings_sha256"] == digest(client.settings)
+    assert report["status"] == "completed_requires_review"

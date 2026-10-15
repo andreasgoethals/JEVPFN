@@ -7,8 +7,9 @@ import json
 
 
 def display_local(*objects) -> None:
+    import pandas as pd
     from IPython import get_ipython
-    from IPython.display import display
+    from IPython.display import HTML, display
     from matplotlib.figure import Figure
 
     from src.utils.notebook_report import record
@@ -17,7 +18,10 @@ def display_local(*objects) -> None:
         if not isinstance(obj, Figure):
             record(obj)
         if get_ipython() is not None:
-            display(obj)
+            if isinstance(obj, pd.DataFrame) and isinstance(obj.index, pd.RangeIndex):
+                display(HTML(obj.to_html(index=False, max_rows=40, max_cols=30, escape=True)))
+            else:
+                display(obj)
 
 
 def display_json(title: str, value) -> None:

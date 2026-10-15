@@ -165,3 +165,34 @@ def test_checkpoint_load_failure_leaves_diagnostic_manifest(isolated_output, mon
     report = json.loads(files[0].read_text())
     assert report["status"] == "failed" and report["error_type"] == "RuntimeError"
     assert not report["full_extraction_authorized"] and not report["full_experiment_0_passed"]
+
+
+def test_success_report_exposes_acceptance_identity(isolated_output, monkeypatch):
+    paths.staging_root().mkdir(parents=True)
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
+    monkeypatch.setattr(gc, "inference_environment", lambda: None)
+    monkeypatch.setattr(gc, "ExactCounter", Mock())
+    monkeypatch.setattr(
+        gc, "token_evidence", lambda *a: ({"datasets": [], "audit_id": "audit"}, None)
+    )
+    monkeypatch.setattr("src.cluster.token_audit.selected_inputs", lambda: [])
+    monkeypatch.setattr(gc, "real_sample", lambda *a: [])
+    monkeypatch.setattr(gc, "synthetic_datasets", lambda: [])
+    monkeypatch.setattr(gc, "exercise_boundaries", lambda *a: {})
+    monkeypatch.setattr(gc, "exercise_semantics", lambda *a: {"passed": True})
+    monkeypatch.setattr(gc, "exercise_real_inputs", lambda *a: [])
+    cuda = Mock()
+    cuda.get_device_name.return_value = "fixture GPU"
+    cuda.get_device_properties.return_value = SimpleNamespace(total_memory=123)
+    cuda.max_memory_allocated.return_value = 0
+    cuda.max_memory_reserved.return_value = 0
+    client = SimpleNamespace(
+        settings={"provider": "intern", "revision": "fixed"},
+        load_seconds=0,
+        torch=SimpleNamespace(cuda=cuda, version=SimpleNamespace(cuda="fixture")),
+    )
+    monkeypatch.setattr(gc, "SelfHostedClient", lambda *a, **kw: client)
+    report = gc.run("intern", execute=True)
+    assert report["settings_sha256"] == digest(client.settings)
+    assert report["token_audit_id"] == "audit"
+    assert report["status"] == "gpu_contracts_passed_requires_review"

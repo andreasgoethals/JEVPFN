@@ -7,7 +7,8 @@ for exploration but are excluded from experiments for text burden and 114-class 
 
 **Current stage: Experiment 0A.** The VSC CPU preflight and five tokenizer audits passed on
 the previous question version. Version 2 removes provenance URLs from model inputs and requires
-a fresh token audit; real GPU compatibility remains unverified. Paid extraction and predictive
+a fresh token audit; real GPU compatibility remains unverified. The local review also repaired
+Slurm argument propagation, allocation memory profiles and acceptance reports. Paid extraction and predictive
 experiments remain disabled. Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
 
@@ -149,12 +150,22 @@ recomputed during a notebook run and discarded; the notebooks and report retain 
 Raw datasets, prepared inputs and permanent features are never temporary cleanup targets.
 `python -m src.utils.clean_run` previews cleanup; `--clean` removes only rebuildable figures,
 reports and legacy question JSON copies. Logs, manifests, token audits, predictions and transfer
-bundles/backups are preserved. It never recursively deletes a data directory.
-For a completely fresh VSC test run, `python -m src.cluster.fresh_start` previews moving
-both output trees to dated `archived_output_JEVPFN/` folders on their existing storage
-tiers. `--apply --writers-stopped` performs those reversible moves and recreates the
-Experiment 0 log directory. It refuses queued/running JEVPFN jobs; stop manual writers too.
-Data, questions, features, weights and environments remain in place.
+bundles/backups are preserved. Cleanup refuses linked output folders and preserves personal
+Markdown/text notes. It never recursively deletes a data directory.
+For a completely fresh run without output archives, preview
+`python -m src.cluster.fresh_start --delete --include-archives` on VSC, or add `--local`
+on the laptop. Append `--apply --writers-stopped` to permanently delete the complete output
+trees and any earlier `archived_output_JEVPFN/` trees. This includes old logs, token audits,
+predictions, transfer bundles and backups stored inside output. No new archive is created.
+Raw data, prepared questions, permanent feature caches, weights and environments remain in
+place. The helper rejects linked/mounted subtrees and queued/running JEVPFN jobs; close
+manual writers first. It recreates empty output roots and the VSC Experiment 0 log directory.
+Without `--delete`, the existing reversible archive mode remains available.
+
+Publish the intended code first, verify the same Git commit locally and on VSC, then reset
+once before new tests. Repack the current input files, rerun token counts and regenerate
+notebook outputs. Do not reset or change code/configuration during that run. Resume an
+interrupted test with unchanged inputs/code; old acceptance reports cannot authorize new code.
 
 Original row identity is **dataset ID + source-data fingerprint + csv:N**, where N is the
 zero-based CSV position before any split/shuffle. `row_map` links each row/slot to a unique

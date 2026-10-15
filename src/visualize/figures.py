@@ -3,9 +3,9 @@
     output_JEVPFN/figures/<phase>/<notebook>/01_<name>.pdf     the figure — vector, for the paper
     output_JEVPFN/figures/<phase>/<notebook>/_figures.json     what was drawn, in order, with captions
 
-PDF ONLY, AND SIZED FOR A4. The PDF is what the paper uses: vector, text embedded as TrueType so
-journal systems accept it, drawn at the width it will occupy on the A4 page (see
-`src/visualize/style.py`). The notebook *displays* each figure inline, so a reader sees them by
+PDF ONLY. Standard figures use A4 dimensions; dense inspection dashboards use explicitly
+named larger canvases in `src/visualize/style.py` and must not be shrunk onto a paper page.
+PDF text is embedded as TrueType. The notebook *displays* each figure inline, so a reader sees them by
 scrolling the notebook — there is no second raster copy on disk to go stale.
 
 THE NOTEBOOK SAVES ITS OWN FIGURES, not the runner: a runner that captures them on the notebook's
@@ -65,7 +65,7 @@ def clear(notebook: str) -> int:
     Scoped to one folder, to the patterns above, and non-recursive, so it cannot reach a sibling
     notebook's figures.
     """
-    folder = figures_dir(notebook)
+    folder = _safe_folder(notebook)
     if not folder.is_dir():
         return 0
     removed = 0
@@ -102,7 +102,7 @@ class FigureSaver:
 
     def __init__(self, notebook: str, *, clear_first: bool = True) -> None:
         self.notebook = notebook
-        self.folder = figures_dir(notebook)
+        self.folder = _safe_folder(notebook)
         self.folder.mkdir(parents=True, exist_ok=True)
         #: `clear_first=False` is for one case only: re-running a single cell mid-session without
         #: wiping what the earlier cells wrote. Never pass it in the setup cell.
@@ -121,6 +121,7 @@ class FigureSaver:
         """
         if not caption.strip():
             raise ValueError("Every figure requires a descriptive caption.")
+        _safe_folder(self.notebook)
         index = len(self.entries) + 1
         stem = f"{index:02d}_{_slug(name)}"
         path = self.folder / f"{stem}.pdf"
@@ -158,6 +159,20 @@ def _slug(name: str) -> str:
     """A filename-safe version of a figure name. Keeps it readable, not opaque."""
     keep = [c if (c.isalnum() or c in "-_") else "_" for c in name.strip().lower()]
     return "".join(keep).strip("_") or "figure"
+
+
+def _safe_folder(notebook: str) -> Path:
+    """Refuse linked output/figure/phase/notebook folders before clearing or writing."""
+    folder = figures_dir(notebook)
+    root = figures_dir().parent
+    if not folder.is_relative_to(root):
+        raise ValueError("Figure folder must remain inside notebook output")
+    for part in (folder, *folder.parents):
+        if part.is_symlink() or getattr(part, "is_junction", lambda: False)():
+            raise ValueError(f"Linked figure output folder is not allowed: {part}")
+        if part == root:
+            break
+    return folder
 
 
 def _guard(path: Path, folder: Path) -> None:

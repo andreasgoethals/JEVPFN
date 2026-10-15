@@ -306,7 +306,7 @@ def raw_dir(*parts: str) -> Path:
 
 
 def processed_dir(*parts: str) -> Path:
-    """`data/processed/` — a cache. Regenerable, so it is the first thing to delete."""
+    """Legacy processed-data location, protected from output cleanup; notebooks do not use it."""
     if _use_staging():
         return _under(staging_root(), "data", "processed", *parts)
     return REPO_ROOT.joinpath("data", "processed", *parts)
@@ -374,7 +374,7 @@ def config_path(name: str) -> Path:
 
 
 def jev_cache_path(relative: str = "jev_cache") -> Path:
-    """Paid responses survive both ordinary output cleanup and --processed cleanup."""
+    """Permanent responses survive every output-cleanup operation."""
     root = _under(staging_root(), "data") if _use_staging() else REPO_ROOT / "data"
     path = (root / relative).resolve()
     if not path.is_relative_to(root.resolve()) or any(

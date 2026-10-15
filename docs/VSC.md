@@ -53,8 +53,6 @@ source scripts/activate_conda.sh
 "${JEVPFN_PYTHON:?Activation must succeed}" -m pip install -e '.[dev,staging,token-audit]'
 "$JEVPFN_PYTHON" -m pip check
 "$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
-"$JEVPFN_PYTHON" -m src.cluster.token_audit --stage-only
-"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only
 ```
 
 Stop if any command fails. The activation helper clears inherited venv/Python overrides,
@@ -63,6 +61,31 @@ checks the actual Conda prefix and prints the interpreter before installation. U
 Jinja2 is explicitly required for chat-template rendering. `--stage-only` downloads small
 pinned tokenizers/source files only; `--check-only` renders all three task formats offline.
 VSC CPU tests exclude only the three local notebook tests; notebooks and their tests run locally.
+
+## Fresh output reset before a new Experiment 0A
+
+After updating the checkout/CPU dependencies, verify that `git rev-parse HEAD` matches the
+local checkout. Stop notebooks, manual writers and JEVPFN jobs. Before upload installation
+or job submission, preview and apply a permanent output reset:
+
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.fresh_start --delete --include-archives
+"$JEVPFN_PYTHON" -m src.cluster.fresh_start --delete --include-archives --apply --writers-stopped
+"$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
+```
+
+The first command previews both tiers. The second permanently deletes their `output_JEVPFN`
+and earlier `archived_output_JEVPFN` trees, including old logs, count databases, predictions
+and output transfer bundles/backups. It creates no archive. Raw datasets, prepared inputs,
+permanent features, weights and environments remain in place. Linked/mounted subtrees and
+active JEVPFN jobs are refused before deletion. If deletion is interrupted, stop remaining
+writers and repeat the same reset before starting tests; there is no rollback.
+
+For local output, use the same commands with `--local` and the local Python interpreter.
+Repack inputs after clearing local output. Fresh token counting starts from zero. Keep code,
+configuration and input files fixed throughout the run; do not reset again after tests start.
+
+## Upload the prepared inputs
 
 Git does not contain data. The existing VSC raw datasets passed their hash checks and do not
 need uploading again after a fresh-output reset. For a first installation only, copy `data/raw/`
@@ -99,28 +122,14 @@ and file hashes before replacement. Existing question files are backed up under 
 copies preserve input fingerprints across local/VSC token reports. It refuses active/recovery
 SQLite sidecars and queued/running JEVPFN jobs; also stop manual writers yourself.
 
-## Fresh output reset before a new Experiment 0A
-
-After updating the checkout/CPU dependencies, but before upload installation or job submission:
-
-```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.fresh_start
-"$JEVPFN_PYTHON" -m src.cluster.fresh_start --apply --writers-stopped
-"$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
-```
-
-The first command previews. The second renames each complete `output_JEVPFN` tree into
-`JEVPFN/archived_output_JEVPFN/<UTC-run-id>/` on the same tier, then creates fresh active
-output/log directories. It does not delete anything, copy large files to DATA, or alter raw
-data, prepared inputs, permanent features, weights or environments. An interrupted reset
-leaves its recovery journal beside the DATA archives. The old token databases remain in the
-archive, so the fresh audit counts everything again. Do not rerun the reset after starting tests.
-
 ## Experiment 0A: CPU and exact tokens
 
-Submit from the checkout after setup creates the log directory:
+After the reset and input installation, stage the small pinned tokenizers and check all
+three task formats. Submit from the checkout after setup creates the log directory:
 
 ```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.token_audit --stage-only
+"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only
 sbatch scripts/slurm/experiment_0_cpu.slurm
 # After successful CPU checks:
 sbatch scripts/slurm/experiment_0_tokens.slurm
@@ -129,15 +138,16 @@ sacct --clusters=wice -j JOB_ID --format=JobID,State,ExitCode,Elapsed,MaxRSS
 ```
 
 The CPU job uses wICE `interactive`, two cores, 8 GB and ten minutes. It checks datasets,
-CV feasibility and synthetic contracts. Token counting uses `batch`, four cores, 16 GB and
+CV feasibility and synthetic contracts. Token counting uses `batch`, four cores, 13,600 MiB and
 four hours. It counts every complete unique input for each pinned open-weight tokenizer,
 including task/question/options and publisher formatting. Counts are committed incrementally
 and resume after interruption; completed provider summaries survive another worker's failure.
-Do not delete count databases to fix a dependency. The fingerprinted tokenizer modules are
+Within a run, do not delete count databases to fix a dependency. The fingerprinted tokenizer modules are
 kept stable so unchanged input/counter versions remain reusable. Jev's hosted tokenization
 remains unverified. Question version 2 changes payloads: rerun preparation and upload the 18
 closed input files after stopping readers/writers, then rerun the CPU/token jobs. Historical
-input sets remain inside those files. Do not delete prior counts or redownload unchanged weights.
+input sets remain inside those files. The explicit fresh-output reset discards old count
+databases; otherwise unchanged counts can resume. Unchanged staged weights need no redownload.
 
 Small summaries use DATA `3. experiment_0/manifests/before_extraction/` and operational
 logs use DATA `3. experiment_0/logs/`;
@@ -203,15 +213,19 @@ publisher code does not alter the fingerprinted checkpoint tree.
 After exact counts for the chosen provider are complete, submit its prepared environment:
 
 ```bash
-export JEVPFN_PROVIDER=cloudflare
-export JEVPFN_CONDA_ENV=/lustre1/project/stg_00211/JEVPFN/environments/cloudflare
-sbatch scripts/slurm/experiment_0_decision_contracts.slurm
+sbatch scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
 ```
 
-After Clef completes successfully, repeat with both values changed from `cloudflare` to
-`intern`. Keep `JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211` exported for these wICE jobs.
+After Clef completes successfully, run `sbatch scripts/slurm/experiment_0_decision_contracts.slurm intern`.
+The provider, optional environment prefix and optional project root are script arguments.
+For example, append `/lustre1/project/stg_00211/JEVPFN/environments/intern /lustre1/project/stg_00211`
+to select both paths explicitly. KU Leuven starts batch jobs with a clean environment; exporting
+variables in the submitting shell is insufficient. CPU/token/storage scripts select the CPU
+environment themselves and accept an optional project-root argument. The prepared job
+environment is explicitly propagated to `srun` workers. See the guide’s Environment propagation
+section and [Slurm argument/export semantics](https://slurm.schedmd.com/sbatch.html).
 
-The job uses one full A100, four CPUs, 128 GB host RAM and one hour in `gpu_a100_debug`,
+The job uses one full A100, four CPUs, 28,000 MiB host RAM and one hour in `gpu_a100_debug`,
 with the configured CreditPFN account. Only one debug GPU job may be queued at a time:
 wait for Clef to finish before submitting Intern. The pinned guide confirms that this is a
 full GPU, unlike the interactive MIG slice. Verify account/partition access on the actual cluster.
@@ -221,7 +235,8 @@ vector, missing/duplicate/Unicode input, overflow rejection, cache reopen/reuse,
 alignment, and saving/reloading both feature representations. It then evaluates first/longest
 unique inputs from each selected dataset. Seven additional known-answer probes check binary
 polarity, permuted class ordering and score endpoints/zero. At most 74 forwards are planned, with a hard ceiling
-of 100. Runtime token-count agreement, load/inference time and peak GPU memory are recorded.
+of 100. Runtime token-count agreement, load/inference time, peak GPU memory and the complete
+`settings_sha256` required for acceptance are recorded in the report.
 A failed known-answer probe requires inspecting raw responses; the model itself may be wrong.
 
 Synthetic artifacts use PROJECT `3. experiment_0/results/gpu_contracts/<run>/`; sampled real
@@ -234,19 +249,36 @@ Robustness, throughput and remaining provider checks are tracked in `debug.yaml`
 profiling uses `self_hosted.yaml` with its explicit pilot opt-in and
 `experiment_0_decision_pilot.slurm`: first/middle/last rows plus ten longest requests per
 dataset, capped at 1,000. Full extraction has a separate switch and a reviewed acceptance
-manifest matching runtime settings and token-audit identity.
+manifest matching runtime settings and token-audit identity. Submit the larger pilot as
+`sbatch scripts/slurm/experiment_0_decision_pilot.slurm cloudflare` (or its selected provider).
+Pilot/full summaries also expose `settings_sha256`.
 After acceptance, `scripts/slurm/feature_creation.slurm` runs full extraction on regular
 `gpu_a100`; its 24-hour allocation is a resumable segment, not a runtime prediction. Create
-`output_JEVPFN/2. feature_creation/logs` before submission. Provider jobs rotate datasets and
+`output_JEVPFN/2. feature_creation/logs` before submission, then use
+`sbatch scripts/slurm/feature_creation.slurm cloudflare` (or its accepted provider). Provider jobs rotate datasets and
 wait for busy files. `--continue-on-error` is an explicit diagnostic mode with durable failed
 request records; incomplete datasets cannot be materialized or accepted. Repair the cause
 and use `--retry-failed` to retry those inputs. No silent substitution by missing values.
+
+The small-model contract/pilot/full-extraction defaults request 28,000 MiB. The predictor
+smoke-test default uses 56,000 MiB. Perplexity 27B uses an explicit initial host-memory profile:
+`sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.
+Use the same override for its pilot/full extraction. These are initial profiles, not measured
+minimums; revise after recording MaxRSS and load peaks. Regular A100 jobs must stay within
+126,000 MiB per GPU. Memory requests can allocate/bill additional CPU cores: with 7,000 MiB
+per core, 56,000/112,000 MiB imply eight/sixteen cores despite four requested compute threads.
+The 13,600 MiB token profile fits four IceLake cores at 3,400 MiB/core and exceeds the observed
+4.6 GiB token-audit peak. Do not assume all workloads fit the small-model profile.
 
 Start serial inference on one wICE A100. Its 80 GiB can hold the Perplexity checkpoint's
 approximately 49 GiB BF16 weights, but working memory must be profiled. Use a regular GPU
 partition for longer jobs. Consider H100 for measured throughput benefit or Mindwell B200
 (192 GiB, native GPFS and a Blackwell-compatible CUDA build) if measured memory justifies it.
-GPU hours, quota and licences remain separate from vendor API token fees.
+GPU hours, quota and licences remain separate from vendor API token fees. Batch size one
+is the current verified code path, not an efficiency claim. Before a multimillion-request
+run, measure sustained throughput and total GPU-credit cost. Batched inference would require
+provider-specific implementation, probability/token parity and resume tests; it is not enabled.
+Hardware speedups and cheaper-GPU feasibility must be measured, not inferred from model size.
 
 ## Local Jev and Experiment 0B
 
@@ -281,7 +313,8 @@ and prediction-time input availability still need review before interpreting res
 Enable only the bounded `predictor_execution_enabled` switch in `experiment_0/debug.yaml`
 for `python -m src.cluster.predictor_contracts --model MODEL --execute`. This runs actual
 binary/three-class/30-class/regression fixtures, five-fold CV and no-refit restart checks.
-`experiment_0_predictor.slurm` supplies a regular A100 allocation for GPU models. Run CPU
+`sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 /lustre1/project/stg_00211/JEVPFN/environments/tabpfn_3_5`
+supplies a regular A100 allocation once that selected predictor environment exists. Run CPU
 CatBoost/linear checks in a CPU allocation with the same module command.
 For full-size feasibility, separately enable `full_fold_profile_enabled` and run
 `python -m src.evaluation.campaign --dataset ID --model MODEL --feature-set ARM --provider PROVIDER --profile-fold --execute`

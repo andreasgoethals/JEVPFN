@@ -1,45 +1,38 @@
-"""Compact burden figures at the template's final A4 dimensions."""
+"""Dataset text burden: typical row size and total volume on one aligned figure."""
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from src.visualize import style
 
 
-def burden_figures(summary, characters_per_token: float = 4.0):
-    ordered = summary.sort_values("combined_tokens_p95")
-    fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_FULL, style.AUDIT_RATIO))
-    ax.scatter(
-        ordered.combined_tokens_median,
-        ordered.dataset,
-        color=style.MEDIAN_COLOR,
-        s=style.AUDIT_MARKER_SIZE,
-        label="Median",
-    )
-    ax.scatter(
-        ordered.combined_tokens_p95,
-        ordered.dataset,
-        color=style.P95_COLOR,
-        s=style.AUDIT_MARKER_SIZE,
-        label="95th percentile",
-        marker="x",
-    )
-    ax.set_xscale("log")
-    ax.set_xlabel("Approximate combined text tokens per row (log scale)")
-    ax.legend()
-    caption = (
-        "Median and 95th percentile of combined text tokens per row for the 20 core text "
-        "datasets. Tokens are approximated by the ceiling of the total text characters "
-        f"per row divided by {characters_per_token:g}; missing text contributes zero. "
-        "The horizontal axis is logarithmic."
-    )
-    yield fig, "row_text_burden", caption
+def burden_figures(summary, characters_per_token=4.0):
     ordered = summary.sort_values("total_text_tokens")
-    fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_FULL, style.AUDIT_RATIO))
-    ax.barh(ordered.dataset, ordered.total_text_tokens / 1e6, color=style.TOTAL_COLOR)
-    ax.set_xlabel("Approximate full-dataset text tokens (millions)")
-    caption = (
-        "Total approximate text tokens across all rows in each of the 20 core text datasets. "
-        f"The totals sum the ceiling of combined text characters per row divided by {characters_per_token:g}; "
-        "task metadata, questions and non-text features are excluded."
+    fig, axes = plt.subplots(1, 2, sharey=True, figsize=style.DASHBOARD_SIZE)
+    y = np.arange(len(ordered))
+    for column, label, color, marker in [
+        ("combined_tokens_median", "Median", style.MEDIAN_COLOR, "o"),
+        ("combined_tokens_p95", "95th percentile", style.P95_COLOR, "x"),
+    ]:
+        axes[0].scatter(
+            ordered[column], y, color=color, marker=marker, s=style.AUDIT_MARKER_SIZE, label=label
+        )
+    axes[0].set_xscale("log")
+    axes[0].set_xlabel("Combined text tokens per row (log scale)")
+    axes[0].legend(loc="lower right")
+    bars = axes[1].barh(y, ordered.total_text_tokens / 1e6, color=style.TOTAL_COLOR)
+    axes[1].bar_label(bars, labels=[f"{v / 1e6:.2f}" for v in ordered.total_text_tokens], padding=3)
+    axes[1].set_xlim(0, ordered.total_text_tokens.max() / 1e6 * 1.15)
+    axes[1].set_xlabel("Full-dataset text tokens (millions)")
+    axes[0].set_yticks(y, ordered.dataset)
+    fig.suptitle("Typical row length and total text volume before exact reuse")
+    yield (
+        fig,
+        "text_burden",
+        (
+            "Combined-text median and 95th percentile per row (left), and total text volume (right) "
+            f"for all 20 core datasets. Tokens use ceil(combined characters/{characters_per_token:g}); "
+            "empty text contributes zero. Questions and task metadata are excluded. "
+            "These are raw text volumes before reuse, not API billing counts."
+        ),
     )
-    yield fig, "total_text_burden", caption

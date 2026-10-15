@@ -85,3 +85,63 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
         assert result.stdout.count("verified-python") == 2
     else:
         assert result.stdout.strip() == "blocked"
+
+
+@pytest.mark.parametrize(
+    "script,args,expected",
+    [
+        (
+            "experiment_0_decision_contracts",
+            ["intern"],
+            ["intern", "/lustre1/project/stg_00211/JEVPFN/environments/intern"],
+        ),
+        (
+            "experiment_0_decision_pilot",
+            ["cloudflare", "/project/env with spaces", "/project/custom"],
+            ["cloudflare", "/project/env with spaces", "/project/custom"],
+        ),
+        (
+            "feature_creation",
+            ["liquid"],
+            ["liquid", "/lustre1/project/stg_00211/JEVPFN/environments/liquid"],
+        ),
+        (
+            "experiment_0_predictor",
+            ["catboost", "/project/catboost"],
+            ["catboost", "/project/catboost"],
+        ),
+        ("experiment_0_gpu", ["/project/gpu"], ["/project/gpu"]),
+        ("experiment_0_tokens", [], ["JEVPFN", "/lustre1/project/stg_00211"]),
+        ("experiment_0_storage", [], ["JEVPFN", "/lustre1/project/stg_00211"]),
+        ("experiment_0_cpu", [], ["JEVPFN", "/lustre1/project/stg_00211"]),
+    ],
+)
+def test_job_arguments_survive_clean_submission_environment(tmp_path, script, args, expected):
+    # Execute the real script's setup prefix with no inherited project variables.
+    source = (ROOT / "scripts/slurm" / f"{script}.slurm").read_text()
+    prefix = source.split('cd "${VSC_DATA:?}/JEVPFN"')[0]
+    driver = tmp_path / "job.sh"
+    driver.write_text(
+        prefix
+        + '\nprintf "%s\\n" "${JEVPFN_PROVIDER:-}" "${JEVPFN_MODEL:-}" "$JEVPFN_CONDA_ENV" "$JEVPFN_STAGING_ROOT"\n',
+        encoding="utf-8",
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("JEVPFN_", "VSC_", "SLURM_"))}
+    result = subprocess.run(
+        [bash_executable(), str(driver), *args], env=env, capture_output=True, text=True, timeout=20
+    )
+    assert result.returncode == 0, result.stderr
+    assert all(value in result.stdout.splitlines() for value in expected)
+
+
+def test_gpu_memory_profiles_fit_a100_and_token_job_matches_four_cores():
+    for script in (ROOT / "scripts/slurm").glob("*.slurm"):
+        text = script.read_text()
+        if "#SBATCH --partition=gpu_a100" in text:
+            memory = next(
+                line.split("=")[1]
+                for line in text.splitlines()
+                if line.startswith("#SBATCH --mem=")
+            )
+            assert memory.endswith("M") and int(memory[:-1]) <= 126000
+    assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()

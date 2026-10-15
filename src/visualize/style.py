@@ -1,18 +1,9 @@
-"""THE shared style. One place, every notebook in THIS project.
+"""Shared JEVPFN figure style and named canvases.
 
-MOSTLY EMPTY ON PURPOSE. What the template fixes is the part that follows from the output medium:
-**every figure ends up in a scientific paper printed on A4**, so it is drawn at the width it will
-occupy on the page and its text is sized to be readable there. That is the same in every project,
-so it is filled in below.
-
-WHAT THIS PROJECT FILLS IN is the *look*: the colours, the grid, the spines, the marker shapes.
-Two projects plotting different things have no reason to look alike, so the template does not
-pretend otherwise — the requirement is only that **every notebook inside one project shares one
-style**, defined here and nowhere else. A notebook never picks a colour or a size itself; if it
-needs a new one, it gets added here, once, and every figure gains it at the same time. (If a new
-project is close to an existing one, copying that project's `style.py` is the fastest start.)
-
-Call `apply()` once at the top of every notebook.
+Standard figures use final A4 print dimensions and embedded TrueType fonts.
+Large audit dashboards use explicitly named inspection canvases; do not shrink
+those onto a paper page. Every notebook calls apply() and takes its visual
+settings from this module.
 """
 
 from __future__ import annotations
@@ -20,7 +11,7 @@ from __future__ import annotations
 import matplotlib as mpl
 
 # ---------------------------------------------------------------------------
-# FIGURE SIZES — A4, and nothing else.
+# DEFAULT FIGURE SIZES — final A4 print dimensions.
 #
 # A4 is 210 x 297 mm. With 25 mm margins that leaves a 160 x 247 mm text block, and the numbers
 # below are that block in inches.
@@ -94,7 +85,7 @@ _RC = {
 }
 
 # ---------------------------------------------------------------------------
-# THIS PROJECT'S OWN LOOK — fill this in.
+# JEVPFN visual conventions.
 #
 # Colours, grid, spines, line widths, marker shapes, colormaps: whatever this project's figures
 # need. Put them here rather than in a notebook, so every figure changes together and a reader
@@ -121,12 +112,11 @@ OVERVIEW_ROW_RATIOS = (0.9, 10.0, 1.1)
 OVERVIEW_TITLE_FONT = 14
 DASHBOARD_SIZE = (12.0, 8.0)
 FLOW_SIZE = (12.0, 5.0)
+COMPACT_FLOW_SIZE = (12.0, 3.4)
 LONG_TEXT_SIZE = (15.0, 11.0)
 LONG_TEXT_PAGE_SIZE = (WIDTH_FULL, 9.10)  # A4 full-page diagnostic, with room for a caption.
-REGRESSION_RUBRIC_SIZE = (12.0, 8.0)
-RUBRIC_FONT = 8
-LONG_TEXT_COLUMNS_SIZE = (24.0, 22.0)
-LONG_TEXT_COLUMNS_SHAPE = (5, 4)
+REGRESSION_RUBRIC_SIZE = (12.0, 4.2)
+RUBRIC_FONT = 9
 LONG_TEXT_LABEL_FONT = 8
 LONG_TEXT_PAGE_FONT = 7
 OVERVIEW_FONT = 9
@@ -152,6 +142,8 @@ DECISION_COLORS = {
 }
 COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, 7.5)
+COMPARISON_PENDING_SIZE = (WIDTH_FULL, 2.5)
+COMPARISON_SCATTER_FIGURE_SIZE = (WIDTH_FULL, 2.5)
 COMPARISON_SCATTER_ALPHA = 0.3
 COMPARISON_SCATTER_SIZE = 6
 COMPARISON_MATRIX_FONT = 7

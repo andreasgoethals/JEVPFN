@@ -1,6 +1,4 @@
-# Came with the template, and worth keeping: `src/visualize/figures.py` is identical in every
-# project. These pin the behaviour the layout depends on — PDF only, the folder cleared before
-# drawing, and only ever this notebook's own folder.
+# Retained template contracts: PDF output, per-notebook clearing and bounded paths.
 """`src/visualize/figures.py` — the saver.
 
 Every test redirects `output/` into `tmp_path` via `isolated_output`, so the suite never
@@ -148,3 +146,19 @@ def test_clear_returns_how_many_files_went(isolated_output, fig) -> None:
     save(fig, "b", caption="c")
     assert figures.clear("nb") == 4  # 2 pdfs + manifest + captions
     assert figures.clear("never_existed") == 0
+
+
+@pytest.mark.parametrize("level", [0, 1, 3])
+def test_linked_figure_folders_are_never_cleared(isolated_output, monkeypatch, level):
+    from pathlib import Path
+
+    folder = figures.figures_dir("nb")
+    folder.mkdir(parents=True)
+    victim = folder / "keep.pdf"
+    victim.write_bytes(b"%PDF")
+    linked = folder if level == 0 else folder.parents[level - 1]
+    real_is_symlink = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda p: p == linked or real_is_symlink(p))
+    with pytest.raises(ValueError, match="Linked figure output"):
+        figures.FigureSaver("nb")
+    assert victim.read_bytes() == b"%PDF"
