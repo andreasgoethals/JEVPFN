@@ -37,6 +37,18 @@ def response(value=0.7):
     return {"model": "jev-1.13.0", "answers": {"semantic": {"type": "noul", "noul": value}}}
 
 
+def test_failed_attempts_merge_once_without_creating_responses(tmp_path):
+    remote = ResponseCache(tmp_path / "remote.sqlite3", "fixture")
+    req = request()
+    remote.record_failure(req, ValueError("not retained"))
+    target = tmp_path / "local.sqlite3"
+    assert merge_cache(remote.path, target)["failures_added"] == 1
+    assert merge_cache(remote.path, target)["failures_added"] == 0
+    local = ResponseCache(target, "fixture")
+    assert local.failure_count(req) == 1
+    assert local.get(req, kind="verified_response") is None
+
+
 def cache(path, req=None, value=0.7):
     store = ResponseCache(path, "fixture")
     store.put(req or request(), response(value), kind="verified_response")

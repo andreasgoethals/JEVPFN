@@ -6,7 +6,7 @@ from src.jev.design import BINARY, COMMON, MULTICLASS, REGRESSION, reviewed_defi
 from src.jev.templates import make_question
 from src.utils.serialization import canonical_json
 
-DOCUMENTED_VERSION = "documented-task-v1"
+DOCUMENTED_VERSION = "documented-task-v2"
 
 
 def dataset_semantics(metadata, catalog):
@@ -24,6 +24,7 @@ def dataset_semantics(metadata, catalog):
     ):
         raise ValueError("Documentary meanings require source references")
     definition = {
+        "source_reference": entry["sources"][0]["url"],
         "dataset_display_name": entry["dataset_display_name"],
         "observation_unit": entry["observation_unit"],
         "target_definition": entry["target_definition"],
@@ -31,7 +32,6 @@ def dataset_semantics(metadata, catalog):
         "class_definitions": {
             f"c{i:03d}": c["description"] for i, c in enumerate(entry["classes"])
         },
-        "source_reference": entry["sources"][0]["url"],
     }
     if "target_unit" in entry:
         definition["target_unit"] = entry["target_unit"]

@@ -35,6 +35,7 @@ TABLES = {
     "extraction_policy",
     "extraction_jobs",
     "imported_extraction_records",
+    "failures",
 }
 
 
@@ -71,6 +72,14 @@ def validate_cache(source: Path) -> str:
         if tables - TABLES or any(kind != "table" for kind, _ in schema):
             raise ValueError("Unknown cache schema; refusing automatic merge")
         expected = {
+            "failures": [
+                "event_id",
+                "request_key",
+                "payload_json",
+                "settings_json",
+                "error_type",
+                "created_at",
+            ],
             "dataset_identity": ["dataset_id"],
             "responses": [
                 "request_key",
@@ -136,6 +145,13 @@ def validate_cache(source: Path) -> str:
                         (key,),
                     ).fetchone():
                         raise ValueError("Feature artifact has missing response references")
+        if "failures" in tables:
+            for _, key, payload, settings, error, _ in db.execute("SELECT * FROM failures"):
+                request = IntendedRequest(
+                    payload, settings, canonical_json({"dataset_id": dataset_id})
+                )
+                if request.cache_key != key or not isinstance(error, str) or not error:
+                    raise ValueError("Invalid failed-request record")
     return dataset_id
 
 
@@ -178,6 +194,7 @@ def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = No
             "artifacts_added": 0,
             "artifacts_reused": 0,
             "ledger_records_added": 0,
+            "failures_added": 0,
         }
         with (
             closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as incoming,
@@ -208,6 +225,16 @@ def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = No
             tables = {
                 r[0] for r in incoming.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
+            if "failures" in tables:
+                for row in incoming.execute("SELECT * FROM failures"):
+                    prior = db.execute(
+                        "SELECT * FROM failures WHERE event_id=?", (row[0],)
+                    ).fetchone()
+                    if prior is not None and prior != row:
+                        raise ValueError("Conflicting failure evidence; no rows merged")
+                    counts["failures_added"] += db.execute(
+                        "INSERT OR IGNORE INTO failures VALUES (?,?,?,?,?,?)", row
+                    ).rowcount
             if "feature_artifacts" in tables:
                 for row in incoming.execute("SELECT * FROM feature_artifacts"):
                     artifact_id = row[0]

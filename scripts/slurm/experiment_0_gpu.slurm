@@ -13,6 +13,7 @@
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
+export JEVPFN_CONDA_ENV="${JEVPFN_CONDA_ENV:?Choose an explicitly configured GPU environment}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.preflight --gpu

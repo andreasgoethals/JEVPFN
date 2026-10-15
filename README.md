@@ -5,8 +5,9 @@ models improve tabular prediction**. Explore all 20 core MulTaBench TEXT dataset
 for extraction and evaluation. Zomato Restaurants and Spotify Genres remain available locally
 for exploration but are excluded from experiments for text burden and 114-class feature size.
 
-**Current stage: Experiment 0A.** The VSC CPU preflight passed; complete tokenizer audits and
-real GPU compatibility checks precede full extraction. Paid extraction and predictive
+**Current stage: Experiment 0A.** The VSC CPU preflight and five tokenizer audits passed on
+the previous question version. Version 2 removes provenance URLs from model inputs and requires
+a fresh token audit; real GPU compatibility remains unverified. Paid extraction and predictive
 experiments remain disabled. Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
 
@@ -20,11 +21,12 @@ retain their sources and original class vocabulary.
 
 | Task | Main numeric features per text input |
 |---|---|
-| Binary classification | One probability for the fixed positive class. |
+| Binary classification | One probability that the text supports the fixed positive class over the other class. |
 | Multiclass classification | All K class probabilities in the original class order. |
 | Regression | Probability-weighted direction on the fixed nine levels −4 to +4. |
 
-The regression score describes directional evidence, not target units. Its rubric distinguishes
+The binary feature answers an evidence question; it is not established as a calibrated target
+probability. The regression score describes directional evidence, not target units. Its rubric distinguishes
 indirect hints, qualified support, clear direct evidence and explicit supported comparisons;
 zero favors neither direction. Full responses, probability vectors and available confidence
 are retained for inspection and later ablations.
@@ -63,6 +65,9 @@ comparisons. Named augmented arms remain separate fits. **TabSTAR and ConTextTab
 two original-text baselines: they receive all original features, including text, without
 extracted features. Cheap character/word/missingness features and partition-local permutation
 controls are implemented for separate ablations.
+`python -m src.evaluation.campaign --include-controls` includes those Experiment 3 arms and
+retained-probability views. On one-text-column datasets, separate/joint/both contain identical
+information; exclude them from representation contrasts, while retaining their named fits.
 
 Use shared five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary thresholds maximize F1 from three inner out-of-fold splits,
@@ -142,6 +147,14 @@ Configurations use `0. exploration`, `1. question_preparation`, `2. feature_crea
 Exploration writes only figures/reports. Temporary audit tables and budget intermediates are
 recomputed during a notebook run and discarded; the notebooks and report retain their values.
 Raw datasets, prepared inputs and permanent features are never temporary cleanup targets.
+`python -m src.utils.clean_run` previews cleanup; `--clean` removes only rebuildable figures,
+reports and legacy question JSON copies. Logs, manifests, token audits, predictions and transfer
+bundles/backups are preserved. It never recursively deletes a data directory.
+For a completely fresh VSC test run, `python -m src.cluster.fresh_start` previews moving
+both output trees to dated `archived_output_JEVPFN/` folders on their existing storage
+tiers. `--apply --writers-stopped` performs those reversible moves and recreates the
+Experiment 0 log directory. It refuses queued/running JEVPFN jobs; stop manual writers too.
+Data, questions, features, weights and environments remain in place.
 
 Original row identity is **dataset ID + source-data fingerprint + csv:N**, where N is the
 zero-based CSV position before any split/shuffle. `row_map` links each row/slot to a unique
@@ -149,6 +162,9 @@ input; NULL denotes empty text. Features join by these IDs, with duplicate/missi
 Provider/checkpoint/settings enter response keys. SQLite stores raw responses, UTC timestamps,
 usage and origins, plus immutable compressed-Parquet feature tables, manifests and checksums.
 Each provider/version/representation can be selected independently in downstream experiments.
+An explicit active input-set ID selects the current question version; historical sets remain
+in the same 18 files. Bulk feature reads do not add execution origins. Feature identities include
+the complete runtime-settings hash and relevant transformation code, not unrelated plotting code.
 
 On VSC, **PROJECT** holds raw/prepared inputs, permanent responses/features, checkpoints,
 CUDA environments, exact token databases, predictions and large results. **DATA** holds the
@@ -160,19 +176,35 @@ Use `python -m src.cluster.transfer export` on VSC, download its bundle, then
 `python -m src.cluster.transfer import <bundle.zip>` locally. Imports validate checksums,
 back up existing dataset caches and merge provider/version records transactionally. Never
 replace a populated cache wholesale with SCP. [Transfer instructions](docs/VSC.md#transfer-results).
+Question uploads use the separate `src.cluster.input_transfer pack` / `install` commands:
+exactly the selected 18 input files, byte-preserving copies, checksums and remote backups.
 
 ## Execution readiness and references
 
 The bounded GPU contract job tests all three tasks, a 30-class vector, missing/duplicate inputs,
 cache recovery, feature-table round trips and real first/longest inputs from every dataset.
-It plans at most 67 forwards per provider, with a hard ceiling of 100. A passing report requires
+Seven known-answer/polarity/option-order probes supplement deterministic decoder tests.
+It plans at most 74 forwards per provider, with a hard ceiling of 100. A passing report requires
 review; it does not authorize full extraction or establish predictive-model compatibility.
+A separate two-node CPU storage test verifies PROJECT lock exclusion and SQLite
+snapshot/restore on the actual mount; local tests cannot establish that behavior.
 
 Still required before full extraction: real contracts/robustness and throughput tests for
 selected extractors, Jev account/billing/context checks, an approved spending limit, and
 verified storage quota/backup. Before evaluation: complete cache transfer/coverage, predictor
 checkpoints and environments, full-fold resource checks and pretraining-overlap review.
 Failures remain explicit; text is never silently truncated or replaced by missing values.
+Self-hosted failures persist by request identity. The optional `--continue-on-error` records/skips
+them but leaves the campaign incomplete; `--retry-failed` explicitly retries them. Provider jobs
+rotate datasets and wait for busy stores, retaining one writer per dataset.
+
+Future execution entry points are implemented and remain guarded: `src.jev.extraction` for the
+local Jev pilot/full run; `src.jev.self_hosted` for open weights; `src.cluster.predictor_contracts`
+for bounded real predictor checks; and `src.evaluation.campaign --profile-fold` for one complete
+outer fold in Experiment 0B. CV resumes checksummed complete folds and saves warnings, sampled
+process RSS and CUDA peaks. `src.evaluation.results --save` summarizes complete five-fold arms
+and paired feature differences, without treating unfinished arms as complete. Exact setup and
+acceptance requirements are in [VSC](docs/VSC.md).
 
 Documentation has distinct purposes: [DATA_SOURCES](docs/DATA_SOURCES.md) records dataset
 provenance/semantics; [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md) records published evidence;

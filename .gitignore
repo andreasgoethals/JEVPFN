@@ -8,6 +8,8 @@
 
 # Generated reports, figures, predictions, caches and downloaded transfer bundles.
 /output_JEVPFN/
+/archived_output_JEVPFN/
+/.maintenance.lock
 /output/
 /.cache/
 /environments/

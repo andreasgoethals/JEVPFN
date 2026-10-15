@@ -153,8 +153,8 @@ Audit target distributions/quantiles remain descriptive only; none enter Jev inp
 The 30-09-2026 audit finds substantial reuse of joint inputs too: Vancouver Salaries avoids
 59.36% of nonempty joint slots, Zomato 31.94%, Video Games Sales 28.20% and Data Scientist
 Salary 23.78%. Across both modes, 3,985,167 nonempty slots become 2,032,351 distinct requests;
-107,235 distinct joint inputs overlap per-column inputs. These counts hold for the current
-untruncated text and fixed request design. They must be recomputed if that design changes.
+107,235 distinct joint inputs overlap per-column inputs. These are historical all-20-dataset
+counts, not the selected 18-dataset extraction workload. Recompute them if the design changes.
 
 ## Extraction and experiment selection
 
@@ -201,10 +201,25 @@ baby-product currency and company-field extraction conventions, CLEAR `British W
 legacy movie `RatingValue` scale/provenance, salary interval endpoints, and US Accidents'
 intermediate traffic-severity boundaries. Unknown units/definitions are not guessed.
 
-Only documentary meanings enter `documented-task-v1`. Audit frequencies, target distributions,
+Only documentary meanings enter `documented-task-v2`; source URLs remain in question-bank
+provenance and are excluded from the model payload. Version 1 remains readable for historical
+reproduction. Audit frequencies, target distributions,
 current row labels and prediction results remain excluded. API class IDs retain original class
 order and types; the human description is added alongside each raw class. The selected text
 fields keep their raw names; per-column requests include only their applicable field definitions.
 Selected-dataset budgets read the frozen prepared question version, including definitions of
 nonempty fields. Removed datasets retain an audit-only template for workload comparison.
 Actual billing still needs a hosted pilot.
+
+Non-text ISO date columns are recognized on each training partition and converted to UTC
+epoch seconds for the numeric predictors. Test dates use that same conversion rather than
+an unseen-category code. Missing dates stay missing. This preserves, but does not repair,
+Kickstarter's upstream 1970/nanosecond-formatted timestamps; no duration feature is invented.
+Unseen nominal categories still map to missing for numeric-only adapters.
+
+Interpretation checks: SciMago's comma-formatted measurements and Rotten Tomatoes' count
+fields remain official text. Names/categories such as publisher, province and brand can carry
+categorical signal without requiring language understanding. Text missingness can also carry
+signal. The statistics/permutation controls address some of these alternatives; they do not
+replace a reviewed numeric-as-text/categorical sensitivity analysis. CLEAR's formula-related
+non-text inputs and Montgomery's previous salary can leave little headroom for text gains.

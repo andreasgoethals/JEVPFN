@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import tempfile
@@ -9,6 +10,7 @@ import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event, Thread
 
 import pandas as pd
 
@@ -16,6 +18,113 @@ from src.utils import paths
 from src.utils.events import append_event
 from src.utils.files import atomic_replace
 from src.utils.serialization import digest, file_sha256, write_json
+
+
+class ResourceMonitor:
+    """Sample current-process RSS; CUDA peaks include all fits in this outer fold."""
+
+    def __init__(self, device="cpu"):
+        self.device = device
+        self.stop = Event()
+        self.peak = 0
+        self.torch = None
+
+    def __enter__(self):
+        import psutil
+
+        self.process = psutil.Process()
+        if self.device.startswith("cuda"):
+            import torch
+
+            self.torch = torch
+            torch.cuda.synchronize(self.device)
+            torch.cuda.reset_peak_memory_stats(self.device)
+        self._sample()
+        self.thread = Thread(target=self._watch, daemon=True)
+        self.thread.start()
+        return self
+
+    def _sample(self):
+        self.peak = max(self.peak, self.process.memory_info().rss)
+
+    def _watch(self):
+        while not self.stop.wait(0.05):
+            self._sample()
+
+    def snapshot(self):
+        self._sample()
+        return {
+            "peak_rss_bytes": self.peak,
+            "rss_scope": "sampled_current_process_including_preexisting_allocations_excluding_children",
+            "rss_sampling_interval_seconds": 0.05,
+            "peak_gpu_allocated_bytes": self.torch.cuda.max_memory_allocated(self.device)
+            if self.torch
+            else None,
+            "peak_gpu_reserved_bytes": self.torch.cuda.max_memory_reserved(self.device)
+            if self.torch
+            else None,
+        }
+
+    def __exit__(self, *exc):
+        self.stop.set()
+        self.thread.join()
+
+
+def fold_marker(recipe, phase):
+    return paths.results_dir("cv_folds", digest(recipe) + ".json", phase=phase)
+
+
+def completed_fold(recipe, phase):
+    """Reuse a fold only when all role records and prediction checksums still match."""
+    marker = fold_marker(recipe, phase)
+    if not marker.is_file():
+        return None
+    manifest = json.loads(marker.read_text(encoding="utf-8"))
+    if manifest.get("recipe") != recipe or manifest.get("status") != "complete":
+        raise ValueError("Completed CV fold identity differs")
+    root = paths.results_dir(phase=phase).resolve()
+    result = []
+    for item in manifest["records"]:
+        record = (root / item["relative_path"]).resolve()
+        if not record.is_relative_to(root) or file_sha256(record) != item["sha256"]:
+            raise ValueError("Completed CV record is missing or corrupt")
+        body = json.loads(record.read_text(encoding="utf-8"))
+        if body["metadata"].get("fold_recipe_id") != digest(recipe):
+            raise ValueError("Completed CV record belongs to a different fold recipe")
+        prediction = record.parent / body["predictions"]["file"]
+        if (
+            prediction.resolve().parent != record.parent
+            or file_sha256(prediction) != body["predictions"]["sha256"]
+        ):
+            raise ValueError("Completed CV predictions are missing or corrupt")
+        result.append(record)
+    expected_roles = {"outer_test"}
+    if recipe["task_type"] == "binary_classification":
+        expected_roles.add("inner_oof_binary_threshold")
+    roles = [
+        json.loads(p.read_text(encoding="utf-8"))["metadata"]["prediction_role"] for p in result
+    ]
+    if len(roles) != len(expected_roles) or set(roles) != expected_roles:
+        raise ValueError("Completed CV fold does not contain every prediction role")
+    return result
+
+
+def complete_fold(recipe, records, phase):
+    root = paths.results_dir(phase=phase).resolve()
+    write_json(
+        fold_marker(recipe, phase),
+        {
+            "status": "complete",
+            "recipe": recipe,
+            "records": [
+                {
+                    "relative_path": p.resolve().relative_to(root).as_posix(),
+                    "sha256": file_sha256(p),
+                }
+                for p in records
+            ],
+        },
+    )
 
 
 class PhaseTimer:
@@ -82,6 +191,7 @@ def save_evaluation(
     timer: PhaseTimer,
     metadata: dict,
     resources: dict | None = None,
+    warnings: list | None = None,
     run_id: str | None = None,
     phase: str = "experiment_1",
 ) -> Path:
@@ -145,6 +255,7 @@ def save_evaluation(
                     "peak_gpu_reserved_bytes": None,
                     **(resources or {}),
                 },
+                "warnings": warnings or [],
                 "environment": {
                     "python": platform.python_version(),
                     "platform": platform.platform(),

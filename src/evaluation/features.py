@@ -29,7 +29,14 @@ def text_statistics(dataset) -> pd.DataFrame:
     return result
 
 
-SELECTOR_FIELDS = {"provider", "model", "version", "question_bank_id", "question_variant"}
+SELECTOR_FIELDS = {
+    "provider",
+    "model",
+    "version",
+    "question_bank_id",
+    "question_variant",
+    "settings_sha256",
+}
 
 MAIN_FEATURE_SETS = (
     "non_text",

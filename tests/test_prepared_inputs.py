@@ -4,6 +4,7 @@ import copy
 import json
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -15,6 +16,31 @@ from src.jev.question_bank import apply_frozen_question, build_question_bank, sa
 from src.jev.requests import build_requests
 from src.utils.config import load_config, load_yaml
 from src.utils.serialization import digest
+
+
+def test_explicit_active_version_preserves_old_inputs_and_repeat_hash(preparation):
+    from src.jev.inputs import activate_input_set
+    from src.jev.question_bank import load_question_bank
+    from src.utils.serialization import file_sha256
+
+    dataset, bank = preparation
+    old = prepare_dataset_inputs(dataset, bank, variant="accepted")
+    activate_input_set(old["path"], old["input_set_id"])
+    newer = copy.deepcopy(bank)
+    newer["datasets"][dataset.metadata.dataset_id]["variants"]["accepted"]["question"]["text"] += (
+        " Clarification."
+    )
+    newer["bank_id"] = digest({k: v for k, v in newer.items() if k != "bank_id"})
+    save_question_bank(newer)
+    current = prepare_dataset_inputs(dataset, newer, variant="accepted")
+    assert list(iter_prepared_inputs(old["path"]))[0]["input_set_id"] == old["input_set_id"]
+    activate_input_set(current["path"], current["input_set_id"])
+    assert list(iter_prepared_inputs(old["path"]))[0]["input_set_id"] == current["input_set_id"]
+    assert list(iter_prepared_inputs(old["path"], input_set_id=old["input_set_id"]))
+    before = file_sha256(Path(old["path"]))
+    activate_input_set(current["path"], current["input_set_id"])
+    assert file_sha256(Path(old["path"])) == before
+    assert load_question_bank(Path(old["path"]).parent)["bank_id"] == newer["bank_id"]
 
 
 @pytest.fixture

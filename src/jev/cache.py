@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from uuid import uuid4
 
 from src.jev.requests import IntendedRequest
 from src.utils.serialization import canonical_json, digest
@@ -48,6 +49,10 @@ class ResponseCache:
                     provenance_hash TEXT NOT NULL, provenance_json TEXT NOT NULL,
                     first_seen_at TEXT NOT NULL,
                     PRIMARY KEY (request_key, kind, provenance_hash));
+                CREATE TABLE IF NOT EXISTS failures (
+                    event_id TEXT PRIMARY KEY, request_key TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, settings_json TEXT NOT NULL,
+                    error_type TEXT NOT NULL, created_at TEXT NOT NULL);
             """)
             bound = db.execute("SELECT dataset_id FROM dataset_identity").fetchall()
             if dataset_id is not None:
@@ -138,7 +143,11 @@ class ResponseCache:
             self._trace(db, request, kind)
 
     def get_many(self, requests, *, kind="verified_response") -> dict:
-        """One connection per bounded batch; record every row origin, including duplicates."""
+        """Read a bounded batch without adding execution provenance during materialization.
+
+        Extraction records origins when writing/reusing responses. Feature artifacts
+        retain the complete row/request map separately; reading them is not a new call.
+        """
         requests = list(requests)
         for request in requests:
             self._validate_dataset(request)
@@ -156,10 +165,30 @@ class ResponseCache:
                         [kind, *batch],
                     )
                 )
-            for request in requests:
-                if request.cache_key in found:
-                    self._trace(db, request, kind)
         return found
+
+    def record_failure(self, request, error):
+        """Persist attempt evidence without exception messages that could contain text/secrets."""
+        self._validate_dataset(request)
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO failures VALUES (?,?,?,?,?,?)",
+                (
+                    uuid4().hex,
+                    request.cache_key,
+                    request.payload_json,
+                    request.settings_json,
+                    type(error).__name__,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            self._trace(db, request, "verified_response")
+
+    def failure_count(self, request):
+        with self._connect() as db:
+            return db.execute(
+                "SELECT COUNT(*) FROM failures WHERE request_key=?", (request.cache_key,)
+            ).fetchone()[0]
 
 
 def dry_run(request: IntendedRequest, cache: ResponseCache) -> dict:

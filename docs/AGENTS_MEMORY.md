@@ -11,12 +11,28 @@ Method constraints are in README; operations are in VSC; source meanings are in 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
 | 14-10-2026 | wICE / 62316611 | experiment_0_cpu.slurm | COMPLETED, exit 0, 1m25s; MaxRSS 1,065,032K. Owner supplied sacct after the dependency/test-scope repair. |
-| 14-10-2026 | wICE / 62316685 | experiment_0_tokens.slurm | RUNNING at 15:24 CEST, 3m24s. Owner verified dependency install and all five tokenizer format checks first. Completion not supplied. |
+| 14-10-2026 | wICE / 62316685 | experiment_0_tokens.slurm | COMPLETED, exit 0, 1h14m26s; MaxRSS 4,868,592K. All five providers counted 1,698,127 unique inputs each; zero overflows. Historical version-1 questions; repeat after version-2 preparation. |
 | 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | FAILED, exit 1, 1m30s; 309 tests passed, 3 notebook tests lacked IPython/nbformat, 1 platform skip; dataset checks passed. |
 | 14-10-2026 | wICE / 62312903 | experiment_0_tokens.slurm | FAILED, exit 1, 1h06m02s; Perplexity lacked Jinja2; Liquid/Strands completed counting; committed databases survive. |
 
 Submission/RUNNING are not successful completion. Do not update a checkout/environment while
 jobs use it. Record final status from sacct and logs. Account balance is not storage quota.
+
+The completed version-1 audit counted Liquid 821,257,572; Strands 1,141,530,844; Clef
+1,143,617,155; Perplexity 960,172,532; Intern 1,316,907,633 input tokens. These are not Jev
+billing counts. Clef and Intern weights were staged and fingerprinted on PROJECT; no real
+GPU forward result has been supplied. Version 2 removes source URLs from payloads, retains
+historical input sets and explicitly activates new sets. Existing audit databases remain
+evidence, but cannot authorize execution against changed inputs.
+
+Local follow-up on 14-10-2026 regenerated all 18 input files (1,698,127 unique inputs per
+extractor), passed 410 tests and reran all five notebooks (21 figures). The checked upload
+bundle contains all 18 byte-identical databases, about 713 MB compressed; no upload has been
+performed by the agent. VSC output archiving and transfer recovery passed synthetic tests.
+An unauthenticated HTTPS HEAD to
+TypeSafe returned 405: connectivity only, not authentication, billing or inference evidence.
+The two-node storage probe and real GPU/provider tests remain unexecuted; quota/backup are
+still unverified. Cleanup removed only rebuildable reports/figures and legacy question copies.
 
 ## Reusable failure lessons
 
@@ -36,6 +52,11 @@ jobs use it. Record final status from sacct and logs. Account balance is not sto
 - **Concurrent notebook reports:** Windows sharing violations require atomic replacement,
   bounded retries and recovery copies. Readers/writers share OS locks; keep the report lock.
   Execute real kernels and persist rich/partial .ipynb outputs; preserve edits made during a run.
+- **Checkpoint imports:** publisher Python imports must not create bytecode inside the
+  fingerprinted checkpoint tree. Disable bytecode before imports; retain strict file hashes.
+- **Fresh VSC runs:** archive outputs on each existing tier before new tests; never clean data
+  or checkpoints. Maintenance refuses active JEVPFN jobs and requires stopped manual writers.
+  Question uploads preserve file bytes and validate every member before replacing old files.
 - **Figure verification:** an inline overview overlapped despite a correct PDF. Separate
   table/header/footer axes and inspect notebook-kernel output, not PDF alone.
 - **Artifact completeness:** checking only trace groups present in a file missed an entirely
@@ -51,3 +72,8 @@ jobs use it. Record final status from sacct and logs. Account balance is not sto
   tests or CUDA tensors alone do not establish compatibility.
 
 Historical change details belong in CHANGELOG/Git, not duplicated status narratives here.
+
+Independent review verified recovery/cleanup/resource gaps. TabICL's many-class default was
+already true; it is now explicit. Rounded documentation examples do not prove rounded live
+Jev responses. Keep strict decoding until a real precision probe supplies evidence. Known-answer
+probe failure requires inspecting the saved raw response; it is not automatically a decoder bug.

@@ -2,8 +2,13 @@
 
 ## 14-10-2026
 
+- Added a reversible, idle-job-checked VSC output reset and a checksum-validated 18-dataset question upload bundle with backups and byte-exact installation. Added isolated Clef/Intern environment setup commands.
+- Fixed publisher imports creating bytecode inside fingerprinted checkpoint trees; bounded archive retries tolerate temporary Windows sharing locks without replacing archives.
+- Critically verified the independent review: fixed durable extraction failures, concurrent-provider scheduling, pure bulk cache reads, runtime-bound feature identities and protected-output cleanup.
+- Added guarded local Jev execution/backoff, known-answer GPU probes, a two-node storage test, resumable CV folds, resource/warning records, executable control arms, predictor/full-fold checks and complete-arm aggregation.
+- Versioned question inputs to exclude provenance URLs from model state; regenerated all 18 files while retaining historical sets. Fixed unseen-date encoding and marked stale token screens as historical; current inputs require a new VSC audit.
 - Removed Microsoft from the active pipeline; aligned six-extractor previews/configs, frozen-question budgets, metric version and the eight-predictor catalog; consolidated docs, ignore rules and citation metadata.
-- Verified 373 tests, all five notebooks/21 figures, 20 raw datasets, unchanged 18 input files, citation schema, dependencies and seven shell files; no model/API runs or Git publication.
+- Final local verification: 410 tests, all five notebooks/21 figures, lint, dependencies and eleven shell files passed. Dataset preflight passed; credential-free HTTPS reachability checked. No live inference, Slurm submission or Git publication.
 - Fixed VSC notebook-test scope/Jinja2; added bounded real GPU contracts, resumable tokenizer reports, safe dataset-cache merging and two-tier export/import.
 - Verified the owner's successful CPU rerun; exact token and real GPU results remain separately tracked in AGENTS_MEMORY.
 

@@ -9,7 +9,7 @@ import pandas as pd
 
 from src.data.loaders import load_catalog, load_dataset
 from src.data.selection import selected_entries
-from src.jev.inputs import prepare_dataset_inputs, prepared_row
+from src.jev.inputs import activate_input_set, prepare_dataset_inputs, prepared_row
 from src.jev.question_bank import build_question_bank, save_question_bank
 from src.utils import paths
 from src.utils.config import load_config, load_yaml
@@ -73,6 +73,10 @@ def prepare_questions(cfg=None, *, progress=print):
         except BaseException as exc:
             report(f"FAILED: {type(exc).__name__}: {exc}")
             raise
+    # Preparation is the explicit activation step. Consumers never choose the latest
+    # timestamp; historical versions remain addressable by their immutable IDs.
+    for summary in summaries:
+        activate_input_set(summary["path"], summary["input_set_id"])
     write_json(
         paths.manifests_dir("question_preparation") / f"prepare_{run_id}.json",
         {

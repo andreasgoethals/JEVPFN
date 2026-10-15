@@ -34,11 +34,17 @@ class FoldInput:
 
     def fit(self, x):
         self.columns_ = list(x.columns)
+        # ISO dates are measurements, not nominal identifiers. Recognition uses only
+        # this training partition; the same fixed conversion applies to unseen dates.
+        self.datetime_ = [c for c in x if _is_datetime_column(x[c])]
         self.numeric_ = [
             c
             for c in x
-            if pd.api.types.is_numeric_dtype(x[c])
-            and not isinstance(x[c].dtype, pd.CategoricalDtype)
+            if c in self.datetime_
+            or (
+                pd.api.types.is_numeric_dtype(x[c])
+                and not isinstance(x[c].dtype, pd.CategoricalDtype)
+            )
         ]
         self.categorical_ = [c for c in x if c not in self.numeric_]
         self.vocabulary_ = {
@@ -55,7 +61,11 @@ class FoldInput:
             raise ValueError("Predictor input column order/schema changed")
         out = pd.DataFrame(index=x.index)
         for c in self.columns_:
-            if c in self.numeric_:
+            if c in self.datetime_:
+                parsed = pd.to_datetime(x[c], format="ISO8601", utc=True, errors="coerce")
+                out[c] = parsed.dt.as_unit("ns").astype("int64").astype(float) / 1e9
+                out.loc[parsed.isna(), c] = np.nan
+            elif c in self.numeric_:
                 out[c] = pd.to_numeric(x[c]).to_numpy(dtype=float, na_value=np.nan)
                 out[c] = out[c].replace([np.inf, -np.inf], np.nan)
             elif strings:
@@ -75,6 +85,20 @@ class FoldInput:
         if not len(out.columns):
             out["__constant_no_non_text_features__"] = 0.0
         return out
+
+
+def _is_datetime_column(series):
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return True
+    if pd.api.types.is_numeric_dtype(series) or isinstance(series.dtype, pd.CategoricalDtype):
+        return False
+    values = series.dropna()
+    if values.empty or not values.map(lambda v: isinstance(v, str)).all():
+        return False
+    # Do not reinterpret categorical year codes, ambiguous locale dates or arbitrary text.
+    if not values.str.match(r"^\d{4}-\d{2}-\d{2}(?:$|[ T])").all():
+        return False
+    return bool(pd.to_datetime(values, format="ISO8601", utc=True, errors="coerce").notna().all())
 
 
 def _checkpoint(settings, task):
@@ -191,6 +215,8 @@ def _backend(model_id, task, settings, encoder, n_train):
         )
     if model_id == "tabicl_v2":
         cls = getattr(importlib.import_module("tabicl"), "TabICL" + suffix)
+        if classification:
+            params.setdefault("support_many_classes", True)
         return cls(
             model_path=_checkpoint(settings, task),
             allow_auto_download=False,
@@ -415,6 +441,8 @@ class PredictorAdapter:
 def estimator_factory(model_id, metadata, settings, *, allow_model_runs=False):
     if allow_model_runs is not True:
         raise RuntimeError("Predictor execution is disabled")
+    if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
+        raise RuntimeError("Predictor execution on VSC requires a compute allocation")
     if model_id not in MAIN_MODELS + TEXT_MODELS:
         raise ValueError("Predictor is outside the approved roster")
     verify_runtime(settings)

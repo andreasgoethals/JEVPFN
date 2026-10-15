@@ -5,7 +5,9 @@ providers: [liquid, strands, perplexity, cloudflare, intern]
 sample: first_middle_last_rows_and_ten_longest_exact_inputs_per_dataset
 max_pilot_requests: 1000
 batch_size: 1  # Profile memory and timing before increasing; serialized per model.
+max_recorded_failures_per_dataset: 10  # --continue-on-error remains incomplete, never accepted.
 full_feature_creation_enabled: false
 accepted_before_extraction_manifest: null
+accepted_before_extraction_manifests: {}  # Provider -> reviewed acceptance JSON; permits concurrent providers.
 dataset_selection:
   exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]

@@ -37,6 +37,15 @@ live_extraction:
   enabled: false
   pilot_authorized: false
   pilot_accepted: false
+  accepted_pilot_manifest: null
+  full_feature_creation_enabled: false
+  max_pilot_requests: 1000
+  context_envelope:
+    verified: false
+    model: null
+    max_request_utf8_bytes: null
+    max_billed_input_tokens: null
+    evidence: null  # Provider documentation/confirmation; do not infer a bytes/token ratio.
   account_limits_verified: false
   billing_bound_verified: false
   context_policy_reviewed: false

@@ -334,7 +334,7 @@ def test_six_offline_mappings_share_identical_questions(intended_request):
         preview(intended_request, "microsoft")
 
 
-def test_batch_cache_lookup_records_all_reused_row_origins(tmp_path, dataset):
+def test_batch_cache_lookup_does_not_mutate_origins(tmp_path, dataset):
     cfg = load_config("feature_creation")
     cfg["jev"]["representation"] = "per_column"
     requests = [build_requests(dataset.features, dataset.metadata, p, cfg)[0] for p in (0, 3)]
@@ -343,4 +343,4 @@ def test_batch_cache_lookup_records_all_reused_row_origins(tmp_path, dataset):
     cache.put(requests[0], supplied, kind="verified_response")
     assert cache.get_many(requests) == {requests[0].cache_key: supplied}
     with cache._connect() as db:
-        assert db.execute("SELECT COUNT(*) FROM origins").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM origins").fetchone()[0] == 1

@@ -1,6 +1,8 @@
 phase: experiment_0
 name: debugging
 enabled: false  # Full experiment acceptance remains disabled; bounded checks are separate commands.
+predictor_execution_enabled: false
+full_fold_profile_enabled: false
 execution_site: vsc_compute_node
 local_preparation_command: python -m src.cluster.preflight --local --verify-data --tests
 feature_config: feature_creation
@@ -16,6 +18,7 @@ stages:
   before_extraction:
     requires: [frozen_prepared_inputs]
     token_command: python -m src.cluster.token_audit
+    storage_command: python -m src.cluster.storage_contracts --execute
     gpu_contract_command: python -m src.cluster.gpu_contracts --provider PROVIDER --execute
     acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
   after_extraction:
@@ -60,7 +63,7 @@ acceptance_checks:
     evidence: Closed dataset stores survive transfer and independent restore with matching checksums; interrupted transfer cannot be accepted as complete.
   - id: allocation_and_native_storage
     site: vsc_compute_node
-    evidence: Current account/partition association, native Lustre or GPFS, quota, write access and independent backup policy are verified; capacity is not confused with personal quota.
+    evidence: Current account/partition association, native Lustre or GPFS, cross-node writer locks, SQLite snapshot/restore, quota, write access and independent backup policy are verified; capacity is not confused with personal quota.
   - id: runtime_and_checkpoint_identity
     site: vsc_compute_node
     evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.

@@ -199,6 +199,15 @@ def _flush(db, inputs, mapping):
 
 
 def _read_set(db, input_set_id):
+    if (
+        input_set_id is None
+        and db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='active_input_set'"
+        ).fetchone()
+    ):
+        selected = db.execute("SELECT input_set_id FROM active_input_set WHERE id=1").fetchone()
+        if selected:
+            input_set_id = selected[0]
     rows = db.execute(
         "SELECT input_set_id,recipe_json,summary_json FROM input_sets"
         + (" WHERE input_set_id=?" if input_set_id else ""),
@@ -219,6 +228,22 @@ def _read_set(db, input_set_id):
     if digest(entry) != stored[1] or stored[1] != recipe["entry_sha256"]:
         raise ValueError("Prepared question checksum mismatch")
     return identity, recipe, summary, entry
+
+
+def activate_input_set(path, input_set_id):
+    """Explicit preparation selects a verified version; retain all historical sets."""
+    with closing(sqlite3.connect(path, timeout=120)) as db, db:
+        _read_set(db, input_set_id)
+        if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='active_input_set'"
+        ).fetchone() and db.execute(
+            "SELECT input_set_id FROM active_input_set WHERE id=1"
+        ).fetchone() == (input_set_id,):
+            return
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS active_input_set (id INTEGER PRIMARY KEY CHECK(id=1), input_set_id TEXT NOT NULL)"
+        )
+        db.execute("INSERT OR REPLACE INTO active_input_set VALUES (1,?)", (input_set_id,))
 
 
 def iter_prepared_inputs(path, *, input_set_id=None, after_input_no=-1, input_numbers=None):

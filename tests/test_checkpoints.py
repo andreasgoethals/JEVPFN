@@ -44,3 +44,21 @@ def test_staging_redirects_download_caches_and_detects_changed_weights(
     (folder / "model.safetensors").write_bytes(b"changed")
     with pytest.raises(ValueError, match="immutable identity"):
         checkpoints.verify_checkpoint("liquid")
+
+
+def test_publisher_import_does_not_mutate_pinned_checkpoint(isolated_output, monkeypatch):
+    from src.jev.open_runtimes import _module
+    from src.jev.self_hosted import inference_environment
+
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)
+    folder = paths.checkpoints_dir("decision_models", "intern")
+    tokenizer = paths.tokenizer_dir("intern")
+    for directory in (folder, tokenizer):
+        directory.mkdir(parents=True)
+        (directory / "inference.py").write_text("ANSWER = 42\n", encoding="utf-8")
+    before = checkpoints.checkpoint_files(folder)
+    inference_environment()
+    module = _module("intern", folder, "inference.py")
+    assert module.ANSWER == 42
+    assert not (folder / "__pycache__").exists()
+    assert checkpoints.checkpoint_files(folder) == before

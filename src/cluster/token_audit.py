@@ -3,7 +3,7 @@
 python -m src.cluster.token_audit --stage-tokenizers  # small public files, then count
 python -m src.cluster.token_audit                     # offline; resume saved counts
 
-Five open-weight tokenizers are available. The other two hosted counts remain explicitly
+Five open-weight tokenizers are available. Jev's hosted counts remain explicitly
 unverified. This never removes rows, shortens text, loads weights or performs inference.
 """
 
@@ -87,9 +87,11 @@ def saved_exact_token_tables():
             i["dataset_id"]: (i["input_set_id"], i["input_file_sha256"]) for i in report["datasets"]
         }
         if observed != current or report["status"] != "counted_all_inputs":
-            raise ValueError(
-                "Exact token audit is stale or incomplete; rerun src.cluster.token_audit"
-            )
+            return {
+                "status": "historical_inputs_changed",
+                "command": "python -m src.cluster.token_audit",
+                "note": "Saved counts are preserved, but do not validate the active prepared inputs.",
+            }, pd.DataFrame()
         rows.append(
             {
                 "provider": report["provider"],
@@ -122,7 +124,10 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
-    counter = counter or ExactCounter(provider)
+    if counter is None:
+        counter = ExactCounter(provider)
+        if counter.limit != load_yaml("extractors")["candidates"][provider]["context_tokens"]:
+            raise ValueError("Configured context window differs from the pinned tokenizer")
     inputs = selected_inputs() if inputs is None else inputs
     recipe = {
         "schema": "jevpfn.exact_tokens.v1",

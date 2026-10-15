@@ -108,7 +108,7 @@ def test_bad_counter_result_cannot_be_saved_as_exact(inputs):
 
 def test_gpu_gate_rejects_incomplete_detailed_counts(inputs):
     counter = SimpleNamespace(
-        identity={"counter_id": "synthetic"}, limit=10, count_many=lambda rows: [2] * len(rows)
+        identity={"counter_id": "synthetic"}, limit=32768, count_many=lambda rows: [2] * len(rows)
     )
     report = token_audit.audit_provider("liquid", inputs, counter=counter)
     write_json(
@@ -135,8 +135,8 @@ def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatc
     scope, table = token_audit.saved_exact_token_tables()
     assert scope["datasets"] == 1 and table.iloc[0].total_input_tokens == 6
     inputs[0]["input_file_sha256"] = "changed"
-    with pytest.raises(ValueError, match="stale"):
-        token_audit.saved_exact_token_tables()
+    scope, table = token_audit.saved_exact_token_tables()
+    assert scope["status"] == "historical_inputs_changed" and table.empty
 
 
 def test_missing_chat_template_dependency_fails_before_counting(monkeypatch):

@@ -18,7 +18,7 @@ def test_lists_by_default_and_deletes_only_when_asked(isolated_output, capsys) -
     assert "Nothing was deleted" in capsys.readouterr().out
 
     clean_run.main(["--clean"])
-    assert not victim.exists()
+    assert victim.exists(), "operational logs are preserved"
 
 
 def test_a_wipe_keeps_the_directory_skeleton(isolated_output) -> None:
@@ -35,10 +35,10 @@ def test_a_wipe_keeps_the_directory_skeleton(isolated_output) -> None:
     (logs_dir("experiment_1") / "run.log").write_text("x", encoding="utf-8")
 
     removed = sum(clean_run.wipe(root) for root in clean_run.roots())
-    assert removed == 2  # the pdf and the log, not the markers
+    assert removed == 1  # the rebuildable figure only
     assert (logs_dir("experiment_1") / ".gitkeep").is_file()
     assert (figures_dir() / ".gitkeep").is_file()
-    assert not per_notebook.exists()  # per-run, no marker, so it goes
+    assert not (per_notebook / "01_x.pdf").exists()
 
 
 def test_gitkeep_is_never_counted(isolated_output) -> None:
@@ -59,13 +59,12 @@ def test_both_storage_tiers_are_cleared_on_the_cluster(isolated_output) -> None:
     assert any("local" in str(r) for r in roots)
 
 
-def test_processed_is_opt_in(isolated_output) -> None:
+def test_processed_is_protected(isolated_output) -> None:
     """Rebuilding the cache can cost far more than re-running the notebooks, so "clean the last
     run" must not silently throw it away."""
     from src.utils.paths import processed_dir
 
     assert processed_dir() not in clean_run.roots()
-    assert processed_dir() in clean_run.roots(processed=True)
 
 
 def test_processed_cleanup_never_includes_system_temp(isolated_output):
@@ -74,6 +73,6 @@ def test_processed_cleanup_never_includes_system_temp(isolated_output):
 
     from src.utils.paths import notebook_cache_dir
 
-    roots = clean_run.roots(processed=True)
+    roots = clean_run.roots()
     assert notebook_cache_dir().parent not in roots
     assert all(root.resolve() != Path(tempfile.gettempdir()).resolve() for root in roots)

@@ -1,4 +1,4 @@
-extends: experiment_1/protocol
+extends: experiment_1/main
 phase: experiment_3
 name: proposed_output_ablation
 enabled: false
@@ -21,6 +21,7 @@ model_catalog: experiment_1/models
 candidate_models: [tabpfn_3_5, catboost]
 fixed_feature_mode_proposal: per_column_and_joint
 new_jev_calls_required: false
+executable_controls: [text_statistics, permuted, retained_view]
 notes: Freeze this experiment before viewing test results; reuse identical experiment-1 fits.
 
 dataset_selection:

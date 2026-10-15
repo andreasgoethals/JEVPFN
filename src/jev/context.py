@@ -123,7 +123,7 @@ def screen_prepared(folder=None, *, progress=print):
 
 
 def saved_screen_tables():
-    """Trace the saved full scan to rows; reject stale selection/input identities.
+    """Trace a current saved scan; label historical selection/input identities explicitly.
 
     This reads the scan, not every text again. Absence is explicit; neither characters
     nor their ratios are relabelled as exact tokens or confirmed overflows.
@@ -140,8 +140,17 @@ def saved_screen_tables():
         )
     report = json.loads(path.read_text(encoding="utf-8"))
     selected = {e["id"] for e in selected_entries(load_catalog(), load_yaml("feature_creation"))}
+    historical = (
+        {
+            "status": "historical_inputs_changed",
+            "command": "python -m src.jev.context",
+            "note": "The earlier approximate screen is preserved; it does not describe the active inputs.",
+        },
+        pd.DataFrame(),
+        pd.DataFrame(),
+    )
     if {d["dataset_id"] for d in report["datasets"]} != selected:
-        raise ValueError("Context screen dataset selection is stale; rerun src.jev.context")
+        return historical
     examples, source_rows = [], 0
     for dataset in report["datasets"]:
         source = paths.dataset_question_path(dataset["dataset_id"])
@@ -151,7 +160,7 @@ def saved_screen_tables():
             identity != dataset["input_set_id"]
             or summary["unique_inputs"] != dataset["unique_inputs"]
         ):
-            raise ValueError("Context screen input version is stale; rerun src.jev.context")
+            return historical
         source_rows += recipe["row_count"]
         for warning in dataset["longest_screened_inputs"]:
             origins = list(input_origins(source, warning["input_no"], input_set_id=identity))

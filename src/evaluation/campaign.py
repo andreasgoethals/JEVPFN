@@ -22,13 +22,14 @@ from src.evaluation.features import (
 from src.evaluation.models import MAIN_MODELS, TEXT_MODELS, estimator_factory
 from src.evaluation.protocol import evaluate_cv, shared_splits
 from src.utils import paths
+from src.utils.acceptance import reviewed_acceptance
 from src.utils.config import load_yaml
 from src.utils.events import append_event
 from src.utils.provenance import code_identity
 from src.utils.serialization import digest, write_json
 
 
-def benchmark_plan(main=None, text=None):
+def benchmark_plan(main=None, text=None, *, include_controls=False):
     main = main or load_yaml("experiment_1/main")
     text = text or load_yaml("experiment_2/native_text")
     if (
@@ -72,23 +73,74 @@ def benchmark_plan(main=None, text=None):
                     "phase": "experiment_2",
                 }
             )
+    if include_controls:
+        cfg = load_yaml("experiment_3/output_ablation")
+        semantics = load_yaml("dataset_semantics")["datasets"]
+        for entry in selected_entries(load_catalog(), main):
+            for model in cfg["candidate_models"]:
+                rows.append(
+                    dict(
+                        dataset_id=entry["id"],
+                        model=model,
+                        feature_set="non_text_plus_text_statistics",
+                        provider=None,
+                        phase="experiment_3",
+                        control="text_statistics",
+                        view="main",
+                    )
+                )
+                for provider in main["candidate_extractors"]:
+                    task = semantics[entry["id"]]["task_type"]
+                    controls = [("permuted", "main")]
+                    if task == "regression":
+                        controls.append(("retained_view", "probabilities"))
+                    if task != "binary_classification":
+                        controls.append(("retained_view", "probabilities_plus_confidence"))
+                    for control, view in controls:
+                        rows.append(
+                            dict(
+                                dataset_id=entry["id"],
+                                model=model,
+                                feature_set="non_text_plus_both",
+                                provider=provider,
+                                phase="experiment_3",
+                                control=control,
+                                view=view,
+                            )
+                        )
     return rows
 
 
-def run_arm(arm, *, allow_model_runs=False):
-    cfg = load_yaml(
-        "experiment_2/native_text" if arm["model"] in TEXT_MODELS else "experiment_1/main"
+def run_arm(arm, *, allow_model_runs=False, profile=False):
+    cfg = (
+        load_yaml("experiment_3/output_ablation")
+        if arm["phase"] == "experiment_3"
+        else load_yaml(
+            "experiment_2/native_text" if arm["model"] in TEXT_MODELS else "experiment_1/main"
+        )
     )
-    if allow_model_runs is not True or cfg["enabled"] is not True:
+    enabled = (
+        load_yaml("experiment_0/debug")["full_fold_profile_enabled"] if profile else cfg["enabled"]
+    )
+    if allow_model_runs is not True or enabled is not True:
         raise RuntimeError("Benchmark execution is disabled; plan only")
-    if not cfg.get("experiment_0_acceptance"):
-        raise ValueError("Record accepted experiment-0 evidence before running benchmark models")
-    if arm not in benchmark_plan():
+    if not profile:
+        reviewed_acceptance(cfg.get("experiment_0_acceptance"), stage="after_extraction")
+    if arm not in benchmark_plan(include_controls=True):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     catalog = load_yaml("experiment_1/models")
     settings = copy.deepcopy(catalog["models"][arm["model"]]["runtime"])
     settings["seed"] = cfg["random_seed"]
-    settings["code_sha256"] = code_identity()
+    settings["code_sha256"] = code_identity(
+        [
+            "src/evaluation/models.py",
+            "src/evaluation/protocol.py",
+            "src/evaluation/features.py",
+            "src/evaluation/metrics.py",
+            "src/evaluation/records.py",
+            "src/evaluation/campaign.py",
+        ]
+    )
     entry = next(e for e in load_catalog()["datasets"] if e["id"] == arm["dataset_id"])
     dataset = load_dataset(entry, allow_download=False)
     blocks = []
@@ -115,7 +167,9 @@ def run_arm(arm, *, allow_model_runs=False):
     features = (
         original_features(dataset)
         if arm["model"] in TEXT_MODELS
-        else assemble_feature_set(dataset, blocks, arm["feature_set"], selector=selector)
+        else assemble_feature_set(
+            dataset, blocks, arm["feature_set"], selector=selector, view=arm.get("view", "main")
+        )
     )
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     synchronize = None
@@ -123,7 +177,8 @@ def run_arm(arm, *, allow_model_runs=False):
         import torch
 
         synchronize = torch.cuda.synchronize
-    log = paths.logs_dir(arm["phase"]) / "benchmark.jsonl"
+    phase = "experiment_0" if profile else arm["phase"]
+    log = paths.logs_dir(phase) / "benchmark.jsonl"
     append_event(log, "arm_started", **arm)
     try:
         records = evaluate_cv(
@@ -133,13 +188,18 @@ def run_arm(arm, *, allow_model_runs=False):
             specification=shared_splits(dataset, seed=cfg["random_seed"], folds=5),
             model_id=arm["model"],
             checkpoint_id=digest(settings),
-            feature_set=arm["feature_set"],
+            feature_set=arm["feature_set"]
+            + ("__" + arm["control"] + "__" + arm["view"] if "control" in arm else ""),
             allow_model_runs=True,
             inner_folds=3,
-            phase=arm["phase"],
+            phase=phase,
             synchronize=synchronize,
             device=settings["device"],
             estimator_settings=settings,
+            permutation_columns=[c for c in features if c not in dataset.metadata.non_text_columns]
+            if arm.get("control") == "permuted"
+            else None,
+            fold_numbers=[0] if profile else None,
         )
     except Exception as exc:
         # Do not record raw text/row values from third-party exception messages.
@@ -150,9 +210,7 @@ def run_arm(arm, *, allow_model_runs=False):
             "created_utc": datetime.now(UTC).isoformat(),
             "settings": settings,
         }
-        write_json(
-            paths.manifests_dir(arm["phase"]) / "failures" / f"{digest(failure)}.json", failure
-        )
+        write_json(paths.manifests_dir(phase) / "failures" / f"{digest(failure)}.json", failure)
         append_event(log, "arm_failed", error_type=type(exc).__name__, **arm)
         raise
     append_event(log, "arm_completed", records=len(records), **arm)
@@ -163,28 +221,43 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
-    parser.add_argument("--feature-set", choices=MAIN_FEATURE_SETS + ("original_features",))
+    parser.add_argument(
+        "--feature-set",
+        choices=MAIN_FEATURE_SETS + ("original_features", "non_text_plus_text_statistics"),
+    )
+    parser.add_argument("--include-controls", action="store_true")
+    parser.add_argument("--control", choices=("text_statistics", "permuted", "retained_view"))
+    parser.add_argument(
+        "--view", choices=("main", "probabilities", "probabilities_plus_confidence")
+    )
     parser.add_argument("--provider", choices=tuple(load_yaml("extractors")["candidates"]))
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--profile-fold",
+        action="store_true",
+        help="Experiment 0B: full first outer fold, no row cap",
+    )
     args = parser.parse_args()
-    plan = benchmark_plan()
+    plan = benchmark_plan(include_controls=args.include_controls or args.control is not None)
     selected = [
         a
         for a in plan
         if all(
-            v is None or a[k] == v
+            v is None or a.get(k) == v
             for k, v in {
                 "dataset_id": args.dataset,
                 "model": args.model,
                 "feature_set": args.feature_set,
                 "provider": args.provider,
+                "control": args.control,
+                "view": args.view,
             }.items()
         )
     ]
     if args.execute:
         if len(selected) != 1:
             parser.error("Execution requires exactly one dataset/model/feature-set/provider arm")
-        run_arm(selected[0], allow_model_runs=True)
+        run_arm(selected[0], allow_model_runs=True, profile=args.profile_fold)
     else:
         print(
             json.dumps(

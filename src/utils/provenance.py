@@ -10,8 +10,12 @@ from src.utils import paths
 from src.utils.serialization import digest, file_sha256
 
 
-def code_identity() -> str:
-    files = sorted((paths.REPO_ROOT / "src").rglob("*.py"))
+def code_identity(relative_files=None) -> str:
+    files = (
+        sorted((paths.REPO_ROOT / "src").rglob("*.py"))
+        if relative_files is None
+        else sorted(paths.REPO_ROOT / name for name in relative_files)
+    )
     return digest({p.relative_to(paths.REPO_ROOT).as_posix(): file_sha256(p) for p in files})
 
 

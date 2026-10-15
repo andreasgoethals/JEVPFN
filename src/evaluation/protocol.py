@@ -7,14 +7,25 @@ Preprocessing must be inside the supplied estimator/pipeline, fitted by its fit 
 from __future__ import annotations
 
 import hashlib
+import warnings
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold
 
 from src.evaluation.metrics import classification_metrics, regression_metrics
-from src.evaluation.records import PhaseTimer, save_evaluation
+from src.evaluation.records import (
+    PhaseTimer,
+    ResourceMonitor,
+    complete_fold,
+    completed_fold,
+    fold_marker,
+    save_evaluation,
+)
 from src.utils import paths
+from src.utils.locking import file_lock
+from src.utils.provenance import code_identity
 from src.utils.serialization import canonical_json, digest, scalar, write_json
 
 
@@ -161,6 +172,8 @@ def evaluate_cv(
     device: str = "cpu",
     estimator_settings: dict | None = None,
     feature_artifact_ids: list[str] | None = None,
+    permutation_columns: list[str] | None = None,
+    fold_numbers: list[int] | None = None,
 ):
     """Fit only after an explicit opt-in; save inner and outer predictions on PROJECT.
 
@@ -201,6 +214,25 @@ def evaluate_cv(
             "Resolved estimator settings and explicit feature artifact IDs are required"
         )
     feature_identity = feature_input_identity(features)
+    permutation_columns = list(permutation_columns or [])
+    if len(set(permutation_columns)) != len(permutation_columns) or set(permutation_columns) - set(
+        features
+    ):
+        raise ValueError("Invalid permutation-control columns")
+
+    def partition_inputs(train, test, seed):
+        left, right = features.iloc[train].copy(), features.iloc[test].copy()
+        if permutation_columns:
+            from src.evaluation.features import shuffle_feature_block
+
+            shuffled = shuffle_feature_block(
+                left[permutation_columns], right[permutation_columns], seed=seed
+            )
+            left.loc[:, permutation_columns], right.loc[:, permutation_columns] = [
+                p.to_numpy() for p in shuffled
+            ]
+        return left, right
+
     # Fail before any fit if configuration metadata cannot be serialized reproducibly.
     canonical_json(estimator_settings)
     target = dataset.frame[dataset.metadata.target].reset_index(drop=True)
@@ -213,104 +245,164 @@ def evaluate_cv(
         paths.results_dir("splits", specification["split_id"] + ".json", phase=phase), specification
     )
     records = []
+    if fold_numbers is not None and (
+        not fold_numbers
+        or len(set(fold_numbers)) != len(fold_numbers)
+        or any(type(i) is not int or not 0 <= i < len(specification["folds"]) for i in fold_numbers)
+    ):
+        raise ValueError("Invalid requested outer-fold subset")
+    recipe = {
+        "schema": "resumable-cv-v1",
+        "dataset_id": metadata.dataset_id,
+        "data_identity": dataset.source["data_identity"],
+        "task_type": metadata.task_type,
+        "task_schema_sha256": metadata.fingerprint,
+        "model_id": model_id,
+        "checkpoint_id": checkpoint_id,
+        "feature_set": feature_set,
+        "feature_input_identity": feature_identity,
+        "feature_artifact_ids": list(feature_artifact_ids),
+        "estimator_settings": estimator_settings,
+        "split_id": specification["split_id"],
+        "inner_folds": inner_folds if binary else None,
+        "permutation_columns": permutation_columns,
+        "protocol_sha256": code_identity(
+            [
+                "src/evaluation/protocol.py",
+                "src/evaluation/metrics.py",
+                "src/evaluation/records.py",
+                "src/evaluation/features.py",
+            ]
+        ),
+    }
     for number, fold in enumerate(specification["folds"]):
-        train, test = np.array(fold["train"]), np.array(fold["test"])
-        timer = PhaseTimer(device=device, synchronize=synchronize)
-        threshold, oof = None, None
-        if binary:
-            encoded = np.array([canonical_json(scalar(v)) for v in target.iloc[train]])
-            if pd.Series(encoded).value_counts().min() < inner_folds:
-                raise ValueError("Insufficient examples for binary inner stratified CV")
-            oof = np.full((len(train), 2), np.nan)
-            splitter = StratifiedKFold(
-                inner_folds, shuffle=True, random_state=specification["seed"] + number
-            )
-            for a, b in splitter.split(train, encoded):
-                with timer.measure("inner_model_loading"):
+        if fold_numbers is not None and number not in fold_numbers:
+            continue
+        fold_recipe = {**recipe, "outer_fold": number}
+        with file_lock(fold_marker(fold_recipe, phase).with_suffix(".lock"), timeout=1):
+            reused = completed_fold(fold_recipe, phase)
+            if reused is not None:
+                records.extend(reused)
+                continue
+            attempt_id = uuid4().hex
+            record_start = len(records)
+            with (
+                ResourceMonitor(device) as monitor,
+                warnings.catch_warnings(record=True) as captured,
+            ):
+                warnings.simplefilter("always")
+                train, test = np.array(fold["train"]), np.array(fold["test"])
+                timer = PhaseTimer(device=device, synchronize=synchronize)
+                threshold, oof = None, None
+                if binary:
+                    encoded = np.array([canonical_json(scalar(v)) for v in target.iloc[train]])
+                    if pd.Series(encoded).value_counts().min() < inner_folds:
+                        raise ValueError("Insufficient examples for binary inner stratified CV")
+                    oof = np.full((len(train), 2), np.nan)
+                    splitter = StratifiedKFold(
+                        inner_folds, shuffle=True, random_state=specification["seed"] + number
+                    )
+                    for inner_number, (a, b) in enumerate(splitter.split(train, encoded)):
+                        inner_train, inner_test = partition_inputs(
+                            train[a], train[b], specification["seed"] + 1000 * number + inner_number
+                        )
+                        with timer.measure("inner_model_loading"):
+                            model = estimator_factory()
+                        try:
+                            with timer.measure("inner_fit"):
+                                model.fit(inner_train, target.iloc[train[a]])
+                            with timer.measure("inner_predict"):
+                                oof[b] = _probabilities(model, inner_test, classes)
+                        finally:
+                            # Release this checkpoint before constructing the next estimator.
+                            # Adapters must not retain it in global caches or factory closures.
+                            del model
+                    with timer.measure("threshold_selection"):
+                        threshold = select_f1_threshold(
+                            (encoded == canonical_json(positive)).astype(int), oof[:, -1]
+                        )
+                outer_train, outer_test = partition_inputs(
+                    train, test, specification["seed"] + 1000 * number + 999
+                )
+                with timer.measure("model_loading"):
                     model = estimator_factory()
                 try:
-                    with timer.measure("inner_fit"):
-                        model.fit(features.iloc[train[a]], target.iloc[train[a]])
-                    with timer.measure("inner_predict"):
-                        oof[b] = _probabilities(model, features.iloc[train[b]], classes)
+                    with timer.measure("fit"):
+                        model.fit(outer_train, target.iloc[train])
+                    with timer.measure("predict"):
+                        prediction = (
+                            np.asarray(model.predict(outer_test), dtype=float)
+                            if metadata.task_type == "regression"
+                            else _probabilities(model, outer_test, classes)
+                        )
                 finally:
-                    # Release this checkpoint before constructing the next estimator.
-                    # Adapters must not retain it in global caches or factory closures.
                     del model
-            with timer.measure("threshold_selection"):
-                threshold = select_f1_threshold(
-                    (encoded == canonical_json(positive)).astype(int), oof[:, -1]
-                )
-        with timer.measure("model_loading"):
-            model = estimator_factory()
-        try:
-            with timer.measure("fit"):
-                model.fit(features.iloc[train], target.iloc[train])
-            with timer.measure("predict"):
-                prediction = (
-                    np.asarray(model.predict(features.iloc[test]), dtype=float)
-                    if metadata.task_type == "regression"
-                    else _probabilities(model, features.iloc[test], classes)
-                )
-        finally:
-            del model
-        base = {
-            "dataset_id": metadata.dataset_id,
-            "data_identity": dataset.source["data_identity"],
-            "model_id": model_id,
-            "checkpoint_id": checkpoint_id,
-            "feature_set": feature_set,
-            "feature_columns": list(features.columns),
-            "feature_input_identity": feature_identity,
-            "feature_artifact_ids": list(feature_artifact_ids),
-            "estimator_settings": estimator_settings,
-            "outer_fold": number,
-            "split_id": specification["split_id"],
-            "n_train": len(train),
-            "n_validation": len(train) if binary else 0,
-            "target_scale": "original_dataset_target",
-            "class_order": list(classes),
-            "positive_class": positive,
-            "selected_threshold": threshold,
-            "inner_folds": inner_folds if binary else None,
-            "preprocessing": "inside_estimator_fit_training_partition_only",
-        }
-        for role, positions, predictions in [
-            ("outer_test", test, prediction),
-            *([("inner_oof_binary_threshold", train, oof)] if binary else []),
-        ]:
-            table = pd.DataFrame(
-                {
-                    "row_id": [row_ids[i] for i in positions],
-                    "y_true": target.iloc[positions].to_numpy(),
+                base = {
+                    "dataset_id": metadata.dataset_id,
+                    "data_identity": dataset.source["data_identity"],
+                    "model_id": model_id,
+                    "checkpoint_id": checkpoint_id,
+                    "feature_set": feature_set,
+                    "feature_columns": list(features.columns),
+                    "feature_input_identity": feature_identity,
+                    "feature_artifact_ids": list(feature_artifact_ids),
+                    "estimator_settings": estimator_settings,
+                    "outer_fold": number,
+                    "split_id": specification["split_id"],
+                    "n_train": len(train),
+                    "n_validation": len(train) if binary else 0,
+                    "target_scale": "original_dataset_target",
+                    "class_order": list(classes),
+                    "positive_class": positive,
+                    "selected_threshold": threshold,
+                    "inner_folds": inner_folds if binary else None,
+                    "preprocessing": "inside_estimator_fit_training_partition_only",
+                    "permutation_columns": permutation_columns,
+                    "single_text_representations_equivalent": len(metadata.text_columns) == 1,
+                    "fold_recipe_id": digest(fold_recipe),
                 }
-            )
-            with timer.measure("metric_evaluation"):
-                if metadata.task_type == "regression":
-                    scores = regression_metrics(table.y_true, predictions)
-                    table["prediction"] = predictions
-                else:
-                    scores = classification_metrics(
-                        table.y_true,
-                        predictions,
-                        classes=classes,
-                        positive_class=positive,
-                        selected_threshold=threshold,
+                for role, positions, predictions in [
+                    ("outer_test", test, prediction),
+                    *([("inner_oof_binary_threshold", train, oof)] if binary else []),
+                ]:
+                    table = pd.DataFrame(
+                        {
+                            "row_id": [row_ids[i] for i in positions],
+                            "y_true": target.iloc[positions].to_numpy(),
+                        }
                     )
-                    for i in range(len(classes)):
-                        table[f"p_c{i:03d}"] = predictions[:, i]
-                    if binary:
-                        table["decision_default"] = predictions[:, -1] >= 0.5
-                        table["decision_selected"] = predictions[:, -1] >= threshold
-            identity = {**base, "prediction_role": role}
-            records.append(
-                save_evaluation(
-                    scores=scores,
-                    predictions=table,
-                    timer=timer,
-                    metadata=identity,
-                    run_id=digest(identity),
-                    phase=phase,
-                )
-            )
+                    with timer.measure("metric_evaluation"):
+                        if metadata.task_type == "regression":
+                            scores = regression_metrics(table.y_true, predictions)
+                            table["prediction"] = predictions
+                        else:
+                            scores = classification_metrics(
+                                table.y_true,
+                                predictions,
+                                classes=classes,
+                                positive_class=positive,
+                                selected_threshold=threshold,
+                            )
+                            for i in range(len(classes)):
+                                table[f"p_c{i:03d}"] = predictions[:, i]
+                            if binary:
+                                table["decision_default"] = predictions[:, -1] >= 0.5
+                                table["decision_selected"] = predictions[:, -1] >= threshold
+                    identity = {**base, "prediction_role": role}
+                    records.append(
+                        save_evaluation(
+                            scores=scores,
+                            predictions=table,
+                            timer=timer,
+                            metadata=identity,
+                            run_id=f"{digest(identity)}_{attempt_id}",
+                            phase=phase,
+                            resources=monitor.snapshot(),
+                            warnings=[
+                                {"category": w.category.__name__, "message": str(w.message)[:2000]}
+                                for w in captured
+                            ],
+                        )
+                    )
+            complete_fold(fold_recipe, records[record_start:], phase)
     return records

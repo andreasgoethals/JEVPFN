@@ -1,0 +1,32 @@
+#!/bin/bash -l
+# Connected login-shell setup for the first two GPU contract environments; no inference.
+set -euo pipefail
+JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern}"
+case "$JEVPFN_SETUP_PROVIDER" in
+    cloudflare) JEVPFN_SETUP_EXTRA=clef ;;
+    intern) JEVPFN_SETUP_EXTRA=intern ;;
+    *) echo 'This setup script supports cloudflare and intern only.' >&2; exit 2 ;;
+esac
+cd "${VSC_DATA:?}/JEVPFN"
+export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}"
+export JEVPFN_CONDA_ENV=JEVPFN
+source scripts/activate_conda.sh
+"${JEVPFN_PYTHON:?}" -c 'from src.cluster.maintenance import require_idle_vsc; require_idle_vsc()'
+export CONDA_PKGS_DIRS="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/conda_packages"
+export PIP_CACHE_DIR="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/pip_cache"
+export HF_HOME="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/huggingface"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export HF_XET_CACHE="$HF_HOME/xet"
+unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
+"$JEVPFN_PYTHON" -m src.jev.checkpoints --provider "$JEVPFN_SETUP_PROVIDER"
+export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/$JEVPFN_SETUP_PROVIDER"
+if [[ ! -x "$JEVPFN_CONDA_ENV/bin/python" ]]; then
+    conda create --yes --prefix "$JEVPFN_CONDA_ENV" python=3.12 pip
+fi
+source scripts/activate_conda.sh
+"${JEVPFN_PYTHON:?}" -m pip install 'torch==2.12.1' 'torchvision==0.27.1' --index-url https://download.pytorch.org/whl/cu126
+"$JEVPFN_PYTHON" -m pip install -e ".[dev,token-audit,$JEVPFN_SETUP_EXTRA]"
+"$JEVPFN_PYTHON" -m pip check
+"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only --provider "$JEVPFN_SETUP_PROVIDER"
+echo "Prepared environment: $JEVPFN_CONDA_ENV"
+echo 'No inference or job submission performed. Actual GPU compatibility still requires the contract job.'

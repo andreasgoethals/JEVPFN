@@ -290,8 +290,8 @@ def test_missing_or_stale_context_screen_is_explicit(tmp_path, monkeypatch):
     summary, scenarios, origins = saved_screen_tables()
     assert summary["status"] == "not_screened" and scenarios.empty and origins.empty
     (tmp_path / "context_screen.json").write_text(json.dumps({"datasets": []}), encoding="utf-8")
-    with pytest.raises(ValueError, match="selection is stale"):
-        saved_screen_tables()
+    summary, scenarios, origins = saved_screen_tables()
+    assert summary["status"] == "historical_inputs_changed" and scenarios.empty and origins.empty
 
 
 @pytest.mark.parametrize(

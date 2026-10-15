@@ -4,7 +4,7 @@ candidate_version: direct-evidence-review-v2
 accepted_version: directional-v2
 implementation: src.jev.design
 semantics_catalog: dataset_semantics
-documented_version: documented-task-v1
+documented_version: documented-task-v2
 inspection_variant: documented
 documentary_definitions: {}  # Only sourced definitions; no guesses for opaque class codes.
 context_candidates: [current_metadata, sourced_task_definitions]

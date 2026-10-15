@@ -62,7 +62,16 @@ def block_identity(
         "request_configuration": cfg["jev"]["request_configuration"],
         "template_version": cfg["jev"]["template_version"],
         "api_mapping_version": MAPPING_VERSION,
-        "code_sha256": code_identity(),
+        "code_sha256": code_identity(
+            [
+                "src/jev/features.py",
+                "src/jev/provider.py",
+                "src/jev/requests.py",
+                "src/jev/question_bank.py",
+                "src/jev/templates.py",
+                "src/utils/serialization.py",
+            ]
+        ),
     }
     if question_bank is not None:
         from src.jev.question_bank import validate_bank
@@ -101,6 +110,7 @@ def materialize_cached_block(
         question_variant=question_variant,
     )
     if provider_settings is not None:
+        identity["settings_sha256"] = digest(provider_settings)
         identity.update(
             {
                 k: provider_settings[k]
@@ -434,6 +444,7 @@ def feature_inventory(path: Path) -> pd.DataFrame:
     path = Path(path)
     columns = [
         "artifact_id",
+        "settings_sha256",
         "dataset_id",
         "provider",
         "model",

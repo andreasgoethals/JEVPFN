@@ -83,6 +83,8 @@ def test_sensitive_and_large_artifacts_are_ignored():
         "output_JEVPFN/All Results.md",
         "output_JEVPFN/figures/Captions.md",
         "output_JEVPFN/4. experiment_1/results/predictions.parquet",
+        "archived_output_JEVPFN/old/3. experiment_0/logs/test.log",
+        ".maintenance.lock",
         "config/private/.env",
         "credentials/private.pem",
         "environments/gpu/bin/python",

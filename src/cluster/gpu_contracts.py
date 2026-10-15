@@ -20,6 +20,7 @@ from uuid import uuid4
 import pandas as pd
 
 from src.cluster.preflight import storage_policy_failures
+from src.cluster.semantic_contracts import exercise_semantics
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.jev.cache import ResponseCache
@@ -303,8 +304,8 @@ def run(provider, *, execute=False):
         }:
             raise ValueError("Token evidence does not cover every selected dataset")
         sample = real_sample(evidence, counts)
-        # 30 distinct synthetic inputs, one wide-choice request, at most two per dataset.
-        if 31 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
+        # 30 fixture inputs, one wide-choice, seven semantic probes, two per dataset.
+        if 38 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
             raise ValueError("GPU contract plan exceeds the configured request budget")
         directory.mkdir(parents=True, exist_ok=True)
         print(f"Loading pinned {provider} on the allocated GPU (offline)", flush=True)
@@ -329,6 +330,13 @@ def run(provider, *, execute=False):
             )
             write_json(manifest, report)
         report["boundaries"] = exercise_boundaries(metered, directory)
+        semantic_cache = ResponseCache(directory / "EXP0_SEMANTICS.sqlite3", "EXP0_SEMANTICS")
+        report["semantic_diagnostics"] = exercise_semantics(metered, semantic_cache)
+        write_json(manifest, report)
+        if not report["semantic_diagnostics"]["passed"]:
+            raise ValueError(
+                "Known-answer diagnostics need review; inspect saved raw answers before blaming the decoder"
+            )
         report["real_datasets"] = exercise_real_inputs(metered, sample, log)
         report["status"] = "gpu_contracts_passed_requires_review"
         report["runtime_token_count_parity"] = True  # SelfHostedClient rejects every mismatch.

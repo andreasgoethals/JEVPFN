@@ -64,20 +64,57 @@ Jinja2 is explicitly required for chat-template rendering. `--stage-only` downlo
 pinned tokenizers/source files only; `--check-only` renders all three task formats offline.
 VSC CPU tests exclude only the three local notebook tests; notebooks and their tests run locally.
 
-Git does not contain the data. Copy all raw datasets and the 18 closed prepared-input files
-from the laptop to PROJECT. Open OnDemand's visible directories do not determine shell permissions.
-In Windows PowerShell, from the local repository:
+Git does not contain data. The existing VSC raw datasets passed their hash checks and do not
+need uploading again after a fresh-output reset. For a first installation only, copy `data/raw/`
+to PROJECT `JEVPFN/data/` with SCP. The current question update uses a checked bundle of exactly
+the 18 selected SQLite input files; it contains no raw data, responses, credentials or weights.
+Stop local question-generation/notebook processes first.
 
-```powershell
-$jevpfnRemote = 'YOUR_VSC_LOGIN@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/data/'
-scp -i "$env:USERPROFILE\.ssh\id_rsa_vsc" -r .\data\raw .\data\decision_inputs $jevpfnRemote
+First create the destination from the VSC login shell:
+
+```bash
+mkdir -p /lustre1/project/stg_00211/JEVPFN/uploads
 ```
 
-Use the SSH key registered to the account. Open OnDemand browser authentication and SSH/MFA
-are separate. Follow [Windows key setup](https://docs.vscentrum.be/accounts/generating_keys_windows.html)
-and [SCP/SFTP](https://docs.vscentrum.be/data/transfer/scp_sftp.html); use
-[Globus](https://docs.vscentrum.be/data/transfer.html) for larger/interruption-prone transfers.
-Never upload a private key. Stop writers before copying SQLite input files.
+Then in Windows PowerShell:
+
+```powershell
+Set-Location 'C:\Users\U0152019\PhD Documents\Projects\5. JEVPFN\JEVPFN'
+.\.venv\Scripts\python.exe -m src.cluster.input_transfer pack
+scp '.\output_JEVPFN\transfers\decision_inputs_v2.zip' '.\output_JEVPFN\transfers\decision_inputs_v2.zip.sha256' 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/uploads/'
+```
+
+This uses the same working SSH authentication as the owner's CreditPFN SCP commands; no
+assumed private-key filename.
+
+After SCP finishes, from the activated CPU environment in `$VSC_DATA/JEVPFN`:
+
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /lustre1/project/stg_00211/JEVPFN/uploads/decision_inputs_v2.zip --writers-stopped
+```
+
+The installer checks the bundle/hash, every database, active question bank, row-link counts
+and file hashes before replacement. Existing question files are backed up under PROJECT
+`output_JEVPFN/transfers/input_backups/`; repeat uploads reuse identical files. Byte-exact
+copies preserve input fingerprints across local/VSC token reports. It refuses active/recovery
+SQLite sidecars and queued/running JEVPFN jobs; also stop manual writers yourself.
+
+## Fresh output reset before a new Experiment 0A
+
+After updating the checkout/CPU dependencies, but before upload installation or job submission:
+
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.fresh_start
+"$JEVPFN_PYTHON" -m src.cluster.fresh_start --apply --writers-stopped
+"$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
+```
+
+The first command previews. The second renames each complete `output_JEVPFN` tree into
+`JEVPFN/archived_output_JEVPFN/<UTC-run-id>/` on the same tier, then creates fresh active
+output/log directories. It does not delete anything, copy large files to DATA, or alter raw
+data, prepared inputs, permanent features, weights or environments. An interrupted reset
+leaves its recovery journal beside the DATA archives. The old token databases remain in the
+archive, so the fresh audit counts everything again. Do not rerun the reset after starting tests.
 
 ## Experiment 0A: CPU and exact tokens
 
@@ -97,11 +134,22 @@ four hours. It counts every complete unique input for each pinned open-weight to
 including task/question/options and publisher formatting. Counts are committed incrementally
 and resume after interruption; completed provider summaries survive another worker's failure.
 Do not delete count databases to fix a dependency. The fingerprinted tokenizer modules are
-kept stable so the current audit remains reusable. Jev's hosted tokenization remains unverified.
+kept stable so unchanged input/counter versions remain reusable. Jev's hosted tokenization
+remains unverified. Question version 2 changes payloads: rerun preparation and upload the 18
+closed input files after stopping readers/writers, then rerun the CPU/token jobs. Historical
+input sets remain inside those files. Do not delete prior counts or redownload unchanged weights.
 
-Small summaries/logs use DATA `3. experiment_0/{manifests,logs}/before_extraction/`;
+Small summaries use DATA `3. experiment_0/manifests/before_extraction/` and operational
+logs use DATA `3. experiment_0/logs/`;
 large SQLite count databases use PROJECT `3. experiment_0/results/token_audit/`.
 A passing CPU/token check is infrastructure evidence; GPU/provider compatibility is separate.
+
+Also submit `sbatch scripts/slurm/experiment_0_storage.slurm`. This five-minute, two-node
+CPU test checks that another node cannot acquire a held PROJECT writer lock, can acquire it
+after release, sees committed SQLite rows, and can produce a valid snapshot/restore. It uses
+only synthetic files under PROJECT Experiment 0 results; its compact evidence goes to DATA.
+A pass verifies the tested mount's behavior, not storage quota or an independent backup.
+Repeat it if moving to another filesystem/cluster. These checks do not need model weights.
 
 ## Checkpoints and isolated GPU environments
 
@@ -120,25 +168,15 @@ Strands stages both its adapter and the configured Qwen3.5-2B base model. The in
 revision caveat is retained in config. Every compute job verifies hashes and runs offline.
 No inference belongs on a login node.
 
-For Clef, use `JEVPFN_PROVIDER=cloudflare` and `JEVPFN_EXTRA=clef`. For Intern, use `intern`
-for both. Create each environment only once; packages/wheel caches and large environments
-belong on PROJECT:
+For the first two GPU tests, the setup helper prepares the isolated Clef and Intern
+environments, reuses staged weights and performs an offline tokenizer smoke check. Run before
+submitting jobs; it refuses active JEVPFN jobs. Packages/wheel caches/environments use PROJECT:
 
 ```bash
 cd "$VSC_DATA/JEVPFN"
 export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
-export JEVPFN_PROVIDER=cloudflare
-export JEVPFN_EXTRA=clef
-export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/$JEVPFN_PROVIDER"
-export CONDA_PKGS_DIRS="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/conda_packages"
-export PIP_CACHE_DIR="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/pip_cache"
-source "$VSC_DATA/miniconda3/etc/profile.d/conda.sh"
-conda create --prefix "$JEVPFN_CONDA_ENV" python=3.12 pip
-source scripts/activate_conda.sh
-"${JEVPFN_PYTHON:?}" -m pip install 'torch==2.12.1' 'torchvision==0.27.1' --index-url https://download.pytorch.org/whl/cu126
-"$JEVPFN_PYTHON" -m pip install -e ".[dev,token-audit,$JEVPFN_EXTRA]"
-"$JEVPFN_PYTHON" -m pip check
-"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only --provider "$JEVPFN_PROVIDER"
+bash scripts/setup_decision_env.sh cloudflare
+bash scripts/setup_decision_env.sh intern
 ```
 
 CUDA 12.6 is the A100 candidate; verify driver/glibc compatibility in the allocation. The
@@ -157,15 +195,21 @@ A failure requires diagnosis rather than silent version substitution.
 
 Custom inference code is reviewed and hash-verified before loading. Complete dependency
 versions enter response identity. All model and Hugging Face/Xet caches use PROJECT;
-HF offline flags are set before runtime imports.
+HF offline flags are set before runtime imports. Bytecode writes are disabled so importing
+publisher code does not alter the fingerprinted checkpoint tree.
 
 ## Bounded GPU contract tests and larger pilots
 
 After exact counts for the chosen provider are complete, submit its prepared environment:
 
 ```bash
+export JEVPFN_PROVIDER=cloudflare
+export JEVPFN_CONDA_ENV=/lustre1/project/stg_00211/JEVPFN/environments/cloudflare
 sbatch scripts/slurm/experiment_0_decision_contracts.slurm
 ```
+
+After Clef completes successfully, repeat with both values changed from `cloudflare` to
+`intern`. Keep `JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211` exported for these wICE jobs.
 
 The job uses one full A100, four CPUs, 128 GB host RAM and one hour in `gpu_a100_debug`,
 with the configured CreditPFN account. Only one debug GPU job may be queued at a time:
@@ -175,8 +219,10 @@ full GPU, unlike the interactive MIG slice. Verify account/partition access on t
 The contract job tests binary, three-class and nine-level regression fixtures, a 30-class
 vector, missing/duplicate/Unicode input, overflow rejection, cache reopen/reuse, original-row
 alignment, and saving/reloading both feature representations. It then evaluates first/longest
-unique inputs from each selected dataset. At most 67 forwards are planned, with a hard ceiling
+unique inputs from each selected dataset. Seven additional known-answer probes check binary
+polarity, permuted class ordering and score endpoints/zero. At most 74 forwards are planned, with a hard ceiling
 of 100. Runtime token-count agreement, load/inference time and peak GPU memory are recorded.
+A failed known-answer probe requires inspecting raw responses; the model itself may be wrong.
 
 Synthetic artifacts use PROJECT `3. experiment_0/results/gpu_contracts/<run>/`; sampled real
 responses use permanent PROJECT `data/jev_cache/<dataset_id>.sqlite3` for reuse. DATA holds
@@ -189,6 +235,12 @@ profiling uses `self_hosted.yaml` with its explicit pilot opt-in and
 `experiment_0_decision_pilot.slurm`: first/middle/last rows plus ten longest requests per
 dataset, capped at 1,000. Full extraction has a separate switch and a reviewed acceptance
 manifest matching runtime settings and token-audit identity.
+After acceptance, `scripts/slurm/feature_creation.slurm` runs full extraction on regular
+`gpu_a100`; its 24-hour allocation is a resumable segment, not a runtime prediction. Create
+`output_JEVPFN/2. feature_creation/logs` before submission. Provider jobs rotate datasets and
+wait for busy files. `--continue-on-error` is an explicit diagnostic mode with durable failed
+request records; incomplete datasets cannot be materialized or accepted. Repair the cause
+and use `--retry-failed` to retry those inputs. No silent substitution by missing values.
 
 Start serial inference on one wICE A100. Its 80 GiB can hold the Perplexity checkpoint's
 approximately 49 GiB BF16 weights, but working memory must be profiled. Use a regular GPU
@@ -205,6 +257,15 @@ verified account rates, a billing-token upper bound, context validation and expl
 campaign budgets. Published rates are references, not automatic account authorization.
 Microsoft is outside the selected roster.
 
+`python -m src.jev.extraction` previews readiness without credentials/network. Its `--execute`
+flag runs the bounded local pilot; `--execute --full` needs a separate full-run switch and
+accepted pilot evidence. Configure `live_extraction` in `feature_creation.yaml`, including the
+reviewed context envelope, full-campaign dataset allocations, and the pilot request ceiling.
+The envelope must justify a maximum complete-body byte size and its billing-token bound;
+do not infer either from characters/4. Unknown bounds keep dispatch blocked. HTTP 429 has
+bounded exponential backoff; 529/timeouts remain review stops because retryable does not
+establish that an earlier attempt was unbilled. Raw paid responses survive decoder failure.
+
 After full feature creation and validated transfer, Experiment 0B checks complete selected
 artifacts and real predictor fits on all task types. Main extras are `models`, `baselines`,
 `tabicl`, `limix`, `kumo`; original-text extras are `tabstar`, `contexttab`. Stage/hash their
@@ -216,6 +277,33 @@ ConTextTab uses one bag and the full training context rather than default row sa
 TabSTAR's default adaptation reserves internal validation for stopping. Kumo rejects
 500-column overflow. Record failures without silently reducing rows/features. Pretraining
 and prediction-time input availability still need review before interpreting results.
+
+Enable only the bounded `predictor_execution_enabled` switch in `experiment_0/debug.yaml`
+for `python -m src.cluster.predictor_contracts --model MODEL --execute`. This runs actual
+binary/three-class/30-class/regression fixtures, five-fold CV and no-refit restart checks.
+`experiment_0_predictor.slurm` supplies a regular A100 allocation for GPU models. Run CPU
+CatBoost/linear checks in a CPU allocation with the same module command.
+For full-size feasibility, separately enable `full_fold_profile_enabled` and run
+`python -m src.evaluation.campaign --dataset ID --model MODEL --feature-set ARM --provider PROVIDER --profile-fold --execute`
+inside the chosen allocation (omit provider for the non-text baseline). It executes only
+outer fold 0, including binary inner validation, with all its training rows and saves to
+Experiment 0. Full benchmark execution still requires its own switches and reviewed 0B evidence.
+
+Jev/full-benchmark acceptance files are owner-reviewed JSON: `accepted: true`, `reviewed_by`,
+`stage` (`jev_pilot` or `after_extraction`) and a nonempty `evidence` list of `{path, sha256}`
+test reports. Jev acceptance also copies `settings_sha256`, `input_sets` and
+`context_envelope_sha256` from the pilot report. Open-weight acceptance uses stage
+`before_extraction` with `settings_sha256` and `token_audit_id`, plus the same reviewer/evidence
+fields. Set its file per provider in `accepted_before_extraction_manifests`. None is generated
+as accepted by a test.
+Inspect the actual evidence, quota/backup and runtime coverage before signing acceptance.
+
+CV folds have completion manifests with record/prediction checksums. Restarts skip only
+complete matching folds; interrupted attempts remain evidence. Experiment 3's statistics,
+permutation and retained-view arms use `campaign --include-controls` and the explicit
+`--control`/`--view` filters. `python -m src.evaluation.results --save` writes complete-arm
+per-dataset metrics and paired differences to PROJECT Experiment 4, with its compact index on
+DATA. Negative differences are improvements for loss metrics, not for higher-is-better metrics.
 
 ## Transfer results
 

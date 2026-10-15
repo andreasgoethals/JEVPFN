@@ -16,6 +16,7 @@ import os
 import sqlite3
 import sys
 import time
+from collections import deque
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,6 +29,7 @@ from src.jev.inputs import _read_set, iter_prepared_inputs, prepared_request
 from src.jev.provider import QUESTION_ID, response_features, semantic_question
 from src.jev.templates import TEMPLATE_VERSION
 from src.utils import paths
+from src.utils.acceptance import reviewed_acceptance
 from src.utils.config import load_config, load_yaml
 from src.utils.events import append_event
 from src.utils.locking import file_lock
@@ -36,6 +38,10 @@ from src.utils.serialization import canonical_json, digest, file_sha256, write_j
 
 def inference_environment():
     """Redirect all implicit library caches before importing a model runtime."""
+    # Loading publisher source must not create untracked __pycache__ files inside
+    # the immutable checkpoint directory and invalidate its next verification.
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
         os.environ[name] = "1"
     os.environ["HF_HOME"] = str(paths.checkpoints_dir("huggingface"))
@@ -192,19 +198,59 @@ class SelfHostedClient:
         return response
 
 
-def cached_evaluate(cache, client, request):
+def cached_evaluate(cache, client, request, *, skip_failed=False):
     """Persist a validated response before advancing. A restart reuses its exact identity."""
     cached = cache.get(request, kind="verified_response")
     if cached is not None:
         response_features(request, cached)
         return "cache_hit"
-    response = client.evaluate(request)
-    response_features(request, response)
-    cache.put(request, response, kind="verified_response")
+    if skip_failed and cache.failure_count(request):
+        return "failed_recorded"
+    try:
+        response = client.evaluate(request)
+        response_features(request, response)
+        cache.put(request, response, kind="verified_response")
+    except Exception as exc:
+        cache.record_failure(request, exc)
+        raise
     return "completed"
 
 
+def locked_datasets(items, provider, *, timeout=3600, sleep=time.sleep):
+    """Rotate starting datasets, defer busy stores, and keep one writer per dataset.
+
+    A generator holds each OS lock through the yielded dataset's work. Callers close
+    it in a finally/context manager. No SQLite connection is held across GPU calls.
+    """
+    ordered = list(items)
+    offset = SELF_HOSTED.index(provider) % len(ordered) if ordered else 0
+    pending = deque(ordered[offset:] + ordered[:offset])
+    last_progress = time.monotonic()
+    while pending:
+        item = pending.popleft()
+        lock = file_lock(
+            paths.dataset_cache_path(item["dataset_id"]).with_suffix(".extraction.lock"), timeout=0
+        )
+        try:
+            lock.__enter__()
+        except TimeoutError:
+            pending.append(item)
+            if time.monotonic() - last_progress >= timeout:
+                raise TimeoutError(
+                    "All remaining dataset stores are busy; rerun to resume"
+                ) from None
+            sleep(0.2)
+            continue
+        try:
+            yield item
+        finally:
+            lock.__exit__(None, None, None)
+        last_progress = time.monotonic()
+
+
 def token_evidence(provider, counter):
+    if counter.limit != load_yaml("extractors")["candidates"][provider]["context_tokens"]:
+        raise ValueError("Configured context window differs from the pinned tokenizer")
     path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
     combined = json.loads(path.read_text(encoding="utf-8"))
     matches = [r for r in combined["self_hosted"] if r["provider"] == provider]
@@ -263,7 +309,7 @@ def pilot_numbers(source, counts, dataset_id):
     return numbers
 
 
-def run(provider, *, execute=False, full=False):
+def run(provider, *, execute=False, full=False, continue_on_error=False, retry_failed=False):
     cfg = load_yaml("experiment_0/self_hosted")
     if not execute or cfg["enabled"] is not True:
         raise RuntimeError("GPU pilot is disabled; explicitly enable its config and pass --execute")
@@ -273,10 +319,10 @@ def run(provider, *, execute=False, full=False):
         raise ValueError("The initial GPU pilot currently supports serialized batch size one")
     if not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU extraction must run in a VSC compute allocation")
-    if full and (
-        cfg["full_feature_creation_enabled"] is not True
-        or not cfg["accepted_before_extraction_manifest"]
-    ):
+    accepted_file = cfg.get("accepted_before_extraction_manifests", {}).get(provider) or cfg.get(
+        "accepted_before_extraction_manifest"
+    )
+    if full and (cfg["full_feature_creation_enabled"] is not True or not accepted_file):
         raise RuntimeError(
             "Full extraction requires reviewed Experiment 0A acceptance and its own enable switch"
         )
@@ -301,15 +347,14 @@ def run(provider, *, execute=False, full=False):
     # All cheap checks precede weight loading. GPU runtime is created once per job.
     client = SelfHostedClient(provider, allow_model_runs=True)
     if full:
-        acceptance = json.loads(
-            Path(cfg["accepted_before_extraction_manifest"]).read_text(encoding="utf-8")
+        reviewed_acceptance(
+            accepted_file,
+            stage="before_extraction",
+            expected={
+                "settings_sha256": digest(client.settings),
+                "token_audit_id": evidence["audit_id"],
+            },
         )
-        if (
-            acceptance.get("accepted") is not True
-            or acceptance.get("settings_sha256") != digest(client.settings)
-            or acceptance.get("token_audit_id") != evidence["audit_id"]
-        ):
-            raise ValueError("Reviewed acceptance does not match this exact runtime/input audit")
     phase = "feature_creation" if full else "experiment_0"
     run_id = uuid4().hex
     log = (
@@ -336,53 +381,68 @@ def run(provider, *, execute=False, full=False):
     )
     write_json(manifest, summary)
     append_event(log, "started", run_id=run_id, provider=provider)
+    schedule = locked_datasets(inputs, provider, timeout=cfg.get("dataset_lock_wait_seconds", 3600))
     try:
-        for item in inputs:
+        for item in schedule:
             dataset_id = item["dataset_id"]
             source = paths.dataset_question_path(dataset_id)
             cache = ResponseCache.for_dataset(dataset_id)
-            started, completed, reused = time.perf_counter(), 0, 0
-            # One writer per dataset across providers. OS releases the lock after a crash.
-            with file_lock(cache.path.with_suffix(".extraction.lock"), timeout=1):
-                for record in iter_prepared_inputs(
-                    source, input_set_id=item["input_set_id"], input_numbers=selection[dataset_id]
-                ):
-                    request = prepared_request(
-                        record, settings=client.settings, provenance={"dataset_id": dataset_id}
+            started, completed, reused, failed = time.perf_counter(), 0, 0, 0
+            for record in iter_prepared_inputs(
+                source, input_set_id=item["input_set_id"], input_numbers=selection[dataset_id]
+            ):
+                request = prepared_request(
+                    record, settings=client.settings, provenance={"dataset_id": dataset_id}
+                )
+                try:
+                    status = cached_evaluate(
+                        cache, client, request, skip_failed=continue_on_error and not retry_failed
                     )
-                    status = cached_evaluate(cache, client, request)
-                    completed += status == "completed"
-                    reused += status == "cache_hit"
-                    if (completed + reused) % 100 == 0:
-                        append_event(
-                            log,
-                            "progress",
-                            dataset_id=dataset_id,
-                            completed=completed,
-                            reused=reused,
-                        )
-                        print(
-                            f"{provider} / {dataset_id}: {completed} new, {reused} reused",
-                            flush=True,
-                        )
-                if full:
-                    _materialize(dataset_id, client.settings, cache, item["input_set_id"])
+                except Exception:
+                    if not continue_on_error:
+                        raise
+                    status = "failed_recorded"
+                failed += status == "failed_recorded"
+                if failed > cfg.get("max_recorded_failures_per_dataset", 10):
+                    raise RuntimeError("Recorded-failure ceiling reached; diagnose before resuming")
+                completed += status == "completed"
+                reused += status == "cache_hit"
+                if (completed + reused) % 100 == 0:
+                    append_event(
+                        log,
+                        "progress",
+                        dataset_id=dataset_id,
+                        completed=completed,
+                        reused=reused,
+                    )
+                    print(
+                        f"{provider} / {dataset_id}: {completed} new, {reused} reused",
+                        flush=True,
+                    )
+            if full and not failed:
+                _materialize(dataset_id, client.settings, cache, item["input_set_id"])
             result = {
                 "dataset_id": dataset_id,
                 "completed": completed,
                 "reused": reused,
+                "failed_requests": failed,
                 "seconds": time.perf_counter() - started,
             }
             summary["datasets"].append(result)
             write_json(manifest, summary)
             append_event(log, "dataset_complete", **result)
             print(result, flush=True)
-        summary["status"] = "completed_requires_review"
+        summary["status"] = (
+            "incomplete_failures_recorded"
+            if any(d["failed_requests"] for d in summary["datasets"])
+            else "completed_requires_review"
+        )
     except BaseException as exc:
         summary.update(status="failed", error_type=type(exc).__name__)
         append_event(log, "failed", error_type=type(exc).__name__)
         raise
     finally:
+        schedule.close()
         summary["peak_gpu_allocated_bytes"] = client.torch.cuda.max_memory_allocated()
         write_json(manifest, summary)
     return summary
@@ -428,14 +488,30 @@ def main():
     parser.add_argument("--provider", choices=SELF_HOSTED, default="liquid")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--full", action="store_true")
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="record/skip failures; incomplete datasets never become feature artifacts",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="retry previously failed inputs in continue mode",
+    )
     args = parser.parse_args()
     if not args.execute:
         print(
             "Prepared GPU pilot. Stage weights, run exact tokens, enable experiment_0/self_hosted, then submit the pilot Slurm job. No inference performed."
         )
         return 0
-    run(args.provider, execute=True, full=args.full)
-    return 0
+    report = run(
+        args.provider,
+        execute=True,
+        full=args.full,
+        continue_on_error=args.continue_on_error,
+        retry_failed=args.retry_failed,
+    )
+    return int(report["status"] != "completed_requires_review")
 
 
 if __name__ == "__main__":

@@ -52,6 +52,9 @@ def cv_fixture(monkeypatch, tmp_path):
         return tmp_path / kwargs["run_id"]
 
     monkeypatch.setattr(protocol, "save_evaluation", fake_save)
+    # This fixture tests identities without serializing records; resume is tested separately.
+    monkeypatch.setattr(protocol, "completed_fold", lambda *a: None)
+    monkeypatch.setattr(protocol, "complete_fold", lambda *a: None)
     monkeypatch.setattr(
         protocol.paths, "results_dir", lambda *parts, **kwargs: tmp_path.joinpath(*parts)
     )

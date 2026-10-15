@@ -26,6 +26,10 @@ from src.utils.serialization import canonical_json
 class RejectedRetryable(RuntimeError):
     """A verified, unbilled rejection (e.g. HTTP 429); safe to retry within the attempt budget."""
 
+    def __init__(self, message="Rate-limit rejection", retry_after_seconds=None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
 
 @dataclass(frozen=True)
 class ExtractionLimits:
@@ -36,6 +40,8 @@ class ExtractionLimits:
     tokens_per_second: float
     workers: int = 1
     max_attempts: int = 3
+    backoff_initial_seconds: float = 1.0
+    backoff_max_seconds: float = 60.0
 
     def __post_init__(self):
         positive = (
@@ -43,6 +49,8 @@ class ExtractionLimits:
             self.input_price_per_million,
             self.requests_per_second,
             self.tokens_per_second,
+            self.backoff_initial_seconds,
+            self.backoff_max_seconds,
         )
         if any(not math.isfinite(v) or v <= 0 for v in positive):
             raise ValueError("Explicit positive budget, verified price and account rates required")
@@ -144,13 +152,33 @@ class TypeSafeTransport:
         except TypeSafeAPIError as exc:
             # Only a known rejected request is retried; unknown billing stays reserved.
             if exc.status == 429:
-                raise RejectedRetryable("Rate-limit rejection") from exc
+                retry_after = exc.headers.get("retry-after")
+                try:
+                    delay = float(retry_after) if retry_after else None
+                    if delay is not None and (not math.isfinite(delay) or delay < 0):
+                        delay = None
+                except ValueError:
+                    delay = None
+                raise RejectedRetryable("Rate-limit rejection", retry_after_seconds=delay) from exc
             raise
         return result.raw_http_response.json()
 
+    def close(self):
+        self.client.close()
+
 
 class DatasetExtractor:
-    def __init__(self, cache, client, limits, *, gate=None, validate_context=None):
+    def __init__(
+        self,
+        cache,
+        client,
+        limits,
+        *,
+        gate=None,
+        validate_context=None,
+        sleep=time.sleep,
+        phase="feature_creation",
+    ):
         if cache.dataset_id is None:
             raise ValueError("Extraction requires a dataset-bound cache")
         if validate_context is None:
@@ -158,8 +186,9 @@ class DatasetExtractor:
         self.cache, self.client, self.limits = cache, client, limits
         self.gate = gate or RateGate(limits)
         self.validate_context = validate_context
+        self.sleep = sleep
         self.session_id = uuid.uuid4().hex
-        self.log = paths.logs_dir("feature_creation") / "extraction" / f"{cache.dataset_id}.jsonl"
+        self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.jsonl"
         with cache._connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS extraction_policy (id INTEGER PRIMARY KEY CHECK(id=1), settings_json TEXT NOT NULL);
@@ -267,7 +296,7 @@ class DatasetExtractor:
             return "recovered_response"
         api_preview(request)
         self.validate_context(request)  # Fails BEFORE reserving money or calling a client.
-        for _ in range(self.limits.max_attempts):
+        for attempt in range(self.limits.max_attempts):
             status = self._reserve(request)
             if status != "claimed":
                 append_event(self.log, status, request_key=request.cache_key)
@@ -276,8 +305,16 @@ class DatasetExtractor:
                 self.gate.acquire()
                 append_event(self.log, "request_started", request_key=request.cache_key)
                 response = self.client.evaluate(request)
-            except RejectedRetryable:
+            except RejectedRetryable as exc:
                 self._update(request, "pending", rejected=True, error="RejectedRetryable")
+                if attempt + 1 < self.limits.max_attempts:
+                    delay = min(
+                        self.limits.backoff_max_seconds,
+                        self.limits.backoff_initial_seconds * 2**attempt,
+                    )
+                    if exc.retry_after_seconds is not None:
+                        delay = max(delay, exc.retry_after_seconds)
+                    self.sleep(delay)
                 continue
             except Exception as exc:
                 return self._update(request, "ambiguous", error=type(exc).__name__)
@@ -322,8 +359,15 @@ class DatasetExtractor:
                         "billing_bound_exceeded",
                         "invalid_response",
                         "sending",
+                        "attempt_limit",
                     }
                 if stop:
                     exhausted = True
         append_event(self.log, "dispatch_finished", counts=counts)
         return counts
+
+
+if __name__ == "__main__":
+    from src.jev.hosted import main
+
+    raise SystemExit(main())

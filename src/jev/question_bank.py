@@ -118,10 +118,25 @@ def load_question_bank(path, bank_id=None):
         validate_bank(bank)
         return bank
     records, members = {}, None
+    infer_active = bank_id is None
     candidates = sorted(path.glob("*.sqlite3"))
     for candidate in candidates:
         with closing(sqlite3.connect(candidate.as_uri() + "?mode=ro", uri=True)) as db:
             rows = db.execute("SELECT * FROM question_banks").fetchall()
+            if (
+                infer_active
+                and db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='input_sets'"
+                ).fetchone()
+            ):
+                from src.jev.inputs import _read_set
+
+                _, recipe, _, _ = _read_set(db, None)
+                if bank_id is not None and bank_id != recipe["bank_id"]:
+                    raise ValueError(
+                        "Active dataset inputs belong to different question banks; finish preparation"
+                    )
+                bank_id = recipe["bank_id"]
         if bank_id is None:
             available = {row[0] for row in rows}
             if len(available) != 1:
@@ -151,6 +166,8 @@ def payload_from_text(entry, variant, text):
     task = copy.deepcopy(entry["task"])
     value = entry["variants"][variant]
     facts = copy.deepcopy(value["documentary_definition"])
+    if value["version"] == "documented-task-v2":
+        facts.pop("source_reference", None)
     if facts:
         if "text_column_definitions" in facts:
             facts["text_column_definitions"] = {
@@ -187,6 +204,8 @@ def _apply_question(request, metadata, bank_id, variant, value):
         raise ValueError("Request task and question bank disagree")
     payload["question"] = copy.deepcopy(value["question"])
     facts = reviewed_definition(metadata, value["documentary_definition"])
+    if value["version"] == "documented-task-v2":
+        facts.pop("source_reference", None)
     if facts:
         # Per-column calls need definitions of supplied fields only. This also
         # preserves separate/joint cache reuse when their available text is equal.
