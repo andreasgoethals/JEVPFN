@@ -62,6 +62,13 @@ Jinja2 is explicitly required for chat-template rendering. `--stage-only` downlo
 pinned tokenizers/source files only; `--check-only` renders all three task formats offline.
 VSC CPU tests exclude only the three local notebook tests; notebooks and their tests run locally.
 
+Storage setup lists the raw-data directory without writing into existing inputs. An absent
+raw directory is created empty for a first upload. Prepared-input installation, feature caches,
+checkpoints and outputs still require a successful write probe. The setup receipt records
+each check separately; actual raw-file readability and hashes are verified by the CPU job.
+If an earlier setup fails, fix that check and rerun setup; a completed output reset or package
+installation does not need repeating. Do not change raw-data permissions merely to permit a probe.
+
 ## Fresh output reset before a new Experiment 0A
 
 After updating the checkout/CPU dependencies, verify that `git rev-parse HEAD` matches the

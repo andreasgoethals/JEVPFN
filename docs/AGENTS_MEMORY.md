@@ -1,9 +1,10 @@
 # Operational evidence
 
 Current stage: Experiment 0A. Full extraction and predictive runs remain disabled; GPU
-contract execution is implemented but no VSC model result has been supplied. Project/data
-write access and the CPU preflight are verified. Storage quota and independent backup remain
-unverified. The read-only library pin is `de324efcca55be392feb0c01830b3b6ce364587f`.
+contract execution is implemented but no VSC model result has been supplied. The prior CPU
+preflight passed; the new clean run still needs setup and fresh CPU/token/storage checks.
+Storage quota and independent backup remain unverified. The read-only library pin is
+`de324efcca55be392feb0c01830b3b6ce364587f`.
 Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
 
 ## VSC runs
@@ -36,6 +37,12 @@ still unverified. Cleanup removed only rebuildable reports/figures and legacy qu
 
 ## Reusable failure lessons
 
+- **15-10-2026 storage setup:** the owner's VSC transcript at commit `08ff22bd` confirms the
+  environment check and DATA/PROJECT output deletion succeeded. Setup then failed because it
+  tried creating a temporary file in `data/raw`. Existing raw inputs need directory-read access,
+  not writes; actual file/hash checks belong in CPU preflight. Setup now separates that check
+  from required writes to mutable destinations. Resume setup after publishing this fix, without
+  repeating deletion or changing raw permissions. No remote success of this fix is claimed.
 - **15-10-2026 local review:** 429 tests and five notebooks/17 inspected figures passed;
   all comparison plot types were additionally rendered with synthetic six-provider data,
   including 30-class output. Packaging, dependencies, dataset preflight, lint and shell checks

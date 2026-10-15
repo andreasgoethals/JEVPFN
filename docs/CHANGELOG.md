@@ -2,6 +2,7 @@
 
 ## 15-10-2026
 
+- Fixed storage setup's unnecessary write probe in existing raw datasets. Raw-directory reads and mutable-destination writes are now reported separately; CPU preflight still verifies actual files/hashes. All 456 local tests and lint passed, including new immutable-input, unreadable-input, blocked-output and missing-allocation cases. The owner's VSC cleanup and environment check had succeeded; resume setup after updating the code.
 - Reproduced and fixed real Windows WinError 5 when deleting read-only output directories. Recovery stays inside validated output paths, retries transient Windows locks and preserves other permission errors. Completed local output deletion and verified all 80 protected data/input/cache files byte-for-byte. Isolated a retry test that had written synthetic logs into the real output folder. All 448 tests passed; the real output folder remained empty after the suite.
 - Added explicit permanent output deletion, optionally including earlier output archives, for local/VSC clean runs. All tiers are checked for links/mounts before deletion; permanent inputs/features and model environments remain protected. The follow-up full suite passed 440 tests; actual local cleanup was previewed only.
 - Verified all five concrete findings in the second independent review. Slurm jobs now receive provider/environment paths as arguments and propagate their prepared environment to workers; memory requests respect A100 limits and token-job core accounting.

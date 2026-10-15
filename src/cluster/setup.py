@@ -7,6 +7,7 @@ downloads weights, deletes data or claims to verify a quota/backup policy.
 
 import argparse
 import json
+import os
 from datetime import UTC, datetime
 
 from src.cluster.preflight import storage_policy_failures
@@ -30,15 +31,32 @@ def setup_storage(cluster):
         "small_logs": paths.logs_dir("experiment_0"),
         "feature_creation_logs": paths.logs_dir("feature_creation"),
     }
+    access_verified = {}
     for name, directory in directories.items():
         if name not in {"small_manifests", "small_logs", "feature_creation_logs"}:
             paths.require_project_output(directory)
-        paths.resolve_writable(directory)
+        access = "directory_read" if name == "raw_datasets" else "write"
+        try:
+            if name == "raw_datasets":
+                # Existing inputs may be immutable. Only create the destination on
+                # first setup; file readability/hashes are checked by CPU preflight.
+                if not directory.exists():
+                    directory.mkdir(parents=True)
+                with os.scandir(directory) as entries:
+                    next(entries, None)
+            else:
+                paths.resolve_writable(directory)
+        except PermissionError as exc:
+            raise PermissionError(
+                f"Storage setup cannot verify {name} ({access}) at {directory}: {exc}"
+            ) from exc
+        access_verified[name] = access
     report = {
         "created_utc": datetime.now(UTC).isoformat(),
         "cluster": cluster,
         "paths": {k: str(v) for k, v in directories.items()},
-        "write_access_verified": True,
+        "access_verified": access_verified,
+        "raw_dataset_contents_verified": False,
         "quota_verified": False,
         "backup_verified": False,
         "jobs_submitted": False,
