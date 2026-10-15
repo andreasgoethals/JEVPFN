@@ -160,6 +160,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         gate=gate,
                         validate_context=validator,
                         phase=phase,
+                        policy_revision_manifest=review.get("spending_policy_revision_manifest"),
                     )
                     requests = (
                         prepared_request(
@@ -176,6 +177,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         {
                             "dataset_id": dataset_id,
                             "input_set_id": item["input_set_id"],
+                            "spending_policy_sha256": extractor.policy_sha256,
                             "counts": counts,
                         }
                     )

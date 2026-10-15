@@ -274,16 +274,28 @@ def test_request_rejection_has_bounded_exponential_backoff(isolated_output):
     assert extractor.log.is_file()
 
 
-def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(monkeypatch):
+@pytest.mark.parametrize("status", [200, 429])
+def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
+    monkeypatch, status
+):
     sdk = pytest.importorskip("typesafe_sdk")
     httpx = pytest.importorskip("httpx2")
     from src.jev.extraction import RejectedRetryable, TypeSafeTransport
 
     calls = []
+    raw = {
+        "model": "jev-1.13.0",
+        "answers": {"semantic": {"type": "noul", "noul": 0.4}},
+        "usage": {"input_tokens": 10},
+    }
 
     def handler(request):
         calls.append(json.loads(request.content))
-        return httpx.Response(429, json={"error": "rate limit"}, headers={"retry-after": "3"})
+        return httpx.Response(
+            status,
+            json=raw if status == 200 else {"error": "rate limit"},
+            headers={"retry-after": "3"},
+        )
 
     cfg = load_config("feature_creation")
     live = cfg["live_extraction"]
@@ -310,9 +322,12 @@ def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
     transport = TypeSafeTransport(cfg, allow_network=True)
     dataset = next(synthetic_datasets())
     request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
-    with pytest.raises(RejectedRetryable) as error:
-        transport.evaluate(request)
-    assert error.value.retry_after_seconds == 3
+    if status == 429:
+        with pytest.raises(RejectedRetryable) as error:
+            transport.evaluate(request)
+        assert error.value.retry_after_seconds == 3
+    else:
+        assert transport.evaluate(request) == raw
     assert len(calls) == 1 and calls[0]["model"] == cfg["jev"]["model"]
     transport.client.close()
 

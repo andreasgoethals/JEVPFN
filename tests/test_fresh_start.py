@@ -1,5 +1,6 @@
 """A fresh output tree must never mean lost research data or active-job output."""
 
+import errno
 import json
 import os
 import stat
@@ -387,6 +388,7 @@ def test_delete_persistent_windows_denial_stops_with_actionable_error(tmp_path, 
 def test_delete_does_not_repair_posix_permissions_or_suppress_io_errors(
     tmp_path, monkeypatch, error_type
 ):
+    error_number = errno.EACCES if error_type is PermissionError else errno.EIO
     root = tmp_path / "output_JEVPFN"
     root.mkdir()
     target = root / "evidence"
@@ -395,13 +397,18 @@ def test_delete_does_not_repair_posix_permissions_or_suppress_io_errors(
 
     def denied(path, *args, **kwargs):
         attempts.append(path)
-        raise error_type("not a Windows attribute error")
+        # POSIX rmtree attaches a filename to the exception. Real OS exceptions
+        # retain errno/strerror; a one-argument OSError loses its message then.
+        error = error_type(error_number, "not a Windows attribute error", str(path))
+        error.filename = str(root)
+        raise error
 
     monkeypatch.setattr(os, "unlink", denied)
     monkeypatch.setattr(Path, "chmod", lambda *a, **kw: pytest.fail("No chmod"))
     monkeypatch.setattr(fresh_start.time, "sleep", lambda _: pytest.fail("No retry"))
-    with pytest.raises(error_type, match="not a Windows"):
+    with pytest.raises(error_type, match="not a Windows") as caught:
         fresh_start.delete_directory(root)
+    assert type(caught.value) is error_type and caught.value.errno == error_number
     assert len(attempts) == 1 and target.read_text() == "keep"
 
 

@@ -5,11 +5,12 @@ models improve tabular prediction**. Explore all 20 core MulTaBench TEXT dataset
 for extraction and evaluation. Zomato Restaurants and Spotify Genres remain available locally
 for exploration but are excluded from experiments for text burden and 114-class feature size.
 
-**Current stage: Experiment 0A.** The VSC CPU preflight and five tokenizer audits passed on
-the previous question version. Version 2 removes provenance URLs from model inputs and requires
-a fresh token audit; real GPU compatibility remains unverified. The local review also repaired
-Slurm argument propagation, allocation memory profiles and acceptance reports. Paid extraction and predictive
-experiments remain disabled. Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
+**Current stage: Experiment 0A.** All five open-weight tokenizers counted the current version-2
+inputs with zero context overflows. Clef and Intern each passed 74 real GPU contract requests
+on wICE. The CPU suite needs a rerun after correcting two Linux test-fixture failures; the
+two-node storage test has not run. Larger pilots, the other three GPU runtimes and live Jev
+checks remain pending. Full extraction and predictive experiments stay disabled.
+Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
 
 ## Research contract
@@ -167,10 +168,12 @@ program holding the path and repeat the same command. No administrator access or
 are part of the helper. In PowerShell, check native command exit codes before proceeding;
 `$ErrorActionPreference = 'Stop'` alone does not stop after a Python failure.
 
-Publish the intended code first, verify the same Git commit locally and on VSC, then reset
-once before new tests. Repack the current input files, rerun token counts and regenerate
-notebook outputs. Do not reset or change code/configuration during that run. Resume an
-interrupted test with unchanged inputs/code; old acceptance reports cannot authorize new code.
+Keep code, configuration and inputs fixed while a stage's jobs are running. Between stages,
+the owner publishes reviewed fixes or explicit enabling-config changes, then synchronizes the
+VSC checkout. Rerun affected checks; retain existing evidence only when its relevant input,
+code and runtime identities still match. A routine fix or stage transition does not require
+another output reset, question upload or tokenizer run. A deliberately fresh campaign uses
+the reset procedure above once, before its tests start.
 
 Original row identity is **dataset ID + source-data fingerprint + csv:N**, where N is the
 zero-based CSV position before any split/shuffle. `row_map` links each row/slot to a unique
@@ -178,6 +181,9 @@ input; NULL denotes empty text. Features join by these IDs, with duplicate/missi
 Provider/checkpoint/settings enter response keys. SQLite stores raw responses, UTC timestamps,
 usage and origins, plus immutable compressed-Parquet feature tables, manifests and checksums.
 Each provider/version/representation can be selected independently in downstream experiments.
+Jev budget, price and billing-bound changes need a checksummed review manifest. Policy history
+and each request's policy identity remain in the same dataset file; pilot spending counts
+toward the full cumulative budget. Unresolved reservations block a policy change.
 An explicit active input-set ID selects the current question version; historical sets remain
 in the same 18 files. Bulk feature reads do not add execution origins. Feature identities include
 the complete runtime-settings hash and relevant transformation code, not unrelated plotting code.

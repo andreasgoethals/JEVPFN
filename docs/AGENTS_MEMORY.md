@@ -1,16 +1,24 @@
 # Operational evidence
 
-Current stage: Experiment 0A. Full extraction and predictive runs remain disabled; GPU
-contract execution is implemented but no VSC model result has been supplied. The prior CPU
-preflight passed; the new clean run still needs setup and fresh CPU/token/storage checks.
-Storage quota and independent backup remain unverified. The read-only library pin is
+Current stage: Experiment 0A. Current-input token audits and Clef/Intern real GPU contracts
+passed. The CPU suite requires a rerun after a Linux test-fixture repair; the two-node
+storage job has not run. Full extraction and predictive runs remain disabled. Larger pilots,
+three remaining GPU runtimes, Jev live checks, storage quota and independent backup remain
+unverified. The read-only library pin is
 `de324efcca55be392feb0c01830b3b6ce364587f`.
 Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
+Latest local verification (15-10): 470 tests, lint and dependency consistency passed, including
+the installed TypeSafe SDK with mocked successful and rate-limited HTTP responses. This is
+not live API evidence. No notebooks, input files or frozen tokenizer code changed in this review.
 
 ## VSC runs
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 15-10-2026 | wICE / 62328904 | experiment_0_cpu.slurm | Dataset/hash/CV checks passed; contract suite failed: 442 passed, 2 cleanup-fixture failures, 9 skipped, 3 local notebook tests deselected. Fixed locally; remote rerun pending. |
+| 15-10-2026 | wICE / 62329058 | experiment_0_tokens.slurm | Version-2 report: counted_all_inputs for all five providers, 18 datasets and 1,698,127 unique inputs each; zero overflows. |
+| 15-10-2026 | wICE / 62332201 | Clef GPU contracts | gpu_contracts_passed_requires_review: 74 forwards, 7 known-answer probes and 36 real inputs across 18 datasets; runtime token parity; A100 80 GB; peak allocated 18.52 GiB. |
+| 15-10-2026 | wICE / 62332327 | Intern GPU contracts | gpu_contracts_passed_requires_review: same 74-request coverage and parity; A100 80 GB; peak allocated 9.32 GiB. |
 | 14-10-2026 | wICE / 62316611 | experiment_0_cpu.slurm | COMPLETED, exit 0, 1m25s; MaxRSS 1,065,032K. Owner supplied sacct after the dependency/test-scope repair. |
 | 14-10-2026 | wICE / 62316685 | experiment_0_tokens.slurm | COMPLETED, exit 0, 1h14m26s; MaxRSS 4,868,592K. All five providers counted 1,698,127 unique inputs each; zero overflows. Historical version-1 questions; repeat after version-2 preparation. |
 | 14-10-2026 | wICE / 62312865 | experiment_0_cpu.slurm | FAILED, exit 1, 1m30s; 309 tests passed, 3 notebook tests lacked IPython/nbformat, 1 platform skip; dataset checks passed. |
@@ -19,21 +27,22 @@ Method constraints are in README; operations are in VSC; source meanings are in 
 Submission/RUNNING are not successful completion. Do not update a checkout/environment while
 jobs use it. Record final status from sacct and logs. Account balance is not storage quota.
 
-The completed version-1 audit counted Liquid 821,257,572; Strands 1,141,530,844; Clef
-1,143,617,155; Perplexity 960,172,532; Intern 1,316,907,633 input tokens. These are not Jev
-billing counts. Clef and Intern weights were staged and fingerprinted on PROJECT; no real
-GPU forward result has been supplied. Version 2 removes source URLs from payloads, retains
-historical input sets and explicitly activates new sets. Existing audit databases remain
-evidence, but cannot authorize execution against changed inputs.
+The owner downloaded the DATA-only `output_JEVPFN.zip`, SHA256
+`8d3fb261ea0af0fd5c869efe319ea8bfdb4a607309f18514b470682f2882e1f9`.
+It contains reports/logs, not PROJECT token databases, sampled real responses or synthetic
+GPU feature artifacts. Do not import it as a validated transfer bundle. All 18 local question
+file hashes match its version-2 token report. Current token totals are Liquid 703,871,352;
+Strands 1,001,295,131; Clef 1,010,144,410; Perplexity 826,699,787; Intern 1,176,671,920.
+These include complete publisher prompts and are not Jev billing counts. Historical version-1
+counts do not authorize current inputs. Frozen tokenizer modules remain byte-identical.
 
-Local follow-up on 14-10-2026 regenerated all 18 input files (1,698,127 unique inputs per
-extractor), passed 410 tests and reran all five notebooks (21 figures). The checked upload
-bundle contains all 18 byte-identical databases, about 713 MB compressed; no upload has been
-performed by the agent. VSC output archiving and transfer recovery passed synthetic tests.
-An unauthenticated HTTPS HEAD to
-TypeSafe returned 405: connectivity only, not authentication, billing or inference evidence.
-The two-node storage probe and real GPU/provider tests remain unexecuted; quota/backup are
-still unverified. Cleanup removed only rebuildable reports/figures and legacy question copies.
+The 15-10 setup receipt confirms access checks passed; upload receipt
+`20261015T114600Z_88790052` confirms all 18 inputs installed. Clef/Intern GPU reports retain
+runtime settings hashes; reference-kernel fallback is correct but needs sustained-throughput
+profiling before full extraction. Successful short probes do not establish campaign duration.
+At 16:51 on 15-10, the owner's `sacct --starttime 2026-10-15 --name=jevpfn-exp0-storage`
+returned no jobs, matching the missing storage report. Submit that check after the CPU rerun.
+An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not live API evidence.
 
 ## Reusable failure lessons
 
@@ -41,12 +50,21 @@ still unverified. Cleanup removed only rebuildable reports/figures and legacy qu
   environment check and DATA/PROJECT output deletion succeeded. Setup then failed because it
   tried creating a temporary file in `data/raw`. Existing raw inputs need directory-read access,
   not writes; actual file/hash checks belong in CPU preflight. Setup now separates that check
-  from required writes to mutable destinations. Resume setup after publishing this fix, without
-  repeating deletion or changing raw permissions. No remote success of this fix is claimed.
-- **15-10-2026 local review:** 429 tests and five notebooks/17 inspected figures passed;
-  all comparison plot types were additionally rendered with synthetic six-provider data,
-  including 30-class output. Packaging, dependencies, dataset preflight, lint and shell checks
-  passed. No new cluster/inference evidence exists; rerun 0A after publishing these fixes.
+  from required writes to mutable destinations. At `cdc1d56`, the raw check passed but writing
+  to `data/decision_inputs` failed. The owner's `getfacl` output confirms owner `r-x` and ACL
+  mask `---`; the parent, cache and checkpoint directories are owner-writable. Add only owner
+  write permission to that exact input directory (`chmod u+w`), without recursion or altering
+  the group/ACL mask, then repeat setup. The upload installer needs that write access. The
+  repair and subsequent installation are now confirmed by the downloaded receipts. Do not
+  repeat deletion or installs. Setup deliberately verifies installation-time write access;
+  compute jobs read the prepared inputs.
+- **Linux cleanup fixtures:** fd-based shutil.rmtree attaches a filename to raised OS errors.
+  The two failed tests constructed exceptions without errno/strerror, so this rewrote their
+  display text. Use realistic OS exceptions; keep assertions that POSIX errors propagate
+  without chmod/retry. The downloaded failure did not demonstrate a production cleanup bug.
+- **Jev policy revisions:** an immutable first-use allocation blocked reviewed pilot-to-full
+  budget/price/bound changes. Versioned approvals now retain cumulative spend and history;
+  in-flight/ambiguous reservations block revisions. Never hand-edit a paid cache to reset it.
 - **KU Leuven job environment:** submitting-shell exports are not inherited. Slurm scripts
   take provider/environment/root arguments; the prepared job sets `SLURM_EXPORT_ENV=ALL`
   for workers. Host-memory requests can increase billed cores; use the profiles in VSC.
@@ -77,12 +95,10 @@ still unverified. Cleanup removed only rebuildable reports/figures and legacy qu
   Use fresh_start with --delete --include-archives; never clean data or checkpoints.
   Maintenance refuses active JEVPFN jobs and requires stopped manual writers.
   Question uploads preserve file bytes and validate every member before replacing old files.
-  The 15-10-2026 delete-mode follow-up passed all 440 tests, including 19 reset tests.
-  The owner's first real deletion then exposed Windows read-only directories (WinError 5),
-  absent from those tests. Reproduced the failure, added Windows-specific attribute recovery
-  and bounded lock retries, and completed the actual local deletion. All 80 raw/prepared/cache
-  files retained identical hashes. After isolating a synthetic retry test's logs, all 448
-  tests passed and the real output folder remained empty. No VSC cleanup was performed.
+  The first real deletion exposed Windows read-only directories (WinError 5). Recovery now
+  clears only validated output attributes and retries brief locks. The subsequent local
+  deletion preserved all 80 raw/prepared/cache file hashes. Historical test counts remain
+  in CHANGELOG; they describe different revisions, not the current VSC suite result.
 - **Figure verification:** an inline overview overlapped despite a correct PDF. Separate
   table/header/footer axes and inspect notebook-kernel output, not PDF alone.
 - **Artifact completeness:** checking only trace groups present in a file missed an entirely

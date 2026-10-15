@@ -21,6 +21,11 @@ export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
 For later owner-published updates, run `git pull --ff-only` and
 `git submodule update --init --recursive`. Wait for jobs using the checkout to finish before
 updating its code or environment. Do not reset local changes or clone over an existing folder.
+Keep a stage's code/config/input versions fixed while its jobs run. Reviewed stage-enabling
+changes are separate owner commits between stages: pilot, full extraction, predictor contracts
+and full-fold profiling each have their own switch. The committed defaults stay disabled.
+Rerun checks affected by a change; unrelated edits do not invalidate matching token/runtime
+evidence or require resetting output and reinstalling inputs.
 
 | Tier under JEVPFN | Contents |
 |---|---|
@@ -71,7 +76,8 @@ installation does not need repeating. Do not change raw-data permissions merely 
 
 ## Fresh output reset before a new Experiment 0A
 
-After updating the checkout/CPU dependencies, verify that `git rev-parse HEAD` matches the
+Use this section only when deliberately starting a completely new output campaign, not when
+resuming the current one after a fix. After updating the checkout/CPU dependencies, verify that `git rev-parse HEAD` matches the
 local checkout. Stop notebooks, manual writers and JEVPFN jobs. Before upload installation
 or job submission, preview and apply a permanent output reset:
 
@@ -93,8 +99,9 @@ Windows read-only output files/directories are handled automatically, with bound
 for sharing locks. A persistent failure leaves a partial cleanup: repeat the cleanup after
 closing the program using that path, before continuing. Check `$LASTEXITCODE` after Python
 commands in Windows PowerShell; a traceback alone does not prevent the next pasted command.
-Repack inputs after clearing local output. Fresh token counting starts from zero. Keep code,
-configuration and input files fixed throughout the run; do not reset again after tests start.
+Repack inputs after clearing local output. Fresh token counting starts from zero. Do not reset
+again after tests start. Keep each stage fixed during execution; publish reviewed changes
+between stages as described above.
 
 ## Upload the prepared inputs
 
@@ -155,7 +162,7 @@ including task/question/options and publisher formatting. Counts are committed i
 and resume after interruption; completed provider summaries survive another worker's failure.
 Within a run, do not delete count databases to fix a dependency. The fingerprinted tokenizer modules are
 kept stable so unchanged input/counter versions remain reusable. Jev's hosted tokenization
-remains unverified. Question version 2 changes payloads: rerun preparation and upload the 18
+remains unverified. When changing question versions, rerun preparation and upload the 18
 closed input files after stopping readers/writers, then rerun the CPU/token jobs. Historical
 input sets remain inside those files. The explicit fresh-output reset discards old count
 databases; otherwise unchanged counts can resume. Unchanged staged weights need no redownload.
@@ -307,7 +314,19 @@ reviewed context envelope, full-campaign dataset allocations, and the pilot requ
 The envelope must justify a maximum complete-body byte size and its billing-token bound;
 do not infer either from characters/4. Unknown bounds keep dispatch blocked. HTTP 429 has
 bounded exponential backoff; 529/timeouts remain review stops because retryable does not
-establish that an earlier attempt was unbilled. Raw paid responses survive decoder failure.
+establish that an earlier attempt was unbilled. Raw responses received by the dispatcher
+survive a subsequent feature-decoder failure.
+
+If the pilot requires a different allocation, price or token bound, set
+`live_extraction.spending_policy_revision_manifest` to an owner-reviewed JSON file. Use
+`accepted: true`, `reviewed_by`, `stage: jev_spending_policy` and checksummed `evidence` as
+described below. Its `policies` map has one entry per revised dataset, containing
+`previous_policy_sha256` from that dataset's run report and `policy` with the exact new
+`budget`, `price` and `token_bound`. Budget is cumulative USD including the pilot; price is
+USD per million input tokens. Revisions cannot erase charges or unresolved reservations,
+and earlier requests retain their original price/policy identity. Unchanged restarts need
+no new revision. A revised context envelope also needs new matching pilot acceptance before
+full extraction; spending review alone does not approve context or provider compatibility.
 
 After full feature creation and validated transfer, Experiment 0B checks complete selected
 artifacts and real predictor fits on all task types. Main extras are `models`, `baselines`,

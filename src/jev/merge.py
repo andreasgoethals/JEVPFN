@@ -33,6 +33,7 @@ TABLES = {
     "origins",
     "feature_artifacts",
     "extraction_policy",
+    "extraction_policy_history",
     "extraction_jobs",
     "imported_extraction_records",
     "failures",
@@ -107,6 +108,14 @@ def validate_cache(source: Path) -> str:
                 "table_name",
                 "record_key",
                 "record_json",
+            ],
+            "extraction_policy_history": [
+                "revision",
+                "policy_sha256",
+                "previous_policy_sha256",
+                "settings_json",
+                "authorization_json",
+                "created_utc",
             ],
         }
         if not {"dataset_identity", "responses", "origins"} <= tables:
@@ -259,7 +268,7 @@ def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = No
                     else:
                         db.execute("INSERT INTO feature_artifacts VALUES (?,?,?,?)", row)
                         counts["artifacts_added"] += 1
-            for table in ("extraction_policy", "extraction_jobs"):
+            for table in ("extraction_policy", "extraction_policy_history", "extraction_jobs"):
                 if table not in tables:
                     continue
                 cursor = incoming.execute(f"SELECT * FROM {table}")

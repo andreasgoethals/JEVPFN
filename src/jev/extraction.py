@@ -1,6 +1,7 @@
 """Opt-in extraction, persistent reservations and bounded dispatch. Nothing runs on import.
 
-Each dataset receives a fixed spending allocation. The campaign allocation sum must
+Each dataset receives a cumulative spending allocation. Reviewed policy revisions
+preserve prior spending and never clear reservations. The campaign allocation sum must
 be <= the owner's spending limit. Reservations and actual usage survive in the
 dataset's single SQLite file; logs contain IDs/counters, never credentials or text.
 A lost/ambiguous response is NOT automatically retried: billing may already have occurred.
@@ -18,9 +19,10 @@ from dataclasses import dataclass
 from threading import Lock
 
 from src.jev.provider import api_preview, response_features
+from src.jev.spending import register_policy
 from src.utils import paths
 from src.utils.events import append_event
-from src.utils.serialization import canonical_json
+from src.utils.serialization import canonical_json, digest
 
 
 class RejectedRetryable(RuntimeError):
@@ -178,6 +180,7 @@ class DatasetExtractor:
         validate_context=None,
         sleep=time.sleep,
         phase="feature_creation",
+        policy_revision_manifest=None,
     ):
         if cache.dataset_id is None:
             raise ValueError("Extraction requires a dataset-bound cache")
@@ -189,28 +192,9 @@ class DatasetExtractor:
         self.sleep = sleep
         self.session_id = uuid.uuid4().hex
         self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.jsonl"
-        with cache._connect() as db:
-            db.executescript("""
-                CREATE TABLE IF NOT EXISTS extraction_policy (id INTEGER PRIMARY KEY CHECK(id=1), settings_json TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS extraction_jobs (
-                    request_key TEXT PRIMARY KEY, request_json TEXT NOT NULL,
-                    status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
-                    reserved_usd REAL NOT NULL DEFAULT 0, spent_usd REAL NOT NULL DEFAULT 0,
-                    input_tokens INTEGER, raw_response_json TEXT, error_type TEXT, owner_session TEXT);
-            """)
-            # A restart must not accidentally reset or change the spending allocation.
-            pinned = canonical_json(
-                {
-                    "budget": limits.dataset_budget_usd,
-                    "price": limits.input_price_per_million,
-                    "token_bound": limits.max_billed_input_tokens,
-                }
-            )
-            db.execute("BEGIN IMMEDIATE")
-            prior = db.execute("SELECT settings_json FROM extraction_policy WHERE id=1").fetchone()
-            if prior and prior[0] != pinned:
-                raise ValueError("Extraction budget policy differs from its permanent allocation")
-            db.execute("INSERT OR IGNORE INTO extraction_policy VALUES (1,?)", (pinned,))
+        self.policy_sha256 = register_policy(
+            cache, limits, revision_manifest=policy_revision_manifest, stage=phase
+        )
 
     def _reserve(self, request):
         reservation = (
@@ -218,6 +202,9 @@ class DatasetExtractor:
         )
         with self.cache._connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            active = db.execute("SELECT settings_json FROM extraction_policy WHERE id=1").fetchone()
+            if not active or digest(json.loads(active[0])) != self.policy_sha256:
+                raise ValueError("Spending policy changed; restart this extractor before dispatch")
             db.execute(
                 "INSERT OR IGNORE INTO extraction_jobs(request_key,request_json,status) VALUES (?,?,'pending')",
                 (request.cache_key, request.to_json()),
@@ -239,8 +226,8 @@ class DatasetExtractor:
             if total + reservation > self.limits.dataset_budget_usd + 1e-12:
                 return "budget_stop"
             db.execute(
-                "UPDATE extraction_jobs SET status='sending',attempts=attempts+1,reserved_usd=?,owner_session=? WHERE request_key=?",
-                (reservation, self.session_id, request.cache_key),
+                "UPDATE extraction_jobs SET status='sending',attempts=attempts+1,reserved_usd=?,owner_session=?,policy_sha256=? WHERE request_key=?",
+                (reservation, self.session_id, self.policy_sha256, request.cache_key),
             )
         return "claimed"
 
@@ -272,7 +259,12 @@ class DatasetExtractor:
                 ),
             )
         append_event(
-            self.log, status, request_key=request.cache_key, input_tokens=tokens, error_type=error
+            self.log,
+            status,
+            request_key=request.cache_key,
+            input_tokens=tokens,
+            error_type=error,
+            policy_sha256=self.policy_sha256,
         )
         return status
 
@@ -303,7 +295,12 @@ class DatasetExtractor:
                 return status
             try:
                 self.gate.acquire()
-                append_event(self.log, "request_started", request_key=request.cache_key)
+                append_event(
+                    self.log,
+                    "request_started",
+                    request_key=request.cache_key,
+                    policy_sha256=self.policy_sha256,
+                )
                 response = self.client.evaluate(request)
             except RejectedRetryable as exc:
                 self._update(request, "pending", rejected=True, error="RejectedRetryable")
