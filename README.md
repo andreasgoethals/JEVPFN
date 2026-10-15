@@ -7,8 +7,9 @@ for exploration but are excluded from experiments for text burden and 114-class 
 
 **Current stage: Experiment 0A.** All five open-weight tokenizers counted the current version-2
 inputs with zero context overflows. Clef and Intern each passed 74 real GPU contract requests
-on wICE. The CPU suite needs a rerun after correcting two Linux test-fixture failures; the
-two-node storage test has not run. Larger pilots, the other three GPU runtimes and live Jev
+on wICE. The repaired CPU suite passed; the two-node storage test needs a rerun after fixing
+its worker-result collection. The combined PROJECT/DATA transfer and all five local notebooks
+completed successfully. Larger pilots, the other three GPU runtimes and live Jev
 checks remain pending. Full extraction and predictive experiments stay disabled.
 Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).

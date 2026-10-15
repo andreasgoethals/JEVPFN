@@ -178,6 +178,11 @@ after release, sees committed SQLite rows, and can produce a valid snapshot/rest
 only synthetic files under PROJECT Experiment 0 results; its compact evidence goes to DATA.
 A pass verifies the tested mount's behavior, not storage quota or an independent backup.
 Repeat it if moving to another filesystem/cluster. These checks do not need model weights.
+Worker results use atomic JSON receipts under DATA
+`3. experiment_0/manifests/before_extraction/storage_contracts/<run>/`; each must match the
+job, lock phase and unique invocation ID. Launcher stdout/stderr are retained separately
+under DATA `3. experiment_0/logs/storage_contracts/<run>/`. Console output is not parsed as
+the result. If the test fails, inspect its top-level report and those logs before retrying.
 
 ## Checkpoints and isolated GPU environments
 

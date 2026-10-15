@@ -45,6 +45,50 @@ def worker(folder, *, expect_busy):
     return {"status": "acquired_after_release", "node": node_name()}
 
 
+def worker_receipt(run_id, *, expect_busy):
+    return (
+        paths.manifests_dir("experiment_0")
+        / "before_extraction"
+        / "storage_contracts"
+        / paths.output_component(run_id)
+        / ("blocked.json" if expect_busy else "released.json")
+    )
+
+
+def remote_worker(command, *, run_id, expect_busy):
+    """Exchange structured evidence through DATA, not the launcher's stdout stream.
+
+    Preserve stdout/stderr separately, including on timeout or nonzero exit. A unique
+    challenge ties each receipt to this invocation; stale/foreign results cannot pass.
+    """
+    receipt = worker_receipt(run_id, expect_busy=expect_busy)
+    if receipt.exists():
+        raise FileExistsError(f"Refusing an existing worker receipt: {receipt}")
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    log_dir = paths.logs_dir("experiment_0") / "storage_contracts" / run_id
+    log_dir.mkdir(parents=True, exist_ok=True)
+    probe_id = uuid4().hex
+    argv = [*command, "--probe-id", probe_id]
+    if expect_busy:
+        argv.append("--expect-busy")
+    with (
+        (log_dir / f"{receipt.stem}.stdout.log").open("w", encoding="utf-8") as out,
+        (log_dir / f"{receipt.stem}.stderr.log").open("w", encoding="utf-8") as err,
+    ):
+        subprocess.run(argv, stdout=out, stderr=err, check=True, timeout=60)
+    if not receipt.is_file():
+        raise RuntimeError(f"Worker wrote no receipt; inspect stdout/stderr in {log_dir}")
+    result = json.loads(receipt.read_text(encoding="utf-8"))
+    expected = {
+        "probe_id": probe_id,
+        "job_id": os.environ["SLURM_JOB_ID"],
+        "expect_busy": expect_busy,
+    }
+    if not isinstance(result, dict) or any(result.get(k) != v for k, v in expected.items()):
+        raise ValueError("Worker receipt does not match this job/probe/lock phase")
+    return result
+
+
 def run(*, execute=False):
     if not execute or not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Storage contracts require --execute in a two-node CPU allocation")
@@ -75,6 +119,11 @@ def run(*, execute=False):
         "job_id": os.environ["SLURM_JOB_ID"],
         "nodes": [local, others[0]],
         "results": str(folder),
+        "worker_receipts": {
+            name: str(worker_receipt(run_id, expect_busy=busy))
+            for name, busy in (("blocked", True), ("released", False))
+        },
+        "worker_logs": str(paths.logs_dir("experiment_0") / "storage_contracts" / run_id),
         "quota_verified": False,
         "independent_backup_verified": False,
     }
@@ -98,10 +147,10 @@ def run(*, execute=False):
             str(folder),
         ]
         with file_lock(folder / "writer.lock", timeout=2):
-            first = json.loads(
-                subprocess.check_output(command + ["--expect-busy"], text=True, timeout=60)
-            )
-        second = json.loads(subprocess.check_output(command, text=True, timeout=60))
+            first = remote_worker(command, run_id=run_id, expect_busy=True)
+        report["cross_node_exclusion"] = first
+        second = remote_worker(command, run_id=run_id, expect_busy=False)
+        report["release_and_reacquire"] = second
         if first["status"] != "blocked_as_expected" or second["status"] != "acquired_after_release":
             raise AssertionError("Cross-node locking behavior differs from the required contract")
         if {first["node"], second["node"]} != {others[0].split(".")[0]}:
@@ -122,7 +171,7 @@ def run(*, execute=False):
             snapshot_restore=True,
         )
     except BaseException as exc:
-        report.update(status="failed", error_type=type(exc).__name__)
+        report.update(status="failed", error_type=type(exc).__name__, error_message=str(exc))
         raise
     finally:
         write_json(manifest, report)
@@ -135,11 +184,21 @@ def main():
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker")
     parser.add_argument("--expect-busy", action="store_true")
+    parser.add_argument("--probe-id")
     args = parser.parse_args()
     if args.worker:
         if not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
             parser.error("Worker requires the active Slurm test allocation")
-        print(json.dumps(worker(args.worker, expect_busy=args.expect_busy)))
+        if not args.probe_id:
+            parser.error("Worker requires its parent's unique --probe-id")
+        result = worker(args.worker, expect_busy=args.expect_busy)
+        result.update(
+            probe_id=args.probe_id,
+            job_id=os.environ["SLURM_JOB_ID"],
+            expect_busy=args.expect_busy,
+        )
+        write_json(worker_receipt(Path(args.worker).name, expect_busy=args.expect_busy), result)
+        print(json.dumps(result), flush=True)
     elif args.execute:
         run(execute=True)
     else:

@@ -1,21 +1,24 @@
 # Operational evidence
 
 Current stage: Experiment 0A. Current-input token audits and Clef/Intern real GPU contracts
-passed. The CPU suite requires a rerun after a Linux test-fixture repair; the two-node
-storage job has not run. Full extraction and predictive runs remain disabled. Larger pilots,
+passed. The repaired CPU suite passed on VSC. The two-node storage job failed while decoding
+worker stdout; its result-collection fix needs a VSC rerun. Full extraction and predictive
+runs remain disabled. Larger pilots,
 three remaining GPU runtimes, Jev live checks, storage quota and independent backup remain
 unverified. The read-only library pin is
 `de324efcca55be392feb0c01830b3b6ce364587f`.
 Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
-Latest local verification (15-10): 470 tests, lint and dependency consistency passed, including
+Latest local verification (15-10): 481 tests and lint passed, including
 the installed TypeSafe SDK with mocked successful and rate-limited HTTP responses. This is
-not live API evidence. No notebooks, input files or frozen tokenizer code changed in this review.
+not live API evidence. The owner subsequently reran all five notebooks successfully (17 figures).
 
 ## VSC runs
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
-| 15-10-2026 | wICE / 62328904 | experiment_0_cpu.slurm | Dataset/hash/CV checks passed; contract suite failed: 442 passed, 2 cleanup-fixture failures, 9 skipped, 3 local notebook tests deselected. Fixed locally; remote rerun pending. |
+| 15-10-2026 | wICE / 62333525 | experiment_0_cpu.slurm at aaf2153 | preflight_passed; all 18 dataset/hash/CV checks passed; 457 tests passed, 10 expected skips, 3 local notebook tests deselected. |
+| 15-10-2026 | wICE / 62333541 | experiment_0_storage.slurm | FAILED with JSONDecodeError while parsing the first worker's stdout. No cross-node storage pass established. Worker stdout was not retained, so its exact contents are unknown. |
+| 15-10-2026 | wICE / 62328904 | experiment_0_cpu.slurm | Dataset/hash/CV checks passed; contract suite failed: 442 passed, 2 cleanup-fixture failures, 9 skipped, 3 local notebook tests deselected. Superseded by 62333525. |
 | 15-10-2026 | wICE / 62329058 | experiment_0_tokens.slurm | Version-2 report: counted_all_inputs for all five providers, 18 datasets and 1,698,127 unique inputs each; zero overflows. |
 | 15-10-2026 | wICE / 62332201 | Clef GPU contracts | gpu_contracts_passed_requires_review: 74 forwards, 7 known-answer probes and 36 real inputs across 18 datasets; runtime token parity; A100 80 GB; peak allocated 18.52 GiB. |
 | 15-10-2026 | wICE / 62332327 | Intern GPU contracts | gpu_contracts_passed_requires_review: same 74-request coverage and parity; A100 80 GB; peak allocated 9.32 GiB. |
@@ -27,11 +30,14 @@ not live API evidence. No notebooks, input files or frozen tokenizer code change
 Submission/RUNNING are not successful completion. Do not update a checkout/environment while
 jobs use it. Record final status from sacct and logs. Account balance is not storage quota.
 
-The owner downloaded the DATA-only `output_JEVPFN.zip`, SHA256
-`8d3fb261ea0af0fd5c869efe319ea8bfdb4a607309f18514b470682f2882e1f9`.
-It contains reports/logs, not PROJECT token databases, sampled real responses or synthetic
-GPU feature artifacts. Do not import it as a validated transfer bundle. All 18 local question
-file hashes match its version-2 token report. Current token totals are Liquid 703,871,352;
+The validated combined transfer `20261015T152724Z_9e160b0c` was imported locally; bundle SHA256
+`23fe2e574693423a6dbb660d5dcbd5109df840f03fd2e8b26c35fca7f2bda1ae`.
+It merged 72 verified real responses (36 Clef, 36 Intern) into 18 permanent dataset stores
+and imported 70 outputs. All five exact-token databases are present locally. The real datasets
+have no complete feature artifacts yet; the comparison notebook's readiness-only output is
+expected. Synthetic GPU artifacts remain under Experiment 0 results. An earlier DATA-only
+download lacked these PROJECT files and was not a valid transfer bundle. All 18 local question
+file hashes match the version-2 token report. Current token totals are Liquid 703,871,352;
 Strands 1,001,295,131; Clef 1,010,144,410; Perplexity 826,699,787; Intern 1,176,671,920.
 These include complete publisher prompts and are not Jev billing counts. Historical version-1
 counts do not authorize current inputs. Frozen tokenizer modules remain byte-identical.
@@ -40,8 +46,10 @@ The 15-10 setup receipt confirms access checks passed; upload receipt
 `20261015T114600Z_88790052` confirms all 18 inputs installed. Clef/Intern GPU reports retain
 runtime settings hashes; reference-kernel fallback is correct but needs sustained-throughput
 profiling before full extraction. Successful short probes do not establish campaign duration.
-At 16:51 on 15-10, the owner's `sacct --starttime 2026-10-15 --name=jevpfn-exp0-storage`
-returned no jobs, matching the missing storage report. Submit that check after the CPU rerun.
+The storage test now uses per-job/per-probe JSON receipts on DATA and saves launcher stdout
+and stderr separately. Empty/noisy stdout cannot replace evidence; missing, foreign or invalid
+receipts, failed steps and timeouts stop the test. Rerun only this affected VSC test before
+continuing. Tokenizer, prepared-input and GPU runtime identities are unchanged.
 An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not live API evidence.
 
 ## Reusable failure lessons
@@ -62,6 +70,9 @@ An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not li
   The two failed tests constructed exceptions without errno/strerror, so this rewrote their
   display text. Use realistic OS exceptions; keep assertions that POSIX errors propagate
   without chmod/retry. The downloaded failure did not demonstrate a production cleanup bug.
+- **Slurm worker results:** do not assume captured srun stdout is a pure JSON reply. Structured
+  worker receipts need job/phase/invocation identity; preserve stdout/stderr even on failure.
+  A successful export or notebook run can contain a failed test report; inspect its status.
 - **Jev policy revisions:** an immutable first-use allocation blocked reviewed pilot-to-full
   budget/price/bound changes. Versioned approvals now retain cumulative spend and history;
   in-flight/ambiguous reservations block revisions. Never hand-edit a paid cache to reset it.
