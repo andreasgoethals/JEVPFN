@@ -11,6 +11,8 @@ import argparse
 import json
 import os
 import shutil
+import stat
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -85,6 +87,55 @@ def validate_deletion_tree(root):
                 raise ValueError(f"Refusing to delete a mounted output entry: {entry}")
 
 
+def delete_directory(root):
+    """Remove a validated output tree, handling Windows read-only files/directories.
+
+    Only retry unlink/rmdir within this tree. Do not change ACLs, chmod parent
+    folders, follow links or suppress persistent errors. The caller has already
+    validated every output tier and holds the maintenance lock.
+    """
+    root = Path(root).absolute()
+
+    def on_error(function, filename, error):
+        entry = Path(filename).absolute()
+        if not entry.is_relative_to(root):
+            raise ValueError(f"Deletion error outside the selected output tree: {entry}") from error
+        if (
+            function not in (os.unlink, os.rmdir)
+            or not isinstance(error, PermissionError)
+            or getattr(error, "winerror", None) not in {5, 32, 33}
+        ):
+            raise error
+        for attempt in range(7):
+            reject_links(entry)
+            if entry.is_mount():
+                raise ValueError(f"Refusing to delete a mounted output entry: {entry}")
+            try:
+                info = entry.stat(follow_symlinks=False)
+                if getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_READONLY:
+                    # Windows chmod only changes the read-only attribute. Preserve
+                    # the existing mode; never broaden permissions on VSC/Linux.
+                    entry.chmod(info.st_mode | stat.S_IWRITE)
+                function(filename)
+                return
+            except FileNotFoundError:
+                return  # A completed removal needs no retry.
+            except PermissionError as exc:
+                if attempt == 6:
+                    exc.add_note(
+                        f"Output cleanup could not remove {entry}. Close programs using this "
+                        "path and retry the same cleanup command before running tests."
+                    )
+                    raise
+                time.sleep(min(0.1 * 2**attempt, 1.0))
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(root, onexc=on_error)
+    else:
+        # Preserve the template's Python 3.11 support without 3.12 deprecation warnings.
+        shutil.rmtree(root, onerror=lambda fn, name, info: on_error(fn, name, info[1]))
+
+
 def run(*, apply=False, writers_stopped=False, local=False, delete=False, include_archives=False):
     if include_archives and not delete:
         raise ValueError("--include-archives requires --delete")
@@ -144,7 +195,7 @@ def run(*, apply=False, writers_stopped=False, local=False, delete=False, includ
                 validate_deletion_tree(target)
             for (_, target), entry in zip(deletion_targets, report["deletions"], strict=True):
                 if target.exists():
-                    shutil.rmtree(target)
+                    delete_directory(target)
                 entry["deleted"] = True
             for root in roots.values():
                 root.mkdir(exist_ok=True)

@@ -82,6 +82,10 @@ active JEVPFN jobs are refused before deletion. If deletion is interrupted, stop
 writers and repeat the same reset before starting tests; there is no rollback.
 
 For local output, use the same commands with `--local` and the local Python interpreter.
+Windows read-only output files/directories are handled automatically, with bounded retries
+for sharing locks. A persistent failure leaves a partial cleanup: repeat the cleanup after
+closing the program using that path, before continuing. Check `$LASTEXITCODE` after Python
+commands in Windows PowerShell; a traceback alone does not prevent the next pasted command.
 Repack inputs after clearing local output. Fresh token counting starts from zero. Keep code,
 configuration and input files fixed throughout the run; do not reset again after tests start.
 

@@ -246,12 +246,12 @@ def test_provenance_urls_are_not_sent_but_urls_in_actual_text_are_preserved():
     assert "source_reference" in entry["variants"]["documented"]["documentary_definition"]
 
 
-def test_request_rejection_has_bounded_exponential_backoff(tmp_path):
+def test_request_rejection_has_bounded_exponential_backoff(isolated_output):
     from src.jev.extraction import DatasetExtractor, ExtractionLimits, RejectedRetryable
 
     dataset = next(synthetic_datasets())
     request = build_requests(dataset.features, dataset.metadata, 0, load_config())[0]
-    cache = ResponseCache(tmp_path / "retry.sqlite3", dataset.metadata.dataset_id)
+    cache = ResponseCache(isolated_output / "retry.sqlite3", dataset.metadata.dataset_id)
     delays, calls = [], []
 
     def reject(request):
@@ -270,6 +270,8 @@ def test_request_rejection_has_bounded_exponential_backoff(tmp_path):
     assert delays == [1, 2] and len(calls) == 3
     assert extractor.evaluate(request) == "attempt_limit"
     assert len(calls) == 3
+    assert extractor.log.is_relative_to(isolated_output)
+    assert extractor.log.is_file()
 
 
 def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(monkeypatch):

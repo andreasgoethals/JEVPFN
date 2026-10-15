@@ -1,6 +1,8 @@
 """A fresh output tree must never mean lost research data or active-job output."""
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -303,3 +305,127 @@ def test_interrupted_deletion_can_be_repeated_without_touching_inputs(isolated_o
     fresh_start.run(delete=True, apply=True, writers_stopped=True)
     assert all(not (root / "evidence").exists() for root in roots)
     assert protected.read_bytes() == b"paid responses"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Real Windows read-only attribute behavior")
+def test_delete_readonly_windows_files_and_directories(isolated_output, monkeypatch):
+    monkeypatch.delenv("VSC_DATA")
+    root = paths.notebook_outputs_dir()
+    archive = root.parent / "archived_output_JEVPFN"
+    for tree in (root, archive):
+        nested = tree / "old-run" / "1. question_preparation" / "questions"
+        nested.mkdir(parents=True)
+        (nested / "old.json").write_text("old report")
+        for path in [*tree.rglob("*"), tree]:
+            path.chmod(stat.S_IREAD)
+    protected = root.parent / "data" / "jev_cache" / "paid.sqlite3"
+    protected.parent.mkdir(parents=True)
+    protected.write_bytes(b"keep paid responses")
+    protected.chmod(stat.S_IREAD)
+    attributes = protected.stat().st_file_attributes
+    try:
+        result = fresh_start.run(
+            local=True, delete=True, include_archives=True, apply=True, writers_stopped=True
+        )
+        assert result["status"] == "fresh_outputs_ready"
+        assert root.is_dir() and not list(root.iterdir())
+        assert not archive.exists()
+        assert protected.read_bytes() == b"keep paid responses"
+        assert protected.stat().st_file_attributes == attributes
+    finally:
+        protected.chmod(stat.S_IWRITE)
+
+
+def test_delete_retries_transient_windows_sharing_lock(tmp_path, monkeypatch):
+    root = tmp_path / "output_JEVPFN"
+    root.mkdir()
+    target = root / "locked.log"
+    target.write_text("old log")
+    unlink = os.unlink
+    attempts, sleeps = [], []
+
+    def transient(path, *args, **kwargs):
+        if Path(path).name == target.name:
+            attempts.append(path)
+            if len(attempts) <= 2:
+                error = PermissionError(13, "sharing violation", str(path))
+                error.winerror = 32
+                raise error
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "unlink", transient)
+    monkeypatch.setattr(fresh_start.time, "sleep", sleeps.append)
+    fresh_start.delete_directory(root)
+    assert not root.exists()
+    assert len(attempts) == 3 and len(sleeps) == 1
+
+
+def test_delete_persistent_windows_denial_stops_with_actionable_error(tmp_path, monkeypatch):
+    root = tmp_path / "output_JEVPFN"
+    root.mkdir()
+    target = root / "locked.log"
+    target.write_text("old log")
+    attempts, sleeps = [], []
+
+    def denied(path, *args, **kwargs):
+        attempts.append(path)
+        error = PermissionError(13, "access denied", str(path))
+        error.winerror = 5
+        raise error
+
+    monkeypatch.setattr(os, "unlink", denied)
+    monkeypatch.setattr(fresh_start.time, "sleep", sleeps.append)
+    monkeypatch.setattr(Path, "chmod", lambda *a, **kw: pytest.fail("No ACL/permission changes"))
+    with pytest.raises(PermissionError, match="access denied") as caught:
+        fresh_start.delete_directory(root)
+    assert "retry the same cleanup" in " ".join(caught.value.__notes__)
+    assert len(attempts) == 8 and len(sleeps) == 6
+    assert target.read_text() == "old log"
+
+
+@pytest.mark.parametrize("error_type", [PermissionError, OSError])
+def test_delete_does_not_repair_posix_permissions_or_suppress_io_errors(
+    tmp_path, monkeypatch, error_type
+):
+    root = tmp_path / "output_JEVPFN"
+    root.mkdir()
+    target = root / "evidence"
+    target.write_text("keep")
+    attempts = []
+
+    def denied(path, *args, **kwargs):
+        attempts.append(path)
+        raise error_type("not a Windows attribute error")
+
+    monkeypatch.setattr(os, "unlink", denied)
+    monkeypatch.setattr(Path, "chmod", lambda *a, **kw: pytest.fail("No chmod"))
+    monkeypatch.setattr(fresh_start.time, "sleep", lambda _: pytest.fail("No retry"))
+    with pytest.raises(error_type, match="not a Windows"):
+        fresh_start.delete_directory(root)
+    assert len(attempts) == 1 and target.read_text() == "keep"
+
+
+@pytest.mark.parametrize("unsafe", ["outside", "junction", "mount"])
+def test_delete_error_recovery_rechecks_path_boundaries(tmp_path, monkeypatch, unsafe):
+    root = tmp_path / "output_JEVPFN"
+    root.mkdir()
+    target = (tmp_path if unsafe == "outside" else root) / "protected"
+    target.write_text("keep")
+    if unsafe in {"junction", "mount"}:
+        attribute = "is_junction" if unsafe == "junction" else "is_mount"
+        original = getattr(Path, attribute, lambda _: False)
+        monkeypatch.setattr(Path, attribute, lambda p: p == target or original(p), raising=False)
+
+    def failure(path, *, onexc=None, onerror=None):
+        error = PermissionError(13, "access denied", str(target))
+        error.winerror = 5
+        if onexc:
+            onexc(os.unlink, str(target), error)
+        else:
+            onerror(os.unlink, str(target), (type(error), error, None))
+
+    monkeypatch.setattr(fresh_start.shutil, "rmtree", failure)
+    monkeypatch.setattr(Path, "chmod", lambda *a, **kw: pytest.fail("No chmod outside safe output"))
+    with pytest.raises(ValueError, match="outside|Linked|mounted"):
+        fresh_start.delete_directory(root)
+    assert target.read_text() == "keep"

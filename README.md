@@ -161,6 +161,11 @@ Raw data, prepared questions, permanent feature caches, weights and environments
 place. The helper rejects linked/mounted subtrees and queued/running JEVPFN jobs; close
 manual writers first. It recreates empty output roots and the VSC Experiment 0 log directory.
 Without `--delete`, the existing reversible archive mode remains available.
+On Windows, deletion clears read-only attributes only on entries inside the validated output
+tree and retries brief sharing locks. Persistent access errors still stop cleanup; close the
+program holding the path and repeat the same command. No administrator access or ACL changes
+are part of the helper. In PowerShell, check native command exit codes before proceeding;
+`$ErrorActionPreference = 'Stop'` alone does not stop after a Python failure.
 
 Publish the intended code first, verify the same Git commit locally and on VSC, then reset
 once before new tests. Repack the current input files, rerun token counts and regenerate

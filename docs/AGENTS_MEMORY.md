@@ -71,7 +71,11 @@ still unverified. Cleanup removed only rebuildable reports/figures and legacy qu
   Maintenance refuses active JEVPFN jobs and requires stopped manual writers.
   Question uploads preserve file bytes and validate every member before replacing old files.
   The 15-10-2026 delete-mode follow-up passed all 440 tests, including 19 reset tests.
-  Actual local deletion was previewed only; the owner runs the coordinated clean start.
+  The owner's first real deletion then exposed Windows read-only directories (WinError 5),
+  absent from those tests. Reproduced the failure, added Windows-specific attribute recovery
+  and bounded lock retries, and completed the actual local deletion. All 80 raw/prepared/cache
+  files retained identical hashes. After isolating a synthetic retry test's logs, all 448
+  tests passed and the real output folder remained empty. No VSC cleanup was performed.
 - **Figure verification:** an inline overview overlapped despite a correct PDF. Separate
   table/header/footer axes and inspect notebook-kernel output, not PDF alone.
 - **Artifact completeness:** checking only trace groups present in a file missed an entirely
