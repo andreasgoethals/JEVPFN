@@ -63,6 +63,9 @@ class SelfHostedClient:
             raise ValueError("; ".join(failures))
         if provider not in SELF_HOSTED:
             raise ValueError("Unsupported self-hosted provider")
+        from src.cluster.freeze import check_if_present
+
+        check_if_present()
         inference_environment()
         self.counter = ExactCounter(provider)
         folder, checkpoint_id = verify_checkpoint(provider)
@@ -85,6 +88,13 @@ class SelfHostedClient:
                 },
             },
         }
+        from src.cluster.containers import active_identity
+
+        image = active_identity()
+        if image is not None:
+            if image["provider"] != provider:
+                raise ValueError("Loaded container belongs to a different decision provider")
+            self.settings["request_configuration"]["execution_container"] = image
         import torch
 
         if not torch.cuda.is_available():

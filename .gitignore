@@ -13,6 +13,7 @@
 /output/
 /.cache/
 /environments/
+/containers/
 /conda_envs/
 *.sqlite3
 *.sqlite3-*

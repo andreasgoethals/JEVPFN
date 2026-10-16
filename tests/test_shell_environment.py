@@ -25,6 +25,60 @@ def bash_executable():
     return bash
 
 
+@pytest.mark.parametrize("selection", ["packed", "corrupt", "native"])
+def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selection):
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    stage = tmp_path / "project"
+    packed = stage / "JEVPFN/containers/cloudflare"
+    (packed / "bin").mkdir(parents=True)
+    (packed / "_JEVPFN_CONTAINER.json").write_text("fixture")
+    host = tmp_path / "host_python"
+    host.write_text(
+        '#!/bin/bash\n[[ "$TEST_CASE" != corrupt ]] || exit 9\nprintf "export JEVPFN_CONTAINER_PROVIDER=cloudflare\\nexport JEVPFN_CONTAINER_ID=verified\\n"\n'
+    )
+    host.chmod(0o755)
+    wrapper = packed / "bin/python"
+    wrapper.write_text('#!/bin/bash\nprintf "packed-python\\n"\n')
+    wrapper.chmod(0o755)
+    (repo / "scripts/activate_conda.sh").write_text(
+        'export JEVPFN_PYTHON="$TEST_HOST"\nprintf "native-activation\\n"\n'
+    )
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        "set -euo pipefail\n"
+        'if [[ "$OSTYPE" == msys* ]]; then\n'
+        '  TEST_REPO="$(cygpath -u "$TEST_REPO")"\n'
+        '  TEST_HOST="$(cygpath -u "$TEST_HOST")"\n'
+        '  JEVPFN_STAGING_ROOT="$(cygpath -u "$JEVPFN_STAGING_ROOT")"\nfi\n'
+        'export TEST_HOST JEVPFN_STAGING_ROOT\ncd "$TEST_REPO"\n'
+        'export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/cloudflare"\n'
+        '[[ "$TEST_CASE" != native ]] || export JEVPFN_CONDA_ENV=JEVPFN\n'
+        'source "$TEST_ACTIVATION"\n'
+        'printf "selected-provider=%s\\n" "${JEVPFN_CONTAINER_PROVIDER:-none}"\n',
+        encoding="utf-8",
+    )
+    env = dict(
+        os.environ,
+        TEST_CASE=selection,
+        TEST_REPO=repo.as_posix(),
+        TEST_HOST=host.as_posix(),
+        JEVPFN_STAGING_ROOT=stage.as_posix(),
+        TEST_ACTIVATION=(ROOT / "scripts/activate_runtime.sh").as_posix(),
+    )
+    result = subprocess.run(
+        [bash_executable(), str(driver)], env=env, capture_output=True, text=True, timeout=30
+    )
+    if selection == "corrupt":
+        assert result.returncode != 0 and "selected-provider" not in result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert (
+            f"selected-provider={'cloudflare' if selection == 'packed' else 'none'}"
+            in result.stdout
+        )
+
+
 @pytest.mark.parametrize("failure", ["none", "activation", "interpreter"])
 def test_setup_selects_only_verified_conda_python(tmp_path, failure):
     bootstrap = tmp_path / "DATA" / "miniconda3" / "etc" / "profile.d"

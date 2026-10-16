@@ -39,6 +39,8 @@ def _isolate_routing_environment(monkeypatch):
         "VSC_PROJECT_GPFS1",
         "SLURM_JOB_ID",
         "SLURM_CLUSTER_NAME",
+        "JEVPFN_CONTAINER_PROVIDER",
+        "JEVPFN_CONTAINER_ID",
     ):
         monkeypatch.delenv(variable, raising=False)
 

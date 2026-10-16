@@ -1,69 +1,62 @@
 # Operational evidence
 
-Current stage: Experiment 0A. The owner approved question version 3 on 16-10; all 18 local
-prepared files were regenerated, retaining historical input sets. The exhaustive local audit
-verified 1,698,127 unique inputs and 3,294,340 original row/text-slot links. Earlier version-2
-token audits and Clef/Intern real GPU contracts passed, but are historical for the new inputs.
-The repaired CPU suite and two-node PROJECT locking/snapshot tests passed on VSC.
-The owner's later 16-10 staging transcript confirms Liquid/Strands/Perplexity downloads and
-fingerprints on PROJECT, completing all five open-weight checkpoints. Only Clef/Intern
-environments and actual GPU execution are confirmed; the other three environments remain pending.
-Full extraction and predictive runs remain disabled. Larger pilots, three remaining GPU
-runtimes, Jev live checks, storage quota and independent backup remain
-unverified. The read-only library pin is
-`de324efcca55be392feb0c01830b3b6ce364587f`.
-Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
-Latest local verification (16-10, fifth review): 539 tests, lint and dependency consistency passed, including
-the installed TypeSafe SDK with mocked successful and rate-limited HTTP responses. This is
-not live API evidence. All five local notebooks were rerun with version-3 inputs (17 figures).
-The modified CPU Slurm script passed Bash syntax/LF checks; its allocation now allows twenty
-minutes for the exhaustive input audit plus the test suite. No remote jobs were submitted.
-The CPU test selection also passed with notebook/TypeSafe imports deliberately unavailable:
-533 passed, three hosted-SDK tests skipped and three notebook tests deselected. This reproduces
-the optional-dependency boundary locally, not Linux or VSC behavior. The exhaustive v3 input
-audit was repeated successfully without changing any of the 18 prepared files.
-The fifth review identified methodological gaps, not additional established execution failures.
-Added the frozen E5 control with train-partition-only PCA, dataset-level paired summaries,
-guarded optional Wilcoxon/Holm analysis and separate native-text reference results. Perturbations
-cannot establish absence of pretraining contamination; the documented review keeps unknowns
-explicit. Real E5 inference is unverified. All five runtime setup branches are now available;
-Perplexity's pre-install requirements check uses only the standard library. The later installation attempt and its quota failure are recorded below; no new GPU
-execution has been observed. Open-provider acceptance now checks
-matching reports but requires explicit owner review of throughput, quota and backup.
-The owner authorized EUR 5 for the Jev pilot and tentatively EUR 50 after testing. A verified
-conservative USD conversion is required; the later budget stays disabled. The pasted console
-showed USD 0 balance and no RPS/TPS. A subsequent owner-authorized read-only authenticated model-list call succeeded; it returned
-`jev-latest` and `jev-preview`. No inference was performed. The key was used only in the
-process environment and was not persisted. Alias listing does not verify pinned-version access. The setup helper writes only an ignored local configuration; account rates and a justified
-context/billing envelope remain required. Provider docs now describe organization-specific
-limits, so the old fixed 80 RPS/100k TPS claim was removed from active metadata.
+Current stage: Experiment 0A setup, before the owner-requested final clean validation.
+Question v3 is frozen; all 18 files contain 1,698,127 unique inputs and 3,294,340 original
+row/text-slot links. CPU 62343023 and exact-token job 62340824 completed successfully.
+All five open tokenizers found zero overflows; counts are below. The two-node storage test
+passed. All five open checkpoints are staged, but only Clef/Intern native GPU execution
+with older questions is verified. Remaining GPU/throughput tests and backup review are pending.
+The library pin is `de324efcca55be392feb0c01830b3b6ce364587f`.
 
-Latest local verification after the eight-configuration expansion: 567 tests passed; all
-five notebooks completed with 18 figures and no error cells. The new configuration figure
-was visually inspected. Lint, dependency consistency and all 12 shell syntax/LF checks
-passed. Tokenization source files remain unchanged. No paid inference, real E5 inference,
-remote job submission, output deletion or Git publication was performed in this revision.
+On 16-10 the owner confirmed USD 5 account funding. Three live local Jev 1.13 probes passed:
+binary p=0.97, three-class correct option p=1, nine-level score expected direction +4.
+Reported input usage: 288 + 355 + 408 = 1,051 tokens; computed input cost USD 0.000044142.
+Raw synthetic responses and the compact receipt are in local Experiment 0 `jev_smoke` outputs.
+No dataset requests or full extraction ran. A repeat with saved receipts must reuse responses;
+unknown outcomes stop rather than silently dispatch again. No key was saved. Published model
+IDs are accepted even when GET models lists aliases only; live returned version was 1.13.0.
+The visible console confirmed USD 5 credit and auto-recharge off. Organization ID is under
+user menu → Settings → Organization; it was not saved in public files. Home, Organization,
+Billing and Usage did not display RPS/TPS. Those remain organization-specific and unverified. Full dataset dispatch retains its
+account/context/budget gates; the separate three-call contract has a documented USD 0.008064
+maximum at 64k request tokens and USD 0.042/M, no long-context header and no retries.
 
-The owner expanded Experiment 1 to all six predictors and eight configurations: non-text;
-joint/per-column/both decision features; E5-only; E5 plus each decision representation.
-E5 remains per-column PCA-32 fitted in each training partition. Provider-independent baselines
-are fitted once; combined comparisons preserve both artifact identities. Real E5/GPU and
-full-fold feasibility remain unverified.
+Latest reported PROJECT quota: 252.5 G / 1 T; 147,339 / 150,000 files. Breakdown: JEVPFN
+113,370, CreditPFN 29,019, TabPFNCredit 4,789, CreditICL 160. JEVPFN's unpacked Clef/Intern
+runtimes contribute about 111k files. Liquid installation rolled back at ncurses; the loop
+never reached Strands/Perplexity. `hpc-container-wrapper/0.4.2` was directly checked in the owner's OnDemand shell: it loads
+without prerequisites; wrap-install/conda-containerize and /usr/bin/apptainer are present.
+The module does not export CW_GLOBAL_YAML; use its default_config/config.yaml. An earlier
+lookup failed only because `0.4.2.` had an extra final dot.
+The same read-only OnDemand check directly confirmed nonempty checkpoint manifests for
+Clef, Intern, Liquid, Strands and Perplexity on PROJECT. Build/load checks still verify every
+checkpoint file hash; a present manifest alone is not a successful inference test.
+Compact runtime build/verification/guarded retirement and source-freeze checks are implemented,
+but real VSC container builds/GPU execution remain unverified. Preserve native sources until
+matching container GPU evidence passes; build unpacked temporary files in scratch.
+Local validation of this revision: 585 tests passed, lint and dependency checks passed, and
+all 15 project shell/Slurm files passed Bash syntax and LF checks. Neither protected tokenizer
+module nor the library submodule changed. The real Jev smoke also reused all three saved
+responses with no new network client. No VSC job, cleanup or Git publication was performed.
 
-16-10 owner transcripts at `0113f19`: local 539 tests passed; all 18 version-3 inputs uploaded
-and installed, five tokenizers verified. Liquid setup failed with `Errno 122` at ncurses;
-its loop never reached Strands/Perplexity. `myquota` showed PROJECT 251.8 G / 1 T bytes but
-146,452 / 150,000 files. This is file-count pressure, not insufficient byte capacity. DATA
-53,817 M / 76,800 M is not a destination for large runtime installations. Preserve running
-token jobs and their output; resolve quota before retrying environment setup.
+The owner wants setup/debugging completed FIRST, then permanent deletion of local and both
+VSC output trees, repeated local question preparation/audit/upload, and one fresh frozen 0A.
+Preserve raw/prepared data, paid responses/features, weights, runtimes and images. Do not
+clean yet while runtime preparation is unfinished. A source/config/runtime change after
+freezing stops jobs; record operational stage-enabling changes separately from source fixes.
+Finish a reviewed stage with `freeze --finish-stage --reviewed-by Andreas --writers-stopped`
+before changing its configuration/pins; the tested receipt is retained. Freeze the next stage
+again rather than deleting prior 0A evidence. Completion does not sign test acceptance.
+Research method is in README, operations in VSC, and meanings in DATA_SOURCES.
 
 ## VSC runs
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 16-10-2026 | wICE / 62343023 | CPU at 606296c | COMPLETED 0:0, 5m19s; preflight_passed and synthetic contracts passed; MaxRSS 5,068,440 K. |
 | 16-10-2026 | wICE / 62340719 | Fresh version-3 CPU job, 0113f19 | Owner sacct: COMPLETED 0:0, 5m19s, MaxRSS 5,010,580 K. Full report not yet downloaded. |
 | 16-10-2026 | wICE / 62340794 | Fresh storage job | Owner sacct: COMPLETED 0:0, 59s; both worker steps completed. |
-| 16-10-2026 | wICE / 62340824 | Fresh version-3 token audit | Owner sacct at 12:10: RUNNING, elapsed 23m34s. Completion/coverage not yet verified. |
+| 16-10-2026 | wICE / 62340824 | Fresh version-3 token audit | COMPLETED 0:0, 1h17m14s, MaxRSS 7,499,032 K. All five providers counted 1,698,127 v3 unique inputs; zero overflows. Totals: Clef 1,014,192,144; Liquid 707,094,152; Strands 1,005,342,865; Perplexity 830,747,521; Intern 1,180,719,654 tokens. These are not Jev billing counts. |
 | 16-10-2026 | wICE / 62338536 | experiment_0_storage.slurm | storage_contracts_passed_requires_quota_and_backup_review; nodes r33c25n1/r33c30n4; held-lock exclusion, release/reacquisition and SQLite snapshot/restore passed. Released receipt became visible after 29.509 s. Quota/independent backup remain unverified. |
 | 15-10-2026 | wICE / 62333801 | experiment_0_storage.slurm at 39a39ff | Coordinator FAILED on immediate released-receipt lookup. Both workers returned valid matching receipts: held-lock exclusion and acquisition after release succeeded on r33c22n3. Receipt later readable; snapshot/restore not reached. |
 | 15-10-2026 | wICE / 62333525 | experiment_0_cpu.slurm at aaf2153 | preflight_passed; all 18 dataset/hash/CV checks passed; 457 tests passed, 10 expected skips, 3 local notebook tests deselected. |
@@ -104,7 +97,7 @@ then passed with the bounded 60-second visibility wait, recording an actual 29.5
 and successful snapshot/restore. Missing receipts still time out; malformed/foreign receipts,
 failed steps and permission errors fail immediately. Workers are never relaunched to recover
 a delayed receipt. Tokenizer and GPU runtime identities are unchanged; prepared inputs now
-use version 3 and require fresh token/GPU checks. The 16-10 08:42 inventory listed only
+use version 3; its token audit passed 62340824 and fresh GPU runtime checks remain pending. The 16-10 08:42 inventory listed only
 cloudflare/intern checkpoints/environments; the later staging finished at 09:04 and added the
 remaining three checkpoint trees, including the Strands adapter/base. The unauthenticated
 Hugging Face warning did not prevent these downloads. Downloads do not establish inference compatibility.

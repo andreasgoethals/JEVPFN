@@ -33,6 +33,7 @@ def test_archive_both_tiers_preserves_every_file_and_protected_data(isolated_out
             "data/text_embeddings/embeddings.sqlite3",
             "checkpoints/weights.bin",
             "environments/python",
+            "containers/cloudflare/image.sif",
         ):
             file = root.parent / name
             file.parent.mkdir(parents=True, exist_ok=True)

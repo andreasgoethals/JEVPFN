@@ -82,6 +82,9 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
         raise RuntimeError("Jev execution requires explicit opt-in and enabled live configuration")
     if paths.on_vsc():
         raise RuntimeError("The selected Jev workflow runs locally")
+    from src.cluster.freeze import check_if_present
+
+    check_if_present()
     review = cfg["live_extraction"]
     if full and (
         review.get("full_feature_creation_enabled") is not True

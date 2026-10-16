@@ -94,7 +94,7 @@ or job submission, preview and apply a permanent output reset:
 The first command previews both tiers. The second permanently deletes their `output_JEVPFN`
 and earlier `archived_output_JEVPFN` trees, including old logs, count databases, predictions
 and output transfer bundles/backups. It creates no archive. Raw datasets, prepared inputs,
-permanent features, weights and environments remain in place. Linked/mounted subtrees and
+permanent features, weights, environments and containers remain in place. Linked/mounted subtrees and
 active JEVPFN jobs are refused before deletion. If deletion is interrupted, stop remaining
 writers and repeat the same reset before starting tests; there is no rollback.
 
@@ -107,12 +107,31 @@ Repack inputs after clearing local output. Fresh token counting starts from zero
 again after tests start. Keep each stage fixed during execution; publish reviewed changes
 between stages as described above.
 
-For a final clean validation, finish diagnosing infrastructure failures first, then freeze
-the reviewed code and reset outputs once on VSC and locally. Rerun CPU/storage checks, exact
+For a final clean validation, finish diagnosing infrastructure failures first, then publish the reviewed code, reset outputs once on VSC and locally, and record frozen
+revision receipts before the new checks start. Rerun CPU/storage checks, exact
 token counts and the selected provider contracts; import the resulting validated transfer
 before rerunning local notebooks. Do not import old output bundles into that clean campaign.
 Permanent dataset caches remain reusable and are not part of output cleanup. Keep diagnostic
 logs until their failure is understood; a clean output folder alone is not evidence of success.
+
+After that single cleanup, run `python -m src.cluster.freeze --record` locally. Transfer the
+small `3. experiment_0/manifests/frozen_revision.json` receipt with the question bundle; on VSC
+run `python -m src.cluster.freeze --record --expected-file PATH_TO_LOCAL_RECEIPT`. It requires
+identical Git HEAD and source/base configuration hashes. Every Slurm startup checks the
+receipt and runtime/checkpoint marker hashes. Notebook outputs are excluded from source
+hashing; notebook source cells are included. Stage all runtime/weight receipts before freezing.
+Private `*.local.yaml` overlays retain their own per-run configuration hashes. Source fixes
+require reviewing/restarting the affected frozen campaign; operational extraction acceptance
+is a separate stage. This mechanism detects changes; finite tests cannot prove no bugs remain.
+
+After reviewing a completed stage, stop its writers and run
+`python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped` on
+each participating machine, BEFORE changing stage configuration or staging new runtime pins.
+It verifies that the active revision still matches, retains its compact receipt under
+`manifests/completed_revisions/` and opens the next stage's setup window. It does not approve
+tests or enable extraction. Then publish/synchronize the reviewed next-stage configuration
+and use `--record` again, comparing local/VSC source receipts. This preserves 0A evidence;
+another output cleanup is unnecessary. Changed active revisions cannot be silently finished.
 
 ## Upload the prepared inputs
 
@@ -221,9 +240,11 @@ Strands stages both its adapter and the configured Qwen3.5-2B base model. The in
 revision caveat is retained in config. Every compute job verifies hashes and runs offline.
 No inference belongs on a login node.
 
-For all five GPU tests, the setup helper prepares isolated provider
-environments, reuses staged weights and performs an offline tokenizer smoke check. Run before
-submitting jobs; it refuses active JEVPFN jobs. Packages/wheel caches/environments use PROJECT:
+Prefer the compact runtimes in the next section on the current file-limited allocation.
+The native setup helper below is an alternative only when sufficient file quota is available;
+do not install five unpacked environments on the nearly full shared allocation. It prepares
+isolated environments, reuses staged weights, checks tokenizers offline and refuses active
+JEVPFN jobs. Packages/wheel caches/environments use PROJECT:
 
 ```bash
 cd "$VSC_DATA/JEVPFN"
@@ -280,6 +301,49 @@ The permanent cache is PROJECT `data/text_embeddings/<dataset_id>.sqlite3`; logs
 feature-creation logs. These embeddings are required before the comparison benchmark;
 decision-model extraction can proceed independently. PCA is computed inside each CV training
 fit, not in the permanent embedding cache.
+
+## Compact decision runtimes
+
+The selected site module is `hpc-container-wrapper/0.4.2`. Use the login shell to inspect it;
+actual packing/building runs through the CPU allocation below. `wrap` packs an existing
+working environment; `new` installs a fresh runtime entirely in scratch before packing it.
+Images and wrappers end in PROJECT `JEVPFN/containers/<provider>/`. Weights stay outside the
+image in PROJECT checkpoints. The build copies the site's wrapper configuration and redirects
+its temporary/work directories and package caches to scratch. No source environment is deleted.
+
+After publishing/synchronizing the source, start with Clef:
+
+```bash
+sbatch --wait scripts/slurm/experiment_0_container_build.slurm cloudflare wrap
+sbatch --wait scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
+```
+
+A sealed receipt hashes image bytes and wrapper/link contents, records package versions and
+checks that a source-only sentinel is invisible inside the packed image. The launcher selects
+the sealed image automatically, verifies it before execution and exposes GPUs with Apptainer.
+Clef/Intern package versions must equal their originals. New runtimes have their own recorded
+identity. The GPU report includes the image identity, so native and container evidence cannot
+be confused. VSC execution of this new path is still unverified until the commands succeed.
+
+Only after matching GPU evidence passes, preview and retire the redundant native source:
+
+```bash
+export JEVPFN_CONDA_ENV=JEVPFN
+source scripts/activate_conda.sh
+"${JEVPFN_PYTHON:?}" -m src.cluster.containers retire cloudflare
+"$JEVPFN_PYTHON" -m src.cluster.containers retire cloudflare --apply --writers-stopped
+```
+
+This requires idle JEVPFN jobs, checksummed matching GPU settings and passed semantic probes.
+It removes only PROJECT `environments/cloudflare`, retaining an empty image mount point.
+It preserves the container, every checkpoint, inputs/features, outputs and other projects.
+Retiring Clef frees room before packing Intern. Repeat `wrap`, GPU test and guarded retirement
+for `intern`. For `liquid`, `strands`, `perplexity`, use build mode `new`; the partial failed
+Liquid installation is not treated as a working source. Test each new image before proceeding.
+Perplexity GPU contracts/pilots use `--mem=112000M`. Scratch build diagnostics remain available
+on failure; the helper refuses to overwrite an existing destination for manual review.
+The container-build script resolves `default_config/config.yaml` from the installed wrapper;
+KU Leuven does not necessarily export `CW_GLOBAL_YAML` from the module itself.
 
 ## Bounded GPU contract tests and larger pilots
 
@@ -366,6 +430,28 @@ provider-specific implementation, probability/token parity and resume tests; it 
 Hardware speedups and cheaper-GPU feasibility must be measured, not inferred from model size.
 
 ## Local Jev and Experiment 0B
+
+First verify the pinned account/task interface locally with:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.jev.smoke --execute
+```
+
+It asks for the key without echo, sends only three fixed synthetic probes sequentially and
+keeps complete responses plus a compact receipt. It checks exact Jev 1.13 identity, binary,
+multiclass, nine-level score mapping and usage. The reviewed policy in
+`config/3. experiment_0/jev_smoke.yaml` reserves at most USD 0.008064 for three attempts using
+the published 64k per-request context and USD 0.042/M price, with no long-context header.
+SDK/application retries are disabled. Existing verified responses are reused; a missing
+response after an attempt stops for billing review. HTTP errors stop, including rate limits.
+This slow interface check does not claim to know account RPS/TPS or enable dataset extraction.
+It passed live on 16 October; its three inputs consumed 1,051 reported tokens.
+
+The console's user menu → Settings → Organization displays the organization ID. Billing
+shows credits and auto-recharge; neither that page nor Home/Organization/Usage exposed
+RPS/TPS during the observed check. Request those values from the existing TypeSafe contact
+or `support@typesafe.ai`; do not substitute proposed traffic settings for account limits.
+Keep the organization ID and credentials out of public configuration/docs.
 
 Jev calls run locally after an approved small pilot. Install `.[jev]`, set `TYPESAFE_API_KEY`
 privately, and use the pinned `jev-1.13.0` client. `src.jev.extraction` disables hidden retries,

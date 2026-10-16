@@ -104,6 +104,9 @@ class E5Encoder:
     """Publisher mean pooling and query prefix, extended to cover all text in chunks."""
 
     def __init__(self, cfg):
+        from src.cluster.freeze import check_if_present
+
+        check_if_present()
         if (
             cfg["dimensions"] != 384
             or cfg["prefix"] != "query: "
@@ -142,6 +145,11 @@ class E5Encoder:
             "device": cfg["device"],
             "dtype": str(next(self.model.parameters()).dtype),
         }
+        from src.cluster.containers import active_identity
+
+        image = active_identity()
+        if image is not None:
+            self.identity["execution_container"] = image
 
     def __call__(self, texts):
         torch, cfg = self.torch, self.cfg

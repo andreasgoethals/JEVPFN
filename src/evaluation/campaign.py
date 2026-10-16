@@ -131,6 +131,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     )
     if allow_model_runs is not True or enabled is not True:
         raise RuntimeError("Benchmark execution is disabled; plan only")
+    from src.cluster.freeze import check_if_present
+
+    check_if_present()
     if not profile:
         reviewed_acceptance(cfg.get("experiment_0_acceptance"), stage="after_extraction")
     if arm not in benchmark_plan(include_controls=True):

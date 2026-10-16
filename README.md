@@ -5,16 +5,16 @@ models improve tabular prediction**. Explore all 20 core MulTaBench TEXT dataset
 for extraction and evaluation. Zomato Restaurants and Spotify Genres remain available locally
 for exploration but are excluded from experiments for text burden and 114-class feature size.
 
-**Current stage: Experiment 0A.** Question version 3 corrects regression grammar and quotes
-binary answer descriptions. Earlier version-2 token audits found zero context overflows;
-Clef and Intern each passed 74 real GPU contract requests on wICE using those earlier inputs.
-Repeat token/GPU checks for version 3. The CPU suite and two-node PROJECT locking/SQLite snapshot tests passed.
-The combined PROJECT/DATA transfer and all five local notebooks completed successfully.
-All five open-weight checkpoints are staged on PROJECT; only Clef/Intern environments and
-GPU execution are confirmed. Liquid environment setup hit PROJECT file-count quota; Strands
-and Perplexity setup was not reached. Fresh version-3 CPU/storage jobs passed and token counts
-are running. A local read-only Jev authentication check succeeded; pinned-version inference,
-account limits, funding, larger pilots and independent backup review remain pending. Full extraction and predictive experiments stay disabled.
+**Current stage: Experiment 0A setup.** Frozen question version 3 has passed the exhaustive
+input audit and exact token counts for all five open-weight extractors: 1,698,127 unique
+inputs each, zero context overflows. CPU and two-node storage tests passed. All five open
+checkpoints are staged; Clef/Intern previously passed GPU tests with older inputs. Their
+compact-container path and the other three real runtimes still need VSC verification.
+The owner confirmed USD 5 funding. Three live local Jev 1.13 requests passed binary,
+multiclass and nine-level scoring contracts (1,051 input tokens; computed cost USD 0.000044142).
+Full dataset pilots, account limits and extraction acceptance remain pending. Full feature
+creation and predictive runs stay disabled. Finish setup before the owner's deliberate
+clean, frozen-revision validation campaign; retain weights, containers, inputs and features.
 Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
 
@@ -203,7 +203,7 @@ For a completely fresh run without output archives, preview
 on the laptop. Append `--apply --writers-stopped` to permanently delete the complete output
 trees and any earlier `archived_output_JEVPFN/` trees. This includes old logs, token audits,
 predictions, transfer bundles and backups stored inside output. No new archive is created.
-Raw data, prepared questions, permanent feature caches, weights and environments remain in
+Raw data, prepared questions, permanent feature caches, weights and environments/containers remain in
 place. The helper rejects linked/mounted subtrees and queued/running JEVPFN jobs; close
 manual writers first. It recreates empty output roots and the VSC Experiment 0 log directory.
 Without `--delete`, the existing reversible archive mode remains available.
@@ -218,7 +218,14 @@ the owner publishes reviewed fixes or explicit enabling-config changes, then syn
 VSC checkout. Rerun affected checks; retain existing evidence only when its relevant input,
 code and runtime identities still match. A routine fix or stage transition does not require
 another output reset, question upload or tokenizer run. A deliberately fresh campaign uses
-the reset procedure above once, before its tests start.
+the reset procedure above once after runtime preparation, then
+`python -m src.cluster.freeze --record` records its source/base configuration and runtime pins. Slurm jobs reject later
+changes. Local and VSC receipts can be compared with `--expected-file`; notebook output
+updates do not alter their source fingerprint.
+After reviewing a completed stage and stopping its writers, explicitly finish its freeze with
+`python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped` before
+changing the next stage's configuration/pins. The tested receipt is retained; record a new
+freeze for the next stage without deleting completed test results.
 
 Original row identity is **dataset ID + source-data fingerprint + csv:N**, where N is the
 zero-based CSV position before any split/shuffle. `row_map` links each row/slot to a unique

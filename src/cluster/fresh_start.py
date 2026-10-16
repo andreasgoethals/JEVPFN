@@ -161,6 +161,7 @@ def run(*, apply=False, writers_stopped=False, local=False, delete=False, includ
             "data/text_embeddings",
             "checkpoints",
             "environments",
+            "containers",
         ],
     }
     if delete:

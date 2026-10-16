@@ -1,7 +1,8 @@
 #!/bin/bash
 # Follow CreditPFN's Conda activation and interpreter verification, with a separate env.
 set -euo pipefail
-source scripts/activate_conda.sh
+source scripts/activate_runtime.sh
+python -m src.cluster.freeze
 # Fail before any cache creation if PROJECT is missing or uses the other cluster's filesystem.
 python -c 'import os; from src.cluster.preflight import storage_policy_failures; failures = storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME")); assert not failures, "\n".join(failures)'
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
