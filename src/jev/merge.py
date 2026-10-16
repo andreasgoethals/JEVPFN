@@ -35,6 +35,7 @@ TABLES = {
     "extraction_policy",
     "extraction_policy_history",
     "extraction_jobs",
+    "extraction_recoveries",
     "imported_extraction_records",
     "failures",
 }
@@ -117,6 +118,13 @@ def validate_cache(source: Path) -> str:
                 "authorization_json",
                 "created_utc",
             ],
+            "extraction_recoveries": [
+                "recovery_id",
+                "request_key",
+                "record_json",
+                "record_sha256",
+                "created_utc",
+            ],
         }
         if not {"dataset_identity", "responses", "origins"} <= tables:
             raise ValueError("Incomplete cache schema")
@@ -127,6 +135,20 @@ def validate_cache(source: Path) -> str:
         if len(bound) != 1:
             raise ValueError("Merge requires exactly one dataset identity")
         dataset_id = paths.output_component(bound[0][0])
+        if "extraction_recoveries" in tables:
+            for recovery_id, key, encoded, sha, created in db.execute(
+                "SELECT * FROM extraction_recoveries"
+            ):
+                record = json.loads(encoded)
+                if (
+                    digest(record) != sha
+                    or record.get("approval_sha256") != recovery_id
+                    or record.get("created_utc") != created
+                    or record.get("before", {}).get("request_key") != key
+                    or record.get("after", {}).get("request_key") != key
+                    or record.get("approval", {}).get("dataset_id") != dataset_id
+                ):
+                    raise ValueError("Invalid recovery history identity/checksum")
         for key, kind, payload, settings, response in db.execute(
             "SELECT request_key,kind,payload_json,settings_json,response_json FROM responses"
         ):
@@ -268,7 +290,12 @@ def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = No
                     else:
                         db.execute("INSERT INTO feature_artifacts VALUES (?,?,?,?)", row)
                         counts["artifacts_added"] += 1
-            for table in ("extraction_policy", "extraction_policy_history", "extraction_jobs"):
+            for table in (
+                "extraction_policy",
+                "extraction_policy_history",
+                "extraction_jobs",
+                "extraction_recoveries",
+            ):
                 if table not in tables:
                     continue
                 cursor = incoming.execute(f"SELECT * FROM {table}")

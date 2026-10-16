@@ -209,6 +209,7 @@ def test_cv_resumes_only_completed_folds_and_detects_corruption(isolated_output,
     summary, rows, means, _ = collect(("experiment_0",))
     assert summary["complete_arms"] == 1 and not means.empty
     assert set(rows.outer_fold) == set(range(5))
+    assert any(name.startswith("text.unseen_joint.") for name in rows.metric)
     (records[0].parent / "predictions.parquet").write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="corrupt"):
         protocol.evaluate_cv(dataset, matrix, factory, **kwargs)

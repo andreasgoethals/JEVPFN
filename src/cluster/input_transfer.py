@@ -219,7 +219,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     packing = sub.add_parser("pack")
     packing.add_argument(
-        "--output", type=Path, default=Path("output_JEVPFN/transfers/decision_inputs_v2.zip")
+        "--output", type=Path, default=Path("output_JEVPFN/transfers/decision_inputs_v3.zip")
     )
     installing = sub.add_parser("install")
     installing.add_argument("bundle", type=Path)

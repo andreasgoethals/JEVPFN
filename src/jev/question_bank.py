@@ -166,7 +166,7 @@ def payload_from_text(entry, variant, text):
     task = copy.deepcopy(entry["task"])
     value = entry["variants"][variant]
     facts = copy.deepcopy(value["documentary_definition"])
-    if value["version"] == "documented-task-v2":
+    if value["version"] in {"documented-task-v2", "documented-task-v3"}:
         facts.pop("source_reference", None)
     if facts:
         if "text_column_definitions" in facts:
@@ -204,7 +204,7 @@ def _apply_question(request, metadata, bank_id, variant, value):
         raise ValueError("Request task and question bank disagree")
     payload["question"] = copy.deepcopy(value["question"])
     facts = reviewed_definition(metadata, value["documentary_definition"])
-    if value["version"] == "documented-task-v2":
+    if value["version"] in {"documented-task-v2", "documented-task-v3"}:
         facts.pop("source_reference", None)
     if facts:
         # Per-column calls need definitions of supplied fields only. This also

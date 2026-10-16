@@ -23,6 +23,12 @@ from src.evaluation.records import (
     fold_marker,
     save_evaluation,
 )
+from src.evaluation.text_overlap import (
+    OVERLAP_VERSION,
+    cohort_scores,
+    fold_overlap,
+    text_identities,
+)
 from src.utils import paths
 from src.utils.locking import file_lock
 from src.utils.provenance import code_identity
@@ -240,6 +246,7 @@ def evaluate_cv(
     binary = metadata.task_type == "binary_classification"
     classes = metadata.classes
     positive = classes[-1] if binary else None
+    text_ids = text_identities(dataset)
     paths.results_dir("splits", phase=phase).mkdir(parents=True, exist_ok=True)
     write_json(
         paths.results_dir("splits", specification["split_id"] + ".json", phase=phase), specification
@@ -266,12 +273,14 @@ def evaluate_cv(
         "split_id": specification["split_id"],
         "inner_folds": inner_folds if binary else None,
         "permutation_columns": permutation_columns,
+        "text_overlap_version": OVERLAP_VERSION,
         "protocol_sha256": code_identity(
             [
                 "src/evaluation/protocol.py",
                 "src/evaluation/metrics.py",
                 "src/evaluation/records.py",
                 "src/evaluation/features.py",
+                "src/evaluation/text_overlap.py",
             ]
         ),
     }
@@ -388,6 +397,17 @@ def evaluate_cv(
                             if binary:
                                 table["decision_default"] = predictions[:, -1] >= 0.5
                                 table["decision_selected"] = predictions[:, -1] >= threshold
+                        if role == "outer_test":
+                            overlap = fold_overlap(text_ids, train, test)
+                            for column in overlap:
+                                table[column] = overlap[column].to_numpy()
+                            scores["text_overlap"] = cohort_scores(
+                                metadata,
+                                table.y_true,
+                                predictions,
+                                overlap,
+                                selected_threshold=threshold,
+                            )
                     identity = {**base, "prediction_role": role}
                     records.append(
                         save_evaluation(

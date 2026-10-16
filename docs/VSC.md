@@ -129,7 +129,7 @@ Then in Windows PowerShell:
 ```powershell
 Set-Location 'C:\Users\U0152019\PhD Documents\Projects\5. JEVPFN\JEVPFN'
 .\.venv\Scripts\python.exe -m src.cluster.input_transfer pack
-scp '.\output_JEVPFN\transfers\decision_inputs_v2.zip' '.\output_JEVPFN\transfers\decision_inputs_v2.zip.sha256' 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/uploads/'
+scp '.\output_JEVPFN\transfers\decision_inputs_v3.zip' '.\output_JEVPFN\transfers\decision_inputs_v3.zip.sha256' 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/uploads/'
 ```
 
 This uses the same working SSH authentication as the owner's CreditPFN SCP commands; no
@@ -138,7 +138,7 @@ assumed private-key filename.
 After SCP finishes, from the activated CPU environment in `$VSC_DATA/JEVPFN`:
 
 ```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /lustre1/project/stg_00211/JEVPFN/uploads/decision_inputs_v2.zip --writers-stopped
+"${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /lustre1/project/stg_00211/JEVPFN/uploads/decision_inputs_v3.zip --writers-stopped
 ```
 
 The installer checks the bundle/hash, every database, active question bank, row-link counts
@@ -162,8 +162,14 @@ squeue --me --clusters=wice
 sacct --clusters=wice -j JOB_ID --format=JobID,State,ExitCode,Elapsed,MaxRSS
 ```
 
-The CPU job uses wICE `interactive`, two cores, 8 GB and ten minutes. It checks datasets,
-CV feasibility and synthetic contracts. Token counting uses `batch`, four cores, 13,600 MiB and
+The CPU job uses wICE `interactive`, two cores, 8 GB and twenty minutes. It checks datasets,
+CV feasibility and synthetic contracts. Before the preflight, the CPU job now runs
+`python -m src.jev.question_audit --phase experiment_0`: every active input hash and every
+row/text-slot link is checked against the pinned raw datasets and current question templates.
+Its compact receipt is on DATA under `3. experiment_0/manifests/question_audit.json`.
+It performs no inference and does not modify question files. Linguistic/source review and
+real-provider interpretation checks are separate from this exhaustive mechanical check.
+Token counting uses `batch`, four cores, 13,600 MiB and
 four hours. It counts every complete unique input for each pinned open-weight tokenizer,
 including task/question/options and publisher formatting. Counts are committed incrementally
 and resume after interruption; completed provider summaries survive another worker's failure.
@@ -331,6 +337,27 @@ do not infer either from characters/4. Unknown bounds keep dispatch blocked. HTT
 bounded exponential backoff; 529/timeouts remain review stops because retryable does not
 establish that an earlier attempt was unbilled. Raw responses received by the dispatcher
 survive a subsequent feature-decoder failure.
+
+After a decoder repair, dispatch revalidates a saved `invalid_response` without another
+API call or charge. For exhausted verified-unbilled rejections or uncertain billing, stop
+writers and inspect `python -m src.jev.recovery DATASET_ID`. This prints request keys,
+accounting and the exact job-state hash, without text or credentials. Prepare a reviewed
+JSON file with `stage: jev_request_recovery`, `accepted: true`, `reviewed_by`, checksummed
+`evidence`, `dataset_id`, `request_key`, `expected_job_sha256`, and one action:
+
+- `renew_rejected_attempts`: reopen only a verified-unbilled rejection sequence.
+- `reconcile_billing`: record the provider-confirmed `charged_usd` for the unresolved
+  attempt and `input_tokens` (integer or null), plus explicit
+  `retry_if_response_missing: true/false`. Charges are added, never replaced. A stored
+  response becomes available for revalidation; without one, false leaves it stopped.
+- `retry_resolved_without_response`: explicitly approve a later retry after billing has
+  already been settled and no response was recovered.
+
+Preview with `python -m src.jev.recovery DATASET_ID --review REVIEW.json`; apply with
+`--apply --writers-stopped`. Changed evidence/job state is rejected. A repeated approval
+is idempotent; before/after states and evidence remain in the permanent dataset store and
+survive validated transfers. This command never calls Jev. Never erase reservations merely
+because a timeout probably went unbilled; first obtain billing evidence from the provider.
 
 If the pilot requires a different allocation, price or token bound, set
 `live_extraction.spending_policy_revision_manifest` to an owner-reviewed JSON file. Use

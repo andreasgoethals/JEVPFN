@@ -1,22 +1,29 @@
 # Operational evidence
 
-Current stage: Experiment 0A. Current-input token audits and Clef/Intern real GPU contracts
-passed. The repaired CPU suite passed on VSC. Both storage workers completed their locking
-checks, but the coordinator missed the newly published receipt and stopped before snapshot
-validation. Its bounded visibility-wait fix needs a VSC rerun. Full extraction and predictive
-runs remain disabled. Larger pilots,
-three remaining GPU runtimes, Jev live checks, storage quota and independent backup remain
+Current stage: Experiment 0A. The owner approved question version 3 on 16-10; all 18 local
+prepared files were regenerated, retaining historical input sets. The exhaustive local audit
+verified 1,698,127 unique inputs and 3,294,340 original row/text-slot links. Earlier version-2
+token audits and Clef/Intern real GPU contracts passed, but are historical for the new inputs.
+The repaired CPU suite and two-node PROJECT locking/snapshot tests passed on VSC.
+The owner's later 16-10 staging transcript confirms Liquid/Strands/Perplexity downloads and
+fingerprints on PROJECT, completing all five open-weight checkpoints. Only Clef/Intern
+environments and actual GPU execution are confirmed; the other three environments remain pending.
+Full extraction and predictive runs remain disabled. Larger pilots, three remaining GPU
+runtimes, Jev live checks, storage quota and independent backup remain
 unverified. The read-only library pin is
 `de324efcca55be392feb0c01830b3b6ce364587f`.
 Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
-Latest local verification (15-10): 486 tests, lint and dependency consistency passed, including
+Latest local verification (16-10): 519 tests, lint and dependency consistency passed, including
 the installed TypeSafe SDK with mocked successful and rate-limited HTTP responses. This is
-not live API evidence. The owner subsequently reran all five notebooks successfully (17 figures).
+not live API evidence. All five local notebooks were rerun with version-3 inputs (17 figures).
+The modified CPU Slurm script passed Bash syntax/LF checks; its allocation now allows twenty
+minutes for the exhaustive input audit plus the test suite. No remote jobs were submitted.
 
 ## VSC runs
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 16-10-2026 | wICE / 62338536 | experiment_0_storage.slurm | storage_contracts_passed_requires_quota_and_backup_review; nodes r33c25n1/r33c30n4; held-lock exclusion, release/reacquisition and SQLite snapshot/restore passed. Released receipt became visible after 29.509 s. Quota/independent backup remain unverified. |
 | 15-10-2026 | wICE / 62333801 | experiment_0_storage.slurm at 39a39ff | Coordinator FAILED on immediate released-receipt lookup. Both workers returned valid matching receipts: held-lock exclusion and acquisition after release succeeded on r33c22n3. Receipt later readable; snapshot/restore not reached. |
 | 15-10-2026 | wICE / 62333525 | experiment_0_cpu.slurm at aaf2153 | preflight_passed; all 18 dataset/hash/CV checks passed; 457 tests passed, 10 expected skips, 3 local notebook tests deselected. |
 | 15-10-2026 | wICE / 62333541 | experiment_0_storage.slurm | FAILED with JSONDecodeError while parsing the first worker's stdout. No cross-node storage pass established. Worker stdout was not retained, so its exact contents are unknown. |
@@ -38,11 +45,11 @@ It merged 72 verified real responses (36 Clef, 36 Intern) into 18 permanent data
 and imported 70 outputs. All five exact-token databases are present locally. The real datasets
 have no complete feature artifacts yet; the comparison notebook's readiness-only output is
 expected. Synthetic GPU artifacts remain under Experiment 0 results. An earlier DATA-only
-download lacked these PROJECT files and was not a valid transfer bundle. All 18 local question
-file hashes match the version-2 token report. Current token totals are Liquid 703,871,352;
+download lacked these PROJECT files and was not a valid transfer bundle. The former 18 question
+file hashes matched the version-2 token report. Historical version-2 totals are Liquid 703,871,352;
 Strands 1,001,295,131; Clef 1,010,144,410; Perplexity 826,699,787; Intern 1,176,671,920.
-These include complete publisher prompts and are not Jev billing counts. Historical version-1
-counts do not authorize current inputs. Frozen tokenizer modules remain byte-identical.
+These include complete publisher prompts and are not Jev billing counts. Neither version-1
+nor version-2 counts authorize current version-3 inputs. Frozen tokenizer modules remain byte-identical.
 
 The 15-10 setup receipt confirms access checks passed; upload receipt
 `20261015T114600Z_88790052` confirms all 18 inputs installed. Clef/Intern GPU reports retain
@@ -51,11 +58,15 @@ profiling before full extraction. Successful short probes do not establish campa
 The storage test uses per-job/per-probe JSON receipts on DATA and saves launcher stdout
 and stderr separately. In job 62333801 the first stdout contains the VSC banner followed by
 JSON; the second contains a successful response. Both receipts match the job, node and probe.
-The coordinator's immediate lookup falsely reported the second receipt missing. It now waits
-up to 60 seconds for cross-node visibility after successful worker exit and records the wait.
-Missing receipts still time out; malformed/foreign receipts, failed steps and permission errors
-fail immediately. Workers are never relaunched to recover a delayed receipt. Rerun this VSC
-test before continuing. Tokenizer, prepared-input and GPU runtime identities are unchanged.
+The coordinator's immediate lookup falsely reported the second receipt missing. Job 62338536
+then passed with the bounded 60-second visibility wait, recording an actual 29.509-second delay
+and successful snapshot/restore. Missing receipts still time out; malformed/foreign receipts,
+failed steps and permission errors fail immediately. Workers are never relaunched to recover
+a delayed receipt. Tokenizer and GPU runtime identities are unchanged; prepared inputs now
+use version 3 and require fresh token/GPU checks. The 16-10 08:42 inventory listed only
+cloudflare/intern checkpoints/environments; the later staging finished at 09:04 and added the
+remaining three checkpoint trees, including the Strands adapter/base. The unauthenticated
+Hugging Face warning did not prevent these downloads. Downloads do not establish inference compatibility.
 An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not live API evidence.
 
 ## Reusable failure lessons
@@ -84,6 +95,15 @@ An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not li
 - **Jev policy revisions:** an immutable first-use allocation blocked reviewed pilot-to-full
   budget/price/bound changes. Versioned approvals now retain cumulative spend and history;
   in-flight/ambiguous reservations block revisions. Never hand-edit a paid cache to reset it.
+- **Jev request recovery:** exhausted verified-unbilled rejections and uncertain billing now
+  have a reviewed, job-state-bound recovery command. Saved invalid responses can be decoded
+  again without paying again. Recovery preserves charges and before/after history; a timeout
+  is not evidence that an attempt was unbilled. Synthetic recovery tests are not live billing evidence.
+- **Duplicate-text review:** exact repeats may cross row folds; this is an interpretation risk,
+  not row-target leakage in extraction. Added conditional metrics on unchanged predictions.
+  The independent review's Women's Clothing repeat share included empty inputs; only five
+  nonempty rows repeat, while 666 joint inputs are empty. Its regression identity R-squared
+  figures were not reproduced by explicit leave-one-out group means on nonempty repeated rows.
 - **KU Leuven job environment:** submitting-shell exports are not inherited. Slurm scripts
   take provider/environment/root arguments; the prepared job sets `SLURM_EXPORT_ENV=ALL`
   for workers. Host-memory requests can increase billed cores; use the profiles in VSC.

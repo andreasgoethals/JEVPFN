@@ -44,6 +44,22 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
                     metrics.update(
                         {f"{name}.{key}": value for key, value in values["metrics"].items()}
                     )
+                for cohort, values in (
+                    record["scores"].get("text_overlap", {}).get("cohorts", {}).items()
+                ):
+                    prefix = f"text.{cohort}."
+                    metrics[prefix + "n_observations"] = values["n_observations"]
+                    metrics[prefix + "fraction_of_outer_test"] = values["fraction_of_outer_test"]
+                    metrics.update(
+                        {prefix + key: value for key, value in values["metrics"].items()}
+                    )
+                    for decision, scores in values.get("decisions", {}).items():
+                        metrics.update(
+                            {
+                                prefix + decision + "." + key: value
+                                for key, value in scores["metrics"].items()
+                            }
+                        )
                 metrics.update(
                     {
                         f"seconds.{name}": value["wall_seconds"]

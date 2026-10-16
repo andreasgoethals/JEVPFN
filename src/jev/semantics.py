@@ -6,7 +6,7 @@ from src.jev.design import BINARY, COMMON, MULTICLASS, REGRESSION, reviewed_defi
 from src.jev.templates import make_question
 from src.utils.serialization import canonical_json
 
-DOCUMENTED_VERSION = "documented-task-v2"
+DOCUMENTED_VERSION = "documented-task-v3"
 
 
 def dataset_semantics(metadata, catalog):
@@ -49,7 +49,9 @@ def documented_question(metadata, entry):
     question = make_question(metadata)
     target = entry["target_display_name"]
     if metadata.task_type == "binary_classification":
-        other, positive = [c["description"] for c in entry["classes"]]
+        # Treat descriptions as quoted answer labels, not bare noun phrases. This
+        # also handles labels such as "funding goal achieved" without changing meaning.
+        other, positive = [canonical_json(c["description"]) for c in entry["classes"]]
         text = BINARY.format(positive=positive, other=other, target=target)
     elif metadata.task_type == "multiclass_classification":
         text = MULTICLASS.format(target=target)

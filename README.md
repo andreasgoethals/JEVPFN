@@ -5,12 +5,13 @@ models improve tabular prediction**. Explore all 20 core MulTaBench TEXT dataset
 for extraction and evaluation. Zomato Restaurants and Spotify Genres remain available locally
 for exploration but are excluded from experiments for text burden and 114-class feature size.
 
-**Current stage: Experiment 0A.** All five open-weight tokenizers counted the current version-2
-inputs with zero context overflows. Clef and Intern each passed 74 real GPU contract requests
-on wICE. The repaired CPU suite passed; storage workers verified cross-node locking, but the
-coordinator needs a rerun after a result-file visibility fix to complete snapshot validation.
-The combined PROJECT/DATA transfer and all five local notebooks
-completed successfully. Larger pilots, the other three GPU runtimes and live Jev
+**Current stage: Experiment 0A.** Question version 3 corrects regression grammar and quotes
+binary answer descriptions. Earlier version-2 token audits found zero context overflows;
+Clef and Intern each passed 74 real GPU contract requests on wICE using those earlier inputs.
+Repeat token/GPU checks for version 3. The CPU suite and two-node PROJECT locking/SQLite snapshot tests passed.
+The combined PROJECT/DATA transfer and all five local notebooks completed successfully.
+All five open-weight checkpoints are staged on PROJECT; only Clef/Intern environments and
+GPU execution are confirmed. Larger pilots, the other three environments/GPU runtimes, storage quota/backup review and live Jev
 checks remain pending. Full extraction and predictive experiments stay disabled.
 Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
@@ -86,6 +87,12 @@ identities. Headline metric selection remains deferred until before comparative 
 reviewed. Exact conventions and runtime settings live in `config/4. experiment_1/`.
 Full-fold feasibility, checkpoint loading and native-text encoders remain unverified on VSC.
 
+Also report the same metrics for test rows with previously seen joint text, unseen joint
+text, no previously seen individual text column, and entirely empty text. These diagnostics
+reuse predictions and fixed thresholds; they do not change CV or add fits. They help assess
+whether gains extend beyond repeated text. Unseen combinations can still contain familiar
+individual columns, and these checks alone cannot establish semantic understanding.
+
 ## Workflow
 
 Exploration → question preparation → Experiment 0A → full feature creation → saved-feature
@@ -115,10 +122,18 @@ py -3.12 -m venv --prompt JEVPFN .venv
 .\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
 .\.venv\Scripts\python.exe -m src.data.prepare
 .\.venv\Scripts\python.exe -m src.jev.preparation
+.\.venv\Scripts\python.exe -m src.jev.question_audit
 .\.venv\Scripts\python.exe -m src.utils.run_notebooks
 ```
 
 Existing environments do not need recreation. Select **Python 3.12 (JEVPFN)** in Jupyter/VS Code.
+Question preparation is local and offline. The audit reads every active unique input and every
+original row/text-slot link against the pinned datasets; it checks saved wording/options against
+the current templates, exact text reuse, empty inputs and hashes. It writes one compact receipt
+under `1. question_preparation/manifests/question_audit.json` and never changes the input files.
+These mechanical checks complement wording review; they cannot prove source meanings or that
+every decision model interprets a question correctly. Source uncertainties remain in the dataset
+definitions and the preparation notebook. Changing wording requires new input/token evidence.
 The no-argument runner executes notebooks in parallel using available CPUs, prints progress,
 and saves rich outputs back into each source `.ipynb`. Reload an already-open notebook after
 execution. Partial failures preserve completed outputs and a recovery copy; concurrent edits

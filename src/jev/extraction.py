@@ -279,11 +279,15 @@ class DatasetExtractor:
                 "SELECT status,raw_response_json FROM extraction_jobs WHERE request_key=?",
                 (request.cache_key,),
             ).fetchone()
-        if saved and saved[0] in {"received", "completed"} and saved[1]:
+        if saved and saved[0] in {"received", "completed", "invalid_response"} and saved[1]:
             # A crash after recording usage/raw response must not require another paid call.
+            # Revalidate a paid response after a decoder fix; never dispatch it again.
             response = json.loads(saved[1])
-            response_features(request, response)
-            self.cache.put(request, response, kind="verified_response")
+            try:
+                response_features(request, response)
+                self.cache.put(request, response, kind="verified_response")
+            except Exception as exc:
+                return self._update(request, "invalid_response", error=type(exc).__name__)
             self._update(request, "completed")
             return "recovered_response"
         api_preview(request)
@@ -357,6 +361,7 @@ class DatasetExtractor:
                         "invalid_response",
                         "sending",
                         "attempt_limit",
+                        "resolved_no_response",
                     }
                 if stop:
                     exhausted = True

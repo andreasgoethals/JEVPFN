@@ -283,6 +283,36 @@ def save_evaluation(
                 for name, decision in scores.get("decisions", {}).items()
             },
         }
+        if "text_overlap" in scores:
+            compact_scores["text_overlap"] = {
+                "version": scores["text_overlap"]["version"],
+                "cohorts": {
+                    name: {
+                        k: v
+                        for k, v in cohort.items()
+                        if k
+                        in {
+                            "n_observations",
+                            "fraction_of_outer_test",
+                            "metrics",
+                            "undefined",
+                            "status",
+                            "reason",
+                        }
+                    }
+                    | {
+                        "decisions": {
+                            d: {
+                                k: v
+                                for k, v in values.items()
+                                if k in {"metrics", "undefined", "threshold"}
+                            }
+                            for d, values in cohort.get("decisions", {}).items()
+                        }
+                    }
+                    for name, cohort in scores["text_overlap"]["cohorts"].items()
+                },
+            }
         write_json(
             paths.manifests_dir(phase) / "evaluations" / f"{run_id}.json",
             {

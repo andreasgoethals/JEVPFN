@@ -148,6 +148,12 @@ def test_shared_cv_and_binary_oof_refit_save_all_predictions(dataset):
         table = pd.read_parquet(path.parent / "predictions.parquet")
         if record["metadata"]["prediction_role"] == "outer_test":
             outer_ids += table.row_id.tolist()
+            assert {
+                "text_present",
+                "joint_text_seen_in_train",
+                "any_text_column_seen_in_train",
+            } <= set(table)
+            assert "text_overlap" in record["scores"]
         assert record["metadata"]["selected_threshold"] >= 0
     assert sorted(outer_ids) == sorted(features.index)
 

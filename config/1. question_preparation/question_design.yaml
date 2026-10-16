@@ -1,10 +1,10 @@
-# Proposals for label-blind inspection, not changes to the accepted extraction templates.
+# Source-backed wording v3 approved on 16-10-2026; live extraction remains disabled.
 enabled: false
-candidate_version: direct-evidence-review-v2
+candidate_version: direct-evidence-review-v3
 accepted_version: directional-v2
 implementation: src.jev.design
 semantics_catalog: dataset_semantics
-documented_version: documented-task-v2
+documented_version: documented-task-v3
 inspection_variant: documented
 documentary_definitions: {}  # Only sourced definitions; no guesses for opaque class codes.
 context_candidates: [current_metadata, sourced_task_definitions]

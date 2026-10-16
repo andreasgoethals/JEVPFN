@@ -138,6 +138,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             "src/evaluation/features.py",
             "src/evaluation/metrics.py",
             "src/evaluation/records.py",
+            "src/evaluation/text_overlap.py",
             "src/evaluation/campaign.py",
         ]
     )

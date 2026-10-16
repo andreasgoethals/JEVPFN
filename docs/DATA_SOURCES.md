@@ -201,8 +201,11 @@ baby-product currency and company-field extraction conventions, CLEAR `British W
 legacy movie `RatingValue` scale/provenance, salary interval endpoints, and US Accidents'
 intermediate traffic-severity boundaries. Unknown units/definitions are not guessed.
 
-Only documentary meanings enter `documented-task-v2`; source URLs remain in question-bank
-provenance and are excluded from the model payload. Version 1 remains readable for historical
+Only documentary meanings enter `documented-task-v3`; source URLs remain in question-bank
+provenance and are excluded from the model payload. Version 3 adds quotation marks around
+binary class descriptions and uses "a lower or higher value for" to support singular and
+plural regression target names. Target meanings, options, class order and the nine-level
+rubric are unchanged. Earlier versions remain readable for historical
 reproduction. Audit frequencies, target distributions,
 current row labels and prediction results remain excluded. API class IDs retain original class
 order and types; the human description is added alongside each raw class. The selected text
@@ -223,3 +226,12 @@ categorical signal without requiring language understanding. Text missingness ca
 signal. The statistics/permutation controls address some of these alternatives; they do not
 replace a reviewed numeric-as-text/categorical sensitivity analysis. CLEAR's formula-related
 non-text inputs and Montgomery's previous salary can leave little headroom for text gains.
+
+Exact text repeats can cross the selected shuffled row folds. This is not target leakage
+in extraction, but it changes the interpretation of gains: repeated names/categories may
+support memorization as well as useful semantic transfer. Evaluation records per-row
+training-text overlap and conditional metrics without changing splits or fitting models
+again. Entirely empty inputs form their own group, never a repeated semantic text group.
+For example, the pinned Women's Clothing data has 666 entirely empty joint inputs but
+only five nonempty rows in repeated joint groups. Unseen-joint and all-columns-unseen
+results answer different questions and both retain the outer-training threshold.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 16-10-2026
+
+- Froze owner-approved question version 3: grammatical regression target wording and quoted binary descriptions, with unchanged meanings/options/rubric. Regenerated all 18 local stores while preserving historical sets; the read-only exhaustive audit verified 1,698,127 unique inputs and 3,294,340 original row/text-slot links. Added that audit to the VSC CPU job and prepared versioned upload support. Previous token/GPU evidence is historical until repeated with these inputs.
+- Verified the independent review's Jev recovery defect. Added reviewed, state-bound reconciliation for uncertain billing and exhausted unbilled retries; saved invalid responses can be decoded again without another paid call. Cumulative charges and mergeable recovery history are preserved. Added conditional seen/unseen-text metrics on unchanged outer-test predictions; no new fits, split changes or target information in extraction. Several review statistics did not reproduce, including an empty-text counting issue.
+- All 519 local tests, five notebooks/17 figures, lint, dependency and modified-shell checks passed. Recorded the owner's successful staging of the remaining three open-weight checkpoints. Their environments/GPU tests and live Jev tests remain pending. No paid calls, model inference, VSC submissions, output deletion or Git publication performed.
+- Recorded passing VSC storage job 62338536, including the measured 29.509-second receipt visibility delay and successful SQLite snapshot/restore. The owner's PROJECT inventory confirms Clef/Intern checkpoints and environments only; the other three runtime setups and live Jev verification remain pending. All 486 local tests, lint and dependency checks passed. Updated current readiness without enabling execution or deleting output.
+
 ## 15-10-2026
 
 - Diagnosed storage job 62333801 from both worker logs and receipts: locking succeeded, but an immediate cross-node file lookup falsely reported a missing result and prevented snapshot validation. Added a bounded receipt-visibility wait without repeating database operations, with delay/timeout/error regression coverage. All 486 local tests, lint and dependency checks passed. Clarified the final clean-validation sequence; protected inputs/caches and existing diagnostic output remain untouched.

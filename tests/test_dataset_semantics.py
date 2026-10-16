@@ -20,6 +20,7 @@ from src.jev.requests import build_requests
 from src.jev.semantics import dataset_semantics
 from src.utils import paths
 from src.utils.config import load_config, load_yaml
+from src.utils.serialization import canonical_json
 
 
 def metadata_catalog():
@@ -111,6 +112,22 @@ def test_source_corrections_are_explicit_and_not_inferred_from_targets():
         entries["MUL_TEXT_PRODUCT_SENTIMENT"]["classes"][0]["description"]
         != entries["MUL_TEXT_PRODUCT_SENTIMENT"]["classes"][2]["description"]
     )
+
+
+def test_version_three_quotes_binary_labels_and_handles_plural_regression_targets():
+    bank = build_question_bank(metadata_catalog(), load_yaml("question_design"))
+    for entry in bank["datasets"].values():
+        variant = entry["variants"]["documented"]
+        assert variant["version"] == "documented-task-v3"
+        question = variant["question"]
+        if question["kind"] == "binary_probability":
+            for label in entry["semantics"]["classes"]:
+                assert canonical_json(label["description"]) in question["text"]
+        elif question["kind"] == "ordered_choice":
+            assert "a lower or higher value for " in question["text"]
+            assert [a["score"] for a in question["allowed_answers"]] == list(range(-4, 5))
+    sales = bank["datasets"]["REG_TEXT_VIDEO_GAMES_SALES"]["variants"]["documented"]["question"]
+    assert "a lower or higher worldwide" not in sales["text"]
 
 
 def test_frozen_question_materialization_matches_cached_request(isolated_output, tmp_path):
