@@ -72,11 +72,14 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
     )
     data = LoadedDataset(frame, meta, official, {"data_identity": "fixed"}, [])
     matrix = frame[["x"]].set_axis([f"csv:{i}" for i in range(20)])
-    for model, phase, features, error in (
-        ("catboost", "experiment_1", "non_text", 2),
-        ("catboost", "experiment_1", "non_text_plus_joint", 0),
-        ("catboost", "experiment_3", "non_text_plus_frozen_e5__frozen_embedding__main", 1),
-        ("tabstar", "experiment_2", "original_features", 1),
+    for model, phase, features, error, provider in (
+        ("catboost", "experiment_1", "non_text", 3, None),
+        ("catboost", "experiment_1", "non_text_plus_joint", 1, "jev"),
+        ("catboost", "experiment_1", "non_text_plus_joint", 1.5, "liquid"),
+        ("catboost", "experiment_1", "non_text_plus_frozen_e5", 2, None),
+        ("catboost", "experiment_1", "non_text_plus_frozen_e5_and_joint", 0.5, "jev"),
+        ("catboost", "experiment_1", "non_text_plus_frozen_e5_and_joint", 0.25, "liquid"),
+        ("tabstar", "experiment_2", "original_features", 1, None),
     ):
         evaluate_cv(
             data,
@@ -92,17 +95,41 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
             allow_model_runs=True,
             estimator_settings={},
             feature_artifact_ids=[],
-            representation_recipe={"name": features},
+            representation_recipe={
+                "provider": provider,
+                "view": "main",
+                "embedding": {"model": "synthetic"} if "e5" in features else None,
+            },
         )
     report, _, summary, paired = collect()
     assert "tabstar" in set(summary.model_id) and "tabstar" not in set(paired.model_id)
     contrast = paired.loc[
         (paired.feature_set == "non_text_plus_joint")
+        & (paired.provider == "jev")
         & (paired.reference == "frozen_e5")
         & (paired.metric == "rmse")
     ]
     assert len(contrast) == 5
     np.testing.assert_allclose(contrast.difference, -1)
+    for provider, expected in (("jev", -0.5), ("liquid", -1.25)):
+        contrast = paired.loc[
+            (paired.feature_set == "non_text_plus_frozen_e5_and_joint")
+            & (paired.provider == provider)
+            & (paired.reference == "same_decision_features_without_e5")
+            & (paired.metric == "rmse")
+        ]
+        assert len(contrast) == 5
+        np.testing.assert_allclose(contrast.difference, expected)
+    assert (
+        len(
+            paired.loc[
+                paired.feature_set.eq("non_text_plus_frozen_e5_and_joint")
+                & paired.reference.eq("frozen_e5")
+                & paired.metric.eq("rmse")
+            ]
+        )
+        == 10
+    )
     assert "descriptive" in report["fold_sd"]
 
 

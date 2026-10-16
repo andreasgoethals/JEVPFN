@@ -9,6 +9,7 @@ import json
 
 import pandas as pd
 
+from src.evaluation.features import EMBEDDING_BASELINE, decision_feature_set, uses_embeddings
 from src.evaluation.records import completed_fold
 from src.utils import paths
 from src.utils.serialization import digest, write_json
@@ -35,6 +36,17 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
                     "checkpoint_id": recipe["checkpoint_id"],
                     "feature_set": recipe["feature_set"],
                     "feature_artifact_ids": json.dumps(recipe["feature_artifact_ids"]),
+                    "provider": (recipe.get("representation_recipe") or {}).get("provider"),
+                    "decision_recipe_id": digest(
+                        {
+                            k: v
+                            for k, v in (
+                                recipe.get("representation_recipe")
+                                or {"legacy_artifacts": recipe["feature_artifact_ids"]}
+                            ).items()
+                            if k != "embedding"
+                        }
+                    ),
                     # A representation recipe is shared across datasets; row artifact IDs are not.
                     # Legacy records without one remain separate rather than silently pooling providers.
                     "comparison_id": digest(
@@ -102,6 +114,8 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
         "checkpoint_id",
         "feature_set",
         "feature_artifact_ids",
+        "provider",
+        "decision_recipe_id",
         "comparison_id",
         "split_id",
         "metric",
@@ -137,14 +151,15 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
     paired["reference_value"] = paired.non_text_value
     paired["difference"] = paired.difference_from_non_text
     embedding = chosen.loc[
-        chosen.feature_set.str.startswith("non_text_plus_frozen_e5"), keys + ["value"]
+        (chosen.phase == "experiment_1") & chosen.feature_set.eq(EMBEDDING_BASELINE),
+        keys + ["value"],
     ]
     if embedding.duplicated(keys).any():
-        raise ValueError("Multiple embedding controls match; select one campaign before comparison")
+        raise ValueError(
+            "Multiple embedding baselines match; select one campaign before comparison"
+        )
     if not embedding.empty:
-        compared = augmented.loc[
-            ~augmented.feature_set.str.startswith("non_text_plus_frozen_e5")
-        ].merge(
+        compared = augmented.loc[~augmented.feature_set.eq(EMBEDDING_BASELINE)].merge(
             embedding.rename(columns={"value": "reference_value"}),
             on=keys,
             how="inner",
@@ -153,12 +168,40 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
         compared["reference"] = "frozen_e5"
         compared["difference"] = compared.value - compared.reference_value
         paired = pd.concat([paired, compared], ignore_index=True)
+    # The combined arm also needs its SAME extractor/mode without E5 as reference.
+    # This measures the benefit of adding embeddings, while comparison with E5 alone
+    # measures the benefit of adding decision features. Never match another provider.
+    combined = chosen.loc[
+        (chosen.phase == "experiment_1")
+        & chosen.feature_set.map(uses_embeddings)
+        & ~chosen.feature_set.eq(EMBEDDING_BASELINE)
+    ].copy()
+    if not combined.empty:
+        combined["reference_feature_set"] = combined.feature_set.map(decision_feature_set)
+        decision_keys = keys + ["decision_recipe_id", "reference_feature_set"]
+        decisions = chosen.loc[
+            (chosen.phase == "experiment_1")
+            & chosen.feature_set.isin(
+                ["non_text_plus_joint", "non_text_plus_per_column", "non_text_plus_both"]
+            )
+        ].rename(columns={"feature_set": "reference_feature_set", "value": "reference_value"})
+        if decisions.duplicated(decision_keys).any():
+            raise ValueError("Multiple matching decision baselines; select one campaign")
+        compared = combined.merge(
+            decisions[decision_keys + ["reference_value"]],
+            on=decision_keys,
+            how="left",
+            validate="many_to_one",
+        )
+        compared["reference"] = "same_decision_features_without_e5"
+        compared["difference"] = compared.value - compared.reference_value
+        paired = pd.concat([paired, compared], ignore_index=True)
     return (
         {
             "status": "collected",
             "complete_arms": len(complete),
             "incomplete_arms": int((counts != 5).sum()),
-            "difference_definition": "augmented minus named reference (non_text or frozen_e5); improvement direction depends on metric",
+            "difference_definition": "augmented minus named reference (non_text, frozen_e5, or same decision features without E5); improvement direction depends on metric",
             "fold_sd": "descriptive variation; not a standard error or confidence interval",
             "native_text_results": "descriptive reference results; no matched same-predictor non-text arm",
             "single_text_rule": "Separate/joint/both use identical information for one-text-column datasets; exclude those datasets from representation contrasts.",

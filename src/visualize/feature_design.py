@@ -9,6 +9,52 @@ from src.visualize import style
 MODE_LABELS = {"per_column": "Per-column", "joint": "Joint", "per_column_and_joint": "Both"}
 
 
+def benchmark_configurations_figure(table):
+    """Binary design matrix: no performance measurements or invented results."""
+    from matplotlib.colors import ListedColormap
+
+    columns = ["Non-text", "E5 / PCA", "Joint", "Per-column"]
+    values = table[columns].to_numpy(dtype=int)
+    fig, ax = plt.subplots(figsize=style.figsize(ratio=style.AUDIT_RATIO))
+    ax.imshow(
+        values,
+        cmap=ListedColormap([style.BACKGROUND_COLOR, style.MEDIAN_COLOR]),
+        vmin=0,
+        vmax=1,
+        aspect="auto",
+    )
+    ax.set_xticks(range(len(columns)), columns)
+    ax.set_yticks(range(len(table)), table.configuration)
+    ax.set_xticks(np.arange(-0.5, len(columns), 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(table), 1), minor=True)
+    ax.grid(which="minor", color=style.GRID_COLOR, linewidth=1)
+    ax.grid(which="major", visible=False)
+    ax.tick_params(which="both", length=0)
+    for (i, j), included in np.ndenumerate(values):
+        ax.text(
+            j,
+            i,
+            "Yes" if included else "–",
+            ha="center",
+            va="center",
+            color=style.BACKGROUND_COLOR if included else style.TEXT_COLOR,
+        )
+    ax.set_title("Eight feature configurations for each of six predictors")
+    return (
+        fig,
+        "benchmark_feature_configurations",
+        (
+            "Feature inclusion in the eight main benchmark configurations. Non-text includes all "
+            "original numerical and categorical columns. E5 is encoded separately per text column, "
+            "with PCA fitted only on each training partition (32 output columns per text column, "
+            "plus a missingness flag). Joint and per-column decision features use one extractor "
+            "at a time. The two configurations without decision features are fitted once per "
+            "dataset and predictor; the other six are repeated for each selected extractor. "
+            "TabSTAR and ConTextTab are separate references using all original features."
+        ),
+    )
+
+
 def input_design_figure():
     fig, ax = plt.subplots(figsize=style.COMPACT_FLOW_SIZE)
     ax.set_axis_off()

@@ -15,9 +15,13 @@ from src.data.loaders import load_catalog, load_dataset
 from src.data.selection import selected_entries
 from src.evaluation.features import (
     MAIN_FEATURE_SETS,
+    PROVIDER_INDEPENDENT_SETS,
+    add_embeddings,
     assemble_feature_set,
+    decision_feature_set,
     load_feature_selection,
     original_features,
+    uses_embeddings,
 )
 from src.evaluation.models import MAIN_MODELS, TEXT_MODELS, estimator_factory
 from src.evaluation.protocol import evaluate_cv, shared_splits
@@ -38,22 +42,25 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
     ):
         raise ValueError("Model roster differs from the reviewed six predictors/two text baselines")
     if tuple(main["candidate_combinations"]) != MAIN_FEATURE_SETS:
-        raise ValueError("The main experiment has exactly four feature configurations")
+        raise ValueError("The main experiment has exactly eight feature configurations")
     rows = []
     for entry in selected_entries(load_catalog(), main):
         for model in MAIN_MODELS:
-            # Reuse the no-extractor baseline across all selected decision-model comparisons.
-            rows.append(
+            # Both baselines are independent of the decision extractor and fitted once.
+            rows.extend(
                 {
                     "dataset_id": entry["id"],
                     "model": model,
-                    "feature_set": "non_text",
+                    "feature_set": arm,
                     "provider": None,
                     "phase": "experiment_1",
                 }
+                for arm in PROVIDER_INDEPENDENT_SETS
             )
             for provider in main["candidate_extractors"]:
-                for arm in MAIN_FEATURE_SETS[1:]:
+                for arm in MAIN_FEATURE_SETS:
+                    if arm in PROVIDER_INDEPENDENT_SETS:
+                        continue
                     rows.append(
                         {
                             "dataset_id": entry["id"],
@@ -86,17 +93,6 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
                         provider=None,
                         phase="experiment_3",
                         control="text_statistics",
-                        view="main",
-                    )
-                )
-                rows.append(
-                    dict(
-                        dataset_id=entry["id"],
-                        model=model,
-                        feature_set="non_text_plus_frozen_e5",
-                        provider=None,
-                        phase="experiment_3",
-                        control="frozen_embedding",
                         view="main",
                     )
                 )
@@ -158,6 +154,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     dataset = load_dataset(entry, allow_download=False)
     blocks = []
     selector = None
+    decision_set = decision_feature_set(arm["feature_set"])
     if arm["provider"] is not None:
         selector = cfg["feature_selectors"].get(arm["provider"])
         if not selector or any(
@@ -171,31 +168,28 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             raise ValueError("Feature selector provider differs from the requested benchmark arm")
         modes = (
             ("per_column", "joint")
-            if arm["feature_set"] == "non_text_plus_both"
+            if decision_set == "non_text_plus_both"
             else ("joint",)
-            if arm["feature_set"] == "non_text_plus_joint"
+            if decision_set == "non_text_plus_joint"
             else ("per_column",)
         )
         blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector, modes)
     embedding_cfg = None
-    if arm.get("control") == "frozen_embedding":
+    features = (
+        original_features(dataset)
+        if arm["model"] in TEXT_MODELS
+        else assemble_feature_set(
+            dataset, blocks, decision_set, selector=selector, view=arm.get("view", "main")
+        )
+    )
+    if uses_embeddings(arm["feature_set"]):
         from src.data.text_embeddings import load
 
         embedding_cfg = load_yaml("feature_creation/text_embeddings")
         embeddings = load(dataset, embedding_cfg)
-        features = assemble_feature_set(dataset, [], "non_text")
-        if set(features) & set(embeddings):
-            raise ValueError("Embedding names collide with non-text features")
-        features = features.join(embeddings, validate="one_to_one")
-        features.attrs.update(embeddings.attrs)
-    else:
-        features = (
-            original_features(dataset)
-            if arm["model"] in TEXT_MODELS
-            else assemble_feature_set(
-                dataset, blocks, arm["feature_set"], selector=selector, view=arm.get("view", "main")
-            )
-        )
+        if arm["model"] not in embedding_cfg["models"]:
+            raise ValueError("Predictor is not enabled for the embedding feature configurations")
+        features = add_embeddings(features, embeddings)
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     representation = {
         "provider": arm["provider"],
@@ -269,13 +263,10 @@ def main():
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
     parser.add_argument(
         "--feature-set",
-        choices=MAIN_FEATURE_SETS
-        + ("original_features", "non_text_plus_text_statistics", "non_text_plus_frozen_e5"),
+        choices=MAIN_FEATURE_SETS + ("original_features", "non_text_plus_text_statistics"),
     )
     parser.add_argument("--include-controls", action="store_true")
-    parser.add_argument(
-        "--control", choices=("text_statistics", "permuted", "retained_view", "frozen_embedding")
-    )
+    parser.add_argument("--control", choices=("text_statistics", "permuted", "retained_view"))
     parser.add_argument(
         "--view", choices=("main", "probabilities", "probabilities_plus_confidence")
     )

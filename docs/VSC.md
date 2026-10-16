@@ -39,7 +39,11 @@ Use native Lustre project storage on wICE and native GPFS on Mindwell. Set the p
 to the allocation's existing parent, not a missing mount or personal DATA directory. Large
 writes enforce this routing and never fall back to DATA. A filesystem's free space is not
 personal/group quota; account credits are not storage quota. Verify current quota and an
-independent backup before full extraction. The pinned guide's storage sections explain that
+independent backup before full extraction. Check both bytes and file counts with `myquota`.
+An `Errno 122` with available bytes can mean the file-count limit is exhausted: stop runtime
+installation, identify usage and request a PROJECT inode/file-quota increase through KU Leuven
+HPC support. Do not move CUDA environments to DATA or delete checkpoints to hide that limit.
+Do not delete package caches while Conda or jobs are using them. The pinned guide's storage sections explain that
 PROJECT can be single-copy; transferring results to the laptop is part of the recovery plan.
 
 ## CPU environment and input transfer
@@ -257,12 +261,25 @@ pass the GPU contracts and a throughput pilot; a slow fallback is not permission
 campaign. If compilation is necessary, use a compute allocation with the matching CUDA
 toolkit and repeat contracts after installation. A new package pin changes runtime identity.
 
-For the separate conventional embedding control, install `.[dev,embeddings,staging]` in an
-isolated environment, run `python -m src.data.text_embeddings --stage` on the connected setup
-host, and test its offline encoder in a GPU allocation before setting its config `enabled`
-to true and running `python -m src.data.text_embeddings --execute`. Its large cache is PROJECT
-`data/text_embeddings/<dataset_id>.sqlite3`; operational logs use DATA feature-creation logs.
-This control is required before the comparison benchmark, not before decision-model extraction.
+E5 is shared by all six main predictors. Its requirements match the existing Clef runtime
+(Torch/Transformers); no additional CUDA environment or package installation is needed there.
+After resolving PROJECT file quota, stage its pinned weights from the connected CPU environment:
+
+```bash
+python -m src.data.text_embeddings --stage
+sbatch --wait scripts/slurm/experiment_0_embeddings.slurm
+```
+
+The bounded test uses the Clef environment in a separate GPU process. It tests short and long
+inputs, missing inputs, exact reuse, unit-norm vectors and restart without re-encoding.
+It writes a synthetic fixture store to PROJECT Experiment 0 and its small report/log to DATA.
+It does not create benchmark features or enable full extraction. After acceptance, enable
+`config/2. feature_creation/text_embeddings.yaml` and run
+`python -m src.data.text_embeddings --execute` in a compute allocation using that environment.
+The permanent cache is PROJECT `data/text_embeddings/<dataset_id>.sqlite3`; logs use DATA
+feature-creation logs. These embeddings are required before the comparison benchmark;
+decision-model extraction can proceed independently. PCA is computed inside each CV training
+fit, not in the permanent embedding cache.
 
 ## Bounded GPU contract tests and larger pilots
 
@@ -452,8 +469,10 @@ permutation and retained-view arms use `campaign --include-controls` and the exp
 `--control`/`--view` filters. `python -m src.evaluation.results --save` writes complete-arm
 per-dataset metrics and paired differences to PROJECT Experiment 4, with its compact index on
 DATA. Negative differences are improvements for loss metrics, not for higher-is-better metrics.
-The frozen E5 control also appears in that plan (`--control frozen_embedding --view main`).
-Analysis writes matched contrasts against both non-text and available E5 controls, plus a
+E5 is part of Experiment 1: `--feature-set non_text_plus_frozen_e5` selects the shared baseline;
+`non_text_plus_frozen_e5_and_joint`, `non_text_plus_frozen_e5_and_per_column` and
+`non_text_plus_frozen_e5_and_both` also require `--provider`. No `--control` is used for E5.
+Analysis matches non-text, E5-only and the same extractor without E5 references, plus a
 separate native-text reference table and dataset-level summaries. `--infer` additionally
 requires an approved `experiment_4/analysis` plan; it does not select headline metrics itself.
 

@@ -90,7 +90,9 @@ extension uses nonoverlapping token chunks, weighting chunk vectors by content-t
 before final normalization; this is our declared coverage policy, not a claim to reproduce
 the MulTaBench encoder exactly. No source token is silently discarded. Full 384-dimensional
 vectors are reusable; per-column PCA is fitted only on the current training partition,
-including each inner threshold-selection fold. Model inference remains to be verified.
+including each inner threshold-selection fold. All six fixed predictors compare E5 alone,
+decision features alone and their combination on identical folds. Model inference remains to
+be verified; the combinations test complementarity without assuming it in advance.
 
 ### Paired inference and pretraining-overlap review
 
@@ -236,7 +238,7 @@ A related 8 October preprint, [Estimating Uncoded Crash Factors with Tabular Fou
 System One Models](https://arxiv.org/abs/2610.10321), uses Kumo on coded crash records and Jev
 on narratives, with human recalibration and population-estimation methods. This was checked
 at abstract level. It is relevant prior art for combining tabular and decision systems, not
-evidence that this project's six-extractor/four-configuration MulTaBench comparison has
+evidence that this project's six-extractor/eight-configuration MulTaBench comparison has
 already been evaluated. Novelty must rest on the controlled representation comparison,
 coverage and reproducible extraction evidence rather than merely mentioning Jev plus a TFM.
 

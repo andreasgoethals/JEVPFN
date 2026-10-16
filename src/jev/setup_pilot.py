@@ -5,6 +5,7 @@ full extraction, or inference is performed by this module.
 """
 
 import argparse
+import getpass
 import json
 import os
 from decimal import ROUND_DOWN, Decimal
@@ -113,7 +114,10 @@ def main():
     action.add_argument("--configure", action="store_true")
     args = parser.parse_args()
     if args.check_account:
+        prompted = not os.environ.get("TYPESAFE_API_KEY")
         try:
+            if prompted:
+                os.environ["TYPESAFE_API_KEY"] = getpass.getpass("TypeSafe API key (hidden): ")
             print(json.dumps(account_check(), indent=2))
         except Exception as exc:
             # SDK exceptions may contain request bodies; expose only safe diagnostics.
@@ -127,6 +131,9 @@ def main():
                 )
             )
             raise SystemExit(1) from None
+        finally:
+            if prompted:
+                os.environ.pop("TYPESAFE_API_KEY", None)
         return
     target = paths.config_path("feature_creation/jev.local")
     if target.exists():

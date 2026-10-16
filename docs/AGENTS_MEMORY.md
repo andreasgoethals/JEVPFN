@@ -27,20 +27,43 @@ Added the frozen E5 control with train-partition-only PCA, dataset-level paired 
 guarded optional Wilcoxon/Holm analysis and separate native-text reference results. Perturbations
 cannot establish absence of pretraining contamination; the documented review keeps unknowns
 explicit. Real E5 inference is unverified. All five runtime setup branches are now available;
-Perplexity's pre-install requirements check uses only the standard library. No new remote
-runtime installation or execution has been observed. Open-provider acceptance now checks
+Perplexity's pre-install requirements check uses only the standard library. The later installation attempt and its quota failure are recorded below; no new GPU
+execution has been observed. Open-provider acceptance now checks
 matching reports but requires explicit owner review of throughput, quota and backup.
 The owner authorized EUR 5 for the Jev pilot and tentatively EUR 50 after testing. A verified
 conservative USD conversion is required; the later budget stays disabled. The pasted console
-showed USD 0 balance and no RPS/TPS. No API key was supplied and no authenticated/live call was
-made. The setup helper writes only an ignored local configuration; account rates and a justified
+showed USD 0 balance and no RPS/TPS. A subsequent owner-authorized read-only authenticated model-list call succeeded; it returned
+`jev-latest` and `jev-preview`. No inference was performed. The key was used only in the
+process environment and was not persisted. Alias listing does not verify pinned-version access. The setup helper writes only an ignored local configuration; account rates and a justified
 context/billing envelope remain required. Provider docs now describe organization-specific
 limits, so the old fixed 80 RPS/100k TPS claim was removed from active metadata.
+
+Latest local verification after the eight-configuration expansion: 567 tests passed; all
+five notebooks completed with 18 figures and no error cells. The new configuration figure
+was visually inspected. Lint, dependency consistency and all 12 shell syntax/LF checks
+passed. Tokenization source files remain unchanged. No paid inference, real E5 inference,
+remote job submission, output deletion or Git publication was performed in this revision.
+
+The owner expanded Experiment 1 to all six predictors and eight configurations: non-text;
+joint/per-column/both decision features; E5-only; E5 plus each decision representation.
+E5 remains per-column PCA-32 fitted in each training partition. Provider-independent baselines
+are fitted once; combined comparisons preserve both artifact identities. Real E5/GPU and
+full-fold feasibility remain unverified.
+
+16-10 owner transcripts at `0113f19`: local 539 tests passed; all 18 version-3 inputs uploaded
+and installed, five tokenizers verified. Liquid setup failed with `Errno 122` at ncurses;
+its loop never reached Strands/Perplexity. `myquota` showed PROJECT 251.8 G / 1 T bytes but
+146,452 / 150,000 files. This is file-count pressure, not insufficient byte capacity. DATA
+53,817 M / 76,800 M is not a destination for large runtime installations. Preserve running
+token jobs and their output; resolve quota before retrying environment setup.
 
 ## VSC runs
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 16-10-2026 | wICE / 62340719 | Fresh version-3 CPU job, 0113f19 | Owner sacct: COMPLETED 0:0, 5m19s, MaxRSS 5,010,580 K. Full report not yet downloaded. |
+| 16-10-2026 | wICE / 62340794 | Fresh storage job | Owner sacct: COMPLETED 0:0, 59s; both worker steps completed. |
+| 16-10-2026 | wICE / 62340824 | Fresh version-3 token audit | Owner sacct at 12:10: RUNNING, elapsed 23m34s. Completion/coverage not yet verified. |
 | 16-10-2026 | wICE / 62338536 | experiment_0_storage.slurm | storage_contracts_passed_requires_quota_and_backup_review; nodes r33c25n1/r33c30n4; held-lock exclusion, release/reacquisition and SQLite snapshot/restore passed. Released receipt became visible after 29.509 s. Quota/independent backup remain unverified. |
 | 15-10-2026 | wICE / 62333801 | experiment_0_storage.slurm at 39a39ff | Coordinator FAILED on immediate released-receipt lookup. Both workers returned valid matching receipts: held-lock exclusion and acquisition after release succeeded on r33c22n3. Receipt later readable; snapshot/restore not reached. |
 | 15-10-2026 | wICE / 62333525 | experiment_0_cpu.slurm at aaf2153 | preflight_passed; all 18 dataset/hash/CV checks passed; 457 tests passed, 10 expected skips, 3 local notebook tests deselected. |

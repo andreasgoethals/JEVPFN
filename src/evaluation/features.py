@@ -1,4 +1,4 @@
-"""Cheap, label-free text baseline and a fold-specific negative control."""
+"""Row-aligned non-text, decision and embedding features plus cheap controls."""
 
 from __future__ import annotations
 
@@ -43,7 +43,75 @@ MAIN_FEATURE_SETS = (
     "non_text_plus_joint",
     "non_text_plus_per_column",
     "non_text_plus_both",
+    "non_text_plus_frozen_e5",
+    "non_text_plus_frozen_e5_and_joint",
+    "non_text_plus_frozen_e5_and_per_column",
+    "non_text_plus_frozen_e5_and_both",
 )
+
+EMBEDDING_BASELINE = "non_text_plus_frozen_e5"
+PROVIDER_INDEPENDENT_SETS = ("non_text", EMBEDDING_BASELINE)
+
+
+def uses_embeddings(name):
+    return name in MAIN_FEATURE_SETS[4:]
+
+
+def decision_feature_set(name):
+    """Select the decision block independently of the optional embedding addition."""
+    return dict(zip(MAIN_FEATURE_SETS[4:], MAIN_FEATURE_SETS[:4])).get(name, name)
+
+
+def benchmark_feature_table():
+    """The eight reviewed configurations, shared by the notebook and campaign."""
+    labels = (
+        "Non-text",
+        "+ Joint",
+        "+ Per-column",
+        "+ Both",
+        "+ E5",
+        "+ E5 + Joint",
+        "+ E5 + Per-column",
+        "+ E5 + Both",
+    )
+    return pd.DataFrame(
+        [
+            {
+                "configuration": label,
+                "feature_set": name,
+                "Non-text": True,
+                "E5 / PCA": uses_embeddings(name),
+                "Joint": decision_feature_set(name)
+                in ("non_text_plus_joint", "non_text_plus_both"),
+                "Per-column": decision_feature_set(name)
+                in ("non_text_plus_per_column", "non_text_plus_both"),
+            }
+            for name, label in zip(MAIN_FEATURE_SETS, labels)
+        ]
+    )
+
+
+def add_embeddings(features, embeddings):
+    """Require identical row identities and preserve both sources' artifact identities."""
+    if not features.index.is_unique or not embeddings.index.is_unique:
+        raise ValueError("Embedding join requires unique row IDs")
+    if not features.index.equals(embeddings.index):
+        raise ValueError("Embedding row IDs/order differ from the selected feature matrix")
+    if set(features) & set(embeddings):
+        raise ValueError("Embedding names collide with existing features")
+    groups = embeddings.attrs.get("embedding_groups", [])
+    grouped = [column for group in groups for column in group]
+    if not groups or len(grouped) != len(set(grouped)) or set(grouped) != set(embeddings):
+        raise ValueError("Embedding groups must cover each embedding column exactly once")
+    result = features.join(embeddings, validate="one_to_one")
+    result.attrs = dict(features.attrs)
+    result.attrs["feature_artifact_ids"] = list(
+        dict.fromkeys(
+            features.attrs["feature_artifact_ids"] + embeddings.attrs["feature_artifact_ids"]
+        )
+    )
+    result.attrs["embedding_groups"] = groups
+    return result
 
 
 def original_features(dataset):

@@ -67,3 +67,31 @@ def test_account_check_never_dispatches_an_inference(isolated_output, monkeypatc
     assert not report["pinned_version_access_verified"]  # Alias listing is not a real model call.
     assert "synthetic-test-key" not in str(report)
     assert calls[0]["base_url"] == "https://api.typesafe.ai"
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_interactive_account_key_is_never_printed_or_left_in_environment(
+    monkeypatch, capsys, fails
+):
+    import os
+
+    from src.jev import setup_pilot
+
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.setattr("sys.argv", ["setup_pilot", "--check-account"])
+    monkeypatch.setattr(setup_pilot.getpass, "getpass", lambda _: "synthetic-hidden-key")
+
+    def check():
+        assert os.environ["TYPESAFE_API_KEY"] == "synthetic-hidden-key"
+        if fails:
+            raise ValueError("synthetic-hidden-key must never be printed")
+        return {"authenticated": True}
+
+    monkeypatch.setattr(setup_pilot, "account_check", check)
+    if fails:
+        with pytest.raises(SystemExit):
+            setup_pilot.main()
+    else:
+        setup_pilot.main()
+    assert "TYPESAFE_API_KEY" not in os.environ
+    assert "synthetic-hidden-key" not in capsys.readouterr().out

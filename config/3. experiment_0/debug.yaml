@@ -20,6 +20,7 @@ stages:
     token_command: python -m src.cluster.token_audit
     storage_command: python -m src.cluster.storage_contracts --execute
     gpu_contract_command: python -m src.cluster.gpu_contracts --provider PROVIDER --execute
+    embedding_contract_command: python -m src.cluster.embedding_contracts --execute
     acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
   after_extraction:
     requires: [complete_selected_provider_features]
@@ -40,6 +41,9 @@ checks:
   - same_five_fold_split_manifest_across_arms
   - binary_threshold_uses_inner_validation_only
   - fold_specific_non_text_and_native_text_preprocessing
+  - E5_exact_reuse_missing_inputs_long_text_chunks_and_resume
+  - eight_feature_configurations_all_six_predictors_with_joint_artifact_provenance
+  - E5_PCA_fit_inside_every_inner_and_outer_training_partition
   - identical_single_text_columns_not_duplicated_in_combined_view
   - later_small_inference_smoke_after_weights_are_prepared
 acceptance: pending_real_runtime_evidence  # Preflight success is not full experiment-0 acceptance.

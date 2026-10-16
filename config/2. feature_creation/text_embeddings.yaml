@@ -13,5 +13,5 @@ device: cuda
 pca_components_per_column: 32
 pca_fit_scope: each_inner_or_outer_training_partition
 missing_text: skip_encoder_store_nan
-models: [catboost, tabpfn_3_5]
+models: [catboost, tabpfn_3_5, tabicl_v2, limix_2, kumo_tabular, linear]
 source: https://huggingface.co/intfloat/e5-small-v2

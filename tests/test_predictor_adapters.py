@@ -131,15 +131,15 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
         estimator_factory("tabpfn_3_5", dataset.metadata, {})
 
 
-def test_plan_four_arms_six_engines_two_original_text_baselines():
+def test_plan_eight_arms_six_engines_two_original_text_baselines():
     plan = benchmark_plan()
     assert len({a["dataset_id"] for a in plan}) == 18
-    assert len(plan) == 18 * (6 * (1 + 6 * 3) + 2)
+    assert len(plan) == 18 * (6 * (2 + 6 * 6) + 2)
     for model in MAIN_MODELS:
         row = [a for a in plan if a["dataset_id"] == plan[0]["dataset_id"] and a["model"] == model]
-        assert len([a for a in row if a["provider"] is None]) == 1
+        assert len([a for a in row if a["provider"] is None]) == 2
         for provider in load_yaml("extractors")["candidates"]:
-            assert len([a for a in row if a["provider"] == provider]) == 3
+            assert len([a for a in row if a["provider"] == provider]) == 6
     text = [a for a in plan if a["model"] in TEXT_MODELS]
     assert len(text) == 36 and {a["feature_set"] for a in text} == {"original_features"}
     assert all(a["provider"] is None for a in text)

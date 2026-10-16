@@ -11,8 +11,10 @@ Clef and Intern each passed 74 real GPU contract requests on wICE using those ea
 Repeat token/GPU checks for version 3. The CPU suite and two-node PROJECT locking/SQLite snapshot tests passed.
 The combined PROJECT/DATA transfer and all five local notebooks completed successfully.
 All five open-weight checkpoints are staged on PROJECT; only Clef/Intern environments and
-GPU execution are confirmed. Larger pilots, the other three environments/GPU runtimes, storage quota/backup review and live Jev
-checks remain pending. Full extraction and predictive experiments stay disabled.
+GPU execution are confirmed. Liquid environment setup hit PROJECT file-count quota; Strands
+and Perplexity setup was not reached. Fresh version-3 CPU/storage jobs passed and token counts
+are running. A local read-only Jev authentication check succeeded; pinned-version inference,
+account limits, funding, larger pilots and independent backup review remain pending. Full extraction and predictive experiments stay disabled.
 Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
 
@@ -58,26 +60,37 @@ price references. Open weights have no vendor token fee; licences and GPU credit
 Actual model compatibility and complete coverage must be demonstrated by Experiment 0A.
 
 The six main predictors are **CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular,
-and logistic/linear regression**. Each receives four configurations:
+and logistic/linear regression**. Each receives eight configurations:
 
 1. All original non-text columns, including categorical columns.
 2. Those columns plus joint decision features.
 3. Those columns plus per-column decision features.
 4. Those columns plus both representations.
+5. Non-text plus frozen E5 embeddings, reduced by PCA.
+6. Non-text plus E5 plus joint decision features.
+7. Non-text plus E5 plus per-column decision features.
+8. Non-text plus E5 plus both decision representations.
 
-The non-text baseline is fitted once per predictor/dataset and reused across extractor
-comparisons. Named augmented arms remain separate fits. **TabSTAR and ConTextTab** are the
-two original-text baselines: they receive all original features, including text, without
-extracted features. Cheap character/word/missingness features and partition-local permutation
-controls are implemented for separate ablations. A frozen E5-small-v2 control is also implemented
-for CatBoost and TabPFN-3.5. It reads each text column, reuses identical text, covers long inputs
-with token chunks, and stores full 384-dimensional embeddings once per dataset. PCA reduces
-each column to up to 32 learned dimensions inside every inner/outer training fit; held-out rows
-never fit the PCA. Its weights and real GPU path still require a separate test. This is a
-conventional semantic control, not an additional decision extractor.
-`python -m src.evaluation.campaign --include-controls` includes those Experiment 3 arms and
-retained-probability views. On one-text-column datasets, separate/joint/both contain identical
-information; exclude them from representation contrasts, while retaining their named fits.
+The non-text and E5-only baselines are fitted once per predictor/dataset and reused across
+extractor comparisons. The other six configurations are fitted for each of six extractors:
+4,104 main configurations, plus 36 original-text references, each with five outer folds.
+**TabSTAR and ConTextTab** receive all original text and non-text features, without extracted
+features. They are descriptive references, not matched within-predictor comparisons.
+
+E5-small-v2 reads each text column, reuses identical text, covers long inputs with token
+chunks and stores full 384-dimensional embeddings once per dataset. PCA produces 32 columns
+per text column, plus a missingness flag, inside every inner/outer training fit. With too few
+nonempty training rows, unused components remain missing. Held-out rows never fit PCA;
+non-text and decision features are not reduced. E5 weights and real GPU execution still need
+verification. Its representation is shared across all six predictors, not a seventh decision
+extractor. Combined-feature manifests retain both the E5 and decision artifact identities.
+
+Analysis pairs each augmented configuration with non-text and E5-only. Combined configurations
+are also paired with the same extractor's matching decision-only configuration, to measure
+what embeddings add. Cheap text statistics, permutation controls and retained-probability
+ablations remain available through `python -m src.evaluation.campaign --include-controls`.
+On one-text-column datasets, separate/joint/both contain identical information; exclude these
+datasets from representation contrasts while retaining the named fits.
 
 Use shared five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary thresholds maximize F1 from three inner out-of-fold splits,

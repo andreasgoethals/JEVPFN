@@ -215,14 +215,14 @@ def test_cv_resumes_only_completed_folds_and_detects_corruption(isolated_output,
         protocol.evaluate_cv(dataset, matrix, factory, **kwargs)
 
 
-def test_controls_are_executable_without_changing_four_main_arms():
+def test_controls_are_executable_without_duplicating_main_embedding_arms():
     from src.evaluation.campaign import benchmark_plan
 
     main = benchmark_plan()
     plan = benchmark_plan(include_controls=True)
-    assert len(main) == 2088
+    assert len(main) == 4140
     added = [a for a in plan if a["phase"] == "experiment_3"]
-    assert {a["control"] for a in added} == {"text_statistics", "frozen_embedding", "permuted", "retained_view"}
+    assert {a["control"] for a in added} == {"text_statistics", "permuted", "retained_view"}
     assert {a["model"] for a in added} == {"catboost", "tabpfn_3_5"}
 
 

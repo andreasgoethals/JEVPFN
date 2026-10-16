@@ -114,12 +114,21 @@ def test_pca_uses_only_training_rows_and_preserves_non_text_values():
         def predict(self, x):
             return x.x.to_numpy()
 
-    train = pd.DataFrame({"x": [1, 2, 3], "e0": [0.0, 2.0, np.nan], "e1": [2.0, 4.0, np.nan]})
-    test = pd.DataFrame({"x": [4], "e0": [10000.0], "e1": [20000.0]})
+    train = pd.DataFrame(
+        {
+            "x": [1, 2, 3],
+            "decision": [0.1, 0.2, np.nan],
+            "e0": [0.0, 2.0, np.nan],
+            "e1": [2.0, 4.0, np.nan],
+        }
+    )
+    test = pd.DataFrame({"x": [4], "decision": [0.8], "e0": [10000.0], "e1": [20000.0]})
     wrapped = EmbeddingControl(Model(), [["e0", "e1"]], components=2).fit(train, [0, 1, 2])
     np.testing.assert_allclose(wrapped.pcas[0].mean_, [1, 3])
     np.testing.assert_array_equal(wrapped.predict(test), [4])
     assert wrapped.estimator.seen.x.equals(train.x)
+    assert wrapped.estimator.seen.decision.equals(train.decision)
+    assert wrapped.transform(test).decision.equals(test.decision)
     assert wrapped.estimator.seen.iloc[2]["e5_pca__000__missing"] == 1
     assert (
         wrapped.estimator.seen.iloc[2]["e5_pca__000__000"]
@@ -147,3 +156,122 @@ def test_long_embedding_text_is_fully_covered_with_room_for_prefix_and_special_t
     assert all(len(prefix) + len(chunk) + 2 <= 512 for chunk in chunks)
     with pytest.raises(ValueError, match="No room"):
         embeddings.token_chunks(Tokenizer(), "long text", prefix="query: ", max_tokens=4)
+
+
+def test_combined_join_preserves_both_artifact_identities_and_missingness():
+    from src.evaluation.features import add_embeddings
+
+    base = pd.DataFrame({"x": [1, 2], "jev": [0.5, np.nan]}, index=["csv:0", "csv:1"])
+    base.attrs["feature_artifact_ids"] = ["decision-artifact"]
+    encoded = pd.DataFrame({"e": [9, np.nan]}, index=base.index)
+    encoded.attrs.update(feature_artifact_ids=["embedding-artifact"], embedding_groups=[["e"]])
+    result = add_embeddings(base, encoded)
+    assert result.attrs["feature_artifact_ids"] == ["decision-artifact", "embedding-artifact"]
+    assert result.loc["csv:1", ["jev", "e"]].isna().all()
+    assert result.attrs["embedding_groups"] == [["e"]]
+    with pytest.raises(ValueError, match="row IDs/order"):
+        add_embeddings(base, encoded.iloc[::-1])
+    with pytest.raises(ValueError, match="collide"):
+        add_embeddings(base, encoded.rename(columns={"e": "x"}))
+    with pytest.raises(ValueError, match="unique row"):
+        add_embeddings(base, encoded.set_axis(["csv:0", "csv:0"]))
+    encoded.attrs["embedding_groups"] = [["e"], ["e"]]
+    with pytest.raises(ValueError, match="exactly once"):
+        add_embeddings(base, encoded)
+
+
+@pytest.mark.parametrize(
+    "model", ["catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear"]
+)
+@pytest.mark.parametrize("mode", ["joint", "per_column", "both", None])
+def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
+    isolated_output, monkeypatch, model, mode
+):
+    from types import SimpleNamespace
+
+    from src.evaluation import campaign
+
+    dataset = fixture_data()
+    name = "non_text_plus_frozen_e5" + (f"_and_{mode}" if mode else "")
+    arm = dict(
+        dataset_id="fixture",
+        model=model,
+        provider="jev" if mode else None,
+        feature_set=name,
+        phase="experiment_1",
+    )
+    real_load = campaign.load_yaml
+    selector = dict(
+        provider="jev",
+        model="jev-1.13.0",
+        version="pin",
+        question_bank_id="bank",
+        question_variant="accepted",
+    )
+
+    def config(name):
+        cfg = copy.deepcopy(real_load(name))
+        if name == "experiment_0/debug":
+            cfg["full_fold_profile_enabled"] = True
+        if name == "experiment_1/main":
+            cfg["feature_selectors"]["jev"] = selector
+        if name == "experiment_1/models":
+            cfg["models"][model]["runtime"]["device"] = "cpu"
+        return cfg
+
+    monkeypatch.setattr(campaign, "load_yaml", config)
+    monkeypatch.setattr(campaign, "benchmark_plan", lambda **_: [arm])
+    monkeypatch.setattr(campaign, "load_catalog", lambda: {"datasets": [{"id": "fixture"}]})
+    monkeypatch.setattr(campaign, "load_dataset", lambda *_, **kw: dataset)
+    monkeypatch.setattr(campaign, "shared_splits", lambda *_, **kw: {})
+    selected = []
+
+    def selection(path, selector, representations):
+        selected.extend(representations)
+        return []
+
+    monkeypatch.setattr(campaign, "load_feature_selection", selection)
+    expected_modes = [] if mode is None else ["per_column", "joint"] if mode == "both" else [mode]
+    base = dataset.frame[["x"]].set_axis([f"csv:{i}" for i in range(4)])
+    if mode:
+        base["decision"] = [0.2, 0.4, np.nan, 0.6]
+    base.attrs["feature_artifact_ids"] = [f"{m}-artifact" for m in expected_modes]
+
+    def assemble(data, blocks, name, **kw):
+        assert name == (f"non_text_plus_{mode}" if mode else "non_text")
+        return base.copy()
+
+    monkeypatch.setattr(campaign, "assemble_feature_set", assemble)
+    encoded = pd.DataFrame(
+        {"e0": [0.0, 2.0, np.nan, 3.0], "e1": [2.0, 4.0, np.nan, 8.0]}, index=base.index
+    )
+    encoded.attrs.update(feature_artifact_ids=["e5-artifact"], embedding_groups=[["e0", "e1"]])
+    monkeypatch.setattr(embeddings, "load", lambda *args: encoded)
+    received = []
+    monkeypatch.setattr(
+        campaign,
+        "estimator_factory",
+        lambda *args, **kw: (
+            lambda: SimpleNamespace(
+                fit=lambda x, y: received.append(x.copy()), predict=lambda x: x.x.to_numpy()
+            )
+        ),
+    )
+
+    def evaluate(data, features, factory, **kw):
+        assert features.attrs["feature_artifact_ids"] == base.attrs["feature_artifact_ids"] + [
+            "e5-artifact"
+        ]
+        assert kw["representation_recipe"]["provider"] == arm["provider"]
+        wrapped = factory().fit(features.iloc[:3], data.frame.y.iloc[:3])
+        np.testing.assert_allclose(wrapped.pcas[0].mean_, [1, 3])
+        assert len([c for c in received[0] if c.startswith("e5_pca")]) == 33
+        assert not any(c.startswith("e0") or c.startswith("e1") for c in received[0])
+        if mode:
+            assert received[0].decision.equals(base.decision.iloc[:3])
+        wrapped.predict(features.iloc[3:])
+        return []
+
+    monkeypatch.setattr(campaign, "evaluate_cv", evaluate)
+    campaign.run_arm(arm, allow_model_runs=True, profile=True)
+    assert selected == expected_modes

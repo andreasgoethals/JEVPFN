@@ -24,6 +24,10 @@ candidate_combinations:
 - non_text_plus_joint
 - non_text_plus_per_column
 - non_text_plus_both
+- non_text_plus_frozen_e5
+- non_text_plus_frozen_e5_and_joint
+- non_text_plus_frozen_e5_and_per_column
+- non_text_plus_frozen_e5_and_both
 common_question_templates: src.jev.semantics
 question_bank_id: null
 question_variant: documented

@@ -11,13 +11,18 @@ candidate_models:
 - limix_2
 - kumo_tabular
 - linear
-roster_note: six_predictors_four_arms_two_separate_original_text_baselines
+roster_note: six_predictors_eight_arms_two_separate_original_text_baselines
 feature_artifacts: []
 candidate_combinations:
 - non_text
 - non_text_plus_joint
 - non_text_plus_per_column
 - non_text_plus_both
+- non_text_plus_frozen_e5
+- non_text_plus_frozen_e5_and_joint
+- non_text_plus_frozen_e5_and_per_column
+- non_text_plus_frozen_e5_and_both
+embedding_configuration: feature_creation/text_embeddings
 text_statistics_baseline: src.evaluation.features.text_statistics
 include_non_text_features_in_jev: false
 feature_view:
@@ -44,7 +49,7 @@ candidate_extractors:
 - intern
 non_text_columns: all_original_numerical_and_categorical_features
 additional_controls:
-  text_statistics: optional_separate_ablation_not_a_fifth_main_arm
+  text_statistics: optional_separate_ablation
 feature_selectors:
   jev: null
   liquid: null

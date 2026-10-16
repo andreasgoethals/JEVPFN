@@ -41,6 +41,14 @@ def test_active_rosters_and_provider_pins_agree():
 
 
 def test_execution_catalog_and_metric_version_match_implementation():
+    from src.evaluation.features import MAIN_FEATURE_SETS
+
+    assert tuple(load_yaml("experiment_1/main")["candidate_combinations"]) == MAIN_FEATURE_SETS
+    assert (
+        tuple(load_yaml("experiment_4/decision_models")["candidate_combinations"])
+        == MAIN_FEATURE_SETS
+    )
+    assert tuple(load_yaml("feature_creation/text_embeddings")["models"]) == MAIN_MODELS
     assert set(load_yaml("experiment_1/models")["models"]) == set(MAIN_MODELS + TEXT_MODELS)
     assert (
         load_yaml("experiment_1/protocol")["evaluation"]["metric_conventions"]["version"]

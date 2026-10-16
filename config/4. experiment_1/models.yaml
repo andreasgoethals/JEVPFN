@@ -16,7 +16,7 @@ hyperparameter_search: false
 models:
   tabpfn_3_5:
     name: TabPFN-3.5
-    priority: selected_four_feature_arms
+    priority: selected_eight_feature_arms
     package: tabpfn==9.0.0
     model_selector: ModelVersion.V3_5
     extra: models
@@ -45,7 +45,7 @@ models:
           sha256: null
   catboost:
     name: CatBoost
-    priority: selected_four_feature_arms
+    priority: selected_eight_feature_arms
     package: catboost==1.2.10
     extra: baselines
     device_proposal: cpu
@@ -62,7 +62,7 @@ models:
       checkpoints: {}
   linear:
     name: Logistic regression for classification; linear regression for regression
-    priority: selected_four_feature_arms
+    priority: selected_eight_feature_arms
     package: scikit-learn==1.9.1
     extra: baselines
     device_proposal: cpu
@@ -82,7 +82,7 @@ models:
       checkpoints: {}
   tabicl_v2:
     name: TabICL v2
-    priority: selected_four_feature_arms
+    priority: selected_eight_feature_arms
     package: tabicl==2.2.0
     classification_checkpoint: tabicl-classifier-v2-20260212.ckpt
     regression_checkpoint: tabicl-regressor-v2-20260212.ckpt
@@ -110,7 +110,7 @@ models:
           sha256: null
   limix_2:
     name: LimiX-2
-    priority: selected_four_feature_arms
+    priority: selected_eight_feature_arms
     package: null
     extra: limix
     checkpoint: LimiX-2.ckpt
@@ -207,7 +207,7 @@ models:
     extra: kumo
     checkpoint_revision: v1.0.1
     regression_point: mean_of_999_predicted_quantiles
-    priority: selected_four_feature_arms
+    priority: selected_eight_feature_arms
     runtime:
       packages:
         structured-data-models: git:bd2d55db104679393fcd6afe13305f37e40b5467
