@@ -65,3 +65,4 @@ kaggle.json
 .ssh/
 /secrets/
 /credentials/
+/config/**/*.local.yaml

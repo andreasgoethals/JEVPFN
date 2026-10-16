@@ -1,6 +1,6 @@
 # Literature review
 
-Primary-source findings checked through 14 October 2026. This reference records prior art,
+Primary-source findings checked through 16 October 2026. This reference records prior art,
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
 execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
@@ -82,6 +82,48 @@ are a reproducible semantic baseline, but their prefix, pooling, truncation and 
 revision must be declared. Comparing Jev's longer inputs with truncated embeddings also
 changes text coverage; it is not solely a comparison of representation quality.
 [E5-small-v2 model card](https://huggingface.co/intfloat/e5-small-v2)
+
+JEVPFN's conventional control pins E5-small-v2 to
+`ffb93f3bd4047442299a41ebb6fa998a38507c52`, uses the card's `query: ` prefix for
+classification/features, attention-mask mean pooling and L2 normalization. Its long-text
+extension uses nonoverlapping token chunks, weighting chunk vectors by content-token count
+before final normalization; this is our declared coverage policy, not a claim to reproduce
+the MulTaBench encoder exactly. No source token is silently discarded. Full 384-dimensional
+vectors are reusable; per-column PCA is fitted only on the current training partition,
+including each inner threshold-selection fold. Model inference remains to be verified.
+
+### Paired inference and pretraining-overlap review
+
+The scientific comparison is within a fixed predictor, using identical splits. TabSTAR and
+ConTextTab are descriptive reference systems; their different predictors cannot isolate the
+effect of replacing a text representation. A frozen encoder in the same predictor supplies
+that missing conventional comparison. Observed paired gains can be reported descriptively
+without a significance test, but fold SD is not uncertainty for an independent-sample mean:
+training sets overlap. [Bengio and Grandvalet (2004)](https://jmlr.org/papers/v5/grandvalet04a.html)
+establish the general cross-validation variance difficulty. [Demšar (2006)](https://jmlr.org/papers/v7/demsar06a.html)
+supports using datasets as comparison units. The implemented optional Wilcoxon/Holm procedure
+requires a complete predeclared family, separate task metrics and one five-fold mean delta
+per dataset. It cannot turn this curated set into a random sample of all tabular tasks;
+few classification datasets and multiple comparisons limit power. Do not choose the metric,
+model or best feature arm after seeing test results and call that choice confirmatory.
+
+Pretraining review applies to every pretrained extractor, E5 and downstream/native-text
+model. Before interpreting results: (1) inspect the pinned model card and released training
+source lists, (2) cross-reference dataset aliases and original sources in DATA_SOURCES,
+(3) record documented overlap, plausible overlap or unknown, with source/version/date,
+and (4) report any documented-overlap subset separately without silently removing datasets.
+For open models with available corpora, exact text-hash matching is useful; absence of an
+exact match cannot exclude paraphrases or undisclosed base-model data. Closed training sets
+must remain unknown. A publication-after-training-cutoff subset is defensible only when both
+dates are verified. No cutoff or absence of overlap should be inferred from a release date.
+
+Masking names/numbers or paraphrasing can test robustness but also removes legitimate signal
+and cannot prove absence of contamination. Oren et al.'s
+[black-box contamination test](https://arxiv.org/abs/2310.17623) relies on likelihood access
+and exchangeability assumptions; a decision-probability API does not expose those likelihoods.
+Here "label-free extraction" means no row targets/statistics enter the representation pipeline;
+it does not establish that pretrained weights never saw public labels. Seen/unseen-text CV
+cohorts address observed repetition, not all pretraining contamination or semantic confounds.
 
 An earlier multimodal-embedding study evaluates TabPFN as a head on frozen image, text and
 audio encoders, with gains varying by label budget and representation dimension. Thus both

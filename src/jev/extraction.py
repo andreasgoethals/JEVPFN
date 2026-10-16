@@ -74,6 +74,15 @@ def campaign_limits(cfg):
         raise ValueError("Each dataset allocation must be positive")
     if sum(allocation.values()) > ceiling + 1e-12:
         raise ValueError("Dataset allocations exceed the campaign spending limit")
+    if review.get("owner_budget_eur") is not None:
+        rate = review.get("usd_per_eur")
+        euros = review["owner_budget_eur"]
+        if (not isinstance(rate, (int, float)) or not math.isfinite(rate) or rate <= 0
+                or not isinstance(euros, (int, float)) or not math.isfinite(euros) or euros <= 0
+                or not review.get("exchange_rate_evidence")):
+            raise ValueError("Verify EUR-to-USD conversion before spending the owner's euro budget")
+        if ceiling > euros * rate + 1e-12:
+            raise ValueError("USD campaign limit exceeds the approved euro budget")
     return {
         dataset: ExtractionLimits(
             budget,
@@ -139,6 +148,7 @@ class TypeSafeTransport:
         self.model = cfg["jev"]["model"]
         self.client = TypeSafeClient(
             api_key=os.environ["TYPESAFE_API_KEY"],
+            base_url="https://api.typesafe.ai",
             model=self.model,
             retry=RetryPolicy(max_retries=0, timeout=60),
         )

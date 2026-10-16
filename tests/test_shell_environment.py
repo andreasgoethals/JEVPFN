@@ -1,8 +1,12 @@
 """Reproduce inherited-venv and shell-shadowing failures without installing anything."""
 
+import hashlib
+import json
 import os
+import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -145,3 +149,36 @@ def test_gpu_memory_profiles_fit_a100_and_token_job_matches_four_cores():
             )
             assert memory.endswith("M") and int(memory[:-1]) <= 126000
     assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+
+
+def test_perplexity_requirements_guard_runs_before_packages_exist(tmp_path):
+    # Execute the real shell's Python guard with site-packages disabled, as in a fresh env.
+    source = (ROOT / "scripts/setup_decision_env.sh").read_text()
+    command = next(line for line in source.splitlines() if "Publisher requirements changed" in line)
+    code = shlex.split(command)[2]
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_bytes(b"example==1.0\n")
+    (tmp_path / "_JEVPFN_CHECKPOINT.json").write_text(
+        json.dumps(
+            {
+                "files": {
+                    "requirements.txt": hashlib.sha256(requirements.read_bytes()).hexdigest(),
+                }
+            }
+        )
+    )
+    call = [sys.executable, "-S", "-c", code, str(requirements)]
+    assert subprocess.run(call, capture_output=True, timeout=10).returncode == 0
+    requirements.write_bytes(b"different==2.0\n")
+    failed = subprocess.run(call, capture_output=True, text=True, timeout=10)
+    assert failed.returncode != 0 and "Publisher requirements changed" in failed.stderr
+
+
+def test_unknown_runtime_is_rejected_before_any_install():
+    result = subprocess.run(
+        [bash_executable(), str(ROOT / "scripts/setup_decision_env.sh"), "unknown"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 2 and "Unknown selected" in result.stderr

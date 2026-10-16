@@ -217,7 +217,7 @@ Strands stages both its adapter and the configured Qwen3.5-2B base model. The in
 revision caveat is retained in config. Every compute job verifies hashes and runs offline.
 No inference belongs on a login node.
 
-For the first two GPU tests, the setup helper prepares the isolated Clef and Intern
+For all five GPU tests, the setup helper prepares isolated provider
 environments, reuses staged weights and performs an offline tokenizer smoke check. Run before
 submitting jobs; it refuses active JEVPFN jobs. Packages/wheel caches/environments use PROJECT:
 
@@ -226,6 +226,9 @@ cd "$VSC_DATA/JEVPFN"
 export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
 bash scripts/setup_decision_env.sh cloudflare
 bash scripts/setup_decision_env.sh intern
+bash scripts/setup_decision_env.sh liquid
+bash scripts/setup_decision_env.sh strands
+bash scripts/setup_decision_env.sh perplexity
 ```
 
 CUDA 12.6 is the A100 candidate; verify driver/glibc compatibility in the allocation. The
@@ -237,7 +240,7 @@ A failure requires diagnosis rather than silent version substitution.
 | Open extractor | Runtime preparation |
 |---|---|
 | Liquid | Separate environment, compatible CUDA wheel and `.[dev,token-audit,liquid]`; staged custom decision implementation. |
-| Strands | Separate Linux/CUDA environment and `.[dev,token-audit,strands]`; build `causal-conv1d --no-build-isolation` with matching CUDA toolkit. Direct `SystemOneEngine` inference; no HTTP server needed. |
+| Strands | Separate Linux/CUDA environment and `.[dev,token-audit,strands]`; optional causal-conv1d acceleration requires a matching toolkit and a compute-node build. Direct `SystemOneEngine` inference; no HTTP server needed. |
 | Perplexity | Separate environment; install the pinned checkpoint's `requirements.txt` and project dependencies. Keep its declared Torch version separate from downstream/Clef pins. Add staged `source/src` for `autojev`. |
 | Clef | `.[dev,token-audit,clef]`; staged joint head/backbone; retain complete softmax precision. |
 | Intern | `.[dev,token-audit,intern]`; retain the pinned publisher's calibration temperature and complete probabilities. |
@@ -246,6 +249,20 @@ Custom inference code is reviewed and hash-verified before loading. Complete dep
 versions enter response identity. All model and Hugging Face/Xet caches use PROJECT;
 HF offline flags are set before runtime imports. Bytecode writes are disabled so importing
 publisher code does not alter the fingerprinted checkpoint tree.
+The helper uses Torch 2.12.1/CUDA 12.6 for four providers and the publisher's Torch
+2.14.0/torchvision 0.29.0 CUDA 12.6 pair for Perplexity, then its fingerprinted requirements.
+It records installed package versions beside each PROJECT environment. Strands' optional
+causal-conv1d accelerator is not compiled on the login node. Its available kernel path must
+pass the GPU contracts and a throughput pilot; a slow fallback is not permission for a full
+campaign. If compilation is necessary, use a compute allocation with the matching CUDA
+toolkit and repeat contracts after installation. A new package pin changes runtime identity.
+
+For the separate conventional embedding control, install `.[dev,embeddings,staging]` in an
+isolated environment, run `python -m src.data.text_embeddings --stage` on the connected setup
+host, and test its offline encoder in a GPU allocation before setting its config `enabled`
+to true and running `python -m src.data.text_embeddings --execute`. Its large cache is PROJECT
+`data/text_embeddings/<dataset_id>.sqlite3`; operational logs use DATA feature-creation logs.
+This control is required before the comparison benchmark, not before decision-model extraction.
 
 ## Bounded GPU contract tests and larger pilots
 
@@ -255,7 +272,9 @@ After exact counts for the chosen provider are complete, submit its prepared env
 sbatch scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
 ```
 
-After Clef completes successfully, run `sbatch scripts/slurm/experiment_0_decision_contracts.slurm intern`.
+After Clef completes successfully, repeat for `intern`, `liquid` and `strands`.
+Perplexity uses `sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.
+Use `sbatch --wait` when chaining jobs so the next command is reached only after success.
 The provider, optional environment prefix and optional project root are script arguments.
 For example, append `/lustre1/project/stg_00211/JEVPFN/environments/intern /lustre1/project/stg_00211`
 to select both paths explicitly. KU Leuven starts batch jobs with a clean environment; exporting
@@ -291,6 +310,16 @@ dataset, capped at 1,000. Full extraction has a separate switch and a reviewed a
 manifest matching runtime settings and token-audit identity. Submit the larger pilot as
 `sbatch scripts/slurm/experiment_0_decision_pilot.slurm cloudflare` (or its selected provider).
 Pilot/full summaries also expose `settings_sha256`.
+`python -m src.cluster.accept_features --provider cloudflare` previews a matching evidence
+set: current question audit, CPU tests, cross-node storage, complete exact token counts,
+GPU contracts and the larger pilot. Repeat with each provider. It rejects missing, stale
+or ambiguous successful reports. After reviewing those files, measured throughput, actual
+quota and the independent backup arrangement, add
+`--approve --reviewed-by Andreas --quota-verified --backup-verified --throughput-reviewed`.
+This explicitly signs `3. experiment_0/manifests/before_extraction/accepted_<provider>.json`;
+it never enables extraction. Only pass those flags after doing the corresponding review.
+Set each path in `self_hosted.yaml`'s `accepted_before_extraction_manifests` map and enable
+its separate full-extraction switch between stages. Tests alone never sign acceptance.
 After acceptance, `scripts/slurm/feature_creation.slurm` runs full extraction on regular
 `gpu_a100`; its 24-hour allocation is a resumable segment, not a runtime prediction. Create
 `output_JEVPFN/2. feature_creation/logs` before submission, then use
@@ -326,6 +355,9 @@ privately, and use the pinned `jev-1.13.0` client. `src.jev.extraction` disables
 uses durable spending reservations and stops on ambiguous billing outcomes. Config requires
 verified account rates, a billing-token upper bound, context validation and explicit dataset/
 campaign budgets. Published rates are references, not automatic account authorization.
+The current docs publish no universal RPS/TPS allowance. Obtain your organization's values
+from the console or TypeSafe support. The owner's pasted console showed USD 0 balance, so
+funding/access must be settled before the paid pilot; the code does not top up an account.
 Microsoft is outside the selected roster.
 
 `python -m src.jev.extraction` previews readiness without credentials/network. Its `--execute`
@@ -337,6 +369,17 @@ do not infer either from characters/4. Unknown bounds keep dispatch blocked. HTT
 bounded exponential backoff; 529/timeouts remain review stops because retryable does not
 establish that an earlier attempt was unbilled. Raw responses received by the dispatcher
 survive a subsequent feature-decoder failure.
+
+Alternatively, keep the tracked defaults disabled and run
+`python -m src.jev.setup_pilot --configure` locally. It prompts for verified price, RPS/TPS,
+context/billing bounds and a conservative EUR/USD conversion, then writes the Git-ignored
+`config/2. feature_creation/jev.local.yaml`. It enforces the approved EUR 5 pilot, includes
+all 18 dataset allocations and never enables full extraction. Unknown provider bounds must
+be obtained before this step; a guessed byte/token ratio is not acceptable evidence.
+Use `python -m src.jev.hosted --config feature_creation/jev.local --execute` for that pilot.
+`python -m src.jev.setup_pilot --check-account` sends only the authenticated model-list GET;
+it verifies neither paid inference, balance, rate limits nor access to the exact version.
+Keep the key in a terminal environment variable and clear it when finished.
 
 After a decoder repair, dispatch revalidates a saved `invalid_response` without another
 API call or charge. For exhausted verified-unbilled rejections or uncertain billing, stop
@@ -409,6 +452,10 @@ permutation and retained-view arms use `campaign --include-controls` and the exp
 `--control`/`--view` filters. `python -m src.evaluation.results --save` writes complete-arm
 per-dataset metrics and paired differences to PROJECT Experiment 4, with its compact index on
 DATA. Negative differences are improvements for loss metrics, not for higher-is-better metrics.
+The frozen E5 control also appears in that plan (`--control frozen_embedding --view main`).
+Analysis writes matched contrasts against both non-text and available E5 controls, plus a
+separate native-text reference table and dataset-level summaries. `--infer` additionally
+requires an approved `experiment_4/analysis` plan; it does not select headline metrics itself.
 
 ## Transfer results
 

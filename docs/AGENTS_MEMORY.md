@@ -13,11 +13,29 @@ runtimes, Jev live checks, storage quota and independent backup remain
 unverified. The read-only library pin is
 `de324efcca55be392feb0c01830b3b6ce364587f`.
 Method constraints are in README; operations are in VSC; source meanings are in DATA_SOURCES.
-Latest local verification (16-10): 519 tests, lint and dependency consistency passed, including
+Latest local verification (16-10, fifth review): 539 tests, lint and dependency consistency passed, including
 the installed TypeSafe SDK with mocked successful and rate-limited HTTP responses. This is
 not live API evidence. All five local notebooks were rerun with version-3 inputs (17 figures).
 The modified CPU Slurm script passed Bash syntax/LF checks; its allocation now allows twenty
 minutes for the exhaustive input audit plus the test suite. No remote jobs were submitted.
+The CPU test selection also passed with notebook/TypeSafe imports deliberately unavailable:
+533 passed, three hosted-SDK tests skipped and three notebook tests deselected. This reproduces
+the optional-dependency boundary locally, not Linux or VSC behavior. The exhaustive v3 input
+audit was repeated successfully without changing any of the 18 prepared files.
+The fifth review identified methodological gaps, not additional established execution failures.
+Added the frozen E5 control with train-partition-only PCA, dataset-level paired summaries,
+guarded optional Wilcoxon/Holm analysis and separate native-text reference results. Perturbations
+cannot establish absence of pretraining contamination; the documented review keeps unknowns
+explicit. Real E5 inference is unverified. All five runtime setup branches are now available;
+Perplexity's pre-install requirements check uses only the standard library. No new remote
+runtime installation or execution has been observed. Open-provider acceptance now checks
+matching reports but requires explicit owner review of throughput, quota and backup.
+The owner authorized EUR 5 for the Jev pilot and tentatively EUR 50 after testing. A verified
+conservative USD conversion is required; the later budget stays disabled. The pasted console
+showed USD 0 balance and no RPS/TPS. No API key was supplied and no authenticated/live call was
+made. The setup helper writes only an ignored local configuration; account rates and a justified
+context/billing envelope remain required. Provider docs now describe organization-specific
+limits, so the old fixed 80 RPS/100k TPS claim was removed from active metadata.
 
 ## VSC runs
 

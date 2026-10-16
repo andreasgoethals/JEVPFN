@@ -53,6 +53,7 @@ jev = ["typesafe-sdk==0.7.2"]  # Guarded local transport; live execution is disa
 models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the hardware-specific Torch wheel first on VSC.
 evaluation = ["scikit-learn==1.9.1"]  # Score saved predictions without model packages.
 staging = ["huggingface-hub>=1.5,<2"]  # Explicit, separately authorized checkpoint staging.
+embeddings = ["transformers==5.17.0", "torch==2.12.1", "scikit-learn==1.9.1"]
 token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  # CPU rendering, including publisher chat templates; no weights.
 # Selected benchmark engines; actual VSC compatibility is tested in Experiment 0B.
 # Validate each selected extra on VSC in experiment 0. AutoGluon is excluded.

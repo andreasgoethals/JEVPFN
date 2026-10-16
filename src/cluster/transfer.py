@@ -87,6 +87,14 @@ def export_bundle() -> Path:
                 if source.stem != dataset_id:
                     raise ValueError("Dataset cache filename and identity differ")
                 add(copied, f"data/jev_cache/{source.name}", "cache")
+            from src.data.text_embeddings import validate as validate_embeddings
+
+            for source in sorted(paths.jev_cache_path("text_embeddings").glob("*.sqlite3")):
+                with file_lock(source.with_suffix(".lock"), timeout=1):
+                    copied = snapshot(source, Path(scratch) / "embeddings" / source.name)
+                if validate_embeddings(copied)["dataset_id"] != source.stem:
+                    raise ValueError("Embedding cache filename and identity differ")
+                add(copied, f"data/text_embeddings/{source.name}", "embedding_cache")
             for tier, output_root in enumerate(
                 dict.fromkeys([paths.large_outputs_dir(), paths.outputs_dir()])
             ):
@@ -235,9 +243,10 @@ def import_bundle(bundle: Path) -> dict:
                     raise ValueError("Duplicate manifest entry")
                 expected.add(str(member))
                 logical_paths.add(str(relative))
-                if record["kind"] == "cache":
+                if record["kind"] in {"cache", "embedding_cache"}:
+                    folder = "jev_cache" if record["kind"] == "cache" else "text_embeddings"
                     if (
-                        relative.parts[:2] != ("data", "jev_cache")
+                        relative.parts[:2] != ("data", folder)
                         or len(relative.parts) != 3
                         or relative.suffix != ".sqlite3"
                     ):
@@ -264,6 +273,11 @@ def import_bundle(bundle: Path) -> dict:
                     raise ValueError("Transfer checksum mismatch")
                 if record["kind"] == "cache" and validate_cache(target) != relative.stem:
                     raise ValueError("Cache dataset and filename differ")
+                if record["kind"] == "embedding_cache":
+                    from src.data.text_embeddings import validate as validate_embeddings
+
+                    if validate_embeddings(target)["dataset_id"] != relative.stem:
+                        raise ValueError("Embedding dataset and filename differ")
                 prepared.append((record, target, relative))
             if set(names) != expected:
                 raise ValueError("Unexpected archive members")
@@ -271,6 +285,7 @@ def import_bundle(bundle: Path) -> dict:
             "bundle_id": bundle_id,
             "bundle_sha256": file_sha256(bundle),
             "caches": [],
+            "embedding_caches": [],
             "outputs": [],
         }
         token_report = None
@@ -283,6 +298,10 @@ def import_bundle(bundle: Path) -> dict:
                         backup_dir=root / "cache_backups",
                     )
                 )
+            elif record["kind"] == "embedding_cache":
+                from src.data.text_embeddings import cache_path, merge
+
+                report["embedding_caches"].append(merge(source, cache_path(relative.stem)))
             else:
                 destination = paths.outputs_dir().joinpath(*relative.parts[1:])
                 # Refuse pre-existing symlink parents pointing outside the local output root.

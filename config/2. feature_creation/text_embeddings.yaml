@@ -1,0 +1,17 @@
+# Conventional representation control; no labels, fine-tuning or silent truncation.
+enabled: false
+model: intfloat/e5-small-v2
+revision: ffb93f3bd4047442299a41ebb6fa998a38507c52
+dimensions: 384
+prefix: 'query: '
+max_tokens: 512
+batch_size: 32
+pooling: attention_mask_mean
+long_text: nonoverlapping_token_chunks_weighted_by_content_tokens
+normalization: l2_per_chunk_then_l2_weighted_mean
+device: cuda
+pca_components_per_column: 32
+pca_fit_scope: each_inner_or_outer_training_partition
+missing_text: skip_encoder_store_nan
+models: [catboost, tabpfn_3_5]
+source: https://huggingface.co/intfloat/e5-small-v2

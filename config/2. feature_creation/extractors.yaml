@@ -1,4 +1,4 @@
-checked_on: '2026-10-14'
+checked_on: '2026-10-16'
 enabled: false
 shared_semantics:
 - binary_probability
@@ -17,8 +17,8 @@ candidates:
     context_tokens: 32000
     input_price_per_million_usd: 0.042
     output_price_per_million_usd: 0
-    published_requests_per_second: 80
-    published_input_tokens_per_second: 100000
+    published_requests_per_second: null  # Current documentation: organization-specific.
+    published_input_tokens_per_second: null
     limits_are_dynamic: true
     account_limits_verified: false
     reference: https://docs.typesafe.ai/api

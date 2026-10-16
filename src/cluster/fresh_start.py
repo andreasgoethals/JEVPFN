@@ -158,6 +158,7 @@ def run(*, apply=False, writers_stopped=False, local=False, delete=False, includ
             "data/raw",
             "data/decision_inputs",
             "data/jev_cache",
+            "data/text_embeddings",
             "checkpoints",
             "environments",
         ],

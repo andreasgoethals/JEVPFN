@@ -101,9 +101,11 @@ evaluation:
   optional_automl_or_bagging: disabled
   calibration: none
   small_n: outside_current_scope
-  statistical_tests: none_required_for_initial_benchmark
+  statistical_tests: experiment_4/analysis  # Disabled until metrics/contrasts are approved before outcomes.
   comparison: jev_feature_combinations_within_the_same_model_on_identical_folds
-  aggregation: per_dataset_mean_and_sd_and_paired_feature_deltas_within_model
+  aggregation: per_dataset_paired_deltas_then_task_specific_across_dataset_summaries
+  fold_sd_interpretation: descriptive_only_never_standard_error
+  native_text_comparison: descriptive_reference_results_no_same_predictor_baseline
   model_leaderboard: outside_research_objective
   pool_raw_classification_and_regression_metrics: forbidden
   failed_or_unsupported_runs: record_explicitly_never_silently_drop

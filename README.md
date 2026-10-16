@@ -69,7 +69,12 @@ The non-text baseline is fitted once per predictor/dataset and reused across ext
 comparisons. Named augmented arms remain separate fits. **TabSTAR and ConTextTab** are the
 two original-text baselines: they receive all original features, including text, without
 extracted features. Cheap character/word/missingness features and partition-local permutation
-controls are implemented for separate ablations.
+controls are implemented for separate ablations. A frozen E5-small-v2 control is also implemented
+for CatBoost and TabPFN-3.5. It reads each text column, reuses identical text, covers long inputs
+with token chunks, and stores full 384-dimensional embeddings once per dataset. PCA reduces
+each column to up to 32 learned dimensions inside every inner/outer training fit; held-out rows
+never fit the PCA. Its weights and real GPU path still require a separate test. This is a
+conventional semantic control, not an additional decision extractor.
 `python -m src.evaluation.campaign --include-controls` includes those Experiment 3 arms and
 retained-probability views. On one-text-column datasets, separate/joint/both contain identical
 information; exclude them from representation contrasts, while retaining their named fits.
@@ -86,12 +91,22 @@ or regression metrics, undefined-metric reasons, timings, resource use, folds an
 identities. Headline metric selection remains deferred until before comparative predictive results are
 reviewed. Exact conventions and runtime settings live in `config/4. experiment_1/`.
 Full-fold feasibility, checkpoint loading and native-text encoders remain unverified on VSC.
+Fold SD is descriptive variation, not a standard error. Analysis also produces one paired
+mean difference per dataset and task-specific across-dataset summaries. Raw target-unit
+errors are not averaged across unrelated regression targets. Optional two-sided Wilcoxon
+tests use datasets as units, with Holm correction over the full predeclared comparison family;
+`config/7. experiment_4/analysis.yaml` remains unapproved until headline metrics and contrasts
+are agreed before seeing outcomes. TabSTAR/ConTextTab are descriptive original-text reference
+results, not matched within-predictor effects or a cross-model leaderboard.
 
 Also report the same metrics for test rows with previously seen joint text, unseen joint
 text, no previously seen individual text column, and entirely empty text. These diagnostics
 reuse predictions and fixed thresholds; they do not change CV or add fits. They help assess
 whether gains extend beyond repeated text. Unseen combinations can still contain familiar
 individual columns, and these checks alone cannot establish semantic understanding.
+"Label-free" describes the extraction pipeline's inputs, not a guarantee about a pretrained
+model's history. Public-data pretraining overlap remains unknown where training data are
+undisclosed. The review procedure and interpretation limits are in LITERATURE_REVIEW.
 
 ## Workflow
 
@@ -210,6 +225,9 @@ CUDA environments, exact token databases, predictions and large results. **DATA*
 checkout, small CPU environment, compact manifests and logs. Both trees use `JEVPFN/` and
 `output_JEVPFN/<number>. phase/`. Local execution uses local storage; notebook paths remain
 local even if VSC variables are present. Large VSC writes fail rather than fall back to DATA.
+The E5 control has one resumable file per dataset under `data/text_embeddings/`; these files
+also survive output cleanup and use PROJECT on VSC. The combined transfer merges them after
+validating encoder identity, vector hashes and original row mappings.
 
 Use `python -m src.cluster.transfer export` on VSC, download its bundle, then
 `python -m src.cluster.transfer import <bundle.zip>` locally. Imports validate checksums,
@@ -244,6 +262,13 @@ outer fold in Experiment 0B. CV resumes checksummed complete folds and saves war
 process RSS and CUDA peaks. `src.evaluation.results --save` summarizes complete five-fold arms
 and paired feature differences, without treating unfinished arms as complete. Exact setup and
 acceptance requirements are in [VSC](docs/VSC.md).
+The owner approved a EUR 5 Jev pilot. The local setup command records an explicit conservative
+EUR/USD conversion; it never assumes the currencies are interchangeable. The later EUR 50
+budget is a proposal after testing, not an enabled full-run budget. Current provider documentation
+specifies organization-specific rate limits; the console excerpt did not show them and showed
+USD 0 balance. `python -m src.jev.setup_pilot --check-account` checks authentication only.
+`--configure` creates an ignored local pilot config after collecting verified rate, price,
+currency and context/billing bounds. The API key stays in the process environment.
 
 Documentation has distinct purposes: [DATA_SOURCES](docs/DATA_SOURCES.md) records dataset
 provenance/semantics; [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md) records published evidence;

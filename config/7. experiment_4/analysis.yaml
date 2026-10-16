@@ -1,0 +1,12 @@
+# Select headline metrics/contrasts before viewing comparative evaluation outcomes.
+# The available test is not an automatic assertion that the dataset sample is random.
+approved_before_results: false
+reviewed_by: null
+unit: per_dataset_mean_of_five_paired_outer_fold_differences
+fold_sd: descriptive_only
+test: two_sided_wilcoxon_signed_rank
+correction: holm_across_all_predeclared_contrasts
+contrasts: []
+undefined_or_incomplete: stop_inferential_analysis_and_report_missing_results
+native_text_baselines: descriptive_reference_results_not_within_predictor_contrasts
+pretraining_overlap: unknown_unless_documented_evidence_establishes_otherwise

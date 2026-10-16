@@ -207,6 +207,7 @@ def main(argv=None):
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--dataset", action="append")
+    parser.add_argument("--config", default="feature_creation")
     args = parser.parse_args(argv)
     if not args.execute:
         print(
@@ -214,7 +215,7 @@ def main(argv=None):
         )
         return 0
     result = run(
-        load_yaml("feature_creation"), execute=True, full=args.full, dataset_ids=args.dataset
+        load_yaml(args.config), execute=True, full=args.full, dataset_ids=args.dataset
     )
     return int(result["status"] != "completed_requires_review")
 

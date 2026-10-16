@@ -1,11 +1,14 @@
 #!/bin/bash -l
-# Connected login-shell setup for the first two GPU contract environments; no inference.
+# Connected login-shell setup for isolated decision runtimes; no inference/job submission.
 set -euo pipefail
-JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern}"
+JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern|liquid|strands|perplexity}"
 case "$JEVPFN_SETUP_PROVIDER" in
     cloudflare) JEVPFN_SETUP_EXTRA=clef ;;
     intern) JEVPFN_SETUP_EXTRA=intern ;;
-    *) echo 'This setup script supports cloudflare and intern only.' >&2; exit 2 ;;
+    liquid) JEVPFN_SETUP_EXTRA=liquid ;;
+    strands) JEVPFN_SETUP_EXTRA=strands ;;
+    perplexity) JEVPFN_SETUP_EXTRA=perplexity ;;
+    *) echo 'Unknown selected decision provider.' >&2; exit 2 ;;
 esac
 cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}"
@@ -24,9 +27,22 @@ if [[ ! -x "$JEVPFN_CONDA_ENV/bin/python" ]]; then
     conda create --yes --prefix "$JEVPFN_CONDA_ENV" python=3.12 pip
 fi
 source scripts/activate_conda.sh
-"${JEVPFN_PYTHON:?}" -m pip install 'torch==2.12.1' 'torchvision==0.27.1' --index-url https://download.pytorch.org/whl/cu126
-"$JEVPFN_PYTHON" -m pip install -e ".[dev,token-audit,$JEVPFN_SETUP_EXTRA]"
+if [[ "$JEVPFN_SETUP_PROVIDER" == perplexity ]]; then
+    # Publisher requirements differ from the other four environments. Verify before installing.
+    JEVPFN_REQUIREMENTS="$JEVPFN_STAGING_ROOT/JEVPFN/checkpoints/decision_models/perplexity/requirements.txt"
+    # A fresh environment has no project dependencies yet: this check uses only stdlib.
+    "$JEVPFN_PYTHON" -c 'import hashlib,json,sys; from pathlib import Path; p=Path(sys.argv[1]); m=json.loads((p.parent/"_JEVPFN_CHECKPOINT.json").read_text()); actual=hashlib.sha256(p.read_bytes()).hexdigest(); sys.exit(0 if actual==m["files"]["requirements.txt"] else "Publisher requirements changed")' "$JEVPFN_REQUIREMENTS"
+    "${JEVPFN_PYTHON:?}" -m pip install 'torch==2.14.0' 'torchvision==0.29.0' --index-url https://download.pytorch.org/whl/cu126
+    "$JEVPFN_PYTHON" -m pip install -r "$JEVPFN_REQUIREMENTS" -e '.[dev,token-audit]'
+else
+    "${JEVPFN_PYTHON:?}" -m pip install 'torch==2.12.1' 'torchvision==0.27.1' --index-url https://download.pytorch.org/whl/cu126
+    "$JEVPFN_PYTHON" -m pip install -e ".[dev,token-audit,$JEVPFN_SETUP_EXTRA]"
+fi
 "$JEVPFN_PYTHON" -m pip check
 "$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only --provider "$JEVPFN_SETUP_PROVIDER"
+"$JEVPFN_PYTHON" -m src.cluster.runtime_setup "$JEVPFN_SETUP_PROVIDER"
+if [[ "$JEVPFN_SETUP_PROVIDER" == strands ]]; then
+    echo 'Strands: causal-conv1d acceleration is not compiled here. GPU contracts must verify the available kernel path and measure throughput; do not launch full extraction on an unprofiled fallback.'
+fi
 echo "Prepared environment: $JEVPFN_CONDA_ENV"
 echo 'No inference or job submission performed. Actual GPU compatibility still requires the contract job.'

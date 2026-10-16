@@ -89,6 +89,17 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
                         view="main",
                     )
                 )
+                rows.append(
+                    dict(
+                        dataset_id=entry["id"],
+                        model=model,
+                        feature_set="non_text_plus_frozen_e5",
+                        provider=None,
+                        phase="experiment_3",
+                        control="frozen_embedding",
+                        view="main",
+                    )
+                )
                 for provider in main["candidate_extractors"]:
                     task = semantics[entry["id"]]["task_type"]
                     controls = [("permuted", "main")]
@@ -140,6 +151,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             "src/evaluation/records.py",
             "src/evaluation/text_overlap.py",
             "src/evaluation/campaign.py",
+            "src/evaluation/embedding_control.py",
         ]
     )
     entry = next(e for e in load_catalog()["datasets"] if e["id"] == arm["dataset_id"])
@@ -165,14 +177,46 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             else ("per_column",)
         )
         blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector, modes)
-    features = (
-        original_features(dataset)
-        if arm["model"] in TEXT_MODELS
-        else assemble_feature_set(
-            dataset, blocks, arm["feature_set"], selector=selector, view=arm.get("view", "main")
+    embedding_cfg = None
+    if arm.get("control") == "frozen_embedding":
+        from src.data.text_embeddings import load
+
+        embedding_cfg = load_yaml("feature_creation/text_embeddings")
+        embeddings = load(dataset, embedding_cfg)
+        features = assemble_feature_set(dataset, [], "non_text")
+        if set(features) & set(embeddings):
+            raise ValueError("Embedding names collide with non-text features")
+        features = features.join(embeddings, validate="one_to_one")
+        features.attrs.update(embeddings.attrs)
+    else:
+        features = (
+            original_features(dataset)
+            if arm["model"] in TEXT_MODELS
+            else assemble_feature_set(
+                dataset, blocks, arm["feature_set"], selector=selector, view=arm.get("view", "main")
+            )
         )
-    )
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
+    representation = {
+        "provider": arm["provider"],
+        "selector": selector,
+        "control": arm.get("control"),
+        "view": arm.get("view", "main"),
+        "embedding": embedding_cfg,
+    }
+    if embedding_cfg:
+        from src.evaluation.embedding_control import EmbeddingControl
+
+        base_factory = factory
+
+        def factory():
+            return EmbeddingControl(
+                base_factory(),
+                features.attrs["embedding_groups"],
+                components=embedding_cfg["pca_components_per_column"],
+                seed=cfg["random_seed"],
+            )
+
     synchronize = None
     if settings["device"].startswith("cuda"):
         import torch
@@ -197,6 +241,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             synchronize=synchronize,
             device=settings["device"],
             estimator_settings=settings,
+            representation_recipe=representation,
             permutation_columns=[c for c in features if c not in dataset.metadata.non_text_columns]
             if arm.get("control") == "permuted"
             else None,
@@ -224,10 +269,13 @@ def main():
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
     parser.add_argument(
         "--feature-set",
-        choices=MAIN_FEATURE_SETS + ("original_features", "non_text_plus_text_statistics"),
+        choices=MAIN_FEATURE_SETS
+        + ("original_features", "non_text_plus_text_statistics", "non_text_plus_frozen_e5"),
     )
     parser.add_argument("--include-controls", action="store_true")
-    parser.add_argument("--control", choices=("text_statistics", "permuted", "retained_view"))
+    parser.add_argument(
+        "--control", choices=("text_statistics", "permuted", "retained_view", "frozen_embedding")
+    )
     parser.add_argument(
         "--view", choices=("main", "probabilities", "probabilities_plus_confidence")
     )

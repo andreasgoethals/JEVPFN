@@ -35,6 +35,9 @@ budget_review:
   billed_retry_fraction_scenarios: [0.0, 0.05, 0.10]
 live_extraction:
   enabled: false
+  owner_budget_eur: 5.0  # Approved pilot only; the proposed later EUR 50 is not enabled.
+  usd_per_eur: null  # Enter a verified conservative conversion, including payment fees.
+  exchange_rate_evidence: null
   spending_policy_revision_manifest: null  # Reviewed cumulative budget/price/token-bound changes; prior spending is retained.
   pilot_authorized: false
   pilot_accepted: false

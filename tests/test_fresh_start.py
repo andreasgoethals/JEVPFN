@@ -30,6 +30,7 @@ def test_archive_both_tiers_preserves_every_file_and_protected_data(isolated_out
             "data/raw/source.csv",
             "data/decision_inputs/questions.sqlite3",
             "data/jev_cache/features.sqlite3",
+            "data/text_embeddings/embeddings.sqlite3",
             "checkpoints/weights.bin",
             "environments/python",
         ):

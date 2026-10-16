@@ -222,7 +222,7 @@ def test_controls_are_executable_without_changing_four_main_arms():
     plan = benchmark_plan(include_controls=True)
     assert len(main) == 2088
     added = [a for a in plan if a["phase"] == "experiment_3"]
-    assert {a["control"] for a in added} == {"text_statistics", "permuted", "retained_view"}
+    assert {a["control"] for a in added} == {"text_statistics", "frozen_embedding", "permuted", "retained_view"}
     assert {a["model"] for a in added} == {"catboost", "tabpfn_3_5"}
 
 
@@ -308,6 +308,8 @@ def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
         context_policy_reviewed=True,
         price_verified=True,
         campaign_spending_limit_usd=1,
+        usd_per_eur=1.0,
+        exchange_rate_evidence="synthetic fixture, not a real exchange rate",
         dataset_budget_allocations_usd={"fixture": 1},
         max_billed_input_tokens_per_attempt=100,
         requests_per_second=1,
@@ -431,6 +433,8 @@ def test_hosted_driver_resumes_prepared_unique_inputs_without_network(isolated_o
     live.update(
         enabled=True,
         campaign_spending_limit_usd=1,
+        usd_per_eur=1.0,
+        exchange_rate_evidence="synthetic fixture, not a real exchange rate",
         dataset_budget_allocations_usd={identifier: 1},
         max_billed_input_tokens_per_attempt=100,
         requests_per_second=10,

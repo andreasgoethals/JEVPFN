@@ -180,6 +180,7 @@ def evaluate_cv(
     feature_artifact_ids: list[str] | None = None,
     permutation_columns: list[str] | None = None,
     fold_numbers: list[int] | None = None,
+    representation_recipe: dict | None = None,
 ):
     """Fit only after an explicit opt-in; save inner and outer predictions on PROJECT.
 
@@ -241,6 +242,7 @@ def evaluate_cv(
 
     # Fail before any fit if configuration metadata cannot be serialized reproducibly.
     canonical_json(estimator_settings)
+    canonical_json(representation_recipe)
     target = dataset.frame[dataset.metadata.target].reset_index(drop=True)
     metadata = dataset.metadata
     binary = metadata.task_type == "binary_classification"
@@ -269,6 +271,7 @@ def evaluate_cv(
         "feature_set": feature_set,
         "feature_input_identity": feature_identity,
         "feature_artifact_ids": list(feature_artifact_ids),
+        "representation_recipe": representation_recipe,
         "estimator_settings": estimator_settings,
         "split_id": specification["split_id"],
         "inner_folds": inner_folds if binary else None,
@@ -355,6 +358,7 @@ def evaluate_cv(
                     "feature_columns": list(features.columns),
                     "feature_input_identity": feature_identity,
                     "feature_artifact_ids": list(feature_artifact_ids),
+                    "representation_recipe": representation_recipe,
                     "estimator_settings": estimator_settings,
                     "outer_fold": number,
                     "split_id": specification["split_id"],
