@@ -12,6 +12,7 @@ export JEVPFN_CONDA_ENV=JEVPFN
 cd "$JEVPFN_BUILD_REPO"
 source scripts/activate_conda.sh
 JEVPFN_BUILD_PYTHON="${JEVPFN_PYTHON:?}"
+source scripts/check_container_tools.sh
 "$JEVPFN_BUILD_PYTHON" -c 'from src.cluster.freeze import check_if_present; assert not check_if_present()["frozen"], "Runtime builds belong before the final frozen validation"'
 "$JEVPFN_BUILD_PYTHON" -c 'import sys; from src.jev.checkpoints import verify_checkpoint; verify_checkpoint(sys.argv[1]); print("Pinned checkpoint verified")' "$JEVPFN_BUILD_PROVIDER"
 JEVPFN_BUILD_DEST="$JEVPFN_STAGING_ROOT/JEVPFN/containers/$JEVPFN_BUILD_PROVIDER"
@@ -29,7 +30,6 @@ export APPTAINER_CACHEDIR="$JEVPFN_BUILD_WORK/apptainer-cache"
 export PIP_CACHE_DIR="$JEVPFN_BUILD_WORK/pip-cache"
 export CONDA_PKGS_DIRS="$JEVPFN_BUILD_WORK/conda-packages"
 mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
-module load hpc-container-wrapper/0.4.2
 JEVPFN_WRAPPER_ROOT="$(dirname "$(dirname "$(readlink -f "$(command -v wrap-install)")")")"
 JEVPFN_SITE_CONFIG="${CW_GLOBAL_YAML:-$JEVPFN_WRAPPER_ROOT/default_config}"
 if [[ -d "$JEVPFN_SITE_CONFIG" ]]; then JEVPFN_SITE_CONFIG="$JEVPFN_SITE_CONFIG/config.yaml"; fi

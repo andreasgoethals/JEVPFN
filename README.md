@@ -7,8 +7,9 @@ are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: Experiment 0A setup, not full extraction.** Question version 3, dataset audits,
 CPU/storage checks and all five open-weight tokenizer audits have passed previously.
-The latest downloaded VSC container log failed before image creation: a missing wrapper
-alias is now handled locally and needs a VSC rerun. All five checkpoints were staged;
+The latest VSC container build reached packaging but failed because `mksquashfs` was
+absent from PATH. A checked Apptainer-bundle fallback is implemented; VSC validation is pending.
+All five checkpoints were staged;
 only Clef/Intern's older native runtimes have passed GPU tests. Jev 1.13 passed three live
 local task probes; its larger dataset pilot and account limits remain pending. E5 and
 predictor runtime tests are also pending. Historical evidence is in

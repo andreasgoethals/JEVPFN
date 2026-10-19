@@ -299,7 +299,18 @@ native ACLs/ownership. The site installation and original environment remain unt
 unknown templates fail closed. See AGENTS_MEMORY for observed failures. Build work/logs
 remain available for diagnosis; do not reset output while setup is failing.
 
-After publishing/synchronizing the source, start with Clef:
+The build checks `apptainer`, both wrapper entry points and `mksquashfs` before hashing
+checkpoints or copying an environment. If the packer is absent from PATH, it reads
+`LIBEXECDIR` from `apptainer buildcfg` and checks the bundled `apptainer/bin/mksquashfs`.
+This follows [Apptainer's documented bundle layout](https://apptainer.org/docs/user/1.4/build_a_container.html).
+It does not guess a site module, install software or edit shared configuration. A missing
+or broken packer stops immediately. The same read-only check can run on the login node:
+
+```bash
+bash scripts/check_container_tools.sh
+```
+
+After publishing/synchronizing the source and passing that check, start with Clef:
 
 ```bash
 sbatch scripts/slurm/experiment_0_container_build.slurm cloudflare wrap

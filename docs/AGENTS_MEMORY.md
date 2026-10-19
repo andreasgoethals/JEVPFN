@@ -1,6 +1,19 @@
 # Operational evidence
 
 Current stage: Experiment 0A setup, before the owner-requested final clean validation.
+Downloaded `jevpfn-container-build_62369139.log` (19-10, 1,042 bytes) shows copying/setup
+progressed to SquashFS creation, then failed with `mksquashfs: command not found`.
+No sealed image, GPU pass or source retirement is established. The terminal's missing
+62369106 log refers to a different job. The owner's corrected `module spider squashfs`
+found no matching module; `apptainer buildcfg` reports 1.4.4-1 and LIBEXECDIR=/usr/libexec.
+The owner then executed `/usr/libexec/apptainer/bin/mksquashfs -version` successfully
+on the login node: version 4.6.1. No additional package installation is needed there.
+The build now checks its tools before copying and discovers Apptainer's documented bundled
+packer when absent from PATH. Its compute-node check, container build and GPU execution
+still need VSC verification. Do not reset output or delete native environments for this failure.
+Local validation of this prerequisite fix: 642 tests passed, one POSIX link test skipped;
+lint, dependency consistency and all 17 shell syntax/LF checks passed. No paid inference,
+remote submission, output deletion, question regeneration or Git publication occurred.
 Local validation after the template/cleanup refactor (19-10): 634 tests passed, one POSIX
 link test deferred to VSC; five notebooks/24 PDFs passed execution and visual inspection;
 all 18 input stores passed the exhaustive audit without modification. Local data/CV
@@ -10,7 +23,7 @@ The new 0A coordinator submits one job at a time, preserving IDs across login di
 only matching source/runtime sequences resume. Cleanup preserves smoke spending/response
 records outside output. Do not reset outputs until container setup works.
 Downloaded `output_JEVPFN.zip` inspected on 19-10 (313,493 bytes; modified 11:44).
-Latest log 62368266 stops with FileNotFoundError at the private wrapper's
+Earlier log 62368266 stops with FileNotFoundError at the private wrapper's
 `frontends/wrap-install` alias replacement. Some site installations lack that alias.
 The local fix now tolerates an absent alias and creates the checked relative link;
 tests cover absent and existing aliases. A successful VSC build remains unverified.
@@ -89,6 +102,7 @@ Research method is in README, operations in VSC, and meanings in DATA_SOURCES.
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 19-10-2026 | wICE / 62369139 | Clef compact wrapper build | Attached log reaches SquashFS creation, then fails because mksquashfs is absent from PATH. No image seal/GPU pass. Scheduler exit code not supplied. |
 | 19-10-2026 | wICE / 62368266 | Clef compact wrapper build, 20bf5e0 | Downloaded log: FileNotFoundError at missing private frontends/wrap-install alias; build/GPU validation not reached. |
 | 19-10-2026 | wICE / 62366728 | Clef wrap build, 09f7982 | FAILED 1:0 after 6m49s, MaxRSS 13,924,368 K. Site wrapper cp -a failed preserving permissions while copying the native environment. No seal/GPU pass or retirement. Scratch-local copy-template workaround prepared, not yet executed on VSC. |
 | 16-10-2026 | wICE / 62346143 | Clef container build, 6f375ab | FAILED 1:0 after 4m48s on l33c25n2. Original stdout was deleted by the subsequent output reset; cause unverified. Empty destination remains; no sealed container or source retirement verified. |

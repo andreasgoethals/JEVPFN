@@ -238,6 +238,73 @@ def test_unknown_runtime_is_rejected_before_any_install():
     assert result.returncode == 2 and "Unknown selected" in result.stderr
 
 
+@pytest.mark.parametrize(
+    "case", ["path", "bundled", "absent", "broken", "config_error", "relative_config",
+             "missing_wrapper", "module_error"]
+)
+def test_container_tools_resolve_bundle_or_stop_before_build(tmp_path, case):
+    bindir = tmp_path / "isolated bin"
+    bundled = tmp_path / "libexec with spaces" / "apptainer/bin"
+    bindir.mkdir()
+    bundled.mkdir(parents=True)
+    commands = {
+        "wrap-install": "exit 0\n",
+        "conda-containerize": "exit 0\n",
+        "apptainer": (
+            '[[ "$TEST_CASE" != config_error || "$1" != buildcfg ]] || exit 9\n'
+            'if [[ "$1" == buildcfg ]]; then\n'
+            '  if [[ "$TEST_CASE" == relative_config ]]; then printf "LIBEXECDIR=relative\\n";\n'
+            '  else printf "LIBEXECDIR=%s\\n" "$TEST_LIBEXEC"; fi\n'
+            'else printf "apptainer version fixture\\n"; fi\n'
+        ),
+    }
+    for name, content in commands.items():
+        executable = bindir / name
+        executable.write_text("#!/bin/bash\n" + content, encoding="utf-8")
+        executable.chmod(0o755)
+    if case == "missing_wrapper":
+        (bindir / "wrap-install").unlink()
+    if case in {"path", "bundled", "broken"}:
+        packer = (bundled if case == "bundled" else bindir) / "mksquashfs"
+        packer.write_text(
+            '#!/bin/bash\n[[ "$1" == -version ]] || exit 8\n'
+            '[[ "$TEST_CASE" != broken ]] || exit 7\nprintf "packer fixture\\n"\n',
+            encoding="utf-8",
+        )
+        packer.chmod(0o755)
+    driver = tmp_path / "check.sh"
+    driver.write_text(
+        "set -euo pipefail\n"
+        'if [[ "$OSTYPE" == msys* ]]; then\n'
+        '  TEST_LIBEXEC="$(cygpath -u "$TEST_LIBEXEC")"\n'
+        '  TEST_BIN="$(cygpath -u "$TEST_BIN")"\nfi\n'
+        'export TEST_LIBEXEC PATH="$TEST_BIN"\n'
+        'module() { [[ "$*" == "load hpc-container-wrapper/0.4.2" && "$TEST_CASE" != module_error ]]; }\n'
+        'source "$TEST_CHECK"\n'
+        'mksquashfs -version\nprintf "ready-to-build\\n"\n', encoding="utf-8"
+    )
+    result = subprocess.run(
+        [bash_executable(), str(driver)],
+        env=dict(os.environ, TEST_CASE=case, TEST_BIN=bindir.as_posix(),
+                 TEST_LIBEXEC=bundled.parent.parent.as_posix(),
+                 TEST_CHECK=(ROOT / "scripts/check_container_tools.sh").as_posix()),
+        capture_output=True, text=True, timeout=20,
+    )
+    if case in {"path", "bundled"}:
+        assert result.returncode == 0, result.stderr
+        assert "ready-to-build" in result.stdout
+        assert result.stdout.count("packer fixture") == 2
+    else:
+        assert result.returncode != 0 and "ready-to-build" not in result.stdout
+        if case in {"absent", "config_error", "relative_config"}:
+            assert "mksquashfs is absent" in result.stderr
+        if case == "broken":
+            assert "exists but cannot execute" in result.stderr
+    build = (ROOT / "scripts/build_decision_container.sh").read_text()
+    assert build.index("source scripts/check_container_tools.sh") < build.index("verify_checkpoint")
+    assert build.index("source scripts/check_container_tools.sh") < build.index("mktemp -d")
+
+
 @pytest.mark.parametrize("kind", ["missing", "empty", "nonempty", "linked"])
 def test_container_retry_reuses_only_an_empty_destination(tmp_path, kind):
     source = (ROOT / "scripts/build_decision_container.sh").read_text()
