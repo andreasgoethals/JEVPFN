@@ -1,10 +1,10 @@
 """Saving figures. One folder per notebook, one PDF per figure, cleared before drawing.
 
     output_JEVPFN/figures/<phase>/<notebook>/01_<name>.pdf     the figure — vector, for the paper
-    output_JEVPFN/figures/<phase>/<notebook>/_figures.json     what was drawn, in order, with captions
+    output_JEVPFN/manifests/notebooks/<phase>/<notebook>/_figures.json  ordered captions
 
-PDF ONLY. Standard figures use A4 dimensions; dense inspection dashboards use explicitly
-named larger canvases in `src/visualize/style.py` and must not be shrunk onto a paper page.
+PDF ONLY. Figures use A4 dimensions from `src/visualize/style.py`; dense audits are split
+across panels rather than shrinking labels below the print-size minimum.
 PDF text is embedded as TrueType. The notebook *displays* each figure inline, so a reader sees them by
 scrolling the notebook — there is no second raster copy on disk to go stale.
 
@@ -28,7 +28,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from src.utils.notebook_report import atomic_text, record_figure
-from src.utils.paths import figures_dir
+from src.utils.paths import figures_dir, notebook_artifacts
 
 #: Vector already, but heatmaps and scatter clouds inside a PDF rasterise, so it still needs a
 #: print DPI.
@@ -37,13 +37,13 @@ DPI = 300
 #: The only things ever deleted from a notebook's folder. Anything else a person put there
 #: survives: a cleaner that removes what it does not recognise eventually removes something
 #: irreplaceable.
-_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "Captions.md")
+_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "_stderr.txt", "_report.txt", "_run.json", "_config.json", "_previous.ipynb", "Captions.md")
 
 MANIFEST = "_figures.json"
 
 
 def manifest_path(notebook: str) -> Path:
-    return figures_dir(notebook) / MANIFEST
+    return notebook_artifacts(notebook) / MANIFEST
 
 
 def read_manifest(notebook: str) -> list[dict]:
@@ -74,6 +74,10 @@ def clear(notebook: str) -> int:
             if path.is_file():
                 path.unlink()
                 removed += 1
+    manifest = manifest_path(notebook)
+    if manifest.exists():
+        manifest.unlink()
+        removed += 1
     return removed
 
 
@@ -104,6 +108,7 @@ class FigureSaver:
         self.notebook = notebook
         self.folder = _safe_folder(notebook)
         self.folder.mkdir(parents=True, exist_ok=True)
+        manifest_path(notebook).parent.mkdir(parents=True, exist_ok=True)
         #: `clear_first=False` is for one case only: re-running a single cell mid-session without
         #: wiping what the earlier cells wrote. Never pass it in the setup cell.
         if clear_first:
@@ -132,12 +137,8 @@ class FigureSaver:
         )
         # Rewritten after every figure, so a notebook that dies halfway still has a manifest
         # describing the figures it did produce.
-        manifest_path(self.notebook).write_text(
-            json.dumps(self.entries, indent=2), encoding="utf-8"
-        )
         atomic_text(
-            self.folder / "Captions.md",
-            "\n\n".join(f"## {e['stem']}\n\n{e['caption']}" for e in self.entries),
+            manifest_path(self.notebook), json.dumps(self.entries, indent=2),
         )
         record_figure(fig, name, caption)
         return path

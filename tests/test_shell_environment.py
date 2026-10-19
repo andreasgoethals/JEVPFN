@@ -335,7 +335,8 @@ def test_private_wrap_template_keeps_symlinks_and_hardlinks(tmp_path):
 
 
 @pytest.mark.parametrize("changed_template", [False, True])
-def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_template):
+@pytest.mark.parametrize("existing_alias", [False, True])
+def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_template, existing_alias):
     script = (ROOT / "scripts/build_decision_container.sh").read_text()
     start = script.index("import sys\nfrom pathlib import Path\nroot,repo=")
     code = script[start:script.index("\nPY", start)]
@@ -349,7 +350,8 @@ def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_
     template = wrapper / "templates/wrap.sh"
     template.write_text(original + ("unknown change\n" if changed_template else ""))
     alias = wrapper / "frontends/wrap-install"
-    alias.write_text("site dispatcher placeholder")
+    if existing_alias:
+        alias.write_text("site dispatcher placeholder")
     result = subprocess.run(
         [sys.executable, "-c", code, str(wrapper), str(ROOT)],
         capture_output=True, text=True, timeout=10,
@@ -357,7 +359,10 @@ def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_
     if changed_template:
         assert result.returncode != 0 and "Site wrap template changed" in result.stderr
         assert template.read_text() == original + "unknown change\n"
-        assert alias.read_text() == "site dispatcher placeholder"
+        if existing_alias:
+            assert alias.read_text() == "site dispatcher placeholder"
+        else:
+            assert not alias.exists()
     else:
         # Windows may refuse the same native symlink that is available in a Linux allocation.
         if os.name == "nt" and "WinError 1314" in result.stderr:

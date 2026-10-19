@@ -125,7 +125,7 @@ def materialize_cached_block(
             }
         )
     artifact_id = digest(identity)
-    event_log = paths.logs_dir(phase) / "builds" / f"{artifact_id}.jsonl"
+    event_log = paths.logs_dir(phase) / "builds" / f"{artifact_id}.log"
     started = time.perf_counter()
     append_event(
         event_log,
@@ -387,7 +387,7 @@ def _record_saved_block(folder, manifest, *, reused, phase="feature_creation"):
         },
     )
     append_event(
-        paths.logs_dir(phase) / "builds" / f"{artifact_id}.jsonl",
+        paths.logs_dir(phase) / "builds" / f"{artifact_id}.log",
         "artifact_reused" if reused else "artifact_saved",
         artifact_path=str(folder),
         rows=manifest["row_count"],

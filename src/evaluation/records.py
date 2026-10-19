@@ -326,7 +326,7 @@ def save_evaluation(
             },
         )
         append_event(
-            paths.logs_dir(phase) / "evaluations.jsonl",
+            paths.logs_dir(phase) / "evaluations.log",
             "evaluation_saved",
             run_id=run_id,
             rows=len(predictions),

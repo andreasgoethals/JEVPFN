@@ -90,7 +90,7 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder):
         "fixture_cache": str(destination),
         "full_feature_creation_enabled": False,
     }
-    log = paths.logs_dir("experiment_0") / "embeddings.jsonl"
+    log = paths.logs_dir("experiment_0") / "embeddings.log"
     write_json(manifest, report)
     append_event(log, "embedding_contract_started", run_id=run_id)
     try:

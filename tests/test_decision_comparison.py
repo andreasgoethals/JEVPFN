@@ -229,7 +229,7 @@ def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, 
     assert result.table("inventory").status.eq("not_created").all()
     assert result.table("pairs").empty
     assert not (tmp_path / "protected").exists()
-    monkeypatch.setattr(paths, "figures_dir", lambda name: tmp_path / "figures")
+    monkeypatch.setattr(paths, "notebook_artifacts", lambda name, **kw: tmp_path / "results")
     folder = save_comparison(result, cfg, "test")
     assert (folder / "manifest.json").is_file()
 

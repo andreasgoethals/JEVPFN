@@ -1,7 +1,7 @@
 # Agent instructions — JEVPFN
 
 Read README.md, docs/LITERATURE_REVIEW.md and docs/AGENTS_MEMORY.md before changing this
-repository. Existing source/config/notebook conventions remain authoritative.
+repository, and follow docs/TEMPLATE.md with the project deviations recorded in README.
 
 ## Boundaries
 
@@ -49,7 +49,7 @@ Slurm files are Linux Bash and must use LF endings. New/editable text files are 
 - Put logic in source modules; notebooks contain no function/class definitions.
 - Each notebook ends with the complete printed report in section order.
 - src/visualize/style.py owns colors/sizes. Use FigureSaver, PDF output and inline display;
-  use its named A4/inspection canvases. Captions describe the figure, ready for a paper.
+  use final A4 widths and split dense views into readable panels. Captions describe the figure, ready for a paper.
 - Save figures under output_JEVPFN/figures/<phase>/<notebook>/, aggregate captions under
   figures/Captions.md and the complete report under output_JEVPFN/All Results.md.
 - Verify actual files/runtime/evidence before claiming success. Synthetic tests establish

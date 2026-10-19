@@ -522,7 +522,7 @@ def dataset_balanced(table: pd.DataFrame, by: list[str], metrics: list[str]) -> 
 
 def save_comparison(result: Comparison, cfg: dict, notebook: str):
     """Small reproducible analysis tables beside local notebook figures, never in data/."""
-    folder = paths.figures_dir(notebook) / "tables"
+    folder = paths.notebook_artifacts(notebook, kind="results") / "tables"
     folder.mkdir(parents=True, exist_ok=True)
     for name in (
         "inventory",

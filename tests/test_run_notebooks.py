@@ -100,7 +100,7 @@ def test_numbered_notebooks_accept_stems_or_logical_phase_aliases(tmp_path, monk
 def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch) -> None:
     """ONE Captions.md for the project, built from each notebook's manifest — so it can be
     regenerated after an interactive run without executing anything."""
-    from src.utils.paths import figures_dir
+    from src.utils.paths import notebook_artifacts
 
     for name, entries in {
         "b_second": [{"index": 1, "stem": "01_x", "name": "x", "caption": "Caption X."}],
@@ -109,7 +109,7 @@ def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch
             {"index": 2, "stem": "02_q", "name": "q", "caption": "Caption Q."},
         ],
     }.items():
-        folder = figures_dir(name)
+        folder = notebook_artifacts(name)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "_figures.json").write_text(json.dumps(entries), encoding="utf-8")
 
@@ -122,9 +122,9 @@ def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch
 
 def test_a_missing_caption_is_flagged_not_skipped(isolated_output) -> None:
     """A gap should be visible in the document that is supposed to contain it."""
-    from src.utils.paths import figures_dir
+    from src.utils.paths import notebook_artifacts
 
-    folder = figures_dir("nb")
+    folder = notebook_artifacts("nb")
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "_figures.json").write_text(
         json.dumps([{"index": 1, "stem": "01_x", "name": "x", "caption": ""}]), encoding="utf-8"
@@ -138,10 +138,10 @@ def test_a_notebook_with_no_figures_still_gets_a_section(isolated_output) -> Non
 
 def test_all_results_is_sorted_alphabetically_by_notebook(isolated_output) -> None:
     """One block per notebook, verbatim, alphabetical — even when passed out of order."""
-    from src.utils.paths import figures_dir
+    from src.utils.paths import notebook_artifacts
 
     for name, text in (("a", "SUMMARY A"), ("b", "SUMMARY B")):
-        folder = figures_dir(name)
+        folder = notebook_artifacts(name, kind="logs")
         folder.mkdir(parents=True, exist_ok=True)
         (folder / rn.STDOUT_FILE).write_text(text, encoding="utf-8")
 

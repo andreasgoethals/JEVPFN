@@ -3,8 +3,9 @@
     python -m src.utils.clean_run          # preview, no deletion
     python -m src.utils.clean_run --clean  # remove listed rebuildable files
 
-Logs, manifests, predictions, token audits, transfer bundles/backups, data and weights
-are always preserved. Stop notebook writers before cleaning; rerun them to rebuild.
+Operational logs/manifests, predictions, token audits, transfer bundles/backups, data and
+weights are preserved. Figure captions are pruned with their PDFs. Stop notebook writers
+before cleaning; rerun them to rebuild. Use output_cleanup for selective/full campaigns.
 """
 
 from __future__ import annotations
@@ -55,6 +56,7 @@ def candidates(root: Path):
                     )
                 )
                 or relative.as_posix() in {"All Results.md", "all_results.md", "Captions.md"}
+                or (relative.parts[:2] == ("results", "notebooks") and name == "_report.txt")
                 or (
                     relative.parts[:2] == ("1. question_preparation", "questions")
                     and path.suffix == ".json"
@@ -71,8 +73,14 @@ def measure(root: Path) -> tuple[int, int]:
 def wipe(root: Path) -> int:
     """Delete only the listed rebuildable files; never recursively remove a tree."""
     files = list(candidates(root))
+    from src.utils.output_cleanup import figure_manifest_updates
+    from src.utils.serialization import write_json
+
+    updates = figure_manifest_updates([("output", root)], [{"path": str(p)} for p in files])
     for path in files:
         path.unlink()
+    for manifest, entries in updates.items():
+        write_json(manifest, entries)
     return len(files)
 
 

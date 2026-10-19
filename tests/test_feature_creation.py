@@ -198,7 +198,7 @@ def test_dataset_sqlite_roundtrip_idempotence_and_corruption(dataset, cfg, tmp_p
     )
     assert json.loads(index.read_text())["artifact_path"] == str(folder)
     events = (
-        paths.logs_dir("feature_creation") / "builds" / f"{block.manifest['artifact_id']}.jsonl"
+        paths.logs_dir("feature_creation") / "builds" / f"{block.manifest['artifact_id']}.log"
     )
     assert {json.loads(line)["event"] for line in events.read_text().splitlines()} >= {
         "materialization_started",

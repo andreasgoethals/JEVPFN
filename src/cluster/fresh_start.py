@@ -182,6 +182,10 @@ def run(*, apply=False, writers_stopped=False, local=False, delete=False, includ
         if not apply:
             for _, target in deletion_targets:
                 validate_deletion_tree(target)
+            if local:
+                from src.jev.smoke import preserve_smoke_state
+
+                preserve_smoke_state()
     if not apply:
         return report
     if not writers_stopped:

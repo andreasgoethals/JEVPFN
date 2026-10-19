@@ -237,8 +237,26 @@ def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
     return root / notebook_stem(notebook) if notebook else root
 
 
+def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", phase: str | None = None) -> Path:
+    """Local notebook records, separated from the PDF-only figure folders."""
+    if kind not in {"manifests", "logs", "results"}:
+        raise ValueError("Notebook artifact kind must be manifests, logs or results")
+    root = notebook_outputs_dir()
+    folder = root / kind / "notebooks"
+    if notebook is not None:
+        folder = folder / phase_folder(phase or notebook_phase(notebook)) / notebook_stem(notebook)
+    elif phase is not None:
+        folder /= phase_folder(phase)
+    for entry in (folder, *folder.parents):
+        if entry.is_symlink() or getattr(entry, "is_junction", lambda: False)():
+            raise ValueError(f"Linked notebook output is not allowed: {entry}")
+        if entry == root:
+            break
+    return folder
+
+
 def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
-    root = figures_dir(notebook, phase=phase)
+    root = notebook_artifacts(notebook, kind="results", phase=phase)
     return root / "_report.txt" if notebook else root
 
 

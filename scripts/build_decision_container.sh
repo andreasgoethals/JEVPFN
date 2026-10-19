@@ -65,7 +65,7 @@ if template.read_text().strip()!=expected:
 template.write_bytes((repo/'scripts/wrap_environment_template.sh').read_bytes())
 # Keep dispatch inside this private copy even if the site alias was absolute.
 alias=root/'frontends/wrap-install'
-alias.unlink()
+alias.unlink(missing_ok=True)
 alias.symlink_to('containerize')
 print('Private scratch wrapper: copy contents/links/times without source ACLs or owners')
 PY

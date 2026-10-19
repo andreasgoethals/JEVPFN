@@ -202,7 +202,7 @@ class DatasetExtractor:
         self.validate_context = validate_context
         self.sleep = sleep
         self.session_id = uuid.uuid4().hex
-        self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.jsonl"
+        self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.log"
         self.policy_sha256 = register_policy(
             cache, limits, revision_manifest=policy_revision_manifest, stage=phase
         )

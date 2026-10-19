@@ -237,7 +237,7 @@ def build(dataset, cfg, encoder, *, destination=None):
         "code_sha256": code_identity(["src/data/text_embeddings.py"]),
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
-    log = paths.logs_dir("feature_creation") / "text_embeddings.jsonl"
+    log = paths.logs_dir("feature_creation") / "text_embeddings.log"
     with file_lock(destination.with_suffix(".lock")), closing(_connect(destination)) as db:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);

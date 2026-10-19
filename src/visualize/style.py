@@ -1,8 +1,7 @@
 """Shared JEVPFN figure style and named canvases.
 
 Standard figures use final A4 print dimensions and embedded TrueType fonts.
-Large audit dashboards use explicitly named inspection canvases; do not shrink
-those onto a paper page. Every notebook calls apply() and takes its visual
+Dense diagnostics are paginated at final print dimensions. Every notebook calls apply() and takes its visual
 settings from this module.
 """
 
@@ -76,12 +75,12 @@ _RC = {
     "font.family": "sans-serif",
     "font.sans-serif": _FONT_STACK,
     "font.size": 9,
-    "axes.titlesize": 10,
-    "axes.labelsize": 9,
+    "axes.titlesize": 9,
+    "axes.labelsize": 8,
     "xtick.labelsize": 8,
-    "ytick.labelsize": 8,
+    "ytick.labelsize": 7,
     "legend.fontsize": 8,
-    "figure.titlesize": 11,
+    "figure.titlesize": 10,
 }
 
 # ---------------------------------------------------------------------------
@@ -106,16 +105,12 @@ P95_COLOR = "#C37929"
 TOTAL_COLOR = "#54765A"
 AUDIT_MARKER_SIZE = 18
 
-# Screen/large-format inspection dashboards: do not shrink these onto a paper page.
-OVERVIEW_SIZE = (25.0, 12.0)
-OVERVIEW_ROW_RATIOS = (0.9, 10.0, 1.1)
-OVERVIEW_TITLE_FONT = 14
-DASHBOARD_SIZE = (12.0, 8.0)
-FLOW_SIZE = (12.0, 5.0)
-COMPACT_FLOW_SIZE = (12.0, 3.4)
-LONG_TEXT_SIZE = (15.0, 11.0)
-LONG_TEXT_PAGE_SIZE = (WIDTH_FULL, 9.10)  # A4 full-page diagnostic, with room for a caption.
-REGRESSION_RUBRIC_SIZE = (12.0, 4.2)
+# Named final-print canvases; paginate dense diagnostics instead of shrinking text.
+DASHBOARD_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+COMPACT_FLOW_SIZE = (WIDTH_FULL, 3.4)
+LONG_TEXT_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+LONG_TEXT_PAGE_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+REGRESSION_RUBRIC_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 RUBRIC_FONT = 9
 LONG_TEXT_LABEL_FONT = 8
 LONG_TEXT_PAGE_FONT = 7
@@ -141,7 +136,7 @@ DECISION_COLORS = {
     "strands": "#AF4C59",
 }
 COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
-COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, 7.5)
+COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_PENDING_SIZE = (WIDTH_FULL, 2.5)
 COMPARISON_SCATTER_FIGURE_SIZE = (WIDTH_FULL, 2.5)
 COMPARISON_SCATTER_ALPHA = 0.3

@@ -173,7 +173,7 @@ def test_result_record_preserves_predictions_timings_and_undefined_values(isolat
     compact = json.loads(manifest.read_text())
     assert compact["predictions_path"] == str(path.parent / "predictions.parquet")
     assert compact["scores"]["metrics"] == scores["metrics"]
-    assert paths.logs_dir("experiment_1").joinpath("evaluations.jsonl").is_file()
+    assert paths.logs_dir("experiment_1").joinpath("evaluations.log").is_file()
     assert not list((isolated_output / "vsc_data").rglob("*.parquet"))
     with pytest.raises(ValueError, match="project storage"):
         save_evaluation(

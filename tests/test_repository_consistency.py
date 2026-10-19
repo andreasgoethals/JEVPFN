@@ -74,6 +74,8 @@ def test_citation_matches_project_metadata():
 
 def test_durable_document_links_resolve():
     for file in [paths.REPO_ROOT / "README.md", *(paths.REPO_ROOT / "docs").glob("*.md")]:
+        if file.name == "TEMPLATE.md":
+            continue  # Generic upstream reference contains example-project links.
         for match in re.finditer(
             r"\[[^\]]*\]\((<[^>]+>|[^)]+)\)", file.read_text(encoding="utf-8")
         ):

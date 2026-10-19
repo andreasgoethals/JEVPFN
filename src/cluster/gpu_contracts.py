@@ -271,7 +271,7 @@ def run(provider, *, execute=False):
         / "gpu_contracts"
         / f"{run_id}.json"
     )
-    log = paths.logs_dir("experiment_0") / "before_extraction" / "gpu_contracts" / f"{run_id}.jsonl"
+    log = paths.logs_dir("experiment_0") / "before_extraction" / "gpu_contracts" / f"{run_id}.log"
     directory = paths.require_project_output(
         paths.results_dir("gpu_contracts", run_id, phase="experiment_0")
     )

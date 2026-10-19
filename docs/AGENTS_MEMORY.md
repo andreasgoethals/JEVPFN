@@ -1,14 +1,24 @@
 # Operational evidence
 
 Current stage: Experiment 0A setup, before the owner-requested final clean validation.
-Latest direct OnDemand check (19-10): Clef container build 62366728 FAILED 1:0 after
-6m49s, MaxRSS 13,924,368 K. The log shows repeated `cp: preserving permissions: Invalid
-argument` errors during the wrapper's environment copy, before image sealing or GPU tests.
-This is not evidence of OOM. Prepared a private scratch copy of site wrapper 0.4.2 whose
-known wrap template copies content/links/timestamps without native ACLs or ownership.
-The site installation and native environments are untouched. Unknown templates stop the
-patch; source package identities and real GPU checks remain required. The new build must
-still pass on VSC. Keep its failure log and do not reset outputs yet.
+Local validation after the template/cleanup refactor (19-10): 634 tests passed, one POSIX
+link test deferred to VSC; five notebooks/24 PDFs passed execution and visual inspection;
+all 18 input stores passed the exhaustive audit without modification. Local data/CV
+preflight, dependencies, lint and 16 shell syntax/LF checks passed. No remote job or paid
+inference was performed. The current code is not yet verified by a fresh VSC 0A campaign.
+The new 0A coordinator submits one job at a time, preserving IDs across login disconnects;
+only matching source/runtime sequences resume. Cleanup preserves smoke spending/response
+records outside output. Do not reset outputs until container setup works.
+Downloaded `output_JEVPFN.zip` inspected on 19-10 (313,493 bytes; modified 11:44).
+Latest log 62368266 stops with FileNotFoundError at the private wrapper's
+`frontends/wrap-install` alias replacement. Some site installations lack that alias.
+The local fix now tolerates an absent alias and creates the checked relative link;
+tests cover absent and existing aliases. A successful VSC build remains unverified.
+The ZIP also retains 62366728's earlier ACL-preserving copy failure (FAILED 1:0,
+6m49s, MaxRSS 13,924,368 K). The private copy-template fix avoids source ACLs and
+ownership; no shared installation or source environment is modified. Neither log
+shows a sealed image or matching GPU tests. Do not infer cancellation from the
+OnDemand disconnection, and do not reset output until runtime setup succeeds.
 Earlier build 62346143 FAILED 1:0 after 4m48s; its log was deleted by an owner reset and its
 cause remains unknown. Local preparation/audit and the uploaded v3 bank are unchanged;
 VSC installation previously reported already_current. No repeated upload is needed now.
@@ -30,7 +40,8 @@ On 16-10 the owner confirmed USD 5 account funding. Three live local Jev 1.13 pr
 again on 19-10 after fixing credential setup:
 binary p=0.97, three-class correct option p=1, nine-level score expected direction +4.
 Reported input usage: 288 + 355 + 408 = 1,051 tokens; computed input cost USD 0.000044142.
-Current responses and the passed receipt are saved locally under Experiment 0 `jev_smoke`.
+Current responses and the spending ledger live permanently in `data/jev_cache/_control/jev_smoke/`;
+Experiment 0 holds rebuildable copies. Cleanup migrates legacy output records before deletion.
 An initial owner-reported HTTP 401 was explicitly retried after the exact supplied key
 authenticated via GET models. Its original diagnostic and USD 0.002688 conservative
 reservation remain in authentication_rejections/history; no refund or unbilled outcome is
@@ -78,6 +89,7 @@ Research method is in README, operations in VSC, and meanings in DATA_SOURCES.
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 19-10-2026 | wICE / 62368266 | Clef compact wrapper build, 20bf5e0 | Downloaded log: FileNotFoundError at missing private frontends/wrap-install alias; build/GPU validation not reached. |
 | 19-10-2026 | wICE / 62366728 | Clef wrap build, 09f7982 | FAILED 1:0 after 6m49s, MaxRSS 13,924,368 K. Site wrapper cp -a failed preserving permissions while copying the native environment. No seal/GPU pass or retirement. Scratch-local copy-template workaround prepared, not yet executed on VSC. |
 | 16-10-2026 | wICE / 62346143 | Clef container build, 6f375ab | FAILED 1:0 after 4m48s on l33c25n2. Original stdout was deleted by the subsequent output reset; cause unverified. Empty destination remains; no sealed container or source retirement verified. |
 | 16-10-2026 | wICE / 62343023 | CPU at 606296c | COMPLETED 0:0, 5m19s; preflight_passed and synthetic contracts passed; MaxRSS 5,068,440 K. |
@@ -192,7 +204,8 @@ An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not li
 - **Checkpoint imports:** publisher Python imports must not create bytecode inside the
   fingerprinted checkpoint tree. Disable bytecode before imports; retain strict file hashes.
 - **Fresh VSC runs:** the owner requests deletion, not archival, of prior generated output.
-  Use fresh_start with --delete --include-archives; never clean data or checkpoints.
+  Use output_cleanup with --include-archives --apply --writers-stopped; never clean data or checkpoints.
+  The older fresh_start --delete interface remains supported.
   Maintenance refuses active JEVPFN jobs and requires stopped manual writers.
   Question uploads preserve file bytes and validate every member before replacing old files.
   The first real deletion exposed Windows read-only directories (WinError 5). Recovery now

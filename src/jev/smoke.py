@@ -29,6 +29,41 @@ MAX_CALLS = POLICY["maximum_requests"]
 REFERENCE = POLICY["reference"]
 
 
+def preserve_smoke_state():
+    """Migrate legacy paid-call evidence before output cleanup; never dispatch a call.
+
+    The durable control record lives outside output, beside permanent feature caches.
+    A response without its ledger is refused rather than silently treated as reusable.
+    """
+    directory = paths.jev_cache_path("jev_cache/_control/jev_smoke")
+    state = directory / "state.json"
+    legacy = paths.manifests_dir("experiment_0") / "before_extraction" / "jev_smoke.json"
+    with file_lock(directory / "state.lock", timeout=1):
+        if state.exists():
+            saved = json.loads(state.read_text(encoding="utf-8"))
+            if legacy.exists() and digest(saved) != digest(json.loads(legacy.read_text(encoding="utf-8"))):
+                raise ValueError("Permanent and output Jev ledgers differ; review before cleanup or inference")
+            return directory, state
+        if not legacy.exists():
+            return directory, state
+        report = json.loads(legacy.read_text(encoding="utf-8"))
+        if not report.get("request_identity") or not isinstance(report.get("attempts"), list):
+            raise ValueError("Legacy Jev smoke ledger is invalid; output cleanup refused")
+        responses = []
+        for attempt in report["attempts"]:
+            name = paths.output_component(attempt["probe"]) + ".json"
+            old = paths.results_dir("jev_smoke", phase="experiment_0") / name
+            if old.exists():
+                raw = json.loads(old.read_text(encoding="utf-8"))
+                if digest(raw) != attempt.get("response_sha256"):
+                    raise ValueError("Legacy Jev smoke response checksum differs")
+                responses.append((directory / name, raw))
+        for target, raw in responses:
+            write_json(target, raw)
+        write_json(state, report)  # Missing responses retain their unresolved attempt reservation.
+    return directory, state
+
+
 def requests():
     settings = dict(
         provider="jev",
@@ -54,7 +89,8 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
     from src.cluster.freeze import check_if_present
 
     check_if_present()
-    directory = paths.results_dir("jev_smoke", phase="experiment_0")
+    directory, state_path = preserve_smoke_state()
+    output_directory = paths.results_dir("jev_smoke", phase="experiment_0")
     report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "jev_smoke.json"
     planned = requests()
     identity = digest([request.cache_key for _, request, _ in planned])
@@ -75,9 +111,13 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
         "attempts": [],
     }
     client = None
-    with file_lock(report_path.with_suffix(".lock"), timeout=1):
-        if report_path.exists():
-            report = json.loads(report_path.read_text(encoding="utf-8"))
+    def persist():
+        write_json(state_path, report)
+        write_json(report_path, report)
+
+    with file_lock(state_path.with_suffix(".lock"), timeout=1):
+        if state_path.exists():
+            report = json.loads(state_path.read_text(encoding="utf-8"))
             if report.get("request_identity") != identity:
                 raise ValueError("Stored smoke test has different requests; preserve and review")
         if report.get("status") == "stopped_requires_review" and report["attempts"]:
@@ -108,7 +148,7 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
         report["status"] = "running"
         report.pop("error_type", None)
         report.pop("http_status", None)
-        write_json(report_path, report)
+        persist()
         try:
             for name, request, expected in planned:
                 prior = next((a for a in report["attempts"] if a["probe"] == name), None)
@@ -148,14 +188,15 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
                         "reserved_usd": TOKEN_BOUND * PRICE / 1e6,
                     }
                     report["attempts"].append(prior)
-                    write_json(report_path, report)  # Persist before a possibly billed request.
+                    persist()  # Persist before a possibly billed request.
                     wire = api_preview(request)
                     raw = client.system_one(
                         wire["state"], wire["questions"]
                     ).raw_http_response.json()
                     write_json(response_file, raw)
                     prior["response_sha256"] = digest(raw)
-                    write_json(report_path, report)
+                    persist()
+                write_json(output_directory / f"{name}.json", raw)
                 usage = raw.get("usage", {}).get("input_tokens")
                 if type(usage) is not int or not 0 <= usage <= TOKEN_BOUND:
                     raise ValueError("Provider usage differs from the documented billing envelope")
@@ -180,7 +221,7 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
                     reserved_usd=0,
                     response_path=str(response_file),
                 )
-                write_json(report_path, report)
+                persist()
                 if not passed:
                     raise ValueError("Known-answer probe needs response/wording review")
             report.update(
@@ -204,7 +245,7 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
             )
             raise
         finally:
-            write_json(report_path, report)
+            persist()
             if client is not None:
                 client.close()
     return report

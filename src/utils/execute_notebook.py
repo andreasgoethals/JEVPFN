@@ -100,7 +100,7 @@ def execute(path: Path, *, root: Path, capture: Path, backup: Path, timeout: int
         executed = nbformat.writes(notebook)
         # Never overwrite edits made by someone while a long notebook was running.
         if hashlib.sha256(path.read_bytes()).digest() != hashlib.sha256(original).digest():
-            recovered = capture.with_suffix(".executed.ipynb")
+            recovered = backup.with_name("recovered.executed.ipynb")
             atomic_text(recovered, executed)
             raise RuntimeError(
                 f"Notebook changed during execution; saved outputs separately at {recovered}"

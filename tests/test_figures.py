@@ -144,7 +144,7 @@ def test_clear_returns_how_many_files_went(isolated_output, fig) -> None:
     save = figures.FigureSaver("nb")
     save(fig, "a", caption="c")
     save(fig, "b", caption="c")
-    assert figures.clear("nb") == 4  # 2 pdfs + manifest + captions
+    assert figures.clear("nb") == 3  # 2 PDFs + separate manifest
     assert figures.clear("never_existed") == 0
 
 

@@ -220,7 +220,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         synchronize = torch.cuda.synchronize
     phase = "experiment_0" if profile else arm["phase"]
-    log = paths.logs_dir(phase) / "benchmark.jsonl"
+    log = paths.logs_dir(phase) / "benchmark.log"
     append_event(log, "arm_started", **arm)
     try:
         records = evaluate_cv(

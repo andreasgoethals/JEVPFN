@@ -78,63 +78,73 @@ each check separately; actual raw-file readability and hashes are verified by th
 If an earlier setup fails, fix that check and rerun setup; a completed output reset or package
 installation does not need repeating. Do not change raw-data permissions merely to permit a probe.
 
-## Fresh output reset before a new Experiment 0A
+## One clean validation campaign
 
-Use this section only when deliberately starting a completely new output campaign, not when
-resuming the current one after a fix. After updating the checkout/CPU dependencies, verify that `git rev-parse HEAD` matches the
-local checkout. Stop notebooks, manual writers and JEVPFN jobs. Before upload installation
-or job submission, preview and apply a permanent output reset:
+Finish runtime setup and diagnose failures before deleting output. The latest container
+failure and its repair are recorded in AGENTS_MEMORY. Do not reset after every fix.
+After runtime tests succeed, the owner publishes the final source; local and VSC HEADs
+must match. Stop notebook/manual writers and wait for all JEVPFN jobs to finish.
+
+In the activated VSC CPU environment:
 
 ```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.fresh_start --delete --include-archives
-"$JEVPFN_PYTHON" -m src.cluster.fresh_start --delete --include-archives --apply --writers-stopped
+"${JEVPFN_PYTHON:?}" -m src.utils.output_cleanup --tier both --include-archives
+"$JEVPFN_PYTHON" -m src.utils.output_cleanup --tier both --include-archives --apply --writers-stopped
 "$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
 ```
 
-The first command previews both tiers. The second permanently deletes their `output_JEVPFN`
-and earlier `archived_output_JEVPFN` trees, including old logs, count databases, predictions
-and output transfer bundles/backups. It creates no archive. Raw datasets, prepared inputs,
-permanent features, weights, environments and containers remain in place. Linked/mounted subtrees and
-active JEVPFN jobs are refused before deletion. If deletion is interrupted, stop remaining
-writers and repeat the same reset before starting tests; there is no rollback.
+This permanently clears generated output on both tiers, including old token counts,
+logs and archives. It preserves raw/prepared data, permanent response/accounting/feature
+stores, checkpoints, environments and containers. Cleanup refuses active JEVPFN jobs,
+links/junctions/mounts and unsafe roots. Manual writers must also be stopped.
 
-For local output, use the same commands with `--local` and the local Python interpreter.
-Windows read-only output files/directories are handled automatically, with bounded retries
-for sharing locks. A persistent failure leaves a partial cleanup: repeat the cleanup after
-closing the program using that path, before continuing. Check `$LASTEXITCODE` after Python
-commands in Windows PowerShell; a traceback alone does not prevent the next pasted command.
-Repack inputs after clearing local output. Fresh token counting starts from zero. Do not reset
-again after tests start. Keep each stage fixed during execution; publish reviewed changes
-between stages as described above.
+For local cleanup and preparation, use this fail-fast PowerShell block:
 
-For a final clean validation, finish diagnosing infrastructure failures first, then publish the reviewed code, reset outputs once on VSC and locally, and record frozen
-revision receipts before the new checks start. Rerun CPU/storage checks, exact
-token counts and the selected provider contracts; import the resulting validated transfer
-before rerunning local notebooks. Do not import old output bundles into that clean campaign.
-Permanent dataset caches remain reusable and are not part of output cleanup. Keep diagnostic
-logs until their failure is understood; a clean output folder alone is not evidence of success.
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    Set-Location 'C:\Users\U0152019\PhD Documents\Projects\5. JEVPFN\JEVPFN'
+    function Invoke-Jev {
+        & .\.venv\Scripts\python.exe @args
+        if ($LASTEXITCODE -ne 0) { throw 'Python failed; remaining steps stopped.' }
+    }
+    Invoke-Jev -m src.utils.output_cleanup --include-archives
+    Invoke-Jev -m src.utils.output_cleanup --include-archives --apply --writers-stopped
+    Invoke-Jev -m src.data.prepare
+    Invoke-Jev -m src.jev.preparation --rebuild
+    Invoke-Jev -m src.jev.question_audit
+    Invoke-Jev -m src.utils.run_notebooks
+    Invoke-Jev -m src.cluster.freeze --record
+    Invoke-Jev -m src.cluster.input_transfer pack
+}
+```
 
-After that single cleanup, run `python -m src.cluster.freeze --record` locally. Transfer the
-small `3. experiment_0/manifests/frozen_revision.json` receipt with the question bundle; on VSC
-run `python -m src.cluster.freeze --record --expected-file PATH_TO_LOCAL_RECEIPT`. It requires
-identical Git HEAD and source/base configuration hashes. Every Slurm startup checks the
-receipt and runtime/checkpoint marker hashes. Notebook outputs are excluded from source
-hashing; notebook source cells are included. Stage all runtime/weight receipts before freezing.
-Freeze schema v2 normalizes CRLF/LF when hashing Python/configuration text, without editing
-files. Bash/Slurm files must still contain actual LF; CRLF scripts are rejected. A mismatch
-reports different file names and whether HEAD/schema agree, without dumping configuration.
-Private `*.local.yaml` overlays retain their own per-run configuration hashes. Source fixes
-require reviewing/restarting the affected frozen campaign; operational extraction acceptance
-is a separate stage. This mechanism detects changes; finite tests cannot prove no bugs remain.
+The rebuild replaces only the current input set transactionally, retaining its identity
+when content is unchanged; interrupted rebuilds restore the previous complete set.
+No paid response is deleted. Raw preparation verifies/reuses the pinned local downloads.
+The subsequent VSC CPU job checks those same raw hashes. Notebook regeneration performs
+no model inference. The new token audits start from zero because their output was cleared.
 
-After reviewing a completed stage, stop its writers and run
-`python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped` on
-each participating machine, BEFORE changing stage configuration or staging new runtime pins.
-It verifies that the active revision still matches, retains its compact receipt under
-`manifests/completed_revisions/` and opens the next stage's setup window. It does not approve
-tests or enable extraction. Then publish/synchronize the reviewed next-stage configuration
-and use `--record` again, comparing local/VSC source receipts. This preserves 0A evidence;
-another output cleanup is unnecessary. Changed active revisions cannot be silently finished.
+Selective cleanup is also available, for example:
+
+```bash
+python -m src.utils.output_cleanup --tier data --phase experiment_0 --kind logs --older-than-days 7
+python -m src.utils.output_cleanup --tier project --kind results --match '*storage_contracts*'
+```
+
+These only preview; append `--apply --writers-stopped` after checking the listed files.
+Phases/categories are repeatable. Deleting selected PDFs prunes their caption entries;
+aggregate reports are rebuilt by `run_notebooks --summaries-only` or the next notebook run.
+On Windows, read-only attributes and brief sharing locks are handled within validated
+output trees. Persistent errors stop deletion; close the writer and repeat before continuing.
+
+A frozen receipt covers Git HEAD, normalized text source, base configuration and local
+runtime pins. Compare local/VSC source with `--expected-file` after uploading the receipt.
+Notebook outputs are excluded; notebook source is included. Shell files must have LF.
+Do not modify the frozen stage. After reviewing it, use
+`python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped`
+on both machines before explicit next-stage configuration changes. Record a new freeze
+for that stage without deleting accepted test results.
 
 ## Upload the prepared inputs
 
@@ -155,7 +165,8 @@ Then in Windows PowerShell:
 ```powershell
 Set-Location 'C:\Users\U0152019\PhD Documents\Projects\5. JEVPFN\JEVPFN'
 .\.venv\Scripts\python.exe -m src.cluster.input_transfer pack
-scp '.\output_JEVPFN\transfers\decision_inputs_v3.zip' '.\output_JEVPFN\transfers\decision_inputs_v3.zip.sha256' 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/uploads/'
+scp '.\output_JEVPFN\transfers\decision_inputs_v3.zip' '.\output_JEVPFN\transfers\decision_inputs_v3.zip.sha256' '.\output_JEVPFN\3. experiment_0\manifests\frozen_revision.json' 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/uploads/'
+if ($LASTEXITCODE -ne 0) { throw 'Upload failed; do not continue.' }
 ```
 
 This uses the same working SSH authentication as the owner's CreditPFN SCP commands; no
@@ -165,6 +176,7 @@ After SCP finishes, from the activated CPU environment in `$VSC_DATA/JEVPFN`:
 
 ```bash
 "${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /lustre1/project/stg_00211/JEVPFN/uploads/decision_inputs_v3.zip --writers-stopped
+"$JEVPFN_PYTHON" -m src.cluster.freeze --record --expected-file /lustre1/project/stg_00211/JEVPFN/uploads/frozen_revision.json
 ```
 
 The installer checks the bundle/hash, every database, active question bank, row-link counts
@@ -173,58 +185,55 @@ and file hashes before replacement. Existing question files are backed up under 
 copies preserve input fingerprints across local/VSC token reports. It refuses active/recovery
 SQLite sidecars and queued/running JEVPFN jobs; also stop manual writers yourself.
 
-## Experiment 0A: CPU and exact tokens
+## Experiment 0A_local and 0A_vsc
 
-After the reset and input installation, stage the small pinned tokenizers and check all
-three task formats. Submit from the checkout after setup creates the log directory:
+Before the final freeze, stage tokenizers/checkpoints/containers/E5 and configure the local
+Jev dataset pilot as described below. Then clean, regenerate, transfer and freeze once.
 
-```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.token_audit --stage-only
-"$JEVPFN_PYTHON" -m src.cluster.token_audit --check-only
-sbatch scripts/slurm/experiment_0_cpu.slurm
-# After successful CPU checks:
-sbatch scripts/slurm/experiment_0_tokens.slurm
-squeue --me --clusters=wice
-sacct --clusters=wice -j JOB_ID --format=JobID,State,ExitCode,Elapsed,MaxRSS
+Local PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.cluster.experiment_zero --site local
+.\.venv\Scripts\python.exe -m src.cluster.experiment_zero --site local --execute --dataset-pilot
+if ($LASTEXITCODE -ne 0) { throw '0A_local stopped; inspect its report.' }
 ```
 
-The CPU job uses wICE `interactive`, two cores, 8 GB and twenty minutes. It checks datasets,
-CV feasibility and synthetic contracts. Before the preflight, the CPU job now runs
-`python -m src.jev.question_audit --phase experiment_0`: every active input hash and every
-row/text-slot link is checked against the pinned raw datasets and current question templates.
-Its compact receipt is on DATA under `3. experiment_0/manifests/question_audit.json`.
-It performs no inference and does not modify question files. Linguistic/source review and
-real-provider interpretation checks are separate from this exhaustive mechanical check.
-Token counting uses `batch`, four cores, 13,600 MiB and
-four hours. It counts every complete unique input for each pinned open-weight tokenizer,
-including task/question/options and publisher formatting. Counts are committed incrementally
-and resume after interruption; completed provider summaries survive another worker's failure.
-Within a run, do not delete count databases to fix a dependency. The fingerprinted tokenizer modules are
-kept stable so unchanged input/counter versions remain reusable. Jev's hosted tokenization
-remains unverified. When changing question versions, rerun preparation and upload the 18
-closed input files after stopping readers/writers, then rerun the CPU/token jobs. Historical
-input sets remain inside those files. The explicit fresh-output reset discards old count
-databases; otherwise unchanged counts can resume. Unchanged staged weights need no redownload.
+The first command previews. Execution checks dependencies, every prepared question/row
+link, local synthetic contracts (including notebook tests), cached/live Jev task contracts
+and the configured paid dataset pilot. It refuses missing/unverified private pilot settings
+before starting. Omitting `--dataset-pilot` is useful for infrastructure checks but leaves
+0A incomplete. Saved smoke responses are reused, not billed again; dataset pilots provide
+additional real-input evidence. Local receipts/logs use `3. experiment_0/{manifests,logs}/0A_local/`.
 
-Small summaries use DATA `3. experiment_0/manifests/before_extraction/` and operational
-logs use DATA `3. experiment_0/logs/`;
-large SQLite count databases use PROJECT `3. experiment_0/results/token_audit/`.
-A passing CPU/token check is infrastructure evidence; GPU/provider compatibility is separate.
+VSC login terminal, after input installation and matching frozen receipts:
 
-Also submit `sbatch scripts/slurm/experiment_0_storage.slurm`. This five-minute, two-node
-CPU test checks that another node cannot acquire a held PROJECT writer lock, can acquire it
-after release, sees committed SQLite rows, and can produce a valid snapshot/restore. It uses
-only synthetic files under PROJECT Experiment 0 results; its compact evidence goes to DATA.
-A pass verifies the tested mount's behavior, not storage quota or an independent backup.
-Repeat it if moving to another filesystem/cluster. These checks do not need model weights.
-Worker results use atomic JSON receipts under DATA
-`3. experiment_0/manifests/before_extraction/storage_contracts/<run>/`; each must match the
-job, lock phase and unique invocation ID. Launcher stdout/stderr are retained separately
-under DATA `3. experiment_0/logs/storage_contracts/<run>/`. Console output is not parsed as
-the result. After successful worker exit the coordinator allows up to 60 seconds for receipt
-visibility across nodes and records the observed delay. It retries only missing-file reads,
-never the worker operation; invalid receipts or other I/O errors still fail immediately.
-If the test fails, inspect its top-level report and those logs before retrying.
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.experiment_zero --site vsc
+"$JEVPFN_PYTHON" -m src.cluster.experiment_zero --site vsc --execute --watch
+```
+
+The runner submits **one job at a time**: CPU → two-node storage → exact tokens → E5 →
+contracts and larger pilot for Clef, Intern, Liquid, Strands and Perplexity. The debug GPU
+partition permits only one queued job, so no batch of pending GPU jobs is submitted.
+`--watch` polls accounting once per minute, performs no inference on the login node, and
+submits the next job only after COMPLETED/0:0. A failed/uncertain submission stops for
+review. If OnDemand disconnects, the current Slurm job continues: reconnect, activate the
+CPU environment and repeat the same command. It resumes from recorded IDs, not a new run.
+Without `--watch`, one invocation checks/advances one step. The receipt records submitted,
+waiting, completed or failed; submission alone is never a pass. Receipts/logs are under
+DATA `3. experiment_0/{manifests,logs}/0A_vsc/`. Each job also retains its normal Slurm log.
+
+CPU tests audit every input and row link, dataset hashes, splits and synthetic contracts;
+only local-notebook execution tests are omitted on VSC. Token jobs count each complete
+unique request with every actual open-weight tokenizer, including options/provider format.
+Jev tokenization is not inferred from another model's counts. The two-node test validates
+PROJECT writer exclusion, release/reacquisition, commit visibility and snapshot/restore.
+Atomic DATA receipts tolerate bounded cross-node visibility delay without repeating workers.
+These checks do not verify quota or independent backups.
+
+Do not delete logs during this campaign or import older output bundles into it. A later
+transfer imports both PROJECT and DATA evidence for local notebook inspection. Finish 0A
+only after reviewing the reports, measured throughput, quota and backup arrangements.
 
 ## Checkpoints and isolated GPU environments
 
@@ -243,47 +252,18 @@ Strands stages both its adapter and the configured Qwen3.5-2B base model. The in
 revision caveat is retained in config. Every compute job verifies hashes and runs offline.
 No inference belongs on a login node.
 
-Prefer the compact runtimes in the next section on the current file-limited allocation.
-The native setup helper below is an alternative only when sufficient file quota is available;
-do not install five unpacked environments on the nearly full shared allocation. It prepares
-isolated environments, reuses staged weights, checks tokenizers offline and refuses active
-JEVPFN jobs. Packages/wheel caches/environments use PROJECT:
+Use compact runtimes below on this file-limited allocation. The alternative
+`bash scripts/setup_decision_env.sh PROVIDER` installs an unpacked environment on PROJECT;
+do not create five such environments when inode quota is nearly exhausted. Keep each
+provider isolated. Perplexity uses its pinned publisher requirements; Strands stages its
+adapter plus base model. The exact packages and CUDA candidates are in the setup scripts
+and pyproject, with resolved versions recorded in each runtime manifest.
 
-```bash
-cd "$VSC_DATA/JEVPFN"
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
-bash scripts/setup_decision_env.sh cloudflare
-bash scripts/setup_decision_env.sh intern
-bash scripts/setup_decision_env.sh liquid
-bash scripts/setup_decision_env.sh strands
-bash scripts/setup_decision_env.sh perplexity
-```
-
-CUDA 12.6 is the A100 candidate; verify driver/glibc compatibility in the allocation. The
-[official paired wheels](https://pytorch.org/get-started/previous-versions/) establish package
-availability, not JEVPFN compatibility. Clef's publisher tested H200 with Torch 2.11 and
-Transformers 5.10.2; this candidate keeps Transformers 5.17 aligned with our token audit.
-A failure requires diagnosis rather than silent version substitution.
-
-| Open extractor | Runtime preparation |
-|---|---|
-| Liquid | Separate environment, compatible CUDA wheel and `.[dev,token-audit,liquid]`; staged custom decision implementation. |
-| Strands | Separate Linux/CUDA environment and `.[dev,token-audit,strands]`; optional causal-conv1d acceleration requires a matching toolkit and a compute-node build. Direct `SystemOneEngine` inference; no HTTP server needed. |
-| Perplexity | Separate environment; install the pinned checkpoint's `requirements.txt` and project dependencies. Keep its declared Torch version separate from downstream/Clef pins. Add staged `source/src` for `autojev`. |
-| Clef | `.[dev,token-audit,clef]`; staged joint head/backbone; retain complete softmax precision. |
-| Intern | `.[dev,token-audit,intern]`; retain the pinned publisher's calibration temperature and complete probabilities. |
-
-Custom inference code is reviewed and hash-verified before loading. Complete dependency
-versions enter response identity. All model and Hugging Face/Xet caches use PROJECT;
-HF offline flags are set before runtime imports. Bytecode writes are disabled so importing
-publisher code does not alter the fingerprinted checkpoint tree.
-The helper uses Torch 2.12.1/CUDA 12.6 for four providers and the publisher's Torch
-2.14.0/torchvision 0.29.0 CUDA 12.6 pair for Perplexity, then its fingerprinted requirements.
-It records installed package versions beside each PROJECT environment. Strands' optional
-causal-conv1d accelerator is not compiled on the login node. Its available kernel path must
-pass the GPU contracts and a throughput pilot; a slow fallback is not permission for a full
-campaign. If compilation is necessary, use a compute allocation with the matching CUDA
-toolkit and repeat contracts after installation. A new package pin changes runtime identity.
+GPU compatibility must be demonstrated in the allocation. Custom inference code is
+hash-verified; compute runs set offline flags and disable bytecode writes before imports.
+All model/Hugging Face/Xet caches use PROJECT. Optional Strands kernel acceleration requires
+a matching CUDA toolkit and a compute-node build; a slow fallback must be profiled before
+acceptance. Changing packages changes runtime identity and requires new contract evidence.
 
 E5 is shared by all six main predictors. Its requirements match the existing Clef runtime
 (Torch/Transformers); no additional CUDA environment or package installation is needed there.
@@ -313,19 +293,18 @@ working environment; `new` installs a fresh runtime entirely in scratch before p
 Images and wrappers end in PROJECT `JEVPFN/containers/<provider>/`. Weights stay outside the
 image in PROJECT checkpoints. The build copies the site's wrapper configuration and redirects
 its temporary/work directories and package caches to scratch. No source environment is deleted.
-For `wrap`, it uses a private scratch copy of wrapper 0.4.2 with a checked copy-template
-replacement. The site template's `cp -a` failed while preserving native Lustre permissions
-inside the image (job 62366728). The replacement copies file contents, links and timestamps
-with ordinary destination permissions, without importing source ACLs/ownership. It changes
-neither the site installation nor source permissions. Unknown upstream templates stop the
-build. Failure diagnostics are retained in shared scratch; the workaround still needs a
-successful real build and matching GPU contracts before retiring either native environment.
+For `wrap`, the private scratch copy of wrapper 0.4.2 replaces only the verified site
+copy template and frontend alias. It copies contents/links/timestamps without importing
+native ACLs/ownership. The site installation and original environment remain untouched;
+unknown templates fail closed. See AGENTS_MEMORY for observed failures. Build work/logs
+remain available for diagnosis; do not reset output while setup is failing.
 
 After publishing/synchronizing the source, start with Clef:
 
 ```bash
-sbatch --wait scripts/slurm/experiment_0_container_build.slurm cloudflare wrap
-sbatch --wait scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
+sbatch scripts/slurm/experiment_0_container_build.slurm cloudflare wrap
+# After its job ID is COMPLETED with exit 0:0 and its log confirms sealing:
+sbatch scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
 ```
 
 A sealed receipt hashes image bytes and wrapper/link contents, records package versions and
@@ -367,7 +346,9 @@ sbatch scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
 
 After Clef completes successfully, repeat for `intern`, `liquid` and `strands`.
 Perplexity uses `sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.
-Use `sbatch --wait` when chaining jobs so the next command is reached only after success.
+The 0A coordinator handles sequential submission. For individual setup jobs, submit without
+`--wait` and inspect the recorded ID with `sacct` before the next command; a disconnected
+login terminal is not proof that the submitted job was cancelled.
 The provider, optional environment prefix and optional project root are script arguments.
 For example, append `/lustre1/project/stg_00211/JEVPFN/environments/intern /lustre1/project/stg_00211`
 to select both paths explicitly. KU Leuven starts batch jobs with a clean environment; exporting
@@ -421,25 +402,12 @@ wait for busy files. `--continue-on-error` is an explicit diagnostic mode with d
 request records; incomplete datasets cannot be materialized or accepted. Repair the cause
 and use `--retry-failed` to retry those inputs. No silent substitution by missing values.
 
-The small-model contract/pilot/full-extraction defaults request 28,000 MiB. The predictor
-smoke-test default uses 56,000 MiB. Perplexity 27B uses an explicit initial host-memory profile:
-`sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.
-Use the same override for its pilot/full extraction. These are initial profiles, not measured
-minimums; revise after recording MaxRSS and load peaks. Regular A100 jobs must stay within
-126,000 MiB per GPU. Memory requests can allocate/bill additional CPU cores: with 7,000 MiB
-per core, 56,000/112,000 MiB imply eight/sixteen cores despite four requested compute threads.
-The 13,600 MiB token profile fits four IceLake cores at 3,400 MiB/core and exceeds the observed
-4.6 GiB token-audit peak. Do not assume all workloads fit the small-model profile.
-
-Start serial inference on one wICE A100. Its 80 GiB can hold the Perplexity checkpoint's
-approximately 49 GiB BF16 weights, but working memory must be profiled. Use a regular GPU
-partition for longer jobs. Consider H100 for measured throughput benefit or Mindwell B200
-(192 GiB, native GPFS and a Blackwell-compatible CUDA build) if measured memory justifies it.
-GPU hours, quota and licences remain separate from vendor API token fees. Batch size one
-is the current verified code path, not an efficiency claim. Before a multimillion-request
-run, measure sustained throughput and total GPU-credit cost. Batched inference would require
-provider-specific implementation, probability/token parity and resume tests; it is not enabled.
-Hardware speedups and cheaper-GPU feasibility must be measured, not inferred from model size.
+Small-model jobs start at 28,000 MiB host RAM; Perplexity uses 112,000 MiB. These are
+initial profiles, not measured minima. Regular A100 jobs must stay within 126,000 MiB per
+GPU; memory requests can bill extra CPU cores. Start on one wICE A100 80 GiB. Consider
+H100 or Mindwell B200/native GPFS only if measured throughput/memory justifies migration.
+Batch size one is the current implementation; a million-request campaign needs measured
+GPU-credit/runtime estimates. Batching would require provider-specific parity/recovery tests.
 
 ## Local Jev and Experiment 0B
 
@@ -460,7 +428,9 @@ after correcting credentials. Its old diagnostic and conservative billing reserv
 in the receipt. This option cannot bypass an ambiguous timeout or other unknown outcome.
 
 It sends only three fixed synthetic probes sequentially and
-keeps complete responses plus a compact receipt. It checks exact Jev 1.13 identity, binary,
+keeps complete responses and the spending ledger in permanent
+`data/jev_cache/_control/jev_smoke/`, with rebuildable copies in Experiment 0 output.
+Legacy records are migrated before cleanup; clearing logs never resets paid-call history. It checks exact Jev 1.13 identity, binary,
 multiclass, nine-level score mapping and usage. The reviewed policy in
 `config/3. experiment_0/jev_smoke.yaml` reserves at most USD 0.008064 for three attempts using
 the published 64k per-request context and USD 0.042/M price, with no long-context header.

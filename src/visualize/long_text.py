@@ -72,16 +72,12 @@ def long_text_figures(datasets, columns):
         ),
     )
     ordered = columns.reset_index(drop=True)
-    boundaries = [
-        i for i in range(1, len(ordered)) if ordered.dataset.iloc[i] != ordered.dataset.iloc[i - 1]
-    ]
-    split = min(boundaries, key=lambda i: abs(i - len(ordered) / 2)) if boundaries else len(ordered)
-    pages = [ordered.iloc[:split], ordered.iloc[split:]]
-    pages = [part for part in pages if not part.empty]
+    # At most 14 labelled fields per half-page; keep the same axis across pages.
+    pages = [ordered.iloc[i:i + 14] for i in range(0, len(ordered), 14)]
     xmax = float(ordered.tokens_max.max()) * 1.3
     for page, part in enumerate(pages, start=1):
         fig, ax = plt.subplots(figsize=style.LONG_TEXT_PAGE_SIZE)
-        labels = part.dataset + " · " + part.text_column
+        labels = part.dataset.str.replace(" ", "\n", n=1) + " · " + part.text_column
         _draw(ax, part, "tokens", labels)
         ax.tick_params(axis="y", labelsize=style.LONG_TEXT_PAGE_FONT)
         ax.set_xlim(0.7, xmax)
@@ -95,8 +91,8 @@ def long_text_figures(datasets, columns):
         yield (
             fig,
             f"long_text_columns_page_{page}",
-            "Nonempty text lengths for the official text columns, in catalog order; datasets stay together on a page. "
+            "Nonempty text lengths for the official text columns, in catalog order, paginated for print. "
             "Dataset and column names label each row. Boxes show p25–p75 and medians; whiskers "
-            "span p01–p99; diamonds mark maxima. The two pages share the same logarithmic axis. "
+            "span p01–p99; diamonds mark maxima. All pages share the same logarithmic axis. "
             "Exact p99/max values remain in the tables. No provider context limit is inferred from character counts.",
         )

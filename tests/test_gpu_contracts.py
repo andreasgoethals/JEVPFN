@@ -128,7 +128,7 @@ def test_real_input_selection_and_reuse(isolated_output):
     report = audit_provider("cloudflare", inputs, counter=counter)
     sample = gc.real_sample(report, Path(report["counts_database"]))
     client = gc.MeasuredClient(FakeClient("cloudflare"), 100)
-    log = paths.logs_dir("experiment_0") / "fixture.jsonl"
+    log = paths.logs_dir("experiment_0") / "fixture.log"
     first = gc.exercise_real_inputs(client, sample, log)
     second = gc.exercise_real_inputs(client, sample, log)
     assert first[0]["new"] == second[0]["reused"] == len(sample[0][1])

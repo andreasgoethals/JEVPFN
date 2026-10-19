@@ -175,7 +175,7 @@ def save_pilot_manifest(manifest):
     )
     write_json(paths.manifests_dir("feature_creation") / "pilots" / f"{name}.summary.json", summary)
     append_event(
-        paths.logs_dir("feature_creation") / "pilot_preparation.jsonl",
+        paths.logs_dir("feature_creation") / "pilot_preparation.log",
         "offline_pilot_prepared",
         manifest_sha256=name,
         dataset_count=len(manifest["dataset_ids"]),

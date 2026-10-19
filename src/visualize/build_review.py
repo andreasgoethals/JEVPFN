@@ -30,6 +30,8 @@ def extraction_figure(budget, price):
 
 
 def regression_scale_figure(labels):
+    from textwrap import fill
+
     fig, ax = plt.subplots(figsize=style.REGRESSION_RUBRIC_SIZE)
     ax.set_axis_off()
     ax.set_title("Regression: nine distinct evidence levels, not target units")
@@ -50,11 +52,10 @@ def regression_scale_figure(labels):
         ax.text(
             0.1,
             0.94 - index * 0.1,
-            wording,
-            wrap=True,
+            fill(wording, width=87),
             transform=ax.transAxes,
             va="top",
-            fontsize=style.RUBRIC_FONT,
+            fontsize=8,
         )
     return (
         fig,

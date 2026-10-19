@@ -1,304 +1,222 @@
 # JEVPFN
 
-Research software for testing whether **label-free probabilistic text features from decision
-models improve tabular prediction**. Explore all 20 core MulTaBench TEXT datasets; use 18
-for extraction and evaluation. Zomato Restaurants and Spotify Genres remain available locally
-for exploration but are excluded from experiments for text burden and 114-class feature size.
+Does **probabilistic text information from decision models improve tabular prediction**?
+This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18 for
+extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
+are excluded from experiments for text burden and 114-class feature size.
 
-**Current stage: Experiment 0A setup.** Frozen question version 3 has passed the exhaustive
-input audit and exact token counts for all five open-weight extractors: 1,698,127 unique
-inputs each, zero context overflows. CPU and two-node storage tests passed. All five open
-checkpoints are staged; Clef/Intern previously passed GPU tests with older inputs. Their
-compact-container path and the other three real runtimes still need VSC verification.
-The owner confirmed USD 5 funding. Three live local Jev 1.13 requests passed binary,
-multiclass and nine-level scoring contracts (1,051 input tokens; computed cost USD 0.000044142).
-Full dataset pilots, account limits and extraction acceptance remain pending. Full feature
-creation and predictive runs stay disabled. Finish setup before the owner's deliberate
-clean, frozen-revision validation campaign; retain weights, containers, inputs and features.
-Run evidence is recorded in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
-The owner handles all Git commits and pushes to [GitHub](https://github.com/andreasgoethals/JEVPFN).
+**Stage: Experiment 0A setup, not full extraction.** Question version 3, dataset audits,
+CPU/storage checks and all five open-weight tokenizer audits have passed previously.
+The latest downloaded VSC container log failed before image creation: a missing wrapper
+alias is now handled locally and needs a VSC rerun. All five checkpoints were staged;
+only Clef/Intern's older native runtimes have passed GPU tests. Jev 1.13 passed three live
+local task probes; its larger dataset pilot and account limits remain pending. E5 and
+predictor runtime tests are also pending. Historical evidence is in
+[AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a new frozen 0A run will supersede it.
+The owner handles Git commits/pushes. Full extraction and benchmark switches stay disabled.
 
 ## Research contract
 
-Each extractor reads mechanically documented task metadata and either one text column or
-all available text columns jointly. Questions are fixed templates; there is no generative
-question writer. **Non-text features, current row targets, class frequencies, target
-statistics and model feedback never enter extraction.** Documentary class-code meanings
-retain their sources and original class vocabulary.
+Extractors receive fixed task metadata, a deterministic question and either one named
+text column or all available text columns jointly. They receive **no non-text row values,
+true row target, class frequencies, target statistics or model feedback**. Class meanings
+are documented from dataset sources; questions do not require a generative LLM.
 
-| Task | Main numeric features per text input |
+| Task | Main numeric features for each text input |
 |---|---|
-| Binary classification | One probability that the text supports the fixed positive class over the other class. |
-| Multiclass classification | All K class probabilities in the original class order. |
-| Regression | Probability-weighted direction on the fixed nine levels −4 to +4. |
+| Binary | One probability supporting the fixed positive class over the other class. |
+| Multiclass | All K class probabilities, in a fixed class order. |
+| Regression | Expected direction over nine ordered levels, −4 to +4. |
 
-The binary feature answers an evidence question; it is not established as a calibrated target
-probability. The regression score describes directional evidence, not target units. Its rubric distinguishes
-indirect hints, qualified support, clear direct evidence and explicit supported comparisons;
-zero favors neither direction. Full responses, probability vectors and available confidence
-are retained for inspection and later ablations.
+Binary evidence probabilities are not assumed to be calibrated target probabilities.
+Regression scores express directional evidence, not target units. Full responses and
+probability vectors are retained. The rubric distinguishes indirect hints, qualified
+support, clear direct evidence and explicit supported comparisons; zero favors neither direction.
 
-Empty text inputs are skipped and yield missing numeric features. Exact equality includes
-task context, question/options, named verbatim text and provider/runtime settings. Identical
-requests reuse their first verified response. Separate and joint inputs containing the same
-single field share one response; their identical numeric columns are included only once.
+Empty text produces missing numeric features without an inference call. Exact request
+reuse includes context, question/options, named text and provider/runtime settings.
+The first verified response is cached. A one-column joint request reuses its identical
+per-column request; duplicate numeric columns are included only once in combined views.
 
-## Selected models and evaluation
+## Models and comparisons
 
-| Decision extractor | Execution |
+| Extractor | Execution |
 |---|---|
-| Jev 1.13.0 | Hosted TypeSafe API, locally. |
-| Liquid d1-3B | Open weights on VSC. |
-| Strands Decider 2B | Open weights on VSC. |
-| Perplexity Decider v1.1-27B | Open weights on VSC. |
-| Cloudflare Clef-flash | Open weights on VSC. |
-| Intern-Decision-4B | Open weights on VSC. |
+| Jev 1.13.0 | TypeSafe API, locally |
+| Liquid d1-3B | Open weights, VSC |
+| Strands Decider 2B | Open weights, VSC |
+| Perplexity Decider v1.1-27B | Open weights, VSC |
+| Cloudflare Clef-flash | Open weights, VSC |
+| Intern-Decision-4B | Open weights, VSC |
 
-Microsoft-Decision-1 is excluded by owner decision because of access/throughput constraints.
-`config/2. feature_creation/extractors.yaml` maintains checkpoint/version pins, limits and
-price references. Open weights have no vendor token fee; licences and GPU credits still apply.
-Actual model compatibility and complete coverage must be demonstrated by Experiment 0A.
+Microsoft is excluded by owner decision. Pins, licences, context and price references
+are in `config/2. feature_creation/extractors.yaml`. Open weights have no vendor token
+fee; GPU credits and licence conditions still apply. Compatibility requires real testing.
 
 The six main predictors are **CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular,
-and logistic/linear regression**. Each receives eight configurations:
+and logistic/linear regression**. Each uses eight feature configurations:
 
 1. All original non-text columns, including categorical columns.
-2. Those columns plus joint decision features.
-3. Those columns plus per-column decision features.
-4. Those columns plus both representations.
-5. Non-text plus frozen E5 embeddings, reduced by PCA.
-6. Non-text plus E5 plus joint decision features.
-7. Non-text plus E5 plus per-column decision features.
-8. Non-text plus E5 plus both decision representations.
+2. Non-text + joint decision features.
+3. Non-text + per-column decision features.
+4. Non-text + both decision representations.
+5. Non-text + frozen E5 embeddings reduced by PCA.
+6. Non-text + E5 + joint decision features.
+7. Non-text + E5 + per-column decision features.
+8. Non-text + E5 + both decision representations.
 
-The non-text and E5-only baselines are fitted once per predictor/dataset and reused across
-extractor comparisons. The other six configurations are fitted for each of six extractors:
-4,104 main configurations, plus 36 original-text references, each with five outer folds.
-**TabSTAR and ConTextTab** receive all original text and non-text features, without extracted
-features. They are descriptive references, not matched within-predictor comparisons.
+Configurations 1 and 5 are shared across extractors; the other six are repeated for each
+extractor. This gives 4,104 main configurations plus 36 native-text references, each with
+five outer folds. **TabSTAR and ConTextTab** use the original text and non-text columns;
+they are descriptive reference results, not matched within-predictor effects.
 
-E5-small-v2 reads each text column, reuses identical text, covers long inputs with token
-chunks and stores full 384-dimensional embeddings once per dataset. PCA produces 32 columns
-per text column, plus a missingness flag, inside every inner/outer training fit. With too few
-nonempty training rows, unused components remain missing. Held-out rows never fit PCA;
-non-text and decision features are not reduced. E5 weights and real GPU execution still need
-verification. Its representation is shared across all six predictors, not a seventh decision
-extractor. Combined-feature manifests retain both the E5 and decision artifact identities.
+E5-small-v2 encodes each text column once, covers long inputs with token chunks, reuses
+identical text and saves 384-dimensional vectors. PCA is fitted **inside each inner/outer
+training partition**, producing 32 components per text column plus a missingness flag.
+Insufficient training rank leaves unused components missing. Held-out rows never fit PCA.
+Non-text/decision features are not reduced. All six predictors use the same E5 source.
 
-Analysis pairs each augmented configuration with non-text and E5-only. Combined configurations
-are also paired with the same extractor's matching decision-only configuration, to measure
-what embeddings add. Cheap text statistics, permutation controls and retained-probability
-ablations remain available through `python -m src.evaluation.campaign --include-controls`.
-On one-text-column datasets, separate/joint/both contain identical information; exclude these
-datasets from representation contrasts while retaining the named fits.
+Use five-fold shuffled stratified CV for binary/multiclass classification and shuffled
+KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, followed
+by refitting on the full outer-training fold. The outer test fold never selects thresholds
+or fits preprocessing. Use all rows and fixed model settings, with no HPO or silent row/
+feature sampling. Full-fold feasibility must be tested before enabling the benchmark.
 
-Use shared five-fold shuffled stratified CV for binary/multiclass classification and shuffled
-KFold for regression. Binary thresholds maximize F1 from three inner out-of-fold splits,
-then the estimator is refitted on the complete outer-training fold. Thresholds are frozen
-before outer-test prediction. All fitted preprocessing stays inside its training partition.
-Use all training rows, fixed library settings, no HPO and no silent context/feature sampling.
-TabSTAR's required task adaptation is recorded as part of its method.
+Save individual predictions, binary inner-OOF predictions, metrics, undefined-metric reasons,
+timings, resource use and artifact identities. Analyze paired feature effects within each
+predictor, including seen/unseen text cohorts. Fold SD is descriptive, not a standard error.
+Headline metrics and optional dataset-level Wilcoxon/Holm contrasts remain unapproved until
+before comparative outcomes are reviewed. Exact protocol/settings live in
+`config/4. experiment_1/`; optional analysis is in `config/7. experiment_4/`.
+Cheap text statistics, permutation controls and retained-probability ablations are also
+available. Public-data pretraining overlap is a limitation; “label-free” describes the
+inputs to extraction, not a guarantee about pretraining. See [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md).
 
-Record full outer-test and binary inner-OOF predictions, all implemented probability/decision
-or regression metrics, undefined-metric reasons, timings, resource use, folds and feature
-identities. Headline metric selection remains deferred until before comparative predictive results are
-reviewed. Exact conventions and runtime settings live in `config/4. experiment_1/`.
-Full-fold feasibility, checkpoint loading and native-text encoders remain unverified on VSC.
-Fold SD is descriptive variation, not a standard error. Analysis also produces one paired
-mean difference per dataset and task-specific across-dataset summaries. Raw target-unit
-errors are not averaged across unrelated regression targets. Optional two-sided Wilcoxon
-tests use datasets as units, with Holm correction over the full predeclared comparison family;
-`config/7. experiment_4/analysis.yaml` remains unapproved until headline metrics and contrasts
-are agreed before seeing outcomes. TabSTAR/ConTextTab are descriptive original-text reference
-results, not matched within-predictor effects or a cross-model leaderboard.
+## Workflow and notebooks
 
-Also report the same metrics for test rows with previously seen joint text, unseen joint
-text, no previously seen individual text column, and entirely empty text. These diagnostics
-reuse predictions and fixed thresholds; they do not change CV or add fits. They help assess
-whether gains extend beyond repeated text. Unseen combinations can still contain familiar
-individual columns, and these checks alone cannot establish semantic understanding.
-"Label-free" describes the extraction pipeline's inputs, not a guarantee about a pretrained
-model's history. Public-data pretraining overlap remains unknown where training data are
-undisclosed. The review procedure and interpretation limits are in LITERATURE_REVIEW.
+Runtime setup → one clean question-preparation/0A campaign → full feature creation →
+feature inspection and Experiment 0B → benchmark. Folder numbers organize files; 0A runs
+before full feature creation despite its higher folder number.
 
-## Workflow
-
-Exploration → question preparation → Experiment 0A → full feature creation → saved-feature
-analysis and Experiment 0B → predictive experiments. The folder numbers organize files;
-Experiment 0A deliberately runs before the numbered feature-creation phase is executed.
-
-| Notebook | Purpose |
+| Local notebook | Purpose |
 |---|---|
 | [01_data_exploration](<notebooks/0. exploration/01_data_exploration.ipynb>) | All 20 datasets: text length, missingness, exact reuse, long text and feature dimensions. |
-| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | Task examples and complete six-extractor request previews for all 18 selected datasets. |
-| [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Source-backed meanings, frozen questions, grouped inputs and original-row links. |
-| [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Exact saved tokenizer audits, duplicate-aware workload, cost scenarios and storage readiness. |
-| [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Saved-feature coverage, agreement, distributions and distance from other extractors. |
+| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | Task examples and exact request previews for all 18 datasets and six extractors. |
+| [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Frozen wording, source meanings, grouped inputs and original-row links. |
+| [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Token counts, workload, cost/throughput scenarios and feature combinations. |
+| [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Coverage, distributions, agreement and disagreements once real features exist. |
 
-All notebooks run locally. They perform no inference or model training. Reusable logic is in
-`src/`; every final cell prints the complete recorded analysis. Feature comparison verifies
-row alignment, matching input hashes, class order and artifact versions; disagreement is
-not evidence of predictive accuracy. Ambiguous versions require explicit artifact selection.
+Notebooks contain orchestration/display only; reusable logic is in `src/`. They perform
+no inference or model training. Each ends with the complete printed report. The comparison
+notebook shows coverage gaps until matching complete artifacts exist; it does not invent results.
 
-## Local setup and commands
+## Local setup
 
-Open this inner repository folder. Create Python 3.12 with the prompt **JEVPFN**:
+For a new environment only, in Windows PowerShell from this inner repository:
 
 ```powershell
 py -3.12 -m venv --prompt JEVPFN .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev,notebooks]"
 .\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
+```
+
+Existing environments need no recreation. Select that kernel in VS Code/Jupyter. Run:
+
+```powershell
 .\.venv\Scripts\python.exe -m src.data.prepare
 .\.venv\Scripts\python.exe -m src.jev.preparation
 .\.venv\Scripts\python.exe -m src.jev.question_audit
 .\.venv\Scripts\python.exe -m src.utils.run_notebooks
 ```
 
-Existing environments do not need recreation. Select **Python 3.12 (JEVPFN)** in Jupyter/VS Code.
-Question preparation is local and offline. The audit reads every active unique input and every
-original row/text-slot link against the pinned datasets; it checks saved wording/options against
-the current templates, exact text reuse, empty inputs and hashes. It writes one compact receipt
-under `1. question_preparation/manifests/question_audit.json` and never changes the input files.
-These mechanical checks complement wording review; they cannot prove source meanings or that
-every decision model interprets a question correctly. Source uncertainties remain in the dataset
-definitions and the preparation notebook. Changing wording requires new input/token evidence.
-The no-argument runner executes notebooks in parallel using available CPUs, prints progress,
-and saves rich outputs back into each source `.ipynb`. Reload an already-open notebook after
-execution. Partial failures preserve completed outputs and a recovery copy; concurrent edits
-are not overwritten. `--only 01_data_exploration` selects a notebook;
-`--summaries-only` rebuilds saved aggregate reports.
+Preparation is local and offline. `preparation --rebuild` explicitly regenerates the active
+input set transactionally; historical versions and paid features remain intact. The exhaustive
+audit checks every unique payload and every original row/text-slot link. It checks mechanics,
+not a proof of linguistic correctness or provider interpretation.
+
+The no-argument notebook runner executes in parallel, prints progress and saves rich outputs
+back into the source `.ipynb` files. Reload an already-open notebook after execution.
+`--only 01_data_exploration` selects one; `--summaries-only` rebuilds aggregate documents.
+Run `python -m pytest -q` for local tests. Install model extras in their separate environments,
+not all together in the notebook environment. Full setup/transfer commands are in [VSC](docs/VSC.md).
+
+## Storage and cleanup
+
+| Path | Content |
+|---|---|
+| `data/raw/` | All 20 numbered dataset folders and their provenance. |
+| `data/decision_inputs/<dataset>.sqlite3` | Exactly 18 versioned question/input stores with row mappings. |
+| `data/jev_cache/<dataset>.sqlite3` | Permanent provider-specific responses, accounting and feature tables. |
+| `data/jev_cache/_control/jev_smoke/` | Permanent smoke-test payment ledger and responses. |
+| `data/text_embeddings/<dataset>.sqlite3` | Permanent E5 vectors and row mappings. |
+| `output_JEVPFN/figures/<phase>/<notebook>/` | PDF figures only. |
+| `output_JEVPFN/{logs,manifests,results}/notebooks/<phase>/<notebook>/` | Local execution logs, figure/config receipts, full reports and analysis tables. |
+| `output_JEVPFN/figures/Captions.md` | One combined captions document. |
+| `output_JEVPFN/All Results.md` | One complete notebook report. |
+| `output_JEVPFN/<number>. phase/{logs,manifests,results}/` | Experiment output, including 0A_local/0A_vsc receipts. |
+
+On VSC, PROJECT holds large inputs, weights/containers, caches, exact-token databases,
+predictions and large results. DATA holds the checkout, small CPU environment, compact
+manifests and logs. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
+Large VSC writes fail rather than falling back to DATA. Free filesystem capacity is not quota.
+
+The cleanup utility previews by default and never deletes data, weights, environments,
+containers or secrets. Run it on the machine being cleaned:
 
 ```powershell
-.\.venv\Scripts\python.exe -m jupyter lab
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m src.cluster.preflight --local --verify-data
-.\.venv\Scripts\python.exe -m src.evaluation.campaign
+.\.venv\Scripts\python.exe -m src.utils.output_cleanup
+.\.venv\Scripts\python.exe -m src.utils.output_cleanup --phase experiment_0 --kind logs
+.\.venv\Scripts\python.exe -m src.utils.output_cleanup --include-archives --apply --writers-stopped
 ```
 
-The campaign command lists the planned arms without fitting models. Dependency extras in
-`pyproject.toml` keep notebook, CPU-tokenizer and model environments separate. Do not install
-all model extras into the notebook environment. [VSC](docs/VSC.md) gives the cluster commands.
+Use `--tier data`, `--tier project` or `--tier both` on VSC; auto selects both. Filters also
+include repeatable phases/categories, `--match` and `--older-than-days`. Stop writers first;
+active JEVPFN jobs and linked/mounted output trees are refused. Deletion is permanent, with
+no archive. Paid smoke records are preserved before deleting legacy output copies. Partial
+figure cleanup updates caption manifests and invalidates aggregate reports for rebuilding.
+`clean_run` remains the older report-only cleaner; `fresh_start` retains archive compatibility.
+In PowerShell, check `$LASTEXITCODE` after native commands; error preference alone is insufficient.
 
-## Durable inputs and outputs
+Rows join through dataset ID, source-data fingerprint and `csv:N` (original zero-based row
+position). Missing slots are explicit. Provider/checkpoint/settings enter cache identities;
+features contain their provenance and checksums. Use validated transfer export/import to
+merge local/VSC caches, never wholesale SCP replacement of populated feature stores.
 
-- `data/raw/`: all 20 numbered dataset folders, each with CSV, metadata and download provenance.
-- `data/decision_inputs/<dataset_id>.sqlite3`: exactly 18 files containing versioned questions,
-  unique named text groups and every original row/representation link.
-- `data/jev_cache/<dataset_id>.sqlite3`: permanent provider-specific responses and numeric features.
-- `output_JEVPFN/figures/<number>. phase/<notebook>/`: PDF figures and local analysis records.
-- `output_JEVPFN/figures/Captions.md` and `output_JEVPFN/All Results.md`: aggregate notebook reports.
-- `output_JEVPFN/<number>. phase/`: operational logs/manifests and experiment results.
+## Execution gates
 
-Configurations use `0. exploration`, `1. question_preparation`, `2. feature_creation`,
-`3. experiment_0`, then `4. experiment_1`, etc. Notebook/output folders are created when used.
-Exploration writes only figures/reports. Temporary audit tables and budget intermediates are
-recomputed during a notebook run and discarded; the notebooks and report retain their values.
-Raw datasets, prepared inputs and permanent features are never temporary cleanup targets.
-`python -m src.utils.clean_run` previews cleanup; `--clean` removes only rebuildable figures,
-reports and legacy question JSON copies. Logs, manifests, token audits, predictions and transfer
-bundles/backups are preserved. Cleanup refuses linked output folders and preserves personal
-Markdown/text notes. It never recursively deletes a data directory.
-For a completely fresh run without output archives, preview
-`python -m src.cluster.fresh_start --delete --include-archives` on VSC, or add `--local`
-on the laptop. Append `--apply --writers-stopped` to permanently delete the complete output
-trees and any earlier `archived_output_JEVPFN/` trees. This includes old logs, token audits,
-predictions, transfer bundles and backups stored inside output. No new archive is created.
-Raw data, prepared questions, permanent feature caches, weights and environments/containers remain in
-place. The helper rejects linked/mounted subtrees and queued/running JEVPFN jobs; close
-manual writers first. It recreates empty output roots and the VSC Experiment 0 log directory.
-Without `--delete`, the existing reversible archive mode remains available.
-On Windows, deletion clears read-only attributes only on entries inside the validated output
-tree and retries brief sharing locks. Persistent access errors still stop cleanup; close the
-program holding the path and repeat the same command. No administrator access or ACL changes
-are part of the helper. In PowerShell, check native command exit codes before proceeding;
-`$ErrorActionPreference = 'Stop'` alone does not stop after a Python failure.
+`python -m src.cluster.experiment_zero --site local` or `--site vsc` previews 0A. Explicit
+execution requires a matching frozen revision. Local 0A covers dependencies, full question
+mapping, synthetic contracts and Jev smoke; `--dataset-pilot` adds the configured paid pilot.
+VSC 0A covers CPU/storage/tokens/E5 and five real provider contract/pilot pairs. It submits
+one job at a time, resumes by job ID and stops after failure. See [VSC](docs/VSC.md) for commands.
 
-Keep code, configuration and inputs fixed while a stage's jobs are running. Between stages,
-the owner publishes reviewed fixes or explicit enabling-config changes, then synchronizes the
-VSC checkout. Rerun affected checks; retain existing evidence only when its relevant input,
-code and runtime identities still match. A routine fix or stage transition does not require
-another output reset, question upload or tokenizer run. A deliberately fresh campaign uses
-the reset procedure above once after runtime preparation, then
-`python -m src.cluster.freeze --record` records its source/base configuration and runtime pins. Slurm jobs reject later
-changes. Local and VSC receipts can be compared with `--expected-file`; notebook output
-updates do not alter their source fingerprint.
-After reviewing a completed stage and stopping its writers, explicitly finish its freeze with
-`python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped` before
-changing the next stage's configuration/pins. The tested receipt is retained; record a new
-freeze for the next stage without deleting completed test results.
+Before full extraction, review real task/robustness tests, measured throughput, quota,
+independent backups and provider acceptance. Jev additionally needs verified organization
+RPS/TPS, context/billing bounds and the approved pilot budget. Its ignored private config
+is created by `python -m src.jev.setup_pilot --configure`; the local ignored credential file
+is loaded automatically and never transferred. No cleanup dispatches API calls.
 
-Original row identity is **dataset ID + source-data fingerprint + csv:N**, where N is the
-zero-based CSV position before any split/shuffle. `row_map` links each row/slot to a unique
-input; NULL denotes empty text. Features join by these IDs, with duplicate/missing IDs rejected.
-Provider/checkpoint/settings enter response keys. SQLite stores raw responses, UTC timestamps,
-usage and origins, plus immutable compressed-Parquet feature tables, manifests and checksums.
-Each provider/version/representation can be selected independently in downstream experiments.
-Jev budget, price and billing-bound changes need a checksummed review manifest. Policy history
-and each request's policy identity remain in the same dataset file; pilot spending counts
-toward the full cumulative budget. Unresolved reservations block a policy change.
-An explicit active input-set ID selects the current question version; historical sets remain
-in the same 18 files. Bulk feature reads do not add execution origins. Feature identities include
-the complete runtime-settings hash and relevant transformation code, not unrelated plotting code.
+Freeze source/configuration after runtime setup and cleanup with `src.cluster.freeze --record`.
+Slurm jobs reject changes; local/VSC receipts compare source identity. Notebook outputs do
+not change source identity. After reviewing a stage, explicitly finish its freeze before
+changing next-stage configuration; do not erase passed evidence at each transition.
+Experiment 0B validates complete saved features and real predictors/full-fold resource use.
+Finite tests cannot establish that no bugs remain or guarantee multimillion-request throughput.
 
-On VSC, **PROJECT** holds raw/prepared inputs, permanent responses/features, checkpoints,
-CUDA environments, exact token databases, predictions and large results. **DATA** holds the
-checkout, small CPU environment, compact manifests and logs. Both trees use `JEVPFN/` and
-`output_JEVPFN/<number>. phase/`. Local execution uses local storage; notebook paths remain
-local even if VSC variables are present. Large VSC writes fail rather than fall back to DATA.
-The E5 control has one resumable file per dataset under `data/text_embeddings/`; these files
-also survive output cleanup and use PROJECT on VSC. The combined transfer merges them after
-validating encoder identity, vector hashes and original row mappings.
+## Documentation and licence
 
-Use `python -m src.cluster.transfer export` on VSC, download its bundle, then
-`python -m src.cluster.transfer import <bundle.zip>` locally. Imports validate checksums,
-back up existing dataset caches and merge provider/version records transactionally. Never
-replace a populated cache wholesale with SCP. [Transfer instructions](docs/VSC.md#transfer-results).
-Question uploads use the separate `src.cluster.input_transfer pack` / `install` commands:
-exactly the selected 18 input files, byte-preserving copies, checksums and remote backups.
+[DATA_SOURCES](docs/DATA_SOURCES.md): provenance/semantics;
+[LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md): research evidence;
+[VSC](docs/VSC.md): operations;
+[AGENTS_MEMORY](docs/AGENTS_MEMORY.md): observed run/failure evidence;
+[CHANGELOG](docs/CHANGELOG.md): code changes. Plans and requested explanations stay in chat.
+Code is MIT; data/weights retain their licences. Software citation: [CITATION.cff](CITATION.cff).
 
-## Execution readiness and references
+## Based on the repository template
 
-The bounded GPU contract job tests all three tasks, a 30-class vector, missing/duplicate inputs,
-cache recovery, feature-table round trips and real first/longest inputs from every dataset.
-Seven known-answer/polarity/option-order probes supplement deterministic decoder tests.
-It plans at most 74 forwards per provider, with a hard ceiling of 100. A passing report requires
-review; it does not authorize full extraction or establish predictive-model compatibility.
-A separate two-node CPU storage test verifies PROJECT lock exclusion and SQLite
-snapshot/restore on the actual mount; local tests cannot establish that behavior.
-
-Still required before full extraction: real contracts/robustness and throughput tests for
-selected extractors, Jev account/billing/context checks, an approved spending limit, and
-verified storage quota/backup. Before evaluation: complete cache transfer/coverage, predictor
-checkpoints and environments, full-fold resource checks and pretraining-overlap review.
-Failures remain explicit; text is never silently truncated or replaced by missing values.
-Self-hosted failures persist by request identity. The optional `--continue-on-error` records/skips
-them but leaves the campaign incomplete; `--retry-failed` explicitly retries them. Provider jobs
-rotate datasets and wait for busy stores, retaining one writer per dataset.
-
-Future execution entry points are implemented and remain guarded: `src.jev.extraction` for the
-local Jev pilot/full run; `src.jev.self_hosted` for open weights; `src.cluster.predictor_contracts`
-for bounded real predictor checks; and `src.evaluation.campaign --profile-fold` for one complete
-outer fold in Experiment 0B. CV resumes checksummed complete folds and saves warnings, sampled
-process RSS and CUDA peaks. `src.evaluation.results --save` summarizes complete five-fold arms
-and paired feature differences, without treating unfinished arms as complete. Exact setup and
-acceptance requirements are in [VSC](docs/VSC.md).
-The owner approved a EUR 5 Jev pilot. The local setup command records an explicit conservative
-EUR/USD conversion; it never assumes the currencies are interchangeable. The later EUR 50
-budget is a proposal after testing, not an enabled full-run budget. Current provider documentation
-specifies organization-specific rate limits; the observed console did not show them. The owner
-confirmed USD 5 funding on 16 October. `python -m src.jev.setup_pilot --check-account` checks authentication only.
-`--configure` creates an ignored local pilot config after collecting verified rate, price,
-currency and context/billing bounds. At the owner's request, local Jev commands automatically
-read the Git-ignored `secrets/typesafe.local.json` file (`api_key` field). An explicit
-`TYPESAFE_API_KEY` environment variable overrides it. With neither source, the CLI offers a
-hidden prompt. Tests isolate the private file; transfers and VSC never read or copy it.
-
-Documentation has distinct purposes: [DATA_SOURCES](docs/DATA_SOURCES.md) records dataset
-provenance/semantics; [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md) records published evidence;
-[VSC](docs/VSC.md) documents operations; [AGENTS_MEMORY](docs/AGENTS_MEMORY.md) records run/failure
-evidence; [CHANGELOG](docs/CHANGELOG.md) records changes. Proposed plans stay in chat.
-
-Source code is MIT-licensed; datasets and weights retain their own licences. Cite the software
-using [CITATION.cff](CITATION.cff). Data, weights, outputs and credentials are Git-ignored.
-Git transfers code only; the owner publishes it. The repository retains conventions from
-[Andreas' research template](https://github.com/andreasgoethals/0.-Template).
+Follow the supplied [TEMPLATE](docs/TEMPLATE.md) and
+[original research template](https://github.com/andreasgoethals/0.-Template).
+Project-specific deviations preserve the agreed numbered phases, `output_JEVPFN`, aggregate
+report names, permanent paid-response stores and explicit local/VSC execution gates. Dense
+figures are paginated at final A4 width; notebook metadata/logs/results are kept outside the
+figure folders. Python entry points stay under `src/`; Slurm launchers stay under `scripts/`.

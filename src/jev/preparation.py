@@ -16,7 +16,7 @@ from src.utils.config import load_config, load_yaml
 from src.utils.serialization import write_json
 
 
-def prepare_questions(cfg=None, *, progress=print):
+def prepare_questions(cfg=None, *, progress=print, rebuild=False):
     """Reads only existing pinned datasets; no downloads, provider access or model imports."""
     cfg = cfg or load_config("question_preparation")
     settings = cfg.get(
@@ -62,6 +62,7 @@ def prepare_questions(cfg=None, *, progress=print):
                     bank,
                     variant=settings["variant"],
                     progress=report,
+                    rebuild=rebuild,
                 )
                 summaries.append(summary)
                 report(
@@ -149,7 +150,10 @@ def main(argv=None):
         "--row", type=int, default=0, help="Original zero-based CSV row for --preview"
     )
     parser.add_argument("--input-set-id", help="Explicit version when a dataset file holds several")
+    parser.add_argument("--rebuild", action="store_true", help="Recompute active inputs transactionally; preserve prior versions and all features")
     args = parser.parse_args(argv)
+    if args.preview and args.rebuild:
+        parser.error("--preview and --rebuild are mutually exclusive")
     if args.preview:
         print(
             json.dumps(
@@ -163,7 +167,7 @@ def main(argv=None):
             )
         )
         return
-    bank, path, summaries = prepare_questions()
+    bank, path, summaries = prepare_questions(rebuild=args.rebuild)
     print(f"Prepared {len(summaries)} dataset files directly in {path}")
     print(f"Question bank: {bank['bank_id']}")
     print(f"Unique inputs per extractor: {sum(s['unique_inputs'] for s in summaries):,}")

@@ -93,114 +93,45 @@ OVERVIEW_LABELS = {
 }
 
 
-def overview_figure(table, characters_per_token=4.0):
-    """A single overview with separate header/body/footer axes, also safe in Jupyter."""
-    specs = [
-        ("task_type", "Task /\nclasses", "task"),
-        ("rows", "Rows", "int"),
-        ("text_columns", "Text\ncolumns", "int"),
-        ("non_text_columns", "Non-text\ncolumns", "int"),
-        ("text_cells", "All text\ncells", "int"),
-        ("per_column_missing_or_empty_pct", "Empty cells\n(%)", "float"),
-        ("distinct_text_cells", "Distinct texts", "int"),
-        ("mean_tokens_per_nonempty_text", "Mean tokens\n/ text", "float"),
-        ("joint_unique_inputs", "Distinct\njoint texts", "int"),
-        ("joint_reuse_savings_pct", "Joint reuse\n(%)", "float"),
-        ("combined_tokens_median", "Joint tokens\nmedian", "float"),
-        ("combined_tokens_p95", "Joint tokens\np95 / max", "tail"),
-        ("combined_unique_inputs", "Unique requests\nboth modes", "int"),
-        ("combined_avoided_requests", "Both modes saved\nN / %", "combined_reuse_savings_pct"),
-    ]
-    values = np.zeros((len(table), len(specs)))
-    for j, (col, _, fmt) in enumerate(specs):
-        if fmt != "task":
-            arr = table[col].fillna(0).to_numpy(dtype=float)
-            values[:, j] = arr / max(arr.max(), 1)
-    fig = plt.figure(figsize=style.OVERVIEW_SIZE, layout="constrained")
-    grid = fig.add_gridspec(3, 1, height_ratios=style.OVERVIEW_ROW_RATIOS)
-    header, ax, footer = [fig.add_subplot(grid[i]) for i in range(3)]
-    for annotation_ax in (header, footer):
-        annotation_ax.set_axis_off()
-    header.text(
-        0,
-        0.8,
-        "20 core datasets: text availability, repetition and extraction workload",
-        transform=header.transAxes,
-        fontsize=style.OVERVIEW_TITLE_FONT,
-        va="top",
-    )
-    header.text(
-        0,
-        0.3,
-        "Darker shading means a larger value within that column. Counts and percentages are printed explicitly.",
-        transform=header.transAxes,
-        fontsize=style.OVERVIEW_FONT,
-        va="top",
-    )
-    ax.imshow(values, cmap=style.OVERVIEW_CMAP, vmin=0, vmax=2, aspect="auto")
-    for i, (_, row) in enumerate(table.iterrows()):
-        for j, (col, _, fmt) in enumerate(specs):
-            value = row[col]
-            if fmt == "task":
-                label = TASK_LABELS[value]
-                if row.n_classes > 0:
-                    label += f"\n{row.n_classes:.0f} classes"
-            elif fmt.endswith("pct"):
-                label = f"{value:,.0f}\n{row[fmt]:.1f}%"
-            elif fmt == "tail":
-                label = f"{value:,.1f}\n{row.combined_tokens_max:,.0f}"
-            elif fmt == "float":
-                label = f"{value:,.1f}"
-            else:
-                label = f"{value:,.0f}"
-            ax.text(
-                j,
-                i,
-                label,
-                ha="center",
-                va="center",
-                fontsize=style.OVERVIEW_FONT,
-                color=style.TASK_COLORS[row.task_type] if fmt == "task" else style.TEXT_COLOR,
-            )
-    ax.set_xticks(range(len(specs)), [s[1] for s in specs], fontsize=style.OVERVIEW_FONT)
-    ax.xaxis.tick_top()
-    ax.tick_params(axis="both", length=0, pad=9)
-    labels = [
-        f"{row.dataset} [REMOVED]"
-        if getattr(row, "experiment_status", "Included") == "REMOVED"
-        else row.dataset
-        for row in table.itertuples()
-    ]
-    ax.set_yticks(range(len(table)), labels, fontsize=style.OVERVIEW_FONT)
-    ax.set_xticks(np.arange(-0.5, len(specs), 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, len(table), 1), minor=True)
-    ax.grid(which="minor", color=style.GRID_COLOR, linewidth=0.7)
-    ax.tick_params(which="minor", length=0)
-    notes = (
-        "[REMOVED] = audit-only: Zomato (extreme text burden) and Spotify (114-class representation size); all 20 remain in exploration.\n"
-        "Text cells = rows × text columns. Distinct texts are counted within each named column, then summed. Empty = null or whitespace-only.\n"
-        "Empty-cell percentages use all text cells. Joint reuse uses rows with text.\n"
-        "Both-mode savings include within-mode duplicates and matching per-column/joint requests. Means exclude empty text cells; joint token summaries include all rows.\n"
-        f"Tokens ≈ ceil(characters / {characters_per_token:g}); task/question overhead is excluded. Context acceptance requires exact provider counts."
-    )
-    footer.text(
-        0,
-        0.95,
-        notes,
-        transform=footer.transAxes,
-        fontsize=style.OVERVIEW_FONT,
-        va="top",
-        linespacing=1.5,
-    )
-    caption = (
-        "Text-focused overview of all 20 core datasets; [REMOVED] identifies Spotify and Zomato as excluded from extraction and experiments, with raw data retained. Dataset/task dimensions are followed by text-cell availability, "
-        "distinct inputs and avoided requests, mean nonempty text length, joint-input availability and reuse, "
-        "joint token median/p95/maximum, and total unique requests and reuse across both modes. "
-        "Percentages use the denominators stated below the table; distinct texts are counted per named field. "
-        "Joint token summaries include empty rows. Shading is scaled independently per column. Token counts "
-        "are character-based estimates excluding questions and metadata. This is a large-format inspection figure."
-    )
-    return fig, "dataset_overview", caption
+def overview_figures(table, characters_per_token=4.0):
+    """Two print-sized overview panels; the full audit remains in the notebook table."""
+    from textwrap import fill
+
+    specs = [("rows", "Rows"), ("text_columns", "Text /\nnon-text"),
+             ("per_column_missing_or_empty_pct", "Empty\ncells %"),
+             ("mean_tokens_per_nonempty_text", "Mean tokens\n/ text"),
+             ("combined_unique_inputs", "Unique\nrequests"),
+             ("combined_avoided_requests", "Avoided\nN / %")]
+    for page, start in enumerate(range(0, len(table), 10), 1):
+        part = table.iloc[start:start + 10]
+        values = np.column_stack([part[col].fillna(0).to_numpy(dtype=float) /
+                                  max(table[col].max(), 1) for col, _ in specs])
+        fig, ax = plt.subplots(figsize=style.figsize(ratio=style.AUDIT_RATIO))
+        ax.imshow(values, cmap=style.OVERVIEW_CMAP, vmin=0, vmax=2, aspect="auto")
+        for i, row in enumerate(part.itertuples()):
+            texts = [f"{row.rows:,}", f"{row.text_columns} / {row.non_text_columns}",
+                     f"{row.per_column_missing_or_empty_pct:.1f}",
+                     f"{row.mean_tokens_per_nonempty_text:,.1f}",
+                     f"{row.combined_unique_inputs:,}",
+                     f"{row.combined_avoided_requests:,}\n{row.combined_reuse_savings_pct:.1f}%"]
+            for j, text in enumerate(texts):
+                ax.text(j, i, text, ha="center", va="center", fontsize=7)
+        labels = [fill(r.dataset, 23) + "\n" + TASK_LABELS[r.task_type] +
+                  (f" · K={r.n_classes:.0f}" if r.n_classes > 0 else "") +
+                  (" · removed" if r.experiment_status == "REMOVED" else "")
+                  for r in part.itertuples()]
+        ax.set_yticks(range(len(part)), labels, fontsize=7)
+        ax.set_xticks(range(len(specs)), [label for _, label in specs], fontsize=7)
+        ax.xaxis.tick_top()
+        ax.tick_params(which="both", length=0)
+        ax.set_title(f"Text extraction overview · {page}/2", pad=12)
+        yield fig, f"dataset_overview_{page}", (
+            "Core text datasets in catalog order. Counts exclude the target. Empty cells are null or whitespace-only. "
+            "Mean tokens exclude empty cells. Unique requests combine separate and joint inputs after exact reuse; "
+            "avoided requests are shown as a count and percentage of nonempty slots. K denotes target classes. "
+            "Spotify and Zomato are marked removed from experiments. Shading scales each metric independently. "
+            f"Tokens use ceil(characters/{characters_per_token:g}), excluding request overhead. Full counts and quantiles appear in the companion table."
+        )
 
 
 def text_column_figures(audit):
@@ -235,7 +166,7 @@ def text_column_figures(audit):
             "Each point represents one of the 90 official text columns. Left: mean character count "
             "among nonempty cells on a logarithmic axis. Right: null, nonfinite or whitespace-only "
             "cells as a percentage of all rows. Within-dataset offsets separate text columns; "
-            "colours identify task types. This is a large-format inspection figure."
+            "colours identify task types."
         ),
     )
     fig, ax = plt.subplots(figsize=style.figsize())
@@ -289,6 +220,6 @@ def reuse_figure(summary):
             "Exact reuse savings for per-column and joint requests on all 20 datasets. Left: "
             "avoided requests divided by nonempty slots, as percentages. Right: the same avoided "
             "requests as absolute counts. Missing inputs and cross-mode overlap are excluded. "
-            "Axes start at zero. This is a large-format inspection figure."
+            "Axes start at zero."
         ),
     )

@@ -98,5 +98,5 @@ def save_resolved_config(cfg: dict, notebook: str) -> str:
     resolved = copy.deepcopy(cfg)
     resolved["resolved_cache_path"] = str(paths.jev_cache_path(cfg["jev"]["cache_location"]))
     resolved["config_sha256"] = digest(cfg)
-    write_json(paths.figures_dir(notebook) / "_config.json", resolved)
+    write_json(paths.notebook_artifacts(notebook) / "_config.json", resolved)
     return resolved["config_sha256"]

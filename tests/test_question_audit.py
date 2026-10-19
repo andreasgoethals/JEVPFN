@@ -22,7 +22,7 @@ from src.utils.serialization import file_sha256
 def prepared(isolated_output):
     frame = pd.DataFrame(
         {
-            "a": ['café\nquoted "text"', "same", "same", None, " "],
+            "a": ['cafÃ©\nquoted "text"', "same", "same", None, " "],
             "b": ["other", "second", "second", 0, None],
             "nontext": [123] * 5,
             "target": [0, 1, 0, 1, 0],
@@ -61,6 +61,18 @@ def test_exhaustive_read_only_audit_checks_unicode_duplicates_zero_and_empty(pre
     assert report["unique_inputs"] == 7 and report["reused_slots"] == 4
     assert report["linguistic_correctness_proven"] is False
     assert file_sha256(prepared[1]) == before == report["file_sha256"]
+
+
+def test_explicit_rebuild_preserves_question_identity_and_all_row_links(prepared):
+    dataset, path, _ = prepared
+    bank = build_question_bank([dataset.metadata], load_yaml("question_design"))
+    before = audit(prepared)
+    result = prepare_dataset_inputs(dataset, bank, variant="accepted", rebuild=True)
+    after = audit(prepared)
+    assert result["reused"] is False
+    assert before["input_set_id"] == after["input_set_id"]
+    assert before["unique_inputs"] == after["unique_inputs"]
+    assert before["slots_total"] == after["slots_total"]
 
 
 @pytest.mark.parametrize(
@@ -114,3 +126,16 @@ def test_failed_start_replaces_prior_success_receipt(isolated_output):
     report = json.loads(path.read_text(encoding="utf-8"))
     assert report["status"] == "failed" and report["bank_id"] is None
     assert report["inference_performed"] is False
+
+
+def test_interrupted_rebuild_rolls_back_existing_input_set(prepared, monkeypatch):
+    from src.jev import inputs
+    dataset, _, _ = prepared
+    bank = build_question_bank([dataset.metadata], load_yaml("question_design"))
+    before = audit(prepared)
+    def interrupted(*args):
+        raise RuntimeError("interrupted rebuild")
+    monkeypatch.setattr(inputs, "_flush", interrupted)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        prepare_dataset_inputs(dataset, bank, variant="accepted", rebuild=True)
+    assert audit(prepared) == before

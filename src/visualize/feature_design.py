@@ -61,15 +61,15 @@ def input_design_figure():
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     boxes = [
-        (0.12, 0.75, "Text column A", style.MEDIAN_COLOR),
-        (0.12, 0.5, "Text column B", style.MEDIAN_COLOR),
-        (0.12, 0.22, "Text columns A + B", style.P95_COLOR),
-        (0.48, 0.75, "Fixed question + A\n→ decision model", style.MEDIAN_COLOR),
-        (0.48, 0.5, "Fixed question + B\n→ decision model", style.MEDIAN_COLOR),
-        (0.48, 0.22, "Same question + A + B\n→ decision model", style.P95_COLOR),
-        (0.84, 0.75, "Features from A", style.MEDIAN_COLOR),
-        (0.84, 0.5, "Features from B", style.MEDIAN_COLOR),
-        (0.84, 0.22, "Joint features", style.P95_COLOR),
+        (0.14, 0.80, "Text column A", style.MEDIAN_COLOR),
+        (0.14, 0.55, "Text column B", style.MEDIAN_COLOR),
+        (0.14, 0.30, "A + B text", style.P95_COLOR),
+        (0.50, 0.80, "Fixed question\n+ A → model", style.MEDIAN_COLOR),
+        (0.50, 0.55, "Fixed question\n+ B → model", style.MEDIAN_COLOR),
+        (0.50, 0.30, "Fixed question\n+ A + B → model", style.P95_COLOR),
+        (0.86, 0.80, "A features", style.MEDIAN_COLOR),
+        (0.86, 0.55, "B features", style.MEDIAN_COLOR),
+        (0.86, 0.30, "Joint features", style.P95_COLOR),
     ]
     for x, y, text, color in boxes:
         ax.text(
@@ -78,14 +78,15 @@ def input_design_figure():
             text,
             ha="center",
             va="center",
+            fontsize=8,
             bbox={
-                "boxstyle": "round,pad=0.8",
+                "boxstyle": "round,pad=0.5",
                 "facecolor": style.BACKGROUND_COLOR,
                 "edgecolor": color,
             },
         )
-    for y in (0.75, 0.5, 0.22):
-        for start, end in ((0.22, 0.36), (0.60, 0.74)):
+    for y in (0.80, 0.55, 0.30):
+        for start, end in ((0.26, 0.36), (0.65, 0.76)):
             ax.annotate(
                 "",
                 xy=(end, y),
@@ -93,13 +94,14 @@ def input_design_figure():
                 arrowprops={"arrowstyle": "->", "color": style.TOTAL_COLOR},
             )
     ax.set_title(
-        "Two text columns → three input groups before empty-input skipping and exact reuse"
+        "Separate and joint text inputs"
     )
     ax.text(
         0.5,
         0.02,
-        "Task metadata is shared. Non-text features and row targets are excluded. Each model: 1 binary probability, K class probabilities, or 1 expected direction per input.",
+        "Shared task metadata; no non-text features or row targets.\nOutputs per input: one binary probability, K class probabilities, or one direction score.",
         ha="center",
+        fontsize=7,
     )
     return (
         fig,

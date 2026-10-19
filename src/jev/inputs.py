@@ -44,7 +44,7 @@ def _schema(db):
     """)
 
 
-def prepare_dataset_inputs(dataset, bank, *, variant="documented", progress=None):
+def prepare_dataset_inputs(dataset, bank, *, variant="documented", progress=None, rebuild=False):
     """Stream all rows into a transactional, deduplicated input set; reuse completed sets.
 
     Exact equality includes task, question/options, field names and untouched values.
@@ -97,7 +97,12 @@ def prepare_dataset_inputs(dataset, bank, *, variant="documented", progress=None
             existing = db.execute(
                 "SELECT recipe_json,summary_json FROM input_sets WHERE input_set_id=?", (identity,)
             ).fetchone()
-            if existing:
+            if existing and rebuild:
+                # Rebuild only this immutable recipe, transactionally. Historical
+                # versions and paid response files are untouched; failure rolls back.
+                for table in ("row_map", "unique_inputs", "input_sets"):
+                    db.execute(f"DELETE FROM {table} WHERE input_set_id=?", (identity,))
+            if existing and not rebuild:
                 if json.loads(existing[0]) != recipe:
                     raise ValueError("Input recipe checksum mismatch")
                 _, _, summary, _ = _read_set(db, identity)

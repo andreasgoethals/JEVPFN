@@ -109,3 +109,22 @@ def test_cleanup_removes_notebook_transcripts_but_preserves_personal_notes(isola
         (folder / name).write_text("text", encoding="utf-8")
     clean_run.main(["--clean"])
     assert {p.name for p in folder.iterdir()} == {"notes.md", "notes.txt"}
+
+
+def test_report_only_cleanup_updates_new_figure_manifest(isolated_output):
+    import json
+
+    from src.utils import paths
+    from src.visualize.figures import manifest_path
+    folder = paths.figures_dir("0. exploration/check")
+    folder.mkdir(parents=True)
+    (folder / "01_plot.pdf").write_text("pdf")
+    manifest = manifest_path("0. exploration/check")
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps([{"stem": "01_plot"}]))
+    report = paths.reports_dir("0. exploration/check")
+    report.parent.mkdir(parents=True)
+    report.write_text("old figure description")
+    clean_run.main(["--clean"])
+    assert json.loads(manifest.read_text()) == []
+    assert not report.exists()
