@@ -41,8 +41,17 @@ def _isolate_routing_environment(monkeypatch):
         "SLURM_CLUSTER_NAME",
         "JEVPFN_CONTAINER_PROVIDER",
         "JEVPFN_CONTAINER_ID",
+        "TYPESAFE_API_KEY",
     ):
         monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_local_credentials(tmp_path, monkeypatch):
+    """Never let synthetic tests read the owner's real, ignored credential file."""
+    from src.jev import auth
+
+    monkeypatch.setattr(auth, "LOCAL_CREDENTIAL_PATH", tmp_path / "absent_credentials.json")
 
 
 @pytest.fixture(autouse=True)

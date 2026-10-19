@@ -94,3 +94,31 @@ def test_client_setup_failure_has_no_attempt_and_can_resume_without_stale_error(
     report = smoke.run(execute=True, client_factory=Client, sleep=lambda _: None)
     assert report["status"] == "jev_smoke_passed_requires_dataset_pilot"
     assert "error_type" not in report and "http_status" not in report
+
+
+def test_explicit_authentication_retry_keeps_history_and_reservation(local):
+    class TypeSafeAuthenticationError(Exception):
+        status = 401
+
+    class Rejected(Client):
+        def system_one(self, state, questions):
+            raise TypeSafeAuthenticationError("Synthetic invalid key")
+
+    with pytest.raises(TypeSafeAuthenticationError):
+        smoke.run(execute=True, client_factory=Rejected)
+    with pytest.raises(RuntimeError, match="no saved response"):
+        smoke.run(execute=True, client_factory=lambda: pytest.fail("Requires explicit retry"))
+    # Ordinary resume preserves the original definitive failure on the attempted request.
+    report = smoke.run(execute=True, retry_auth_rejected=True, client_factory=Client, sleep=lambda _: None)
+    assert len(report["attempts"]) == 3
+    assert len(report["authentication_rejections"]) == 1
+    assert report["historical_reserved_usd"] > 0
+    assert report["conservative_total_with_prior_reservations_usd"] > report["total_cost_usd"]
+    smoke.run(execute=True, retry_auth_rejected=True, client_factory=lambda: pytest.fail("Reuse saved responses"))
+
+
+def test_authentication_retry_never_overrides_an_uncertain_timeout(local):
+    with pytest.raises(TimeoutError):
+        smoke.run(execute=True, client_factory=lambda: Client(fail=True))
+    with pytest.raises(ValueError, match="HTTP 401"):
+        smoke.run(execute=True, retry_auth_rejected=True, client_factory=lambda: pytest.fail("No call"))

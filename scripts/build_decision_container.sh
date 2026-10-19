@@ -49,7 +49,28 @@ cd "$JEVPFN_BUILD_WORK"
 if [[ "$JEVPFN_BUILD_MODE" == wrap ]]; then
     JEVPFN_BUILD_SOURCE="$JEVPFN_STAGING_ROOT/JEVPFN/environments/$JEVPFN_BUILD_PROVIDER"
     [[ -x "$JEVPFN_BUILD_SOURCE/bin/python" ]] || { echo 'No complete source environment; use new mode.' >&2; exit 2; }
-    wrap-install --mask -w bin "$JEVPFN_BUILD_SOURCE" --prefix "$JEVPFN_BUILD_DEST"
+    # The site's archival copy fails when propagating native Lustre ACLs into the image.
+    # Patch only a private scratch copy; never edit the site installation or source ACLs.
+    JEVPFN_PRIVATE_WRAPPER="$JEVPFN_BUILD_WORK/wrapper"
+    mkdir "$JEVPFN_PRIVATE_WRAPPER"
+    cp -R -- "$JEVPFN_WRAPPER_ROOT/." "$JEVPFN_PRIVATE_WRAPPER"
+    "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_PRIVATE_WRAPPER" "$JEVPFN_BUILD_REPO" <<'PY'
+import sys
+from pathlib import Path
+root,repo=map(Path,sys.argv[1:])
+template=root/'templates/wrap.sh'
+expected='cp -a $CW_SOURCE_MOUNT_POINT/. $CW_INSTALLATION_PATH\ncd $CW_WORKDIR\nsource $CW_INSTALLATION_PATH/_post_install.sh'
+if template.read_text().strip()!=expected:
+    raise ValueError('Site wrap template changed; review it before applying the ACL workaround')
+template.write_bytes((repo/'scripts/wrap_environment_template.sh').read_bytes())
+# Keep dispatch inside this private copy even if the site alias was absolute.
+alias=root/'frontends/wrap-install'
+alias.unlink()
+alias.symlink_to('containerize')
+print('Private scratch wrapper: copy contents/links/times without source ACLs or owners')
+PY
+    export CW_DEBUG_KEEP_FILES=1
+    bash "$JEVPFN_PRIVATE_WRAPPER/frontends/wrap-install" --mask -w bin "$JEVPFN_BUILD_SOURCE" --prefix "$JEVPFN_BUILD_DEST"
 else
     "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_BUILD_WORK" "$JEVPFN_BUILD_REPO" "$JEVPFN_BUILD_PROVIDER" "$JEVPFN_STAGING_ROOT" <<'PY'
 import sys,shlex

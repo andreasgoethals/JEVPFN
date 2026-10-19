@@ -285,10 +285,13 @@ acceptance requirements are in [VSC](docs/VSC.md).
 The owner approved a EUR 5 Jev pilot. The local setup command records an explicit conservative
 EUR/USD conversion; it never assumes the currencies are interchangeable. The later EUR 50
 budget is a proposal after testing, not an enabled full-run budget. Current provider documentation
-specifies organization-specific rate limits; the console excerpt did not show them and showed
-USD 0 balance. `python -m src.jev.setup_pilot --check-account` checks authentication only.
+specifies organization-specific rate limits; the observed console did not show them. The owner
+confirmed USD 5 funding on 16 October. `python -m src.jev.setup_pilot --check-account` checks authentication only.
 `--configure` creates an ignored local pilot config after collecting verified rate, price,
-currency and context/billing bounds. The API key stays in the process environment.
+currency and context/billing bounds. At the owner's request, local Jev commands automatically
+read the Git-ignored `secrets/typesafe.local.json` file (`api_key` field). An explicit
+`TYPESAFE_API_KEY` environment variable overrides it. With neither source, the CLI offers a
+hidden prompt. Tests isolate the private file; transfers and VSC never read or copy it.
 
 Documentation has distinct purposes: [DATA_SOURCES](docs/DATA_SOURCES.md) records dataset
 provenance/semantics; [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md) records published evidence;

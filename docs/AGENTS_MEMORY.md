@@ -1,16 +1,17 @@
 # Operational evidence
 
 Current stage: Experiment 0A setup, before the owner-requested final clean validation.
-At 6f375ab the owner reset local and both VSC output trees before container setup completed.
-Local preparation/audit passed for all 18 datasets, all 585 tests passed, and the v3 question
-bundle plus local freeze receipt were uploaded. VSC installation reported already_current.
-The fresh Jev smoke stopped during SDK construction with TypeSafeError and zero attempts;
-this indicates local credential input validation, not a completed inference or a provider
-rejection. Its CLI now gives a controlled paste-format hint without exposing the credential.
-Container build 62346143 FAILED 1:0 after 4m48s on l33c25n2. Its Slurm log was removed by the
-reset; no surviving build diagnostics were found. The Clef container directory is empty.
-Retry now permits only an empty destination; nonempty/linked destinations remain protected.
-The wICE build now prefers shared Lustre scratch so diagnostics can survive a failed job.
+Latest direct OnDemand check (19-10): Clef container build 62366728 FAILED 1:0 after
+6m49s, MaxRSS 13,924,368 K. The log shows repeated `cp: preserving permissions: Invalid
+argument` errors during the wrapper's environment copy, before image sealing or GPU tests.
+This is not evidence of OOM. Prepared a private scratch copy of site wrapper 0.4.2 whose
+known wrap template copies content/links/timestamps without native ACLs or ownership.
+The site installation and native environments are untouched. Unknown templates stop the
+patch; source package identities and real GPU checks remain required. The new build must
+still pass on VSC. Keep its failure log and do not reset outputs yet.
+Earlier build 62346143 FAILED 1:0 after 4m48s; its log was deleted by an owner reset and its
+cause remains unknown. Local preparation/audit and the uploaded v3 bank are unchanged;
+VSC installation previously reported already_current. No repeated upload is needed now.
 Direct VSC comparison found identical HEADs but 52 differing file hashes, all explained by
 Windows CRLF versus Git/Linux LF. Freeze schema v2 hashes normalized text source without
 rewriting files; shell scripts still require actual LF. Content changes still stop execution.
@@ -25,13 +26,19 @@ passed. All five open checkpoints are staged, but only Clef/Intern native GPU ex
 with older questions is verified. Remaining GPU/throughput tests and backup review are pending.
 The library pin is `de324efcca55be392feb0c01830b3b6ce364587f`.
 
-On 16-10 the owner confirmed USD 5 account funding. Three live local Jev 1.13 probes passed:
+On 16-10 the owner confirmed USD 5 account funding. Three live local Jev 1.13 probes passed
+again on 19-10 after fixing credential setup:
 binary p=0.97, three-class correct option p=1, nine-level score expected direction +4.
 Reported input usage: 288 + 355 + 408 = 1,051 tokens; computed input cost USD 0.000044142.
-Those raw synthetic responses were in local Experiment 0 `jev_smoke` outputs before the
-owner's reset; the new smoke has not completed and does not supersede that historical pass.
-No dataset requests or full extraction ran. A repeat with saved receipts must reuse responses;
-unknown outcomes stop rather than silently dispatch again. No key was saved. Published model
+Current responses and the passed receipt are saved locally under Experiment 0 `jev_smoke`.
+An initial owner-reported HTTP 401 was explicitly retried after the exact supplied key
+authenticated via GET models. Its original diagnostic and USD 0.002688 conservative
+reservation remain in authentication_rejections/history; no refund or unbilled outcome is
+asserted. A repeat reused all three verified responses without creating a network client.
+No dataset requests or full extraction ran. Unknown outcomes stop rather than silently
+dispatch again. At the owner's explicit request the key is now saved only in ignored
+secrets/typesafe.local.json. Local commands load it; tests isolate it; transfers and VSC
+never use it. An explicit environment value takes precedence. Published model
 IDs are accepted even when GET models lists aliases only; live returned version was 1.13.0.
 The visible console confirmed USD 5 credit and auto-recharge off. Organization ID is under
 user menu → Settings → Organization; it was not saved in public files. Home, Organization,
@@ -52,10 +59,10 @@ checkpoint file hash; a present manifest alone is not a successful inference tes
 Compact runtime build/verification/guarded retirement and source-freeze checks are implemented,
 but real VSC container builds/GPU execution remain unverified. Preserve native sources until
 matching container GPU evidence passes; build unpacked temporary files in scratch.
-Local validation after the CRLF/auth/retry fixes: 599 tests passed, lint and dependency checks passed, and
-all 15 project shell/Slurm files passed Bash syntax and LF checks. Neither protected tokenizer
-module nor the library submodule changed. The real Jev smoke also reused all three saved
-responses with no new network client. No VSC job, cleanup or Git publication was performed.
+Local credential/recovery validation passed 609 tests before the wrapper-copy workaround;
+the final combined-suite result is recorded in CHANGELOG. Neither protected tokenizer module
+nor the library submodule changed. No VSC job submission, cleanup or Git publication was
+performed; the current VSC failure and installed wrapper source were inspected read-only.
 
 The owner wants setup/debugging completed FIRST, then permanent deletion of local and both
 VSC output trees, repeated local question preparation/audit/upload, and one fresh frozen 0A.
@@ -71,6 +78,7 @@ Research method is in README, operations in VSC, and meanings in DATA_SOURCES.
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 19-10-2026 | wICE / 62366728 | Clef wrap build, 09f7982 | FAILED 1:0 after 6m49s, MaxRSS 13,924,368 K. Site wrapper cp -a failed preserving permissions while copying the native environment. No seal/GPU pass or retirement. Scratch-local copy-template workaround prepared, not yet executed on VSC. |
 | 16-10-2026 | wICE / 62346143 | Clef container build, 6f375ab | FAILED 1:0 after 4m48s on l33c25n2. Original stdout was deleted by the subsequent output reset; cause unverified. Empty destination remains; no sealed container or source retirement verified. |
 | 16-10-2026 | wICE / 62343023 | CPU at 606296c | COMPLETED 0:0, 5m19s; preflight_passed and synthetic contracts passed; MaxRSS 5,068,440 K. |
 | 16-10-2026 | wICE / 62340719 | Fresh version-3 CPU job, 0113f19 | Owner sacct: COMPLETED 0:0, 5m19s, MaxRSS 5,010,580 K. Full report not yet downloaded. |

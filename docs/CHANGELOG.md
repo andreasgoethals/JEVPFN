@@ -1,5 +1,10 @@
 # Changelog
 
+## 19-10-2026
+
+- Added automatic local credentials from the owner's Git-ignored secrets/typesafe.local.json, with environment override, fixed non-disclosing diagnostics and isolated synthetic tests. An explicitly recorded HTTP 401 can be retried once after correction, retaining its diagnostic and conservative reservation; unknown outcomes remain blocked. Authenticated model listing and three new live Jev 1.13 probes passed (1,051 input tokens; computed USD 0.000044142); saved responses were then reused without another client. No dataset extraction ran.
+- Directly inspected failed VSC build 62366728: the site wrapper's archival copy could not preserve native permissions inside its image. Prepared a checked copy-template replacement in a private scratch copy of wrapper 0.4.2; shared software and native environments remain untouched. Real VSC build/GPU verification remains pending. Updated setup/readiness instructions. Validation: 614 local tests passed, one Linux link test deferred to VSC; lint, dependency checks and all 16 shell syntax/LF checks passed. Protected tokenizers/submodule are unchanged. No output cleanup, VSC submission or Git publication performed.
+
 ## 16-10-2026
 
 - Diagnosed the fresh-run freeze mismatch as 52 CRLF/LF-only differences despite identical Git HEADs; source hashing now normalizes text line endings and still rejects CRLF shell scripts. Added credential-format diagnostics without exposing keys, and retry coverage for pre-request initialization failures. Container retries preserve nonempty/linked destinations, reuse only empty directories and keep build work on shared Lustre scratch. Recorded the failed 62346143 build without inventing a cause after its log was deleted. Prepared inputs/uploads and protected tokenizers are unchanged. Validation: 599 tests, lint, dependency checks and all 15 shell syntax/LF checks passed; no paid request, remote job or publication was performed.

@@ -14,7 +14,7 @@ import time
 from datetime import UTC, datetime
 
 from src.cluster.semantic_contracts import probes
-from src.jev.auth import api_key, error_hint
+from src.jev.auth import api_key, credentials_available, error_hint
 from src.jev.provider import MAPPING_VERSION, api_preview, response_features
 from src.utils import paths
 from src.utils.config import load_yaml
@@ -45,7 +45,7 @@ def requests():
     ]
 
 
-def run(*, execute=False, client_factory=None, sleep=time.sleep):
+def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_rejected=False):
     if not execute or paths.on_vsc():
         raise RuntimeError("The bounded Jev smoke test requires --execute locally")
     if MODEL != "jev-1.13.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
@@ -80,9 +80,35 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep):
             report = json.loads(report_path.read_text(encoding="utf-8"))
             if report.get("request_identity") != identity:
                 raise ValueError("Stored smoke test has different requests; preserve and review")
+        if report.get("status") == "stopped_requires_review" and report["attempts"]:
+            report["attempts"][-1].setdefault(
+                "failure",
+                {"error_type": report.get("error_type"), "http_status": report.get("http_status")},
+            )
+        if retry_auth_rejected and report.get("status") == "stopped_requires_review":
+            pending = [
+                a for a in report["attempts"] if not (directory / f"{a['probe']}.json").exists()
+            ]
+            failure = pending[0].get("failure", {}) if len(pending) == 1 else {}
+            if (
+                failure.get("http_status") != 401
+                or failure.get("error_type") != "TypeSafeAuthenticationError"
+                or len(pending) != 1
+                or pending[0] != report["attempts"][-1]
+                or pending[0].get("status") != "attempting"
+                or report.get("authentication_rejections")
+            ):
+                raise ValueError("Only one explicitly recorded HTTP 401 can be retried this way")
+            failed = report["attempts"].pop()
+            report["authentication_rejections"] = [
+                {**failed, "http_status": 401, "review": "explicit retry after credential correction"}
+            ]
+            # Preserve the old conservative reservation; do not assert a billing refund.
+            report["historical_reserved_usd"] = failed["reserved_usd"]
         report["status"] = "running"
         report.pop("error_type", None)
         report.pop("http_status", None)
+        write_json(report_path, report)
         try:
             for name, request, expected in planned:
                 prior = next((a for a in report["attempts"] if a["probe"] == name), None)
@@ -161,8 +187,16 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep):
                 status="jev_smoke_passed_requires_dataset_pilot",
                 pinned_version_access_verified=True,
                 total_cost_usd=sum(a["charged_usd"] for a in report["attempts"]),
+                conservative_total_with_prior_reservations_usd=(
+                    sum(a["charged_usd"] for a in report["attempts"])
+                    + report.get("historical_reserved_usd", 0)
+                ),
             )
         except Exception as exc:
+            if report["attempts"] and report["attempts"][-1].get("status") == "attempting":
+                report["attempts"][-1].setdefault(
+                    "failure", {"error_type": type(exc).__name__, "http_status": getattr(exc, "status", None)}
+                )
             report.update(
                 status="stopped_requires_review",
                 error_type=type(exc).__name__,
@@ -179,6 +213,10 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--retry-auth-rejected", action="store_true",
+        help="After correcting credentials, explicitly retry one saved 401; retain its reservation/history",
+    )
     args = parser.parse_args()
     if not args.execute:
         print(
@@ -193,11 +231,11 @@ def main():
             )
         )
         return
-    prompted = not os.environ.get("TYPESAFE_API_KEY")
+    prompted = not credentials_available()
     try:
         if prompted:
             os.environ["TYPESAFE_API_KEY"] = getpass.getpass("TypeSafe API key (hidden): ")
-        print(json.dumps(run(execute=True), indent=2))
+        print(json.dumps(run(execute=True, retry_auth_rejected=args.retry_auth_rejected), indent=2))
     except Exception as exc:
         print(
             json.dumps(

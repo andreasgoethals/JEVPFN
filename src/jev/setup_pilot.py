@@ -1,6 +1,7 @@
 """Check authentication without inference, or prepare a private, explicitly reviewed pilot.
 
-Never accepts an API key as an argument or writes it to disk. No automatic top-up,
+Loads the process environment or the owner's ignored local credential file, with a
+hidden prompt only if neither exists. Never writes keys. No automatic top-up,
 full extraction, or inference is performed by this module.
 """
 
@@ -14,7 +15,7 @@ import yaml
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
-from src.jev.auth import api_key, error_hint
+from src.jev.auth import api_key, credentials_available, error_hint
 from src.jev.extraction import campaign_limits
 from src.jev.hosted import ReviewedContextEnvelope
 from src.utils import paths
@@ -114,7 +115,7 @@ def main():
     action.add_argument("--configure", action="store_true")
     args = parser.parse_args()
     if args.check_account:
-        prompted = not os.environ.get("TYPESAFE_API_KEY")
+        prompted = not credentials_available()
         try:
             if prompted:
                 os.environ["TYPESAFE_API_KEY"] = getpass.getpass("TypeSafe API key (hidden): ")

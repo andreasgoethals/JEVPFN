@@ -12,7 +12,9 @@ repository. Existing source/config/notebook conventions remain authoritative.
   to the owner. Cite code snapshots by symbol, not line number; record the pin used.
 - Raw datasets, prepared inputs, permanent response/features and checkpoints are protected.
   Never recursively clean them or a system temporary root. Never force-add data/weights.
-- Credentials must never enter code, tracked configuration, notebooks, reports or tool output.
+- Credentials must never enter tracked code/configuration, notebooks, reports or tool output.
+  The owner explicitly authorized the Git-ignored local secrets/typesafe.local.json file.
+  Local Jev commands load it automatically; never copy it to VSC or include it in transfers.
 - Main inputs are deterministic and label-free: no generative questions, non-text row values,
   true row targets, class frequencies, target statistics or model feedback. Keep original
   class vocabularies; source meanings live in dataset_semantics.yaml. Skip empty text and

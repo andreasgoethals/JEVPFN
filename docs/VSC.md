@@ -313,6 +313,13 @@ working environment; `new` installs a fresh runtime entirely in scratch before p
 Images and wrappers end in PROJECT `JEVPFN/containers/<provider>/`. Weights stay outside the
 image in PROJECT checkpoints. The build copies the site's wrapper configuration and redirects
 its temporary/work directories and package caches to scratch. No source environment is deleted.
+For `wrap`, it uses a private scratch copy of wrapper 0.4.2 with a checked copy-template
+replacement. The site template's `cp -a` failed while preserving native Lustre permissions
+inside the image (job 62366728). The replacement copies file contents, links and timestamps
+with ordinary destination permissions, without importing source ACLs/ownership. It changes
+neither the site installation nor source permissions. Unknown upstream templates stop the
+build. Failure diagnostics are retained in shared scratch; the workaround still needs a
+successful real build and matching GPU contracts before retiring either native environment.
 
 After publishing/synchronizing the source, start with Clef:
 
@@ -442,13 +449,17 @@ First verify the pinned account/task interface locally with:
 .\.venv\Scripts\python.exe -m src.jev.smoke --execute
 ```
 
-Paste only the key value. In classic Windows PowerShell, right-click/Shift+Insert or a
-`Read-Host -AsSecureString` process-only environment variable avoids Ctrl+V control characters
-in a hidden Python prompt. Local format validation reports a fixed hint without displaying
-the key. A constructor failure with zero recorded attempts can resume with corrected input;
-an attempted request without a saved response still stops for billing review.
+The owner's key is stored in Git-ignored `secrets/typesafe.local.json` on the laptop and
+loaded automatically by account checks, smoke tests and dataset extraction. Do not upload
+this file. An explicit `TYPESAFE_API_KEY` environment variable takes precedence; with neither
+source, the CLI asks through a hidden prompt. Local format errors never display the key.
+A constructor failure with zero recorded attempts can resume with corrected input; an
+attempted request without a saved response stops for review. Only a specifically recorded
+authentication HTTP 401 can be retried once using `smoke --execute --retry-auth-rejected`
+after correcting credentials. Its old diagnostic and conservative billing reservation remain
+in the receipt. This option cannot bypass an ambiguous timeout or other unknown outcome.
 
-It asks for the key without echo, sends only three fixed synthetic probes sequentially and
+It sends only three fixed synthetic probes sequentially and
 keeps complete responses plus a compact receipt. It checks exact Jev 1.13 identity, binary,
 multiclass, nine-level score mapping and usage. The reviewed policy in
 `config/3. experiment_0/jev_smoke.yaml` reserves at most USD 0.008064 for three attempts using
@@ -456,7 +467,9 @@ the published 64k per-request context and USD 0.042/M price, with no long-contex
 SDK/application retries are disabled. Existing verified responses are reused; a missing
 response after an attempt stops for billing review. HTTP errors stop, including rate limits.
 This slow interface check does not claim to know account RPS/TPS or enable dataset extraction.
-It passed live on 16 October; its three inputs consumed 1,051 reported tokens.
+It passed live again on 19 October after credential setup; its three inputs consumed 1,051
+reported tokens at computed input cost USD 0.000044142. Repeating the successful command
+reuses those saved responses without new requests. The dataset pilot remains separate.
 
 The console's user menu → Settings → Organization displays the organization ID. Billing
 shows credits and auto-recharge; neither that page nor Home/Organization/Usage exposed
@@ -464,14 +477,14 @@ RPS/TPS during the observed check. Request those values from the existing TypeSa
 or `support@typesafe.ai`; do not substitute proposed traffic settings for account limits.
 Keep the organization ID and credentials out of public configuration/docs.
 
-Jev calls run locally after an approved small pilot. Install `.[jev]`, set `TYPESAFE_API_KEY`
-privately, and use the pinned `jev-1.13.0` client. `src.jev.extraction` disables hidden retries,
+Jev calls run locally after an approved small pilot. Install `.[jev]`, use the local credential
+file or a private environment override, and use the pinned `jev-1.13.0` client. `src.jev.extraction` disables hidden retries,
 uses durable spending reservations and stops on ambiguous billing outcomes. Config requires
 verified account rates, a billing-token upper bound, context validation and explicit dataset/
 campaign budgets. Published rates are references, not automatic account authorization.
 The current docs publish no universal RPS/TPS allowance. Obtain your organization's values
-from the console or TypeSafe support. The owner's pasted console showed USD 0 balance, so
-funding/access must be settled before the paid pilot; the code does not top up an account.
+from the console or TypeSafe support. The owner confirmed USD 5 funding on 16 October;
+check the remaining balance before the dataset pilot. The code does not top up an account.
 Microsoft is outside the selected roster.
 
 `python -m src.jev.extraction` previews readiness without credentials/network. Its `--execute`
@@ -493,7 +506,8 @@ be obtained before this step; a guessed byte/token ratio is not acceptable evide
 Use `python -m src.jev.hosted --config feature_creation/jev.local --execute` for that pilot.
 `python -m src.jev.setup_pilot --check-account` sends only the authenticated model-list GET;
 it verifies neither paid inference, balance, rate limits nor access to the exact version.
-Keep the key in a terminal environment variable and clear it when finished.
+The local private file remains outside Git and output cleanup. Clear any temporary environment
+override when finished so it cannot unexpectedly override that file.
 
 After a decoder repair, dispatch revalidates a saved `invalid_response` without another
 API call or charge. For exhausted verified-unbilled rejections or uncertain billing, stop

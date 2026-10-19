@@ -264,3 +264,104 @@ def test_container_retry_reuses_only_an_empty_destination(tmp_path, kind):
         assert (destination / "image.sif").read_text() == "preserve"
     if kind == "linked":
         assert destination.is_symlink() and outside.is_dir()
+
+
+@pytest.mark.parametrize("failure", ["none", "copy", "post_install"])
+def test_private_wrap_template_preserves_contents_and_executable_bits(tmp_path, failure):
+    source = tmp_path / "source with spaces"
+    destination = tmp_path / "image with spaces"
+    work = tmp_path / "work with spaces"
+    for p in (source, destination, work):
+        p.mkdir()
+    (source / "package.txt").write_text("unchanged package bytes α\n", encoding="utf-8")
+    (source / "empty").mkdir()
+    (source / "tool").write_text("#!/bin/bash\nprintf 'executable works\\n'\n")
+    (source / "tool").chmod(0o755)
+    # The actual wrapper writes this hook into the image before copying the environment.
+    (destination / "_post_install.sh").write_text(
+        "exit 29\n" if failure == "post_install" else "printf 'post install works\\n'\n"
+    )
+    driver = tmp_path / "wrap.sh"
+    driver.write_text(
+        "set -euo pipefail\n"
+        'if [[ "$OSTYPE" == msys* ]]; then\n'
+        '  CW_SOURCE_MOUNT_POINT="$(cygpath -u "$CW_SOURCE_MOUNT_POINT")"\n'
+        '  CW_INSTALLATION_PATH="$(cygpath -u "$CW_INSTALLATION_PATH")"\n'
+        '  CW_WORKDIR="$(cygpath -u "$CW_WORKDIR")"\nfi\n'
+        "cp() {\n"
+        '  [[ "$TEST_FAILURE" != copy ]] || return 27\n'
+        '  [[ "$1" == -R && "$2" == --preserve=links,timestamps ]] || return 28\n'
+        '  command cp "$@"\n}\n'
+        'source "$TEST_TEMPLATE"\n'
+        '"$CW_INSTALLATION_PATH/tool"\n', encoding="utf-8"
+    )
+    result = subprocess.run(
+        [bash_executable(), str(driver)],
+        env=dict(os.environ, CW_SOURCE_MOUNT_POINT=source.as_posix(),
+                 CW_INSTALLATION_PATH=destination.as_posix(), CW_WORKDIR=work.as_posix(),
+                 TEST_FAILURE=failure,
+                 TEST_TEMPLATE=(ROOT / "scripts/wrap_environment_template.sh").as_posix()),
+        capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == {"none": 0, "copy": 27, "post_install": 29}[failure], result.stderr
+    assert (source / "package.txt").read_text(encoding="utf-8") == "unchanged package bytes α\n"
+    assert not (source / "_post_install.sh").exists()
+    if failure != "copy":
+        assert (destination / "package.txt").read_bytes() == (source / "package.txt").read_bytes()
+        assert (destination / "empty").is_dir()
+    if failure == "none":
+        assert "post install works" in result.stdout and "executable works" in result.stdout
+    else:
+        assert "executable works" not in result.stdout
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX link behavior needs a Linux filesystem")
+def test_private_wrap_template_keeps_symlinks_and_hardlinks(tmp_path):
+    source, dest = tmp_path / "source", tmp_path / "dest"
+    source.mkdir()
+    dest.mkdir()
+    (source / "original").write_bytes(b"package bytes")
+    (source / "alias").symlink_to("original")
+    os.link(source / "original", source / "hardlink")
+    (dest / "_post_install.sh").write_text(":\n")
+    result = subprocess.run(
+        [bash_executable(), "-e", str(ROOT / "scripts/wrap_environment_template.sh")],
+        env=dict(os.environ, CW_SOURCE_MOUNT_POINT=str(source), CW_INSTALLATION_PATH=str(dest),
+                 CW_WORKDIR=str(tmp_path)), capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (dest / "alias").is_symlink() and os.readlink(dest / "alias") == "original"
+    assert os.path.samefile(dest / "original", dest / "hardlink")
+
+
+@pytest.mark.parametrize("changed_template", [False, True])
+def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_template):
+    script = (ROOT / "scripts/build_decision_container.sh").read_text()
+    start = script.index("import sys\nfrom pathlib import Path\nroot,repo=")
+    code = script[start:script.index("\nPY", start)]
+    wrapper = tmp_path / "private wrapper"
+    (wrapper / "templates").mkdir(parents=True)
+    (wrapper / "frontends").mkdir()
+    original = (
+        "cp -a $CW_SOURCE_MOUNT_POINT/. $CW_INSTALLATION_PATH\n"
+        "cd $CW_WORKDIR\nsource $CW_INSTALLATION_PATH/_post_install.sh\n"
+    )
+    template = wrapper / "templates/wrap.sh"
+    template.write_text(original + ("unknown change\n" if changed_template else ""))
+    alias = wrapper / "frontends/wrap-install"
+    alias.write_text("site dispatcher placeholder")
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(wrapper), str(ROOT)],
+        capture_output=True, text=True, timeout=10,
+    )
+    if changed_template:
+        assert result.returncode != 0 and "Site wrap template changed" in result.stderr
+        assert template.read_text() == original + "unknown change\n"
+        assert alias.read_text() == "site dispatcher placeholder"
+    else:
+        # Windows may refuse the same native symlink that is available in a Linux allocation.
+        if os.name == "nt" and "WinError 1314" in result.stderr:
+            pytest.skip("Native symlink creation unavailable")
+        assert result.returncode == 0, result.stderr
+        assert template.read_bytes() == (ROOT / "scripts/wrap_environment_template.sh").read_bytes()
+        assert alias.is_symlink() and os.readlink(alias) == "containerize"

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import time
 import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -145,9 +144,11 @@ class TypeSafeTransport:
             raise ValueError("A fixed matching Jev model/version is required")
         from typesafe_sdk import RetryPolicy, TypeSafeClient
 
+        from src.jev.auth import api_key
+
         self.model = cfg["jev"]["model"]
         self.client = TypeSafeClient(
-            api_key=os.environ["TYPESAFE_API_KEY"],
+            api_key=api_key(),
             base_url="https://api.typesafe.ai",
             model=self.model,
             retry=RetryPolicy(max_retries=0, timeout=60),
