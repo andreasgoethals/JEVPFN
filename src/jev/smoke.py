@@ -14,6 +14,7 @@ import time
 from datetime import UTC, datetime
 
 from src.cluster.semantic_contracts import probes
+from src.jev.auth import api_key, error_hint
 from src.jev.provider import MAPPING_VERSION, api_preview, response_features
 from src.utils import paths
 from src.utils.config import load_yaml
@@ -49,8 +50,7 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep):
         raise RuntimeError("The bounded Jev smoke test requires --execute locally")
     if MODEL != "jev-1.13.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
         raise ValueError("Smoke policy differs from the reviewed model/context/three-call budget")
-    if not os.environ.get("TYPESAFE_API_KEY"):
-        raise ValueError("Supply the key through the hidden prompt or process environment")
+    key = api_key()
     from src.cluster.freeze import check_if_present
 
     check_if_present()
@@ -80,6 +80,9 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep):
             report = json.loads(report_path.read_text(encoding="utf-8"))
             if report.get("request_identity") != identity:
                 raise ValueError("Stored smoke test has different requests; preserve and review")
+        report["status"] = "running"
+        report.pop("error_type", None)
+        report.pop("http_status", None)
         try:
             for name, request, expected in planned:
                 prior = next((a for a in report["attempts"] if a["probe"] == name), None)
@@ -102,7 +105,7 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep):
                             from typesafe_sdk import RetryPolicy, TypeSafeClient
 
                             client = TypeSafeClient(
-                                api_key=os.environ["TYPESAFE_API_KEY"],
+                                api_key=key,
                                 base_url="https://api.typesafe.ai",
                                 model=MODEL,
                                 retry=RetryPolicy(max_retries=0),
@@ -202,6 +205,7 @@ def main():
                     "status": "stopped_requires_review",
                     "error_type": type(exc).__name__,
                     "http_status": getattr(exc, "status", None),
+                    "hint": error_hint(exc),
                 }
             )
         )

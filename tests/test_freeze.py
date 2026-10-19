@@ -86,3 +86,29 @@ def test_stage_completion_cannot_hide_changed_runtime_receipts(isolated_output, 
     with pytest.raises(ValueError, match="runtime receipts changed"):
         freeze.finish_stage(reviewed_by="Andreas", writers_stopped=True)
     assert freeze.receipt_path().is_file()
+
+
+def test_windows_linux_source_endings_match_but_content_changes_do_not(
+    isolated_output, tmp_path, monkeypatch
+):
+    repo = tmp_path / "checkout"
+    source = repo / "src/example.py"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"x = 1\n# same source\n")
+    monkeypatch.setattr(paths, "REPO_ROOT", repo)
+    original = freeze.source_snapshot()
+    expected = tmp_path / "local_receipt.json"
+    expected.write_text(json.dumps(original))
+    source.write_bytes(b"x = 1\r\n# same source\r\n")
+    assert freeze.source_snapshot() == original
+    assert freeze.record(expected_file=expected)["frozen"]
+    source.write_bytes(b"x = 2\r\n# changed source\r\n")
+    with pytest.raises(ValueError, match="src/example.py"):
+        freeze.check_if_present()
+
+
+def test_crlf_shell_scripts_are_rejected_instead_of_normalized(tmp_path):
+    shell = tmp_path / "job.slurm"
+    shell.write_bytes(b"#!/bin/bash\r\nexit 0\r\n")
+    with pytest.raises(ValueError, match="LF line endings"):
+        freeze.source_hash(shell)

@@ -15,8 +15,12 @@ JEVPFN_BUILD_PYTHON="${JEVPFN_PYTHON:?}"
 "$JEVPFN_BUILD_PYTHON" -c 'from src.cluster.freeze import check_if_present; assert not check_if_present()["frozen"], "Runtime builds belong before the final frozen validation"'
 "$JEVPFN_BUILD_PYTHON" -c 'import sys; from src.jev.checkpoints import verify_checkpoint; verify_checkpoint(sys.argv[1]); print("Pinned checkpoint verified")' "$JEVPFN_BUILD_PROVIDER"
 JEVPFN_BUILD_DEST="$JEVPFN_STAGING_ROOT/JEVPFN/containers/$JEVPFN_BUILD_PROVIDER"
-[[ ! -e "$JEVPFN_BUILD_DEST" ]] || { echo "Destination already exists; inspect it before rebuilding: $JEVPFN_BUILD_DEST" >&2; exit 2; }
-JEVPFN_BUILD_SCRATCH="${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-${VSC_SCRATCH_LUSTRE1:-}}}"
+if [[ -d "$JEVPFN_BUILD_DEST" && ! -L "$JEVPFN_BUILD_DEST" ]]; then
+    rmdir -- "$JEVPFN_BUILD_DEST" 2>/dev/null || true  # Only an empty failed-build directory.
+fi
+[[ ! -e "$JEVPFN_BUILD_DEST" && ! -L "$JEVPFN_BUILD_DEST" ]] || { echo "Nonempty or linked destination exists; inspect it before rebuilding: $JEVPFN_BUILD_DEST" >&2; exit 2; }
+# The wICE shared Lustre scratch survives a failed allocation for diagnosis.
+JEVPFN_BUILD_SCRATCH="${VSC_SCRATCH_LUSTRE1:-${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-}}}"
 [[ -n "$JEVPFN_BUILD_SCRATCH" && -d "$JEVPFN_BUILD_SCRATCH" ]] || { echo 'No existing scratch allocation is available.' >&2; exit 2; }
 JEVPFN_BUILD_WORK="$(mktemp -d "$JEVPFN_BUILD_SCRATCH/jevpfn-container-$JEVPFN_BUILD_PROVIDER-XXXXXX")"
 echo "Build scratch: $JEVPFN_BUILD_WORK"

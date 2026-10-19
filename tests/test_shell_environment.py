@@ -236,3 +236,31 @@ def test_unknown_runtime_is_rejected_before_any_install():
         timeout=10,
     )
     assert result.returncode == 2 and "Unknown selected" in result.stderr
+
+
+@pytest.mark.parametrize("kind", ["missing", "empty", "nonempty", "linked"])
+def test_container_retry_reuses_only_an_empty_destination(tmp_path, kind):
+    source = (ROOT / "scripts/build_decision_container.sh").read_text()
+    start = source.index('if [[ -d "$JEVPFN_BUILD_DEST"')
+    guard = source[start:source.index("# The wICE", start)]
+    destination = tmp_path / "container with spaces"
+    if kind in {"empty", "nonempty"}:
+        destination.mkdir()
+    if kind == "nonempty":
+        (destination / "image.sif").write_text("preserve")
+    if kind == "linked":
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        try:
+            destination.symlink_to(outside, target_is_directory=True)
+        except OSError:
+            pytest.skip("Symlink creation unavailable")
+    env = dict(os.environ, JEVPFN_BUILD_DEST=destination.as_posix())
+    result = subprocess.run(
+        [bash_executable(), "-c", guard], env=env, capture_output=True, text=True, timeout=15
+    )
+    assert result.returncode == (2 if kind in {"nonempty", "linked"} else 0)
+    if kind == "nonempty":
+        assert (destination / "image.sif").read_text() == "preserve"
+    if kind == "linked":
+        assert destination.is_symlink() and outside.is_dir()

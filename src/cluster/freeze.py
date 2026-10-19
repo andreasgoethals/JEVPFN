@@ -6,6 +6,7 @@ No Git operation modifies the checkout. A mismatch stops jobs, never edits files
 """
 
 import argparse
+import hashlib
 import json
 import subprocess
 from datetime import UTC, datetime
@@ -34,6 +35,14 @@ def runtime_pins():
     }
 
 
+def source_hash(path):
+    """Treat CRLF/LF as equal in text source; shell scripts must actually use LF."""
+    content = path.read_bytes()
+    if path.suffix in {".sh", ".slurm"} and b"\r" in content:
+        raise ValueError(f"Shell source must use LF line endings: {path.name}")
+    return hashlib.sha256(content.replace(b"\r\n", b"\n")).hexdigest()
+
+
 def source_snapshot():
     root = paths.REPO_ROOT
     files = {}
@@ -45,10 +54,10 @@ def source_snapshot():
     ):
         for path in sorted((root / directory).rglob("*")):
             if path.is_file() and path.suffix in suffixes and not path.name.endswith(".local.yaml"):
-                files[path.relative_to(root).as_posix()] = file_sha256(path)
+                files[path.relative_to(root).as_posix()] = source_hash(path)
     for name in ("pyproject.toml", "AGENTS.md", ".gitignore", ".gitattributes"):
         if (root / name).is_file():
-            files[name] = file_sha256(root / name)
+            files[name] = source_hash(root / name)
     for path in sorted((root / "notebooks").rglob("*.ipynb")):
         notebook = json.loads(path.read_text(encoding="utf-8"))
         files[path.relative_to(root).as_posix()] = digest(
@@ -61,7 +70,7 @@ def source_snapshot():
         ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=False
     )
     return {
-        "schema": "jevpfn.frozen-source.v1",
+        "schema": "jevpfn.frozen-source.v2",
         "git_head": git.stdout.strip() or None,
         "source_sha256": digest(files),
         "files": files,
@@ -101,8 +110,18 @@ def record(*, expected_file=None):
         if (
             expected.get("source_sha256") != current["source_sha256"]
             or expected.get("git_head") != current["git_head"]
+            or expected.get("schema") != current["schema"]
         ):
-            raise ValueError("Local and VSC source revisions differ; do not start the clean run")
+            differences = sorted(
+                k for k in expected.get("files", {}).keys() | current["files"].keys()
+                if expected.get("files", {}).get(k) != current["files"].get(k)
+            )
+            raise ValueError(
+                "Local and VSC source revisions differ; do not start the clean run. "
+                f"HEAD equal: {expected.get('git_head') == current['git_head']}; "
+                f"schema equal: {expected.get('schema') == current['schema']}; "
+                "different files: " + ", ".join(differences)
+            )
     path = receipt_path()
     if path.exists():
         return check_if_present()

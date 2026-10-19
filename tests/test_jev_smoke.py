@@ -79,3 +79,18 @@ def test_no_implicit_paid_execution_or_vsc_calls(local, monkeypatch):
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     with pytest.raises(RuntimeError):
         smoke.run(execute=True, client_factory=lambda: pytest.fail("Must not connect"))
+
+
+def test_client_setup_failure_has_no_attempt_and_can_resume_without_stale_error(local):
+    import json
+
+    def constructor_failure():
+        raise ValueError("Synthetic client initialization failure; no request")
+
+    with pytest.raises(ValueError):
+        smoke.run(execute=True, client_factory=constructor_failure)
+    path = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
+    assert json.loads(path.read_text())["attempts"] == []
+    report = smoke.run(execute=True, client_factory=Client, sleep=lambda _: None)
+    assert report["status"] == "jev_smoke_passed_requires_dataset_pilot"
+    assert "error_type" not in report and "http_status" not in report

@@ -120,6 +120,9 @@ run `python -m src.cluster.freeze --record --expected-file PATH_TO_LOCAL_RECEIPT
 identical Git HEAD and source/base configuration hashes. Every Slurm startup checks the
 receipt and runtime/checkpoint marker hashes. Notebook outputs are excluded from source
 hashing; notebook source cells are included. Stage all runtime/weight receipts before freezing.
+Freeze schema v2 normalizes CRLF/LF when hashing Python/configuration text, without editing
+files. Bash/Slurm files must still contain actual LF; CRLF scripts are rejected. A mismatch
+reports different file names and whether HEAD/schema agree, without dumping configuration.
 Private `*.local.yaml` overlays retain their own per-run configuration hashes. Source fixes
 require reviewing/restarting the affected frozen campaign; operational extraction acceptance
 is a separate stage. This mechanism detects changes; finite tests cannot prove no bugs remain.
@@ -340,8 +343,10 @@ It preserves the container, every checkpoint, inputs/features, outputs and other
 Retiring Clef frees room before packing Intern. Repeat `wrap`, GPU test and guarded retirement
 for `intern`. For `liquid`, `strands`, `perplexity`, use build mode `new`; the partial failed
 Liquid installation is not treated as a working source. Test each new image before proceeding.
-Perplexity GPU contracts/pilots use `--mem=112000M`. Scratch build diagnostics remain available
-on failure; the helper refuses to overwrite an existing destination for manual review.
+Perplexity GPU contracts/pilots use `--mem=112000M`. Builds prefer shared Lustre scratch on
+wICE, so failed-build work survives the allocation. An empty leftover destination can be
+retried; nonempty or linked destinations are refused for manual review. Keep the Slurm log
+until the failure is understood; do not reset output while runtime setup is still failing.
 The container-build script resolves `default_config/config.yaml` from the installed wrapper;
 KU Leuven does not necessarily export `CW_GLOBAL_YAML` from the module itself.
 
@@ -436,6 +441,12 @@ First verify the pinned account/task interface locally with:
 ```powershell
 .\.venv\Scripts\python.exe -m src.jev.smoke --execute
 ```
+
+Paste only the key value. In classic Windows PowerShell, right-click/Shift+Insert or a
+`Read-Host -AsSecureString` process-only environment variable avoids Ctrl+V control characters
+in a hidden Python prompt. Local format validation reports a fixed hint without displaying
+the key. A constructor failure with zero recorded attempts can resume with corrected input;
+an attempted request without a saved response still stops for billing review.
 
 It asks for the key without echo, sends only three fixed synthetic probes sequentially and
 keeps complete responses plus a compact receipt. It checks exact Jev 1.13 identity, binary,

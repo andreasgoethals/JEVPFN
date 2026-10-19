@@ -14,6 +14,7 @@ import yaml
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
+from src.jev.auth import api_key, error_hint
 from src.jev.extraction import campaign_limits
 from src.jev.hosted import ReviewedContextEnvelope
 from src.utils import paths
@@ -24,13 +25,12 @@ from src.utils.serialization import write_json
 def account_check(client_factory=None):
     if paths.on_vsc():
         raise RuntimeError("The hosted account check runs locally")
-    if not os.environ.get("TYPESAFE_API_KEY"):
-        raise ValueError("Set TYPESAFE_API_KEY in this terminal; never put it in a notebook")
+    key = api_key()
     from typesafe_sdk import RetryPolicy, TypeSafeClient
 
     factory = client_factory or TypeSafeClient
     with factory(
-        api_key=os.environ["TYPESAFE_API_KEY"],
+        api_key=key,
         base_url="https://api.typesafe.ai",
         model="jev-1.13.0",
         retry=RetryPolicy(max_retries=0),
@@ -127,6 +127,7 @@ def main():
                         "authenticated": False,
                         "error_type": type(exc).__name__,
                         "http_status": getattr(exc, "status", None),
+                        "hint": error_hint(exc),
                     }
                 )
             )
