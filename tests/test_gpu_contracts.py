@@ -147,6 +147,45 @@ def test_no_gpu_loading_without_explicit_allocation(monkeypatch):
     loader.assert_not_called()
 
 
+def test_missing_token_report_stops_before_model_loading(isolated_output, monkeypatch):
+    paths.staging_root().mkdir(parents=True)
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
+    limit = load_yaml("extractors")["candidates"]["cloudflare"]["context_tokens"]
+    monkeypatch.setattr(gc, "ExactCounter", lambda _: SimpleNamespace(limit=limit))
+    loader = Mock()
+    monkeypatch.setattr(gc, "SelfHostedClient", loader)
+    with pytest.raises(ValueError, match="experiment_0_tokens.slurm"):
+        gc.run("cloudflare", execute=True)
+    loader.assert_not_called()
+    reports = list((paths.manifests_dir("experiment_0") / "before_extraction/gpu_contracts").glob("*.json"))
+    report = json.loads(reports[0].read_text())
+    assert report["status"] == "failed" and report["synthetic"] == []
+    assert "Do not rebuild the container" in report["error"]
+
+
+@pytest.mark.parametrize("all_datasets", [True, False])
+def test_login_input_check_checks_coverage_without_gpu(monkeypatch, capsys, all_datasets):
+    monkeypatch.setattr(gc, "ExactCounter", Mock())
+    monkeypatch.setattr(gc, "token_evidence", lambda *a: (
+        {"datasets": [{"dataset_id": "fixture"}], "audit_id": "checked"}, Path("counts.sqlite3")
+    ))
+    monkeypatch.setattr("src.cluster.token_audit.selected_inputs", lambda: [
+        {"dataset_id": "fixture" if all_datasets else "another"}
+    ])
+    loader = Mock()
+    monkeypatch.setattr(gc, "SelfHostedClient", loader)
+    monkeypatch.setattr("sys.argv", ["gpu_contracts", "--provider", "cloudflare", "--check-inputs"])
+    if all_datasets:
+        gc.main()
+        result = json.loads(capsys.readouterr().out)
+        assert result["status"] == "token_input_evidence_passed"
+        assert result["inference_executed"] is False and result["gpu_execution_verified"] is False
+    else:
+        with pytest.raises(ValueError, match="every selected dataset"):
+            gc.main()
+    loader.assert_not_called()
+
+
 def test_checkpoint_load_failure_leaves_diagnostic_manifest(isolated_output, monkeypatch):
     paths.staging_root().mkdir(parents=True)
     monkeypatch.setenv("SLURM_JOB_ID", "fixture")

@@ -262,7 +262,16 @@ def token_evidence(provider, counter):
     if counter.limit != load_yaml("extractors")["candidates"][provider]["context_tokens"]:
         raise ValueError("Configured context window differs from the pinned tokenizer")
     path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
-    combined = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        combined = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ValueError(
+            f"Exact token audit report is missing: {path}. "
+            "From the VSC checkout, run sbatch scripts/slurm/experiment_0_tokens.slurm "
+            "and wait for COMPLETED 0:0 before retrying GPU inference. "
+            "The CPU audit reuses matching counts still on PROJECT, or recounts if absent. "
+            "Do not rebuild the container or bypass this check."
+        ) from None
     matches = [r for r in combined["self_hosted"] if r["provider"] == provider]
     if len(matches) != 1:
         raise ValueError("Run the exact tokenizer audit for this provider first")
@@ -283,7 +292,10 @@ def token_evidence(provider, counter):
             raise ValueError("Prepared input changed after token audit")
     database = paths.token_audit_dir() / f"{provider}_{report['audit_id']}.sqlite3"
     if not database.is_file():
-        raise ValueError("Detailed exact counts are missing from PROJECT")
+        raise ValueError(
+            "Detailed exact counts are missing from PROJECT. Run "
+            "sbatch scripts/slurm/experiment_0_tokens.slurm and wait for COMPLETED 0:0."
+        )
     with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         saved = db.execute("SELECT recipe_json FROM identity WHERE id=1").fetchone()
         if not saved or digest(json.loads(saved[0])) != report["audit_id"]:

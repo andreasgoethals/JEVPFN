@@ -122,6 +122,29 @@ def test_gpu_gate_rejects_incomplete_detailed_counts(inputs):
         token_evidence("liquid", counter)
 
 
+def test_deleted_summary_recovers_from_counts_without_retokenizing(inputs):
+    counter = SimpleNamespace(
+        identity={"counter_id": "synthetic"}, limit=32768, count_many=lambda rows: [2] * len(rows)
+    )
+    report = token_audit.audit_provider("liquid", inputs, counter=counter)
+    token_audit.save_reports([report])
+    summary = paths.manifests_dir("experiment_0") / "before_extraction/token_audit.json"
+    summary.unlink()
+    with pytest.raises(ValueError, match="experiment_0_tokens.slurm"):
+        token_evidence("liquid", counter)
+
+    def no_recount(rows):
+        pytest.fail("Matching saved counts must not be tokenized again")
+
+    counter.count_many = no_recount
+    recovered = token_audit.audit_provider("liquid", inputs, counter=counter)
+    token_audit.save_reports([recovered])
+    verified, database = token_evidence("liquid", counter)
+    assert verified["audit_id"] == report["audit_id"]
+    assert database == Path(report["counts_database"])
+    assert inputs[0]["input_file_sha256"] == file_sha256(Path(inputs[0]["path"]))
+
+
 def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatch):
     counter = SimpleNamespace(
         identity={"counter_id": "synthetic"}, limit=10, count_many=lambda rows: [2] * len(rows)

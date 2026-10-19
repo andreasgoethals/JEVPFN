@@ -1,6 +1,21 @@
 # Operational evidence
 
 Current stage: Experiment 0A setup, before the owner-requested final clean validation.
+Newest Downloads `output_JEVPFN.zip` (343,145 bytes; local modified 19-10 14:00) contains
+13 files. Build 62369713 succeeded: wrapper installation completed, source-only sentinel
+was invisible, package equivalence passed, and container a701323896f9554825df71b5d9eec617abcda30704142b21fd846aafd2a0a40d
+was sealed. GPU job 62370298 selected that packed runtime and passed the CUDA tensor check
+on an A100 80 GB, then stopped with FileNotFoundError for DATA
+`3. experiment_0/manifests/before_extraction/token_audit.json`. Its synthetic/real result
+lists are empty: no Clef model inference was reached. The ZIP contains no token report;
+it does not establish whether detailed PROJECT counts survive. Re-run the CPU token job
+to reuse/recount and republish evidence, then retry only GPU contracts. Do not rebuild
+Clef, retire its native source or clean output yet. The code now gives the recovery command
+and a read-only `gpu_contracts --check-inputs` check for use before allocating a GPU.
+Local validation: 646 tests passed, one POSIX-only skip; lint/dependency checks and all
+17 shell syntax/LF checks passed. One separate Git Bash syntax-check process transiently
+exited 0xC0000005 on Windows; the identical check and complete shell pass then succeeded,
+as did the full shell integration suite. No shell source was changed for that host event.
 Downloaded `jevpfn-container-build_62369139.log` (19-10, 1,042 bytes) shows copying/setup
 progressed to SquashFS creation, then failed with `mksquashfs: command not found`.
 No sealed image, GPU pass or source retirement is established. The terminal's missing
@@ -9,8 +24,8 @@ found no matching module; `apptainer buildcfg` reports 1.4.4-1 and LIBEXECDIR=/u
 The owner then executed `/usr/libexec/apptainer/bin/mksquashfs -version` successfully
 on the login node: version 4.6.1. No additional package installation is needed there.
 The build now checks its tools before copying and discovers Apptainer's documented bundled
-packer when absent from PATH. Its compute-node check, container build and GPU execution
-still need VSC verification. Do not reset output or delete native environments for this failure.
+packer when absent from PATH. Build 62369713 subsequently confirmed this repair on VSC;
+the newer failure described above concerns missing token evidence, not packaging.
 Local validation of this prerequisite fix: 642 tests passed, one POSIX link test skipped;
 lint, dependency consistency and all 17 shell syntax/LF checks passed. No paid inference,
 remote submission, output deletion, question regeneration or Git publication occurred.
@@ -26,7 +41,7 @@ Downloaded `output_JEVPFN.zip` inspected on 19-10 (313,493 bytes; modified 11:44
 Earlier log 62368266 stops with FileNotFoundError at the private wrapper's
 `frontends/wrap-install` alias replacement. Some site installations lack that alias.
 The local fix now tolerates an absent alias and creates the checked relative link;
-tests cover absent and existing aliases. A successful VSC build remains unverified.
+tests cover absent and existing aliases. This failure is superseded by build 62369713.
 The ZIP also retains 62366728's earlier ACL-preserving copy failure (FAILED 1:0,
 6m49s, MaxRSS 13,924,368 K). The private copy-template fix avoids source ACLs and
 ownership; no shared installation or source environment is modified. Neither log
@@ -80,8 +95,8 @@ lookup failed only because `0.4.2.` had an extra final dot.
 The same read-only OnDemand check directly confirmed nonempty checkpoint manifests for
 Clef, Intern, Liquid, Strands and Perplexity on PROJECT. Build/load checks still verify every
 checkpoint file hash; a present manifest alone is not a successful inference test.
-Compact runtime build/verification/guarded retirement and source-freeze checks are implemented,
-but real VSC container builds/GPU execution remain unverified. Preserve native sources until
+Compact runtime build/verification/guarded retirement and source-freeze checks are implemented.
+Clef's build/seal and CUDA check passed; model contracts remain pending. Preserve native sources until
 matching container GPU evidence passes; build unpacked temporary files in scratch.
 Local credential/recovery validation passed 609 tests before the wrapper-copy workaround;
 the final combined-suite result is recorded in CHANGELOG. Neither protected tokenizer module
@@ -102,6 +117,8 @@ Research method is in README, operations in VSC, and meanings in DATA_SOURCES.
 
 | Date | Cluster / job | Configuration | Verified outcome |
 |---|---|---|---|
+| 19-10-2026 | wICE / 62370298 | Clef packed GPU contracts | Packed runtime and A100/CUDA tensor preflight passed. Contract report failed on missing DATA token_audit.json before model loading; no inference results. |
+| 19-10-2026 | wICE / 62369713 | Clef compact wrapper build | Downloaded log confirms installed/sealed image, package equivalence and hidden source sentinel. Wrapper installation reports 431 seconds; scheduler elapsed/exit not supplied. |
 | 19-10-2026 | wICE / 62369139 | Clef compact wrapper build | Attached log reaches SquashFS creation, then fails because mksquashfs is absent from PATH. No image seal/GPU pass. Scheduler exit code not supplied. |
 | 19-10-2026 | wICE / 62368266 | Clef compact wrapper build, 20bf5e0 | Downloaded log: FileNotFoundError at missing private frontends/wrap-install alias; build/GPU validation not reached. |
 | 19-10-2026 | wICE / 62366728 | Clef wrap build, 09f7982 | FAILED 1:0 after 6m49s, MaxRSS 13,924,368 K. Site wrapper cp -a failed preserving permissions while copying the native environment. No seal/GPU pass or retirement. Scratch-local copy-template workaround prepared, not yet executed on VSC. |

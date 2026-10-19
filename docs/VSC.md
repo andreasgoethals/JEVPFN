@@ -315,6 +315,7 @@ After publishing/synchronizing the source and passing that check, start with Cle
 ```bash
 sbatch scripts/slurm/experiment_0_container_build.slurm cloudflare wrap
 # After its job ID is COMPLETED with exit 0:0 and its log confirms sealing:
+# First validate saved token evidence in the activated CPU environment (see below).
 sbatch scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
 ```
 
@@ -323,7 +324,8 @@ checks that a source-only sentinel is invisible inside the packed image. The lau
 the sealed image automatically, verifies it before execution and exposes GPUs with Apptainer.
 Clef/Intern package versions must equal their originals. New runtimes have their own recorded
 identity. The GPU report includes the image identity, so native and container evidence cannot
-be confused. VSC execution of this new path is still unverified until the commands succeed.
+be confused. Clef's build/seal and CUDA tensor execution have now passed; model inference
+and other providers' containers still need successful contract evidence.
 
 Only after matching GPU evidence passes, preview and retire the redundant native source:
 
@@ -352,8 +354,19 @@ KU Leuven does not necessarily export `CW_GLOBAL_YAML` from the module itself.
 After exact counts for the chosen provider are complete, submit its prepared environment:
 
 ```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.gpu_contracts --provider cloudflare --check-inputs
 sbatch scripts/slurm/experiment_0_decision_contracts.slurm cloudflare
 ```
+
+Run the first command in the activated CPU environment on the login host. It reads the
+saved token report, validates its tokenizer identity, input hashes, dataset coverage and
+PROJECT count database; it loads no weights and executes no inference. If it fails, do not
+submit the GPU job. Missing DATA `before_extraction/token_audit.json` or PROJECT count files
+require `sbatch scripts/slurm/experiment_0_tokens.slurm` first, followed by COMPLETED 0:0
+and the read-only check again. A matching surviving count database is reused; otherwise
+the CPU job recounts. Do not rebuild a sealed container, regenerate unchanged questions or
+disable context checks to repair a missing report. A deliberate full-output reset removes
+this evidence, so exact token counting must precede GPU contracts in the subsequent campaign.
 
 After Clef completes successfully, repeat for `intern`, `liquid` and `strands`.
 Perplexity uses `sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.

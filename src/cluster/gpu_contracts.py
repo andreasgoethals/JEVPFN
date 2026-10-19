@@ -2,6 +2,7 @@
 
 python -m src.cluster.gpu_contracts --provider cloudflare --execute
 Requires an allocated VSC GPU, staged pinned weights and a complete exact token audit.
+Use --check-inputs on the login host to validate existing token evidence without inference.
 Synthetic outputs stay under Experiment 0; real pilot responses are permanently reusable.
 """
 
@@ -255,6 +256,18 @@ def exercise_real_inputs(client, sample, log):
     return records
 
 
+def checked_inputs(provider):
+    """Read-only prerequisite check, shared by the login CLI and GPU execution."""
+    evidence, counts = token_evidence(provider, ExactCounter(provider))
+    from src.cluster.token_audit import selected_inputs
+
+    if {i["dataset_id"] for i in selected_inputs()} != {
+        i["dataset_id"] for i in evidence["datasets"]
+    }:
+        raise ValueError("Token evidence does not cover every selected dataset")
+    return evidence, counts
+
+
 def run(provider, *, execute=False):
     if not execute or not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU contracts require --execute inside a VSC GPU allocation")
@@ -296,13 +309,7 @@ def run(provider, *, execute=False):
     write_json(manifest, report)
     append_event(log, "started", run_id=run_id, provider=provider)
     try:
-        evidence, counts = token_evidence(provider, ExactCounter(provider))
-        from src.cluster.token_audit import selected_inputs
-
-        if {i["dataset_id"] for i in selected_inputs()} != {
-            i["dataset_id"] for i in evidence["datasets"]
-        }:
-            raise ValueError("Token evidence does not cover every selected dataset")
+        evidence, counts = checked_inputs(provider)
         sample = real_sample(evidence, counts)
         # 30 fixture inputs, one wide-choice, seven semantic probes, two per dataset.
         if 38 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
@@ -363,9 +370,22 @@ def run(provider, *, execute=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", required=True, choices=SELF_HOSTED)
-    parser.add_argument("--execute", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--execute", action="store_true")
+    mode.add_argument("--check-inputs", action="store_true", help="Read-only validation of saved counts and input hashes; no GPU or inference")
     args = parser.parse_args()
-    if args.execute:
+    if args.check_inputs:
+        evidence, counts = checked_inputs(args.provider)
+        print(canonical_json({
+            "status": "token_input_evidence_passed",
+            "provider": args.provider,
+            "token_audit_id": evidence["audit_id"],
+            "datasets": len(evidence["datasets"]),
+            "counts_database": str(counts),
+            "inference_executed": False,
+            "gpu_execution_verified": False,
+        }))
+    elif args.execute:
         run(args.provider, execute=True)
     else:
         print(
