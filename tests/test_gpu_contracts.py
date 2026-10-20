@@ -228,6 +228,10 @@ def test_success_report_exposes_acceptance_identity(isolated_output, monkeypatch
     monkeypatch.setattr(gc, "exercise_boundaries", lambda *a: {})
     monkeypatch.setattr(gc, "exercise_semantics", lambda *a: {"passed": True})
     monkeypatch.setattr(gc, "exercise_robustness", lambda *a: {"structurally_valid": True})
+    monkeypatch.setattr(
+        "src.cluster.semantic_contracts.exercise_real_robustness",
+        lambda *a: {"structurally_valid": True},
+    )
     monkeypatch.setattr(gc, "exercise_batch_parity", lambda *a, **kw: {"passed": True})
     monkeypatch.setattr(gc, "exercise_real_inputs", lambda *a: [])
     cuda = Mock()

@@ -207,3 +207,36 @@ def test_divergent_output_ledger_cannot_silently_replace_durable_spending(local)
     write_json(legacy, {"request_identity": "fixed", "attempts": [{"probe": "binary_True"}]})
     with pytest.raises(ValueError, match="ledgers differ"):
         smoke.preserve_smoke_state()
+
+
+def test_rounded_score_is_revalidated_offline_without_rebilling(local, monkeypatch):
+    from src.jev.provider import score_consistency
+
+    class Rounded(Client):
+        def system_one(self, state, questions):
+            wrapped = super().system_one(state, questions)
+            raw = wrapped.raw_http_response.json()
+            if raw["answers"]["semantic"]["type"] == "score":
+                raw["answers"]["semantic"]["score"] = 7.99
+            return SimpleNamespace(raw_http_response=SimpleNamespace(json=lambda: raw))
+
+    report = smoke.run(execute=True, client_factory=Rounded, sleep=lambda _: None, robustness=True)
+    assert report["attempts"][-1]["score_validation"]["rounding_envelope_used"]
+    monkeypatch.setattr(
+        smoke, "api_key", lambda: pytest.fail("Offline revalidation must not read credentials")
+    )
+    after = smoke.run(
+        revalidate_only=True, robustness=True, client_factory=lambda: pytest.fail("No network")
+    )
+    assert after["total_cost_usd"] == report["total_cost_usd"]
+    assert len(after["attempts"]) == 15
+    probabilities = [0.0] * 8 + [1.0]
+    for provider, score in [("intern", 7.99), ("jev", 7.8), ("jev", 7.991)]:
+        with pytest.raises(ValueError, match="inconsistent"):
+            score_consistency(score, probabilities, provider)
+
+
+def test_offline_revalidation_cannot_fill_missing_responses(local, monkeypatch):
+    monkeypatch.setattr(smoke, "api_key", lambda: pytest.fail("No credential access"))
+    with pytest.raises(RuntimeError, match="offline revalidation"):
+        smoke.run(revalidate_only=True, client_factory=lambda: pytest.fail("No network"))

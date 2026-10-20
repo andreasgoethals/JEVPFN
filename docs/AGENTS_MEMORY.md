@@ -2,6 +2,40 @@
 
 ## 20-10-2026
 
+Latest supplied VSC terminal: checkout 6a12e8f, setup write checks passed. Token job
+62372655 was submitted at 15:29 and still PENDING at 16:03, with zero elapsed time.
+This is scheduler waiting, not a tokenizer failure. Do not submit an overlapping audit.
+Clef: sealed container, 55,640 native entries still present. Intern: 55,442 native
+entries, no container. Liquid: 119 partial entries, no Python/container. Strands and
+Perplexity: no native environments/containers. Shared PROJECT quota: 147,540/150,000
+files and 253.1 GB/1 TB. No retirement is established by this output.
+
+Jev synthetic robustness made and saved all 15 responses. The final score response
+contained score=7.99 and a returned probability vector implying 8.00; strict 1e-4
+consistency rejected it. The decoder now permits only a feasible two-decimal rounding
+envelope for Jev (an explicit compatibility policy, not a provider guarantee), retaining
+the raw response and deriving the feature from the returned probabilities. Offline-only
+revalidation succeeded: 5,336 input tokens, USD 0.000224112; no new requests. Largest
+synthetic TV distance was 0.11 on the injected binary input; top options were unchanged.
+This is not evidence of robustness over real datasets.
+
+Review repairs: resolved-path comparison in fold completion; serial isolation of failed
+open-weight batches only in explicit continue mode; presence-only controls for all six
+predictors; 13 label-blind real-text sensitivity probes with canonical option alignment;
+PCA training explained-variance records. Source questions/tokenizer files are unchanged.
+The GPU contract ceiling is now 110 (at most 106 planned). Local real-text diagnostics
+remain behind the reviewed context envelope; no live execution occurred during repair.
+The complete local test suite passed: 667 passed, two skipped (local PyTorch absent and
+POSIX-only symlink behavior). All five notebooks completed and saved 24 figures; lint,
+dependency consistency and all 17 shell syntax checks passed. Actual new GPU/real-text
+provider checks remain outstanding.
+
+HEAD 6a12e8f contains neither the old nor new DM gitlink. `.gitmodules` points to
+`dm-library`, whose local untracked checkout is c4040baad01db55976a2eda22257cdcfd599f5e5.
+The owner must stage and publish that gitlink; the agent must not stage/commit it.
+`src.utils.check_libraries` now detects missing committed links and checkout drift
+before local 0A / VSC CPU tests. Prior notes about the old index entry are historical.
+
 Implementation after the read-only review: evaluation now stores Parquet prediction payloads,
 metrics and fold-completion records inside one SQLite file per dataset/phase on PROJECT.
 DATA gets one locator per dataset; fixed fold-lock stripes bound file growth. Transfer merges
@@ -26,9 +60,9 @@ All five notebooks executed successfully and saved 24 figures. Dependency consis
 lint passed. Live VSC runs, native E5 batching/decision batch parity, actual quota reduction
 and Jev prompt diagnostics remain unverified. No output, environment, question store, model
 weight or paid feature was deleted; no submodule, Git index, branch or remote was changed.
-The pre-existing DM-library rename is still unstaged: .gitmodules names dm-library while the
-index still contains decision-models-library. The owner must stage/publish the complete rename
-before VSC pulls/submodule updates. No automatic cleanup or paid inference should follow a
+Before the owner's 6a12e8f commit, the DM rename was unstaged and the old gitlink was still
+in the index. That commit removed it but omitted its replacement, as recorded above.
+No automatic cleanup or paid inference should follow a
 local test pass alone. Finish runtime setup/retirement, then perform the requested clean 0A.
 
 - Added DM Library as an independent read-only submodule for this project only; canonical maintenance and pin propagation run from `0. Literature`. No model settings changed.

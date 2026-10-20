@@ -154,6 +154,23 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
     paired["reference"] = "non_text"
     paired["reference_value"] = paired.non_text_value
     paired["difference"] = paired.difference_from_non_text
+    presence_name = "non_text_plus_presence__text_presence__main"
+    presence = chosen.loc[
+        chosen.phase.eq("experiment_3") & chosen.feature_set.eq(presence_name),
+        keys + ["value"],
+    ]
+    if presence.duplicated(keys).any():
+        raise ValueError("Multiple presence baselines match; select one campaign")
+    if not presence.empty:
+        compared = augmented.loc[augmented.phase.eq("experiment_1")].merge(
+            presence.rename(columns={"value": "reference_value"}),
+            on=keys,
+            how="inner",
+            validate="many_to_one",
+        )
+        compared["reference"] = "non_text_plus_presence"
+        compared["difference"] = compared.value - compared.reference_value
+        paired = pd.concat([paired, compared], ignore_index=True)
     embedding = chosen.loc[
         (chosen.phase == "experiment_1") & chosen.feature_set.eq(EMBEDDING_BASELINE),
         keys + ["value"],
@@ -205,7 +222,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
             "status": "collected",
             "complete_arms": len(complete),
             "incomplete_arms": int((counts != 5).sum()),
-            "difference_definition": "augmented minus named reference (non_text, frozen_e5, or same decision features without E5); improvement direction depends on metric",
+            "difference_definition": "augmented minus named reference (non_text, non_text_plus_presence, frozen_e5, or same decision features without E5); improvement direction depends on metric",
             "fold_sd": "descriptive variation; not a standard error or confidence interval",
             "native_text_results": "descriptive reference results; no matched same-predictor non-text arm",
             "single_text_rule": "Separate/joint/both use identical information for one-text-column datasets; exclude those datasets from representation contrasts.",

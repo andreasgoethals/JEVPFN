@@ -207,6 +207,7 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
 
     modes = {
         "non_text": set(),
+        "non_text_plus_presence": set(),
         "non_text_plus_text_statistics": set(),
         "non_text_plus_per_column": {"per_column"},
         "non_text_plus_joint": {"joint"},
@@ -250,7 +251,7 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
         matrix = matrix.join(stats, validate="one_to_one")
     # pandas joins can discard attrs, including the baseline's explicit empty list.
     matrix.attrs["feature_artifact_ids"] = [b.manifest["artifact_id"] for b in selected]
-    if modes[name]:
+    if modes[name] or name == "non_text_plus_presence":
         matrix = add_text_presence(matrix, dataset)
     return matrix
 

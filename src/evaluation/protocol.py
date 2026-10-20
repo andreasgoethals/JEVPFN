@@ -309,6 +309,7 @@ def evaluate_cv(
                 train, test = np.array(fold["train"]), np.array(fold["test"])
                 timer = PhaseTimer(device=device, synchronize=synchronize)
                 threshold, oof = None, None
+                pca_diagnostics = []
                 if binary:
                     encoded = np.array([canonical_json(scalar(v)) for v in target.iloc[train]])
                     if pd.Series(encoded).value_counts().min() < inner_folds:
@@ -326,6 +327,13 @@ def evaluate_cv(
                         try:
                             with timer.measure("inner_fit"):
                                 model.fit(inner_train, target.iloc[train[a]])
+                            if hasattr(model, "pca_diagnostics_"):
+                                pca_diagnostics.append(
+                                    {
+                                        "partition": f"inner_{inner_number}",
+                                        "columns": model.pca_diagnostics_,
+                                    }
+                                )
                             with timer.measure("inner_predict"):
                                 oof[b] = _probabilities(model, inner_test, classes)
                         finally:
@@ -344,6 +352,10 @@ def evaluate_cv(
                 try:
                     with timer.measure("fit"):
                         model.fit(outer_train, target.iloc[train])
+                    if hasattr(model, "pca_diagnostics_"):
+                        pca_diagnostics.append(
+                            {"partition": "outer_train", "columns": model.pca_diagnostics_}
+                        )
                     with timer.measure("predict"):
                         prediction = (
                             np.asarray(model.predict(outer_test), dtype=float)
@@ -373,6 +385,7 @@ def evaluate_cv(
                     "selected_threshold": threshold,
                     "inner_folds": inner_folds if binary else None,
                     "preprocessing": "inside_estimator_fit_training_partition_only",
+                    "pca_diagnostics": pca_diagnostics,
                     "permutation_columns": permutation_columns,
                     "single_text_representations_equivalent": len(metadata.text_columns) == 1,
                     "fold_recipe_id": digest(fold_recipe),

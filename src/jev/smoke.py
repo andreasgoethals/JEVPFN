@@ -68,7 +68,7 @@ def preserve_smoke_state():
     return directory, state
 
 
-def requests(*, robustness=False):
+def requests(*, robustness=False, real=False):
     settings = dict(
         provider="jev",
         model=MODEL,
@@ -76,6 +76,10 @@ def requests(*, robustness=False):
         api_mapping_version=MAPPING_VERSION,
         request_configuration={},
     )
+    if real:
+        from src.cluster.semantic_contracts import real_robustness_probes
+
+        return list(real_robustness_probes(settings))
     if robustness:
         from src.cluster.semantic_contracts import robustness_probes
 
@@ -95,32 +99,58 @@ def run(
     sleep=time.sleep,
     retry_auth_rejected=False,
     robustness=False,
+    revalidate_only=False,
+    dataset_robustness=False,
+    config="feature_creation/jev.local",
 ):
-    if not execute or paths.on_vsc():
+    if not (execute or revalidate_only) or paths.on_vsc():
         raise RuntimeError("The bounded Jev smoke test requires --execute locally")
     if MODEL != "jev-1.13.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
         raise ValueError("Smoke policy differs from the reviewed model/context/three-call budget")
-    key = api_key()
+    key = None if revalidate_only else api_key()
     from src.cluster.freeze import check_if_present
 
     check_if_present()
-    if robustness:
-        directory = paths.jev_cache_path("jev_cache/_control/jev_robustness")
+    diagnostic = robustness or dataset_robustness
+    test_name = (
+        "jev_dataset_robustness"
+        if dataset_robustness
+        else "jev_robustness"
+        if robustness
+        else "jev_smoke"
+    )
+    if diagnostic:
+        directory = paths.jev_cache_path("jev_cache/_control/" + test_name)
         directory.mkdir(parents=True, exist_ok=True)
         state_path = directory / "state.json"
     else:
         directory, state_path = preserve_smoke_state()
-    test_name = "jev_robustness" if robustness else "jev_smoke"
     output_directory = paths.results_dir(test_name, phase="experiment_0")
     report_path = paths.manifests_dir("experiment_0") / "before_extraction" / f"{test_name}.json"
-    planned = requests(robustness=True) if robustness else requests()
-    maximum = 15 if robustness else MAX_CALLS
+    planned = (
+        requests(real=True)
+        if dataset_robustness
+        else requests(robustness=True)
+        if robustness
+        else requests()
+    )
+    maximum = 13 if dataset_robustness else 15 if robustness else MAX_CALLS
+    if dataset_robustness and not revalidate_only:
+        from src.jev.hosted import ReviewedContextEnvelope
+
+        envelope = ReviewedContextEnvelope(load_yaml(config))
+        if envelope.contract["max_billed_input_tokens"] > TOKEN_BOUND:
+            raise ValueError("Diagnostic context exceeds its fixed billing reservation")
+        for _, request, _ in planned:
+            envelope(request)
     identity = digest([request.cache_key for _, request, _ in planned])
     report = {
         "status": "running",
         "model": MODEL,
         "request_identity": identity,
-        "scope": "synthetic prompt robustness; no dataset extraction"
+        "scope": "label-blind real-text sensitivity sample; no feature materialization"
+        if dataset_robustness
+        else "synthetic prompt robustness; no dataset extraction"
         if robustness
         else "three synthetic task contracts; no dataset extraction",
         "account_limits_verified": False,
@@ -193,6 +223,10 @@ def run(
                     if prior.get("response_sha256") != digest(raw):
                         raise ValueError("Stored smoke response checksum differs")
                 else:
+                    if revalidate_only:
+                        raise RuntimeError(
+                            "Saved response missing; offline revalidation cannot call Jev"
+                        )
                     if len(report["attempts"]) >= maximum:
                         raise RuntimeError("Synthetic-test attempt ceiling reached")
                     if client is None:
@@ -215,6 +249,7 @@ def run(
                         "request_key": request.cache_key,
                         "status": "attempting",
                         "reserved_usd": TOKEN_BOUND * PRICE / 1e6,
+                        "provenance": json.loads(request.provenance_json),
                     }
                     report["attempts"].append(prior)
                     persist()  # Persist before a possibly billed request.
@@ -230,7 +265,19 @@ def run(
                 if type(usage) is not int or not 0 <= usage <= TOKEN_BOUND:
                     raise ValueError("Provider usage differs from the documented billing envelope")
                 features = response_features(request, raw)
-                if name.startswith("binary"):
+                prior["canonical_probability_order"] = json.loads(request.provenance_json).get(
+                    "canonical_probability_order"
+                )
+                answer = raw["answers"]["semantic"]
+                if answer["type"] == "score":
+                    from src.jev.provider import score_consistency
+
+                    prior["score_validation"] = score_consistency(
+                        answer["score"], [answer["probabilities"][str(i)] for i in range(9)], "jev"
+                    )
+                if dataset_robustness:
+                    passed = True  # No correct target is known or used in this diagnostic.
+                elif name.startswith("binary"):
                     passed = features["p_positive"] > 0.5
                 else:
                     probabilities = {k: v for k, v in features.items() if k.startswith("p_")}
@@ -243,15 +290,20 @@ def run(
                         f"p_c{expected:03d}" if name.startswith("choice") else f"p_{expected + 4}"
                     ]
                 prior.update(
-                    status="passed" if passed else "semantic_review_required",
+                    status="observed"
+                    if dataset_robustness
+                    else "passed"
+                    if passed
+                    else "semantic_review_required",
                     features=features,
                     input_tokens=usage,
                     charged_usd=usage * PRICE / 1e6,
                     reserved_usd=0,
                     response_path=str(response_file),
                 )
+                prior.pop("failure", None)
                 persist()
-                if not passed and not robustness:
+                if not passed and not diagnostic:
                     raise ValueError("Known-answer probe needs response/wording review")
             report.update(
                 status="jev_smoke_passed_requires_dataset_pilot",
@@ -262,11 +314,11 @@ def run(
                     + report.get("historical_reserved_usd", 0)
                 ),
             )
-            if robustness:
+            if diagnostic:
                 from src.cluster.semantic_contracts import robustness_summary
 
                 report["prompt_robustness"] = robustness_summary(report["attempts"])
-                report["status"] = "jev_robustness_requires_review"
+                report["status"] = test_name + "_requires_review"
         except Exception as exc:
             if report["attempts"] and report["attempts"][-1].get("status") == "attempting":
                 report["attempts"][-1].setdefault(
@@ -290,33 +342,44 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(
+        "--revalidate-only",
+        action="store_true",
+        help="Reprocess saved responses and accounting without credentials or network calls",
+    )
+    parser.add_argument(
         "--robustness",
         action="store_true",
         help="Separate resumable 15-call synthetic diagnostic, at most $0.04032 plus any explicit auth retry reservation",
     )
+    parser.add_argument(
+        "--dataset-robustness",
+        action="store_true",
+        help="Separate 13-call real-text diagnostic; requires the reviewed local context envelope",
+    )
+    parser.add_argument("--config", default="feature_creation/jev.local")
     parser.add_argument(
         "--retry-auth-rejected",
         action="store_true",
         help="After correcting credentials, explicitly retry one saved 401; retain its reservation/history",
     )
     args = parser.parse_args()
-    if not args.execute:
+    if args.robustness and args.dataset_robustness:
+        parser.error("Select synthetic or real-text robustness separately")
+    maximum = 13 if args.dataset_robustness else 15 if args.robustness else MAX_CALLS
+    if not args.execute and not args.revalidate_only:
         print(
             json.dumps(
                 {
                     "execution_enabled": False,
                     "model": MODEL,
-                    "maximum_requests": 15 if args.robustness else MAX_CALLS,
-                    "maximum_cost_usd": (15 if args.robustness else MAX_CALLS)
-                    * TOKEN_BOUND
-                    * PRICE
-                    / 1e6,
+                    "maximum_requests": maximum,
+                    "maximum_cost_usd": maximum * TOKEN_BOUND * PRICE / 1e6,
                 },
                 indent=2,
             )
         )
         return
-    prompted = not credentials_available()
+    prompted = not args.revalidate_only and not credentials_available()
     try:
         if prompted:
             os.environ["TYPESAFE_API_KEY"] = getpass.getpass("TypeSafe API key (hidden): ")
@@ -326,6 +389,9 @@ def main():
                     execute=True,
                     retry_auth_rejected=args.retry_auth_rejected,
                     robustness=args.robustness,
+                    revalidate_only=args.revalidate_only,
+                    dataset_robustness=args.dataset_robustness,
+                    config=args.config,
                 ),
                 indent=2,
             )
@@ -337,7 +403,8 @@ def main():
                     "status": "stopped_requires_review",
                     "error_type": type(exc).__name__,
                     "http_status": getattr(exc, "status", None),
-                    "hint": error_hint(exc),
+                    "hint": error_hint(exc)
+                    or "Inspect the experiment_0 before_extraction Jev report and permanent _control ledger; saved responses can be revalidated without new calls.",
                 }
             )
         )

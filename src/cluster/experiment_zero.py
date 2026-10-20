@@ -30,6 +30,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         )
     if site == "local":
         items = [
+            ("libraries", ["src.utils.check_libraries"]),
             ("dependencies", ["pip", "check"]),
             ("questions", ["src.jev.question_audit", "--phase", "experiment_0"]),
             ("cpu", ["src.cluster.preflight", "--local", "--verify-data", "--tests"]),
@@ -37,6 +38,12 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
             ("jev_robustness", ["src.jev.smoke", "--robustness", "--execute"]),
         ]
         if dataset_pilot:
+            items.append(
+                (
+                    "jev_real_robustness",
+                    ["src.jev.smoke", "--dataset-robustness", "--config", config, "--execute"],
+                )
+            )
             items.append(("jev_dataset_pilot", ["src.jev.hosted", "--config", config, "--execute"]))
         return [
             {"name": n, "command": [sys.executable, "-X", "utf8", "-u", "-m", *c]} for n, c in items

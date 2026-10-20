@@ -129,8 +129,8 @@ def save(record, payload, run_id, phase):
 
 
 def complete(recipe, records, phase):
-    path = database(recipe["dataset_id"], phase)
-    if any(not isinstance(r, RecordRef) or r.database != path for r in records):
+    path = database(recipe["dataset_id"], phase).resolve()
+    if any(not isinstance(r, RecordRef) or r.database.resolve() != path for r in records):
         raise ValueError("A fold must use records in its own dataset store")
     refs = [{"id": r.key, "sha256": digest(json.loads(r.read_text()))} for r in records]
     with connect(path) as db:

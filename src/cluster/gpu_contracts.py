@@ -358,8 +358,8 @@ def run(provider, *, execute=False):
     try:
         evidence, counts = checked_inputs(provider)
         sample = real_sample(evidence, counts)
-        # 30 fixtures + wide choice + 7 known-answer + 15 robustness + 4 batch probes.
-        if 57 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
+        # Existing contracts plus 13 label-blind real-text robustness forwards.
+        if 70 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
             raise ValueError("GPU contract plan exceeds the configured request budget")
         directory.mkdir(parents=True, exist_ok=True)
         print(f"Loading pinned {provider} on the allocated GPU (offline)", flush=True)
@@ -393,6 +393,11 @@ def run(provider, *, execute=False):
                 "Known-answer diagnostics need review; inspect saved raw answers before blaming the decoder"
             )
         report["prompt_robustness"] = exercise_robustness(metered)
+        from src.cluster.semantic_contracts import exercise_real_robustness
+
+        report["real_prompt_robustness"] = exercise_real_robustness(
+            metered, directory / "real_robustness"
+        )
         report["batch_parity"] = exercise_batch_parity(
             metered, tolerance=cfg["batch_probability_tolerance"]
         )

@@ -41,6 +41,7 @@ def evidence(isolated_output, monkeypatch):
             "runtime_token_count_parity": True,
             "semantic_diagnostics": {"passed": True},
             "prompt_robustness": {"structurally_valid": True},
+            "real_prompt_robustness": {"structurally_valid": True},
             "batch_parity": {"passed": True},
             "real_datasets": [{"dataset_id": "fixture"}],
         },

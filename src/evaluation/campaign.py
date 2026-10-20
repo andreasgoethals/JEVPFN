@@ -84,6 +84,18 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
         cfg = load_yaml("experiment_3/output_ablation")
         semantics = load_yaml("dataset_semantics")["datasets"]
         for entry in selected_entries(load_catalog(), main):
+            for model in cfg["presence_control_models"]:
+                rows.append(
+                    dict(
+                        dataset_id=entry["id"],
+                        model=model,
+                        feature_set="non_text_plus_presence",
+                        provider=None,
+                        phase="experiment_3",
+                        control="text_presence",
+                        view="main",
+                    )
+                )
             for model in cfg["candidate_models"]:
                 rows.append(
                     dict(
@@ -275,10 +287,13 @@ def main():
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
     parser.add_argument(
         "--feature-set",
-        choices=MAIN_FEATURE_SETS + ("original_features", "non_text_plus_text_statistics"),
+        choices=MAIN_FEATURE_SETS
+        + ("original_features", "non_text_plus_text_statistics", "non_text_plus_presence"),
     )
     parser.add_argument("--include-controls", action="store_true")
-    parser.add_argument("--control", choices=("text_statistics", "permuted", "retained_view"))
+    parser.add_argument(
+        "--control", choices=("text_statistics", "text_presence", "permuted", "retained_view")
+    )
     parser.add_argument(
         "--view", choices=("main", "probabilities", "probabilities_plus_confidence")
     )

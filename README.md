@@ -11,10 +11,13 @@ Clef's container is now built/sealed and its A100/CUDA tensor check passed. Its 
 contract test stopped before inference because the saved token-audit report was missing.
 The replacement audit reports now cover all five tokenizers with zero overflows, but two
 overlapping jobs collided while writing counts and both failed. Duplicate-run protection
-is fixed locally; run one resumable audit to verify saved counts, then retry Clef's GPU test.
+is fixed locally; replacement job 62372655 was PENDING at 16:03 on 20 October.
+Verify its status before retrying Clef's GPU test.
 All five checkpoints were staged; only Clef/Intern's
 older native runtimes have passed model inference tests. Jev 1.13 passed three live
-local task probes; its larger dataset pilot and account limits remain pending. E5 and
+local task probes and 15 synthetic sensitivity probes. A rounded-score decoder mismatch
+in the latter was repaired and saved responses revalidated without new calls.
+Its real-text diagnostics, larger dataset pilot and account limits remain pending. E5 and
 predictor runtime tests are also pending. Historical evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a new frozen 0A run will supersede it.
 The owner handles Git commits/pushes. Full extraction and benchmark switches stay disabled.
@@ -80,11 +83,16 @@ they are descriptive reference results, not matched within-predictor effects.
 E5-small-v2 encodes each text column once, covers long inputs with token chunks, reuses
 identical text and saves 384-dimensional vectors. PCA is fitted **inside each inner/outer
 training partition**, producing 32 components per text column plus a missingness flag.
-Insufficient training rank leaves unused components missing. Held-out rows never fit PCA.
+Insufficient nonempty training rows leave unused components missing. Held-out rows never fit PCA.
+Each fit records the component count and training explained-variance fraction; 32 is a
+fixed computational compromise, not an established optimum or a guarantee of predictive quality.
 Non-text/decision features are not reduced. All six predictors use the same E5 source.
 Every decision/E5 arm receives the same per-text-column missing indicator, exactly once
 in combined arms. The non-text baseline contains no text-derived information. E5 batches
 chunks across different texts; content-token weighting and row mappings are preserved.
+Experiment 3 additionally offers a non-text-plus-text-presence reference for all six
+predictors. It distinguishes gains from knowing that text exists from gains beyond that
+information. Analysis retains the original non-text contrast and adds this matched reference.
 
 Use five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, followed
@@ -162,6 +170,7 @@ not all together in the notebook environment. Full setup/transfer commands are i
 | `data/jev_cache/<dataset>.sqlite3` | Permanent provider-specific responses, accounting and feature tables. |
 | `data/jev_cache/_control/jev_smoke/` | Permanent smoke-test payment ledger and responses. |
 | `data/jev_cache/_control/jev_robustness/` | Separate permanent 15-call diagnostic ledger and responses. |
+| `data/jev_cache/_control/jev_dataset_robustness/` | Separate 13-call real-text sensitivity diagnostic; never production feature blocks. |
 | `data/text_embeddings/<dataset>.sqlite3` | Permanent E5 vectors and row mappings. |
 | `output_JEVPFN/figures/<phase>/<notebook>/` | PDF figures only. |
 | `output_JEVPFN/{logs,manifests,results}/notebooks/<phase>/<notebook>/` | Local execution logs, figure/config receipts, full reports and analysis tables. |
@@ -209,6 +218,10 @@ mapping, synthetic contracts and Jev smoke; `--dataset-pilot` adds the configure
 Local 0A also runs a separate bounded Jev wording/repetition/instruction diagnostic
 (15 attempts, at most USD 0.04032 under the configured bounds, excluding a separately
 authorized authentication retry). Saved diagnostic responses survive output cleanup.
+With `--dataset-pilot`, local 0A also checks 13 deterministic real-text variants across
+three task types, using the reviewed private context envelope. VSC contracts check that
+same label-blind sample, including aligned multiclass option reversal. These measurements
+require human review; they do not select wording by predictive performance.
 VSC 0A covers CPU/storage/tokens/E5 and five real provider contract/pilot pairs. It submits
 one job at a time, resumes by job ID and stops after failure. See [VSC](docs/VSC.md) for commands.
 

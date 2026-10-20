@@ -81,6 +81,7 @@ def evidence_for(provider, *, campaign=None):
             and r.get("runtime_token_count_parity") is True
             and r.get("semantic_diagnostics", {}).get("passed") is True
             and r.get("prompt_robustness", {}).get("structurally_valid") is True
+            and r.get("real_prompt_robustness", {}).get("structurally_valid") is True
             and r.get("batch_parity", {}).get("passed") is True
             and {d["dataset_id"] for d in r["real_datasets"]} == set(current)
         ),

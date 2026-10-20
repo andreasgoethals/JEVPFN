@@ -2,6 +2,19 @@
 
 ## 20-10-2026
 
+- Reproduced the Jev robustness decoder failure from its saved response (score 7.99
+  versus probability expectation 8.00). Added a bounded two-decimal compatibility check,
+  discrepancy records and credential-free/network-free revalidation. Revalidated all
+  15 actual saved responses without another API call.
+- Fixed aliased-path fold completion and isolated failed open-weight batches in diagnostic
+  continue mode. Added all-predictor presence-only controls and matched analysis, real-text
+  sensitivity diagnostics with option alignment, and per-fit PCA explained-variance metadata.
+- Added a read-only committed-submodule/pin check. Corrected the DM rename evidence:
+  owner commit 6a12e8f omitted the new gitlink; publication remains the owner's task.
+  Token job 62372655 is PENDING in the supplied 16:03 accounting. Local tests: 667 passed,
+  two platform/runtime skips; all five notebooks completed with 24 figures, and lint passed. No remote
+  submission, environment deletion, new paid request, commit or push occurred in this repair.
+
 - Implemented the review follow-up: per-dataset/phase SQLite evaluation stores containing
   checksummed Parquet predictions and immutable fold records, bounded lock-file growth,
   transactional portable merging and legacy reading. Added corruption, concurrency,
@@ -19,7 +32,8 @@
   skips; five notebooks passed with 24 figures. Actual GPU/batch/throughput validation and
   remote retirement remain pending. No paid inference, remote submission, cleanup or Git publication.
 
-- Renamed the DM Library submodule to `dm-library`, preserving its exact library revision and updating references and tooling exclusions.
+- Updated DM references/tooling to `dm-library`; the owner's 6a12e8f commit omitted the
+  replacement gitlink, so fresh-clone installation remains incomplete until owner publication.
 
 - Added DM Library as an independent read-only submodule for this project only; canonical maintenance and pin propagation run from `0. Literature`. No model settings changed.
 

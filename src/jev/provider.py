@@ -15,6 +15,51 @@ from src.utils.serialization import canonical_json, digest
 
 MAPPING_VERSION = "typesafe-systemone-v1"
 QUESTION_ID = "semantic"
+SCORE_VALIDATION_VERSION = "jev-two-decimal-envelope-v1"
+
+
+def score_consistency(score, values, provider):
+    """Keep full-precision runtimes strict; accommodate observed Jev wire rounding.
+
+    Jev 1.13 returned score=7.99 beside p(8)=1.00 on 20 October. Its documentation
+    defines a weighted mean but does not promise a decimal precision. We therefore
+    accept a discrepancy only if a normalized latent distribution and score could
+    both round to the *observed two-decimal* fields. This is an explicit compatibility
+    policy, not a claim that the provider guarantees this rounding.
+    """
+    expected = sum(i * p for i, p in enumerate(values))
+    lower = upper = expected
+    exact = math.isclose(score, expected, abs_tol=1e-4)
+    if (
+        not exact
+        and provider == "jev"
+        and all(math.isclose(v * 100, round(v * 100), abs_tol=1e-8) for v in [score, *values])
+    ):
+        lows = [max(0, p - 0.005) for p in values]
+        highs = [min(1, p + 0.005) for p in values]
+
+        def extreme(order):
+            candidate = lows.copy()
+            remaining = 1 - sum(candidate)
+            for i in order:
+                addition = min(remaining, highs[i] - candidate[i])
+                candidate[i] += addition
+                remaining -= addition
+            if abs(remaining) > 1e-8:
+                raise ValueError("Rounded probabilities cannot represent a distribution.")
+            return sum(i * p for i, p in enumerate(candidate))
+
+        lower = extreme(range(len(values))) - 0.005
+        upper = extreme(reversed(range(len(values)))) + 0.005
+    if not exact and not lower - 1e-8 <= score <= upper + 1e-8:
+        raise ValueError("Regression score is inconsistent with its probabilities.")
+    return {
+        "policy": SCORE_VALIDATION_VERSION,
+        "reported_score": score,
+        "probability_weighted_score": expected,
+        "absolute_difference": abs(score - expected),
+        "rounding_envelope_used": not exact,
+    }
 
 
 def api_preview(request: IntendedRequest) -> dict:
@@ -130,9 +175,7 @@ def response_features(request: IntendedRequest, response: dict) -> dict[str, flo
         if answer.get("legend") != dict(zip(keys, question["criteria"])):
             raise ValueError("Regression legend differs from the requested scale.")
         score = _number(answer.get("score"), 0, 8)
-        expected = sum(i * p for i, p in enumerate(values))
-        if not math.isclose(score, expected, abs_tol=1e-4):
-            raise ValueError("Regression score is inconsistent with its probabilities.")
+        expected = score_consistency(score, values, provider)["probability_weighted_score"]
         # Jev indexes levels 0..8; our agreed directional values are -4..+4.
         features["expected_direction"] = expected - 4
     return features

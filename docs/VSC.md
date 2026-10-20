@@ -32,6 +32,9 @@ updating its code or environment. Do not reset local changes or clone over an ex
 Keep a stage's code/config/input versions fixed while its jobs run. Reviewed stage-enabling
 changes are separate owner commits between stages: pilot, full extraction, predictor contracts
 and full-fold profiling each have their own switch. The committed defaults stay disabled.
+`python -m src.utils.check_libraries` verifies that all three library gitlinks are present
+in HEAD and their checkouts match. A directory and `.gitmodules` entry alone are insufficient.
+The CPU job and local 0A run this read-only check before proceeding.
 Rerun checks affected by a change; unrelated edits do not invalidate matching token/runtime
 evidence or require resetting output and reinstalling inputs.
 
@@ -438,8 +441,8 @@ vector, missing/duplicate/Unicode input, overflow rejection, cache reopen/reuse,
 alignment, and saving/reloading both feature representations. It then evaluates first/longest
 unique inputs from each selected dataset. Seven additional known-answer probes check binary
 polarity, permuted class ordering and score endpoints/zero. With robustness and batch-parity
-checks, at most 93 input evaluations are planned, with a hard ceiling
-of 100. Runtime token-count agreement, load/inference time, peak GPU memory and the complete
+checks and 13 real-text sensitivity probes, at most 106 input evaluations are planned, with a hard ceiling
+of 110. Runtime token-count agreement, load/inference time, peak GPU memory and the complete
 `settings_sha256` required for acceptance are recorded in the report.
 A failed known-answer probe requires inspecting raw responses; the model itself may be wrong.
 
@@ -485,8 +488,10 @@ H100 or Mindwell B200/native GPFS only if measured throughput/memory justifies m
 Clef and Perplexity use batches of two; 0A checks their probabilities against serial execution
 with an absolute tolerance of 0.001. Liquid, Strands and Intern remain serial until a native
 batch interface is independently verified. All retain exact context checks, row ordering and
-cache reuse. A failed batch is recorded; storage failures stop immediately. Runtime settings
-include batch size. Larger batches require a new reviewed profile and acceptance.
+cache reuse. In explicit `--continue-on-error` mode, a failed batch is retried once per
+input serially so its valid neighbour can complete. Storage failures stop immediately.
+This is open-weight diagnostic recovery, not a paid API retry. Runtime settings include
+batch size. Larger batches require a new reviewed profile and acceptance.
 0A additionally measures repetition, paraphrase, irrelevant-context and embedded-instruction
 sensitivity on synthetic inputs. These diagnostics are separate from frozen dataset questions.
 Inspect probability shifts before approving; do not automatically relax a failing tolerance.
@@ -532,6 +537,23 @@ responses. The initial attempt allowance is at most USD 0.04032 under the config
 64k billing bound and USD 0.042/M price. Review the measured probability shifts; this
 diagnostic does not change the frozen dataset questions or establish account rate limits.
 The local 0A coordinator includes this step automatically.
+
+If a saved response fails decoding, `python -m src.jev.smoke --robustness --revalidate-only`
+reprocesses existing responses without credentials or network access. It cannot fill missing
+responses or erase unknown attempts. Jev 1.13 has returned score 7.99 alongside displayed
+probabilities implying 8.00. The decoder now accepts only discrepancies mathematically
+consistent with two-decimal rounding of both fields; open-weight responses remain strict.
+Raw fields and the discrepancy are retained, and the feature remains the expectation
+computed from the returned probabilities. TypeSafe does not guarantee this rounding rule.
+
+After configuring the private context envelope, run
+`python -m src.jev.smoke --dataset-robustness --config feature_creation/jev.local --execute`
+for 13 real-text diagnostic requests (initial maximum USD 0.034944). It selects the first
+prepared input of the first dataset per task, in sorted dataset order, without accessing
+row targets. It compares fixed paraphrases, irrelevant context and injected instructions;
+multiclass also reverses options and realigns probabilities. Regression's ordered rubric
+is not reversed. Local 0A includes this when `--dataset-pilot` is selected. Report total
+variation and top-option agreement; this small sample is not comprehensive robustness evidence.
 
 The console's user menu → Settings → Organization displays the organization ID. Billing
 shows credits and auto-recharge; neither that page nor Home/Organization/Usage exposed

@@ -17,6 +17,7 @@ export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STAGING_ROOT="${1:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
+python -m src.utils.check_libraries
 python -m src.jev.question_audit --phase experiment_0
 python -m src.cluster.preflight --verify-data --tests
 echo 'CPU preflight finished; this is not acceptance of the full experiment 0.'

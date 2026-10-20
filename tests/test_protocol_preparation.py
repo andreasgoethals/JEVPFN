@@ -58,6 +58,18 @@ def test_text_statistics_are_label_free_and_missing_aware(dataset):
     assert baseline.attrs["feature_artifact_ids"] == []
 
 
+def test_presence_control_contains_only_non_text_and_missing_flags(dataset):
+    matrix = assemble_feature_set(dataset, [], "non_text_plus_presence")
+    assert list(matrix) == ["n", "text_presence__000__missing"]
+    assert matrix.iloc[:4, 1].tolist() == [0, 1, 1, 0]
+    from src.evaluation.campaign import benchmark_plan
+    from src.evaluation.models import MAIN_MODELS
+
+    arms = [a for a in benchmark_plan(include_controls=True) if a.get("control") == "text_presence"]
+    assert len(arms) == 18 * 6
+    assert {a["model"] for a in arms} == set(MAIN_MODELS)
+
+
 def test_shuffle_preserves_vectors_without_crossing_partitions():
     train = pd.DataFrame({"a": range(12), "b": range(100, 112)}, index=range(12))
     test = train + 500

@@ -89,3 +89,18 @@ def test_transfer_import_merges_evaluation_records(isolated_output, tmp_path, mo
     pd.testing.assert_frame_equal(store.read_predictions(refs[0]), values)
     assert len(list(store.recipes("experiment_1"))) == 2
     assert len(list(paths.results_dir("evaluation", phase="experiment_1").glob("*.sqlite3"))) == 1
+
+
+def test_completion_accepts_equivalent_path_alias_but_not_another_store(
+    isolated_output, monkeypatch, tmp_path
+):
+    original = store.database("fixture", "experiment_1")
+    detour = original.parent / "detour"
+    detour.mkdir(parents=True)
+    monkeypatch.setattr(store, "database", lambda *a: detour / ".." / original.name)
+    recipe, ref, values = save(3)
+    pd.testing.assert_frame_equal(
+        store.read_predictions(store.completed(recipe, "experiment_1")[0]), values
+    )
+    with pytest.raises(ValueError, match="own dataset"):
+        store.complete(recipe, [store.RecordRef(tmp_path / original.name, ref.key)], "experiment_1")

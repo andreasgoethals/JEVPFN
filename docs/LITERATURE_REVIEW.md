@@ -101,6 +101,19 @@ vectors are reusable; per-column PCA is fitted only on the current training part
 including each inner threshold-selection fold. All six fixed predictors compare E5 alone,
 decision features alone and their combination on identical folds. Model inference remains to
 be verified; the combinations test complementarity without assuming it in advance.
+The fixed 32 components per column are a resource choice, not a literature-established
+optimum. Training-fold explained variance is recorded; it measures compression, not
+target relevance. Full vectors remain saved, so a separately agreed dimensionality
+ablation would not require new E5 inference. Any supervised choice of dimensionality
+must be made inside training folds, never from the outer test scores.
+
+Non-text-versus-text-augmented gains include text availability as well as content.
+The additional presence-only reference for every main predictor separates these effects.
+Synthetic known-answer tests establish interface behavior only. A deterministic,
+label-blind real-input sensitivity sample measures wording/context/option-order drift;
+it cannot certify robustness over all datasets or establish a paraphrase's semantic
+equivalence. TypeSafe itself documents irrelevant-context, instruction and option-order
+sensitivity in [Jev 1.13's limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
 
 ### Paired inference and pretraining-overlap review
 

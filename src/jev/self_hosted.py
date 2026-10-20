@@ -301,11 +301,23 @@ def cached_batches(cache, client, requests, size, *, continue_on_error=False, re
             for request, raw in zip(pending, responses, strict=True):
                 response_features(request, raw)
         except Exception as exc:
-            for request in pending:
-                cache.record_failure(request, exc)
             if not continue_on_error:
+                for request in pending:
+                    cache.record_failure(request, exc)
                 raise
-            yield from ("failed_recorded" for _ in pending)
+            # Diagnostic mode isolates bad inputs once; do not repeatedly pair a
+            # valid input with its failing neighbour on --retry-failed.
+            for request in pending:
+                try:
+                    raw = client.evaluate(request)
+                    response_features(request, raw)
+                except Exception as individual_error:
+                    cache.record_failure(request, individual_error)
+                    yield "failed_recorded"
+                    continue
+                # Storage errors must propagate, never become model failures.
+                cache.put(request, raw, kind="verified_response")
+                yield "completed"
             continue
         # A storage failure must stop, even in continue-on-model-error mode.
         for request, raw in zip(pending, responses, strict=True):

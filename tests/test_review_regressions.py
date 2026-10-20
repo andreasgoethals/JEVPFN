@@ -225,8 +225,16 @@ def test_controls_are_executable_without_duplicating_main_embedding_arms():
     plan = benchmark_plan(include_controls=True)
     assert len(main) == 4140
     added = [a for a in plan if a["phase"] == "experiment_3"]
-    assert {a["control"] for a in added} == {"text_statistics", "permuted", "retained_view"}
-    assert {a["model"] for a in added} == {"catboost", "tabpfn_3_5"}
+    assert {a["control"] for a in added} == {
+        "text_presence",
+        "text_statistics",
+        "permuted",
+        "retained_view",
+    }
+    assert {a["model"] for a in added if a["control"] != "text_presence"} == {
+        "catboost",
+        "tabpfn_3_5",
+    }
 
 
 def test_provenance_urls_are_not_sent_but_urls_in_actual_text_are_preserved():

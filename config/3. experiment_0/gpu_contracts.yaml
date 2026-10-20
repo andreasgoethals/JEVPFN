@@ -2,10 +2,11 @@ phase: experiment_0
 providers: [liquid, strands, perplexity, cloudflare, intern]
 execution_site: vsc_gpu_allocation
 requires_explicit_execute: true
-max_live_requests: 100
-synthetic_fixture_version: gpu-contracts-v3
+max_live_requests: 110
+synthetic_fixture_version: gpu-contracts-v4
 known_answer_and_option_order_probes: 7
 prompt_robustness_forwards: 15
+real_prompt_robustness_forwards: 13
 batch_probability_tolerance: 0.001  # Numerical parity check; failures need review, not automatic relaxation.
 real_sample: first_and_longest_unique_input_per_dataset
 full_extraction_authorized: false

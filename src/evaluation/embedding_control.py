@@ -13,6 +13,7 @@ class EmbeddingControl:
     def fit(self, x, y):
         self.schema = list(x.columns)
         self.pcas = []
+        self.pca_diagnostics_ = []
         for group in self.groups:
             matrix = x[group].to_numpy()
             present = np.isfinite(matrix).all(axis=1)
@@ -25,6 +26,15 @@ class EmbeddingControl:
                     matrix[present]
                 )
             self.pcas.append(pca)
+            ratio = float(pca.explained_variance_ratio_.sum()) if pca is not None else float("nan")
+            self.pca_diagnostics_.append(
+                {
+                    "requested_components": self.components,
+                    "fitted_components": count if pca is not None else 0,
+                    "training_nonempty_rows": int(present.sum()),
+                    "training_explained_variance_fraction": ratio if np.isfinite(ratio) else None,
+                }
+            )
         self.estimator.fit(self.transform(x), y)
         if hasattr(self.estimator, "classes_"):
             self.classes_ = self.estimator.classes_

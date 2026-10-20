@@ -125,6 +125,14 @@ def test_pca_uses_only_training_rows_and_preserves_non_text_values():
     test = pd.DataFrame({"x": [4], "decision": [0.8], "e0": [10000.0], "e1": [20000.0]})
     wrapped = EmbeddingControl(Model(), [["e0", "e1"]], components=2).fit(train, [0, 1, 2])
     np.testing.assert_allclose(wrapped.pcas[0].mean_, [1, 3])
+    assert wrapped.pca_diagnostics_ == [
+        {
+            "requested_components": 2,
+            "fitted_components": 1,
+            "training_nonempty_rows": 2,
+            "training_explained_variance_fraction": pytest.approx(1),
+        }
+    ]
     np.testing.assert_array_equal(wrapped.predict(test), [4])
     assert wrapped.estimator.seen.x.equals(train.x)
     assert wrapped.estimator.seen.decision.equals(train.decision)
