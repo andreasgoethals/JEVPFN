@@ -49,7 +49,9 @@ project-specific belongs in `README.md` or another `docs/` file, not here.
 │   │   └── figures.py       FigureSaver
 │   └── ...                  more as the project needs (train/, eval/, models/)
 ├── tests/
-├── tfm-library/             submodule: literature + VSC docs. READ-ONLY.
+├── tfm-library/             submodule: TFM literature. READ-ONLY.
+├── decision-models-library/ submodule: decision-model literature. READ-ONLY.
+├── vsc-library/             submodule: HPC/VSC guides and templates. READ-ONLY.
 ├── .vscode/settings.json
 ├── .gitattributes  .gitignore  .gitmodules
 ├── AGENTS.md                the rules for every agent
@@ -138,7 +140,7 @@ It ships empty. Filling it is the project's job.
 
 How **this** project runs on the KU Leuven VSC cluster: which partitions and walltime limits it
 uses, how to submit, how to resume a job that outlives the walltime, and how to get results back.
-Built from the VSC documentation in `tfm-library/`, but written about this project.
+Built from the VSC documentation in `vsc-library/`, but written about this project.
 
 **Storage — two tiers.** On both, everything lives inside a folder named after the project.
 
@@ -354,13 +356,14 @@ anything under `src/visualize/`.
 
 ## `tfm-library/`
 
-The shared TFM literature, as a **pinned git submodule**. In every project.
+The shared TFM literature, as an optional **pinned git submodule**, installed in this project.
 
 **What it is.** One curated knowledge base: the papers as PDFs with full-text extractions,
 per-paper summaries, a cross-paper synthesis, flat-text snapshots of the upstream reference
-implementations, and the VSC documentation. Maintained in its own repository, consumed by all.
+implementations. VSC documentation is maintained separately in `vsc-library/`;
+project-specific infrastructure instructions belong in `docs/VSC.md`.
 
-**Why every project has it.** So a human *or an agent* can answer "what does the literature say?"
+**Why this project has it.** So a human *or an agent* can answer "what does the literature say?"
 and "how does the official code actually do this?" **from inside the repository, offline, by
 reading and grepping files** — no web search, no paywall, no recall from memory. It turns "I
 believe X" into "X, see `tfm-library/<path>`". That is the point.

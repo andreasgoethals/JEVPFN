@@ -1,5 +1,11 @@
 # Operational evidence
 
+## 20-10-2026
+
+- Added DM Library as an independent read-only submodule for this project only; canonical maintenance and pin propagation run from `0. Literature`. No model settings changed.
+
+- Added the independent read-only VSC Library submodule and daily pin-update proposals; shared HPC guidance moved out of TFM Library, with project instructions retained in docs/VSC.md. No cluster workload was submitted.
+
 Current stage: Experiment 0A setup, before the owner-requested final clean validation.
 Newest Downloads `output_JEVPFN.zip` (343,145 bytes; local modified 19-10 14:00) contains
 13 files. Build 62369713 succeeded: wrapper installation completed, source-only sentinel

@@ -1,5 +1,11 @@
 # Changelog
 
+## 20-10-2026
+
+- Added DM Library as an independent read-only submodule for this project only; canonical maintenance and pin propagation run from `0. Literature`. No model settings changed.
+
+- Added the independent read-only VSC Library submodule and daily pin-update proposals; shared HPC guidance moved out of TFM Library, with project instructions retained in docs/VSC.md. No cluster workload was submitted.
+
 ## 19-10-2026
 
 - Inspected the newer VSC ZIP: Clef container build 62369713 sealed successfully; GPU job 62370298 passed CUDA but stopped before model loading because the token-audit summary was absent. Added an actionable recovery error and read-only `gpu_contracts --check-inputs` CLI, shared with the execution gate. Added tests for missing-evidence refusal before model loading, dataset coverage, and rebuilding a lost summary from surviving exact counts without retokenization. Validation: 646 tests passed, one POSIX-only skip; lint, dependencies and 17 shell syntax/LF checks passed. Updated setup order and observed status; no model/container rebuild, cleanup, paid call, remote submission or Git publication performed.

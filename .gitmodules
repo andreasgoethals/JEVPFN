@@ -1,3 +1,11 @@
 [submodule "tfm-library"]
 	path = tfm-library
 	url = https://github.com/andreasgoethals/TFM_Library.git
+[submodule "vsc-library"]
+	path = vsc-library
+	url = https://github.com/andreasgoethals/VSC_Library.git
+	branch = main
+[submodule "decision-models-library"]
+	path = decision-models-library
+	url = https://github.com/andreasgoethals/DM_Library.git
+	branch = main

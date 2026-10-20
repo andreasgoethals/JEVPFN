@@ -59,3 +59,23 @@ Slurm files are Linux Bash and must use LF endings. New/editable text files are 
 - Record substantive changes concisely in docs/CHANGELOG.md, newest first, DD-MM-YYYY.
   Record each cluster run and reusable failures in docs/AGENTS_MEMORY.md. Submission is not
   completion; retain the exact observed status. Keep docs uppercase, durable and concise.
+
+## Shared VSC Library
+
+`vsc-library/` is a pinned, entirely read-only infrastructure submodule. Read its
+README, source snapshot, guides and Slurm examples; never edit, refresh, lint,
+format or test inside it. There is no PROJECT_SPECIFIC exception. Keep this
+project's VSC choices and operating instructions in `docs/VSC.md`, outside the
+submodule. Shared corrections belong in the standalone VSC Library checkout.
+Record the library pin when operational evidence depends on it.
+
+
+## Shared Decision Models Library
+
+`decision-models-library/` is an independent pinned read-only submodule. Read
+its summaries, synthesis, papers and official source snapshots for decision-model
+claims; cite source paths and symbols and record the pin. Never edit, refresh,
+lint or test shared files there. The sole local exception is its ignored
+`PROJECT_SPECIFIC.md`, created from `PROJECT_SPECIFIC.template.md`.
+Maintain shared corrections in the canonical DM Library under `0. Literature`.
+Adding this reference changes no model roster, experimental protocol or execution gate.

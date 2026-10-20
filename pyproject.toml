@@ -86,14 +86,14 @@ Template = "https://github.com/andreasgoethals/0.-Template"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
-exclude = ["tfm-library*", "notebooks*", "data*", "output*", "checkpoints*", "docs*", "src.data.upstream*"]
+exclude = ["tfm-library*", "vsc-library*", "decision-models-library*", "notebooks*", "data*", "output*", "checkpoints*", "docs*", "src.data.upstream*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 extend-exclude = [
     # Read-only submodule. Never lint, never format, never touch.
-    "tfm-library",
+    "tfm-library", "vsc-library", "decision-models-library",
     "src/data/upstream",
     # Generated output and notebook JSON are not source.
     "output", "output_JEVPFN",
@@ -121,7 +121,7 @@ addopts = "-ra --strict-markers"
 # WHY: without this, pytest walks tfm-library/ and tries to collect the upstream
 # code snapshots as tests. It finds "test" in filenames there and fails on imports
 # of packages this project does not have.
-norecursedirs = ["tfm-library", "output", "output_JEVPFN", "data", ".venv", "venv", "notebooks"]
+norecursedirs = ["tfm-library", "vsc-library", "decision-models-library", "output", "output_JEVPFN", "data", ".venv", "venv", "notebooks"]
 markers = [
     "notebook: requires the local IPython/Jupyter environment; excluded from VSC CPU contracts",
     "slow: takes more than a few seconds",

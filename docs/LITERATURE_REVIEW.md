@@ -1,5 +1,12 @@
 # Literature review
 
+Shared references: [DM Library](../decision-models-library/README.md) for decision
+models and [TFM Library](../tfm-library/README.md) for tabular foundation models.
+Both are independent read-only submodules; run `git submodule status` to record
+the exact references used. This document keeps JEVPFN-specific interpretation.
+Maintenance and published-pin propagation run from the canonical `0. Literature`
+workspace; installing one library never installs another automatically.
+
 Primary-source findings checked through 16 October 2026. This reference records prior art,
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),

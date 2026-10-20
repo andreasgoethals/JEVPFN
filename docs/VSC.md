@@ -1,10 +1,18 @@
 # VSC operations
 
+Shared infrastructure reference: [VSC Library](../vsc-library/README.md). The parent Git commit pins its revision; inspect it with `git submodule status -- vsc-library`.
+Its [official repository snapshot](<../vsc-library/VSC Repository.txt>),
+[guides](../vsc-library/guides/) and [Slurm templates](<../vsc-library/slurm templates/README.md>)
+are read-only. Keep this project's actual paths, environment, resource choices,
+submission/resume steps and run evidence in this file or the project's own run logs.
+Check [upstream review flags](../vsc-library/UPSTREAM_CHANGES.md) and the
+[live Leuven status](https://status.vscentrum.be/tier2_leuven.html) before applying a changed policy.
+
 Use the Open OnDemand login shell for setup/downloads and Slurm allocations for computation.
 Notebook analysis always runs locally. Current run evidence is in [AGENTS_MEMORY](AGENTS_MEMORY.md);
 the research contract is in [README](../README.md). These instructions follow the read-only
-[VSC guide](<../tfm-library/repositories/VSC Documentation.txt>) at library pin
-`de324efcca55be392feb0c01830b3b6ce364587f`.
+[VSC guide](<../vsc-library/VSC Repository.txt>) at VSC Library pin
+`289ed81df5d101512f91ae1ea3b0083a2de08a96`.
 
 ## Checkout and storage
 
@@ -367,6 +375,15 @@ and the read-only check again. A matching surviving count database is reused; ot
 the CPU job recounts. Do not rebuild a sealed container, regenerate unchanged questions or
 disable context checks to repair a missing report. A deliberate full-output reset removes
 this evidence, so exact token counting must precede GPU contracts in the subsequent campaign.
+
+Submit only one full token audit at a time. The coordinator takes a PROJECT lock before
+loading tokenizers; each count database also has a writer lock, and DATA report merges
+are serialized. A duplicate run stops promptly without deleting or replacing counts.
+The OS releases these locks when the process exits; do not remove lock files manually.
+If older overlapping jobs failed with `UNIQUE constraint failed: counts.dataset_id,
+counts.input_no`, wait for both to exit, synchronize the fixed code and submit one audit.
+It reuses matching committed counts and checks completeness before republishing reports.
+Preserve the databases, prepared inputs and sealed containers during this recovery.
 
 After Clef completes successfully, repeat for `intern`, `liquid` and `strands`.
 Perplexity uses `sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.
