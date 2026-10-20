@@ -83,6 +83,10 @@ def across_datasets(datasets):
                 "positive_deltas": int((values > 0).sum()),
                 "zero_deltas": int((values == 0).sum()),
                 "negative_deltas": int((values < 0).sum()),
+                "minimum_two_sided_exact_sign_p_no_ties": 2.0 ** (1 - len(values))
+                if len(values)
+                else None,
+                "power_note": "Ideal lower bound before multiplicity correction; ties/zeros reduce information. Three binary datasets cannot establish p < .05 using this exact test.",
                 "interpretation": "Descriptive; positive is better only for higher-is-better metrics. Raw magnitudes with dataset-specific units are not pooled.",
             }
         )

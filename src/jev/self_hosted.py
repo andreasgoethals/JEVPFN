@@ -19,6 +19,7 @@ import time
 from collections import deque
 from contextlib import closing
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 from uuid import uuid4
 
@@ -78,6 +79,7 @@ class SelfHostedClient:
             "template_version": TEMPLATE_VERSION,
             "api_mapping_version": f"{provider}-self-hosted-v1",
             "request_configuration": {
+                "batch_size": batch_size_for(provider),
                 "checkpoint_sha256": checkpoint_id,
                 "counter_id": self.counter.identity["counter_id"],
                 "runtime_revision": self.candidate.get("runtime_revision"),
@@ -206,6 +208,109 @@ class SelfHostedClient:
         }
         response_features(request, response)
         return response
+
+    def evaluate_many(self, requests):
+        if len(requests) <= 1 or self.provider not in {"cloudflare", "perplexity"}:
+            return [self.evaluate(r) for r in requests]
+        if len(requests) > self.settings["request_configuration"]["batch_size"]:
+            raise ValueError("Batch exceeds pinned runtime configuration")
+        payloads, counts, questions = [], [], []
+        for request in requests:
+            if json.loads(request.settings_json) != self.settings:
+                raise ValueError("Batch request differs from loaded runtime")
+            payload = json.loads(request.payload_json)
+            count = self.counter(payload)
+            if count > self.counter.limit:
+                raise ValueError("Context overflow; no truncation")
+            payloads.append(payload)
+            counts.append(count)
+            questions.append(semantic_question(payload["question"]))
+        with self.torch.inference_mode():
+            if self.provider == "cloudflare":
+                raw = self.model.predict_many(
+                    [
+                        {"state": p["state"], "questions": {QUESTION_ID: q}}
+                        for p, q in zip(payloads, questions)
+                    ]
+                )
+            else:
+                rows = [
+                    {"state": canonical_json(p["state"]), "question": q}
+                    for p, q in zip(payloads, questions)
+                ]
+                if self.model.prepare(rows).input_tokens != sum(counts):
+                    raise ValueError("Batch inference token count differs from audit")
+                vectors = self.model.predict(rows, batch_size=len(rows))
+                raw = [
+                    {
+                        "answers": {QUESTION_ID: self.decode(q, v)},
+                        "usage": {"input_tokens": n, "output_tokens": 0},
+                        "raw_probabilities": v,
+                    }
+                    for q, n, v in zip(questions, counts, vectors, strict=True)
+                ]
+        self.torch.cuda.synchronize()
+        result = []
+        for request, count, item in zip(requests, counts, raw, strict=True):
+            if item["usage"]["input_tokens"] != count:
+                raise ValueError("Batch inference token count differs from audit")
+            response = {
+                "provider": self.provider,
+                "model": self.settings["model"],
+                "version": self.settings["version"],
+                "settings_sha256": digest(self.settings),
+                "answers": item["answers"],
+                "usage": item["usage"],
+                "publisher_response": item,
+            }
+            response_features(request, response)
+            result.append(response)
+        return result
+
+
+def batch_size_for(provider):
+    cfg = load_yaml("experiment_0/self_hosted")
+    size = cfg.get("provider_batch_sizes", {}).get(provider, cfg["batch_size"])
+    if type(size) is not int or not 1 <= size <= 8:
+        raise ValueError("Bounded inference batch size must be between 1 and 8")
+    if size > 1 and provider not in {"cloudflare", "perplexity"}:
+        raise ValueError("This provider has no verified multi-input batch adapter")
+    return size
+
+
+def cached_batches(cache, client, requests, size, *, continue_on_error=False, retry_failed=False):
+    """Batch only uncached requests; persist every valid response before advancing."""
+    iterator = iter(requests)
+    while batch := list(islice(iterator, size)):
+        pending = []
+        for request in batch:
+            raw = cache.get(request, kind="verified_response")
+            if raw is not None:
+                response_features(request, raw)
+                yield "cache_hit"
+            elif continue_on_error and not retry_failed and cache.failure_count(request):
+                yield "failed_recorded"
+            else:
+                pending.append(request)
+        if not pending:
+            continue
+        try:
+            responses = client.evaluate_many(pending)
+            if len(responses) != len(pending):
+                raise ValueError("Batch returned wrong number of responses")
+            for request, raw in zip(pending, responses, strict=True):
+                response_features(request, raw)
+        except Exception as exc:
+            for request in pending:
+                cache.record_failure(request, exc)
+            if not continue_on_error:
+                raise
+            yield from ("failed_recorded" for _ in pending)
+            continue
+        # A storage failure must stop, even in continue-on-model-error mode.
+        for request, raw in zip(pending, responses, strict=True):
+            cache.put(request, raw, kind="verified_response")
+            yield "completed"
 
 
 def cached_evaluate(cache, client, request, *, skip_failed=False):
@@ -337,8 +442,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         raise RuntimeError("GPU pilot is disabled; explicitly enable its config and pass --execute")
     if provider not in cfg["providers"]:
         raise ValueError("Provider is not selected for this pilot")
-    if cfg["batch_size"] != 1:
-        raise ValueError("The initial GPU pilot currently supports serialized batch size one")
+    batch_size = batch_size_for(provider)
     if not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU extraction must run in a VSC compute allocation")
     accepted_file = cfg.get("accepted_before_extraction_manifests", {}).get(provider) or cfg.get(
@@ -397,6 +501,10 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         "status": "running",
         "full_experiment_0_passed": False,
     }
+    from src.cluster.evidence import current_identity
+
+    summary["validation_identity"] = current_identity()
+    summary["job_id"] = os.environ.get("SLURM_JOB_ID")
     manifest = (
         paths.manifests_dir(phase)
         / ("full_extraction" if full else "before_extraction")
@@ -411,20 +519,22 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
             source = paths.dataset_question_path(dataset_id)
             cache = ResponseCache.for_dataset(dataset_id)
             started, completed, reused, failed = time.perf_counter(), 0, 0, 0
-            for record in iter_prepared_inputs(
-                source, input_set_id=item["input_set_id"], input_numbers=selection[dataset_id]
-            ):
-                request = prepared_request(
+            requests = (
+                prepared_request(
                     record, settings=client.settings, provenance={"dataset_id": dataset_id}
                 )
-                try:
-                    status = cached_evaluate(
-                        cache, client, request, skip_failed=continue_on_error and not retry_failed
-                    )
-                except Exception:
-                    if not continue_on_error:
-                        raise
-                    status = "failed_recorded"
+                for record in iter_prepared_inputs(
+                    source, input_set_id=item["input_set_id"], input_numbers=selection[dataset_id]
+                )
+            )
+            for status in cached_batches(
+                cache,
+                client,
+                requests,
+                batch_size,
+                continue_on_error=continue_on_error,
+                retry_failed=retry_failed,
+            ):
                 failed += status == "failed_recorded"
                 if failed > cfg.get("max_recorded_failures_per_dataset", 10):
                     raise RuntimeError("Recorded-failure ceiling reached; diagnose before resuming")

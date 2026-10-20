@@ -91,6 +91,45 @@ def test_disabled_model_run_never_imports_or_loads_weights():
         run("liquid")
 
 
+def test_cached_batch_reuses_existing_response_and_stops_on_invalid_reply(tmp_path):
+    from dataclasses import replace
+
+    from src.jev.self_hosted import cached_batches
+
+    request = IntendedRequest(
+        canonical_json(
+            {
+                "state": {"text": {"t": "body"}},
+                "question": {"kind": "binary_probability", "text": "True?"},
+            }
+        ),
+        canonical_json(settings("cloudflare")),
+        canonical_json({"dataset_id": "fixture"}),
+    )
+    second = replace(request, payload_json=request.payload_json.replace("body", "other"))
+    response = {
+        "provider": "cloudflare",
+        "model": "pinned-model",
+        "version": "pinned-revision",
+        "settings_sha256": digest(settings("cloudflare")),
+        "answers": {QUESTION_ID: {"type": "noul", "noul": 0.7}},
+    }
+    cache = ResponseCache(tmp_path / "fixture.sqlite3", "fixture")
+    cache.put(request, response, kind="verified_response")
+    client = Mock()
+    client.evaluate_many.return_value = [response]
+    assert list(cached_batches(cache, client, [request, second], 2)) == ["cache_hit", "completed"]
+    assert client.evaluate_many.call_args.args[0] == [second]
+    client.reset_mock()
+    assert list(cached_batches(cache, client, [request, second], 2)) == ["cache_hit", "cache_hit"]
+    client.evaluate_many.assert_not_called()
+    third = replace(second, payload_json=second.payload_json.replace("other", "third"))
+    client.evaluate_many.return_value = []
+    with pytest.raises(ValueError, match="wrong number"):
+        list(cached_batches(cache, client, [third], 2))
+    assert cache.get(third, kind="verified_response") is None
+
+
 @pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity", "cloudflare", "intern"])
 def test_cache_resume_and_feature_materialization_for_every_provider(isolated_output, provider):
     frame = pd.DataFrame({"text": ["same", "same", None], "y": [0, 1, 0]})

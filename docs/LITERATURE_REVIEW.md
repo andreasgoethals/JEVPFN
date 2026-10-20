@@ -1,6 +1,6 @@
 # Literature review
 
-Shared references: [DM Library](../decision-models-library/README.md) for decision
+Shared references: [DM Library](../dm-library/README.md) for decision
 models and [TFM Library](../tfm-library/README.md) for tabular foundation models.
 Both are independent read-only submodules; run `git submodule status` to record
 the exact references used. This document keeps JEVPFN-specific interpretation.
@@ -11,8 +11,9 @@ Primary-source findings checked through 16 October 2026. This reference records 
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
 execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
-The read-only library pin is `de324efcca55be392feb0c01830b3b6ce364587f`; cite code snapshots
-by symbol rather than drifting line numbers. Linked live sources need rechecking when pins change.
+Read each library's own refresh/scope notes and record its checkout SHA; cite implementation
+snapshots by symbol rather than drifting line numbers. Linked live sources need rechecking
+when pins change. The local corpus is not an exhaustive inventory of global literature.
 
 ## 1. Why text-derived features are a meaningful comparison
 
@@ -115,6 +116,21 @@ requires a complete predeclared family, separate task metrics and one five-fold 
 per dataset. It cannot turn this curated set into a random sample of all tabular tasks;
 few classification datasets and multiple comparisons limit power. Do not choose the metric,
 model or best feature arm after seeing test results and call that choice confirmatory.
+
+There are only three binary, six multiclass and nine regression datasets in the selected
+subset. The ideal minimum two-sided exact signed-rank p-values with no ties/zeros are
+0.25, 0.03125 and 0.00390625 respectively, before multiplicity correction. Thus binary
+effects cannot establish p < .05 with that test on three datasets, even with identical
+signs. Report descriptive paired effects and coverage; do not claim power that this design
+does not have. The result summaries expose this bound without approving a headline metric.
+
+Task-conditioned decision features and task-agnostic E5 embeddings do not isolate only
+model architecture: they also differ in allowed task information. Interpret their comparison
+as practical representation utility. Common missing-text indicators remove an avoidable
+information imbalance. Provider-defined confidence fields are not a shared uncertainty scale;
+the optional uncertainty view derives entropy, peak probability and directional variance from
+each full distribution, without fitting calibration to benchmark labels. The robustness
+probes measure prompt sensitivity; they cannot prove semantic invariance or contamination absence.
 
 Pretraining review applies to every pretrained extractor, E5 and downstream/native-text
 model. Before interpreting results: (1) inspect the pinned model card and released training

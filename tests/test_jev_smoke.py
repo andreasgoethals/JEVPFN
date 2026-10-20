@@ -63,6 +63,24 @@ def test_three_real_contract_shapes_resume_without_another_call(local):
     assert len(client.calls) == 3
 
 
+def test_robustness_has_separate_durable_budget_and_reuses_after_output_reset(local):
+    client = Client()
+    report = smoke.run(
+        execute=True, robustness=True, client_factory=lambda: client, sleep=lambda _: None
+    )
+    assert len(client.calls) == 15
+    assert report["maximum_new_call_cost_usd"] == pytest.approx(0.04032)
+    assert report["prompt_robustness"]["structurally_valid"]
+    assert report["status"] == "jev_robustness_requires_review"
+    assert report["prompt_robustness"]["comparisons"][1]["total_variation_from_base"] == 0
+    smoke.run(
+        execute=True,
+        robustness=True,
+        client_factory=lambda: pytest.fail("No repayment on resume"),
+        sleep=lambda _: None,
+    )
+
+
 @pytest.mark.parametrize("wrong_model", [False, True])
 def test_timeout_or_version_drift_stops_without_retry(local, wrong_model):
     client = Client(fail=not wrong_model, wrong_model=wrong_model)
@@ -109,19 +127,27 @@ def test_explicit_authentication_retry_keeps_history_and_reservation(local):
     with pytest.raises(RuntimeError, match="no saved response"):
         smoke.run(execute=True, client_factory=lambda: pytest.fail("Requires explicit retry"))
     # Ordinary resume preserves the original definitive failure on the attempted request.
-    report = smoke.run(execute=True, retry_auth_rejected=True, client_factory=Client, sleep=lambda _: None)
+    report = smoke.run(
+        execute=True, retry_auth_rejected=True, client_factory=Client, sleep=lambda _: None
+    )
     assert len(report["attempts"]) == 3
     assert len(report["authentication_rejections"]) == 1
     assert report["historical_reserved_usd"] > 0
     assert report["conservative_total_with_prior_reservations_usd"] > report["total_cost_usd"]
-    smoke.run(execute=True, retry_auth_rejected=True, client_factory=lambda: pytest.fail("Reuse saved responses"))
+    smoke.run(
+        execute=True,
+        retry_auth_rejected=True,
+        client_factory=lambda: pytest.fail("Reuse saved responses"),
+    )
 
 
 def test_authentication_retry_never_overrides_an_uncertain_timeout(local):
     with pytest.raises(TimeoutError):
         smoke.run(execute=True, client_factory=lambda: Client(fail=True))
     with pytest.raises(ValueError, match="HTTP 401"):
-        smoke.run(execute=True, retry_auth_rejected=True, client_factory=lambda: pytest.fail("No call"))
+        smoke.run(
+            execute=True, retry_auth_rejected=True, client_factory=lambda: pytest.fail("No call")
+        )
 
 
 def test_output_cleanup_cannot_erase_paid_attempts_or_repeat_calls(local):
@@ -138,25 +164,43 @@ def test_output_cleanup_cannot_erase_paid_attempts_or_repeat_calls(local):
 
 def test_legacy_unresolved_attempt_survives_output_cleanup(local):
     from src.utils.serialization import write_json
+
     legacy = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
-    write_json(legacy, {"request_identity": "fixed", "attempts": [{"probe": "binary_True", "reserved_usd": 0.002688}]})
+    write_json(
+        legacy,
+        {
+            "request_identity": "fixed",
+            "attempts": [{"probe": "binary_True", "reserved_usd": 0.002688}],
+        },
+    )
     directory, state = smoke.preserve_smoke_state()
     assert state.exists() and not (directory / "binary_True.json").exists()
     import json
+
     assert json.loads(state.read_text())["attempts"][0]["reserved_usd"] == 0.002688
 
 
 def test_legacy_response_corruption_blocks_migration(local):
     from src.utils.serialization import write_json
+
     legacy = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
-    write_json(legacy, {"request_identity": "fixed", "attempts": [{"probe": "binary_True", "response_sha256": "incorrect"}]})
-    write_json(paths.results_dir("jev_smoke", phase="experiment_0") / "binary_True.json", {"answer": 1})
+    write_json(
+        legacy,
+        {
+            "request_identity": "fixed",
+            "attempts": [{"probe": "binary_True", "response_sha256": "incorrect"}],
+        },
+    )
+    write_json(
+        paths.results_dir("jev_smoke", phase="experiment_0") / "binary_True.json", {"answer": 1}
+    )
     with pytest.raises(ValueError, match="checksum"):
         smoke.preserve_smoke_state()
 
 
 def test_divergent_output_ledger_cannot_silently_replace_durable_spending(local):
     from src.utils.serialization import write_json
+
     directory, state = smoke.preserve_smoke_state()
     write_json(state, {"request_identity": "fixed", "attempts": []})
     legacy = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"

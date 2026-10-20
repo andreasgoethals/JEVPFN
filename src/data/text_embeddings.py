@@ -138,6 +138,7 @@ class E5Encoder:
             AutoModel.from_pretrained(folder, local_files_only=True).to(cfg["device"]).eval()
         )
         self.identity = {
+            "batching": "cross_text_chunks_v1",
             "checkpoint_sha256": digest(manifest),
             "runtime": {
                 p: importlib.metadata.version(p) for p in ("torch", "transformers", "tokenizers")
@@ -153,35 +154,43 @@ class E5Encoder:
 
     def __call__(self, texts):
         torch, cfg = self.torch, self.cfg
-        vectors = []
-        for text in texts:
+        totals = np.zeros((len(texts), cfg["dimensions"]), dtype=np.float64)
+        pending = []
+
+        def flush():
+            inputs = self.tokenizer.pad(
+                [
+                    self.tokenizer.prepare_for_model(prefix + ids, truncation=False)
+                    for _, prefix, ids in pending
+                ],
+                padding=True,
+                return_tensors="pt",
+            ).to(cfg["device"])
+            if inputs["input_ids"].shape[1] > cfg["max_tokens"]:
+                raise ValueError("Embedding input exceeds its context; never truncate")
+            with torch.inference_mode():
+                hidden = self.model(**inputs).last_hidden_state
+                mask = inputs["attention_mask"].unsqueeze(-1)
+                pooled = (hidden * mask).sum(1) / mask.sum(1)
+                pooled = torch.nn.functional.normalize(pooled, p=2, dim=1).cpu().numpy()
+            for (row, _, ids), vector in zip(pending, pooled):
+                totals[row] += vector * max(1, len(ids))
+            pending.clear()
+
+        for row, text in enumerate(texts):
             prefix, chunks = token_chunks(
                 self.tokenizer, text, prefix=cfg["prefix"], max_tokens=cfg["max_tokens"]
             )
-            total = np.zeros(cfg["dimensions"], dtype=np.float64)
-            for start in range(0, len(chunks), cfg["batch_size"]):
-                batch = chunks[start : start + cfg["batch_size"]]
-                inputs = self.tokenizer.pad(
-                    [
-                        self.tokenizer.prepare_for_model(prefix + ids, truncation=False)
-                        for ids in batch
-                    ],
-                    padding=True,
-                    return_tensors="pt",
-                ).to(cfg["device"])
-                if inputs["input_ids"].shape[1] > cfg["max_tokens"]:
-                    raise ValueError("Embedding input exceeds its context; never truncate")
-                with torch.inference_mode():
-                    hidden = self.model(**inputs).last_hidden_state
-                    mask = inputs["attention_mask"].unsqueeze(-1)
-                    pooled = (hidden * mask).sum(1) / mask.sum(1)
-                    pooled = torch.nn.functional.normalize(pooled, p=2, dim=1).cpu().numpy()
-                total += (pooled * np.array([max(1, len(c)) for c in batch])[:, None]).sum(0)
-            length = np.linalg.norm(total)
-            if not np.isfinite(length) or length == 0:
-                raise ValueError("Invalid embedding norm")
-            vectors.append((total / length).astype("<f4"))
-        return np.stack(vectors)
+            for ids in chunks:
+                pending.append((row, prefix, ids))
+                if len(pending) == cfg["batch_size"]:
+                    flush()
+        if pending:
+            flush()
+        lengths = np.linalg.norm(totals, axis=1)
+        if not np.isfinite(lengths).all() or (lengths == 0).any():
+            raise ValueError("Invalid embedding norm")
+        return (totals / lengths[:, None]).astype("<f4")
 
 
 def input_rows(dataset):

@@ -81,6 +81,11 @@ def test_regression_default_view_is_one_direction_not_eleven_features():
     assert list(feature_view(block, "regression").columns) == ["row_id", columns[-1]]
     assert feature_view(block, "regression", "probabilities").shape[1] == 10
     assert feature_view(block, "regression", "retained").shape[1] == 12
+    uncertainty = feature_view(block, "regression", "probabilities_plus_confidence")
+    assert not any(c.endswith("__confidence") for c in uncertainty)
+    assert uncertainty["jev__all_text__entropy_normalized"][0] == pytest.approx(1)
+    assert uncertainty["jev__all_text__max_probability"][0] == pytest.approx(1 / 9)
+    assert uncertainty["jev__all_text__direction_variance"][0] == pytest.approx(60 / 9)
 
 
 def test_fast_threshold_search_matches_exhaustive_search():
@@ -145,7 +150,9 @@ def test_shared_cv_and_binary_oof_refit_save_all_predictions(dataset):
     for path in records:
         record = json.loads(path.read_text())
         assert path.is_relative_to(paths.large_outputs_dir())
-        table = pd.read_parquet(path.parent / "predictions.parquet")
+        from src.evaluation.store import read_predictions
+
+        table = read_predictions(path)
         if record["metadata"]["prediction_role"] == "outer_test":
             outer_ids += table.row_id.tolist()
             assert {

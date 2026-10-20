@@ -11,8 +11,8 @@ Check [upstream review flags](../vsc-library/UPSTREAM_CHANGES.md) and the
 Use the Open OnDemand login shell for setup/downloads and Slurm allocations for computation.
 Notebook analysis always runs locally. Current run evidence is in [AGENTS_MEMORY](AGENTS_MEMORY.md);
 the research contract is in [README](../README.md). These instructions follow the read-only
-[VSC guide](<../vsc-library/VSC Repository.txt>) at VSC Library pin
-`289ed81df5d101512f91ae1ea3b0083a2de08a96`.
+[VSC guide](<../vsc-library/VSC Repository.txt>). Record the checked-out library revision
+with `git -C vsc-library rev-parse HEAD`; operational evidence is date-specific.
 
 ## Checkout and storage
 
@@ -42,6 +42,13 @@ evidence or require resetting output and reinstalling inputs.
 | DATA `output_JEVPFN/<number>. phase/` | Operational logs, compact completion indexes and manifests. |
 | PROJECT `output_JEVPFN/<number>. phase/` | Token-count databases, predictions, feature matrices, full metric records and other large results. |
 | Node scratch | Disposable compiler/runtime caches; never the only saved result. |
+
+Predictions/full metrics/fold completion now share one PROJECT
+`<phase>/results/evaluation/<dataset>.sqlite3`. Each prediction table is stored as a
+checksummed Parquet payload inside it. DATA holds one small dataset locator and shared
+logs. Import merges immutable records transactionally, rejecting conflicting identities;
+legacy individual files remain readable. The bounded fold-lock pool has at most 4,096
+entries per phase. This avoids the previous six-figure file count for the planned benchmark.
 
 Use native Lustre project storage on wICE and native GPFS on Mindwell. Set the project root
 to the allocation's existing parent, not a missing mount or personal DATA directory. Large
@@ -295,6 +302,18 @@ fit, not in the permanent embedding cache.
 
 ## Compact decision runtimes
 
+First inspect only this project's runtimes:
+
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.containers inventory
+myquota
+```
+
+The inventory counts entries, not shared quota or other projects' use. Never remove another
+project's environment. Package caches and unpacked build trees use scratch; only sealed
+images/wrappers belong in PROJECT containers. New builds test index connectivity on the
+build node before installation; a network/index failure stops early and requires inspection.
+
 The selected site module is `hpc-container-wrapper/0.4.2`. Use the login shell to inspect it;
 actual packing/building runs through the CPU allocation below. `wrap` packs an existing
 working environment; `new` installs a fresh runtime entirely in scratch before packing it.
@@ -350,6 +369,17 @@ It preserves the container, every checkpoint, inputs/features, outputs and other
 Retiring Clef frees room before packing Intern. Repeat `wrap`, GPU test and guarded retirement
 for `intern`. For `liquid`, `strands`, `perplexity`, use build mode `new`; the partial failed
 Liquid installation is not treated as a working source. Test each new image before proceeding.
+After the new Liquid image passes, its obsolete partial native installation can also be
+removed safely with `containers retire liquid --allow-replacement` (preview), then the same
+command with `--apply --writers-stopped`. This requires a verified image and matching GPU
+evidence. The ordinary `retire` command cannot remove an unrelated or untested installation.
+
+All eight predictor names can also be packed in `wrap` mode once their independently reviewed
+environments exist. For example, use the same build job with `tabpfn_3_5 wrap`, then run
+`experiment_0_predictor.slurm tabpfn_3_5 /lustre1/project/stg_00211/JEVPFN/containers/tabpfn_3_5`.
+Retirement requires its exact image to pass predictor contracts. Automatic new predictor
+installations are deliberately unavailable until their package/checkpoint configurations are
+reviewed in 0B. E5 already reuses Clef's container; the small CPU environment stays on DATA.
 Perplexity GPU contracts/pilots use `--mem=112000M`. Builds prefer shared Lustre scratch on
 wICE, so failed-build work survives the allocation. An empty leftover destination can be
 retried; nonempty or linked destinations are refused for manual review. Keep the Slurm log
@@ -407,7 +437,8 @@ The contract job tests binary, three-class and nine-level regression fixtures, a
 vector, missing/duplicate/Unicode input, overflow rejection, cache reopen/reuse, original-row
 alignment, and saving/reloading both feature representations. It then evaluates first/longest
 unique inputs from each selected dataset. Seven additional known-answer probes check binary
-polarity, permuted class ordering and score endpoints/zero. At most 74 forwards are planned, with a hard ceiling
+polarity, permuted class ordering and score endpoints/zero. With robustness and batch-parity
+checks, at most 93 input evaluations are planned, with a hard ceiling
 of 100. Runtime token-count agreement, load/inference time, peak GPU memory and the complete
 `settings_sha256` required for acceptance are recorded in the report.
 A failed known-answer probe requires inspecting raw responses; the model itself may be wrong.
@@ -430,7 +461,11 @@ set: current question audit, CPU tests, cross-node storage, complete exact token
 GPU contracts and the larger pilot. Repeat with each provider. It rejects missing, stale
 or ambiguous successful reports. After reviewing those files, measured throughput, actual
 quota and the independent backup arrangement, add
-`--approve --reviewed-by Andreas --quota-verified --backup-verified --throughput-reviewed`.
+`--approve --reviewed-by Andreas --quota-verified --backup-verified --throughput-reviewed --robustness-reviewed`.
+When several successful runs exist, pass `--campaign` with the exact completed `0A_vsc`
+receipt. CPU/storage/GPU/pilot evidence must match current source/configuration and runtime
+fingerprints, and the selected campaign's job IDs. Token evidence is reusable only when its
+input hashes and exact tokenizer identity match. Do not delete evidence to resolve ambiguity.
 This explicitly signs `3. experiment_0/manifests/before_extraction/accepted_<provider>.json`;
 it never enables extraction. Only pass those flags after doing the corresponding review.
 Set each path in `self_hosted.yaml`'s `accepted_before_extraction_manifests` map and enable
@@ -447,8 +482,16 @@ Small-model jobs start at 28,000 MiB host RAM; Perplexity uses 112,000 MiB. Thes
 initial profiles, not measured minima. Regular A100 jobs must stay within 126,000 MiB per
 GPU; memory requests can bill extra CPU cores. Start on one wICE A100 80 GiB. Consider
 H100 or Mindwell B200/native GPFS only if measured throughput/memory justifies migration.
-Batch size one is the current implementation; a million-request campaign needs measured
-GPU-credit/runtime estimates. Batching would require provider-specific parity/recovery tests.
+Clef and Perplexity use batches of two; 0A checks their probabilities against serial execution
+with an absolute tolerance of 0.001. Liquid, Strands and Intern remain serial until a native
+batch interface is independently verified. All retain exact context checks, row ordering and
+cache reuse. A failed batch is recorded; storage failures stop immediately. Runtime settings
+include batch size. Larger batches require a new reviewed profile and acceptance.
+0A additionally measures repetition, paraphrase, irrelevant-context and embedded-instruction
+sensitivity on synthetic inputs. These diagnostics are separate from frozen dataset questions.
+Inspect probability shifts before approving; do not automatically relax a failing tolerance.
+For every provider, estimate full GPU hours from the measured pilot rather than assuming
+that a short successful contract test establishes million-request throughput.
 
 ## Local Jev and Experiment 0B
 
@@ -481,6 +524,14 @@ This slow interface check does not claim to know account RPS/TPS or enable datas
 It passed live again on 19 October after credential setup; its three inputs consumed 1,051
 reported tokens at computed input cost USD 0.000044142. Repeating the successful command
 reuses those saved responses without new requests. The dataset pilot remains separate.
+
+`python -m src.jev.smoke --robustness --execute` runs the separate 15-call diagnostic
+for repeated inputs, paraphrases, irrelevant context and embedded instructions. Its
+permanent ledger is `data/jev_cache/_control/jev_robustness/`; normal reruns reuse saved
+responses. The initial attempt allowance is at most USD 0.04032 under the configured
+64k billing bound and USD 0.042/M price. Review the measured probability shifts; this
+diagnostic does not change the frozen dataset questions or establish account rate limits.
+The local 0A coordinator includes this step automatically.
 
 The console's user menu → Settings → Organization displays the organization ID. Billing
 shows credits and auto-recharge; neither that page nor Home/Organization/Usage exposed
@@ -585,7 +636,7 @@ fields. Set its file per provider in `accepted_before_extraction_manifests`. Non
 as accepted by a test.
 Inspect the actual evidence, quota/backup and runtime coverage before signing acceptance.
 
-CV folds have completion manifests with record/prediction checksums. Restarts skip only
+CV folds have completion records in the dataset database with record/prediction checksums. Restarts skip only
 complete matching folds; interrupted attempts remain evidence. Experiment 3's statistics,
 permutation and retained-view arms use `campaign --include-controls` and the explicit
 `--control`/`--view` filters. `python -m src.evaluation.results --save` writes complete-arm

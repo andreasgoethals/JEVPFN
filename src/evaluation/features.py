@@ -5,6 +5,26 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+MISSINGNESS_VERSION = "shared_text_missing_v1"
+
+
+def missing_column(index):
+    return f"text_presence__{index:03d}__missing"
+
+
+def add_text_presence(matrix, dataset):
+    """Identical label-free text-availability information for every representation arm."""
+    result = matrix.copy()
+    for i, column in enumerate(dataset.metadata.text_columns):
+        values = dataset.frame[column].map(lambda x: pd.isna(x) or not str(x).strip())
+        name = missing_column(i)
+        if name in result:
+            raise ValueError("Text-presence name collides with existing features")
+        result[name] = values.to_numpy(dtype=int)
+    result.attrs = dict(matrix.attrs)
+    result.attrs["missingness_policy"] = MISSINGNESS_VERSION
+    return result
+
 
 def text_statistics(dataset) -> pd.DataFrame:
     """No encoder, vocabulary fitting, target values or API calls are involved.
@@ -111,6 +131,16 @@ def add_embeddings(features, embeddings):
         )
     )
     result.attrs["embedding_groups"] = groups
+    for i, group in enumerate(groups):
+        values = embeddings[group].isna()
+        if not values.all(axis=1).equals(values.any(axis=1)):
+            raise ValueError("Partially missing embedding vector")
+        name = missing_column(i)
+        missing = values.all(axis=1).astype(int)
+        if name in result and not result[name].equals(missing):
+            raise ValueError("Embedding and decision text-presence information differs")
+        result[name] = missing
+    result.attrs["missingness_policy"] = MISSINGNESS_VERSION
     return result
 
 
@@ -220,6 +250,8 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
         matrix = matrix.join(stats, validate="one_to_one")
     # pandas joins can discard attrs, including the baseline's explicit empty list.
     matrix.attrs["feature_artifact_ids"] = [b.manifest["artifact_id"] for b in selected]
+    if modes[name]:
+        matrix = add_text_presence(matrix, dataset)
     return matrix
 
 

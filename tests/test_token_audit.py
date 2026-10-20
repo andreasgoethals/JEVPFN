@@ -2,7 +2,9 @@
 
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 
 import pandas as pd
@@ -17,6 +19,7 @@ from src.jev.question_bank import build_question_bank, save_question_bank
 from src.jev.self_hosted import token_evidence
 from src.utils import paths
 from src.utils.config import load_yaml
+from src.utils.locking import file_lock
 from src.utils.serialization import file_sha256, write_json
 
 
@@ -92,6 +95,75 @@ def test_interrupted_token_audit_resumes_committed_batch(inputs):
     assert len(list(iter_prepared_inputs(inputs[0]["path"], after_input_no=1))) == 1
 
 
+def test_duplicate_audit_cannot_count_or_write_while_first_writer_is_active(inputs):
+    entered, release = Event(), Event()
+    calls = []
+
+    def count(rows):
+        calls.extend(rows)
+        entered.set()
+        assert release.wait(10), "Test did not release the first writer"
+        return [2] * len(rows)
+
+    first = SimpleNamespace(identity={"counter_id": "same"}, limit=10, count_many=count)
+    second = SimpleNamespace(
+        identity=first.identity,
+        limit=10,
+        count_many=lambda _: pytest.fail("Duplicate writer reached tokenization"),
+    )
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        running = pool.submit(token_audit.audit_provider, "liquid", inputs, counter=first)
+        try:
+            assert entered.wait(10)
+            with pytest.raises(RuntimeError, match="already running"):
+                token_audit.audit_provider("liquid", inputs, counter=second)
+            # Independent provider databases must remain usable in parallel.
+            other = SimpleNamespace(
+                identity=first.identity, limit=10, count_many=lambda rows: [2] * len(rows)
+            )
+            assert token_audit.audit_provider("intern", inputs, counter=other)["unique_inputs"] == 3
+        finally:
+            release.set()
+        report = running.result(timeout=10)
+    resumed = token_audit.audit_provider("liquid", inputs, counter=second)
+    assert resumed["audit_id"] == report["audit_id"]
+    assert resumed["total_input_tokens"] == 6 and len(calls) == 3
+
+
+def test_second_cli_run_stops_before_tokenizer_loading(isolated_output, monkeypatch):
+    paths.staging_root().mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
+    monkeypatch.setattr("sys.argv", ["token_audit"])
+    monkeypatch.setattr(
+        token_audit, "check_tokenizers", lambda _: pytest.fail("Duplicate job loaded tokenizers")
+    )
+    with (
+        file_lock(paths.token_audit_dir() / ".token_audit.lock"),
+        pytest.raises(RuntimeError, match="already running"),
+    ):
+        token_audit.main()
+
+
+def test_report_merge_waits_for_other_publisher(isolated_output):
+    started = Event()
+    report_path = paths.manifests_dir("experiment_0") / "before_extraction/token_audit.json"
+
+    def publish():
+        started.set()
+        token_audit.save_reports([{"provider": "intern", "status": "counted_all_inputs"}])
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with file_lock(report_path.with_suffix(".lock")):
+            future = pool.submit(publish)
+            assert started.wait(10)
+            with pytest.raises(TimeoutError):
+                future.result(timeout=0.2)
+            write_json(report_path, {"self_hosted": [{"provider": "liquid"}]})
+        future.result(timeout=10)
+    saved = json.loads(report_path.read_text(encoding="utf-8"))
+    assert {r["provider"] for r in saved["self_hosted"]} == {"liquid", "intern"}
+
+
 @pytest.mark.parametrize("provider", ["jev"])
 def test_hosted_tokenizers_are_not_faked(provider):
     with pytest.raises(ValueError, match="unverified|unavailable"):
@@ -162,9 +234,11 @@ def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatc
     assert scope["status"] == "historical_inputs_changed" and table.empty
 
 
-def test_missing_chat_template_dependency_fails_before_counting(monkeypatch):
+def test_missing_chat_template_dependency_fails_before_counting(isolated_output, monkeypatch):
     from unittest.mock import Mock
 
+    paths.staging_root().mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
     counter = SimpleNamespace(count_many=Mock(side_effect=ImportError("jinja2 missing")))
     monkeypatch.setattr(token_audit, "ExactCounter", lambda _: counter)
     inputs, pool = Mock(), Mock()

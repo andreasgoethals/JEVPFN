@@ -41,8 +41,12 @@ def preserve_smoke_state():
     with file_lock(directory / "state.lock", timeout=1):
         if state.exists():
             saved = json.loads(state.read_text(encoding="utf-8"))
-            if legacy.exists() and digest(saved) != digest(json.loads(legacy.read_text(encoding="utf-8"))):
-                raise ValueError("Permanent and output Jev ledgers differ; review before cleanup or inference")
+            if legacy.exists() and digest(saved) != digest(
+                json.loads(legacy.read_text(encoding="utf-8"))
+            ):
+                raise ValueError(
+                    "Permanent and output Jev ledgers differ; review before cleanup or inference"
+                )
             return directory, state
         if not legacy.exists():
             return directory, state
@@ -64,7 +68,7 @@ def preserve_smoke_state():
     return directory, state
 
 
-def requests():
+def requests(*, robustness=False):
     settings = dict(
         provider="jev",
         model=MODEL,
@@ -72,6 +76,10 @@ def requests():
         api_mapping_version=MAPPING_VERSION,
         request_configuration={},
     )
+    if robustness:
+        from src.cluster.semantic_contracts import robustness_probes
+
+        return list(robustness_probes(settings))
     selected = {"binary_True", "choice_red_green_blue", "score_4"}
     return [
         (name, request, expected)
@@ -80,7 +88,14 @@ def requests():
     ]
 
 
-def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_rejected=False):
+def run(
+    *,
+    execute=False,
+    client_factory=None,
+    sleep=time.sleep,
+    retry_auth_rejected=False,
+    robustness=False,
+):
     if not execute or paths.on_vsc():
         raise RuntimeError("The bounded Jev smoke test requires --execute locally")
     if MODEL != "jev-1.13.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
@@ -89,28 +104,38 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
     from src.cluster.freeze import check_if_present
 
     check_if_present()
-    directory, state_path = preserve_smoke_state()
-    output_directory = paths.results_dir("jev_smoke", phase="experiment_0")
-    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "jev_smoke.json"
-    planned = requests()
+    if robustness:
+        directory = paths.jev_cache_path("jev_cache/_control/jev_robustness")
+        directory.mkdir(parents=True, exist_ok=True)
+        state_path = directory / "state.json"
+    else:
+        directory, state_path = preserve_smoke_state()
+    test_name = "jev_robustness" if robustness else "jev_smoke"
+    output_directory = paths.results_dir(test_name, phase="experiment_0")
+    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / f"{test_name}.json"
+    planned = requests(robustness=True) if robustness else requests()
+    maximum = 15 if robustness else MAX_CALLS
     identity = digest([request.cache_key for _, request, _ in planned])
     report = {
         "status": "running",
         "model": MODEL,
         "request_identity": identity,
-        "scope": "three synthetic task contracts; no dataset extraction",
+        "scope": "synthetic prompt robustness; no dataset extraction"
+        if robustness
+        else "three synthetic task contracts; no dataset extraction",
         "account_limits_verified": False,
         "full_extraction_enabled": False,
         "documented_input_token_bound_per_attempt": TOKEN_BOUND,
         "input_price_per_million_usd": PRICE,
         "reference": REFERENCE,
-        "maximum_new_call_cost_usd": MAX_CALLS * TOKEN_BOUND * PRICE / 1e6,
+        "maximum_new_call_cost_usd": maximum * TOKEN_BOUND * PRICE / 1e6,
         "client_minimum_interval_seconds": POLICY["minimum_interval_seconds"],
         "automatic_retries": 0,
         "created_utc": datetime.now(UTC).isoformat(),
         "attempts": [],
     }
     client = None
+
     def persist():
         write_json(state_path, report)
         write_json(report_path, report)
@@ -141,7 +166,11 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
                 raise ValueError("Only one explicitly recorded HTTP 401 can be retried this way")
             failed = report["attempts"].pop()
             report["authentication_rejections"] = [
-                {**failed, "http_status": 401, "review": "explicit retry after credential correction"}
+                {
+                    **failed,
+                    "http_status": 401,
+                    "review": "explicit retry after credential correction",
+                }
             ]
             # Preserve the old conservative reservation; do not assert a billing refund.
             report["historical_reserved_usd"] = failed["reserved_usd"]
@@ -164,8 +193,8 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
                     if prior.get("response_sha256") != digest(raw):
                         raise ValueError("Stored smoke response checksum differs")
                 else:
-                    if len(report["attempts"]) >= MAX_CALLS:
-                        raise RuntimeError("Three-call attempt ceiling reached")
+                    if len(report["attempts"]) >= maximum:
+                        raise RuntimeError("Synthetic-test attempt ceiling reached")
                     if client is None:
                         if client_factory is None:
                             from typesafe_sdk import RetryPolicy, TypeSafeClient
@@ -222,7 +251,7 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
                     response_path=str(response_file),
                 )
                 persist()
-                if not passed:
+                if not passed and not robustness:
                     raise ValueError("Known-answer probe needs response/wording review")
             report.update(
                 status="jev_smoke_passed_requires_dataset_pilot",
@@ -233,10 +262,16 @@ def run(*, execute=False, client_factory=None, sleep=time.sleep, retry_auth_reje
                     + report.get("historical_reserved_usd", 0)
                 ),
             )
+            if robustness:
+                from src.cluster.semantic_contracts import robustness_summary
+
+                report["prompt_robustness"] = robustness_summary(report["attempts"])
+                report["status"] = "jev_robustness_requires_review"
         except Exception as exc:
             if report["attempts"] and report["attempts"][-1].get("status") == "attempting":
                 report["attempts"][-1].setdefault(
-                    "failure", {"error_type": type(exc).__name__, "http_status": getattr(exc, "status", None)}
+                    "failure",
+                    {"error_type": type(exc).__name__, "http_status": getattr(exc, "status", None)},
                 )
             report.update(
                 status="stopped_requires_review",
@@ -255,7 +290,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(
-        "--retry-auth-rejected", action="store_true",
+        "--robustness",
+        action="store_true",
+        help="Separate resumable 15-call synthetic diagnostic, at most $0.04032 plus any explicit auth retry reservation",
+    )
+    parser.add_argument(
+        "--retry-auth-rejected",
+        action="store_true",
         help="After correcting credentials, explicitly retry one saved 401; retain its reservation/history",
     )
     args = parser.parse_args()
@@ -265,8 +306,11 @@ def main():
                 {
                     "execution_enabled": False,
                     "model": MODEL,
-                    "maximum_requests": MAX_CALLS,
-                    "maximum_cost_usd": MAX_CALLS * TOKEN_BOUND * PRICE / 1e6,
+                    "maximum_requests": 15 if args.robustness else MAX_CALLS,
+                    "maximum_cost_usd": (15 if args.robustness else MAX_CALLS)
+                    * TOKEN_BOUND
+                    * PRICE
+                    / 1e6,
                 },
                 indent=2,
             )
@@ -276,7 +320,16 @@ def main():
     try:
         if prompted:
             os.environ["TYPESAFE_API_KEY"] = getpass.getpass("TypeSafe API key (hidden): ")
-        print(json.dumps(run(execute=True, retry_auth_rejected=args.retry_auth_rejected), indent=2))
+        print(
+            json.dumps(
+                run(
+                    execute=True,
+                    retry_auth_rejected=args.retry_auth_rejected,
+                    robustness=args.robustness,
+                ),
+                indent=2,
+            )
+        )
     except Exception as exc:
         print(
             json.dumps(

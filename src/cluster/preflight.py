@@ -216,6 +216,9 @@ def run_preflight(
         "feature_artifacts": [],
         "datasets": [],
     }
+    from src.cluster.evidence import current_identity
+
+    report["validation_identity"] = current_identity()
     if sys.version_info[:2] != (3, 12):
         report["failures"].append("Use Python 3.12 on both local and VSC environments.")
     required_packages = ("numpy", "pandas", "pyarrow", "pytest", "PyYAML", "scikit-learn")

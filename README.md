@@ -8,13 +8,19 @@ are excluded from experiments for text burden and 114-class feature size.
 **Stage: Experiment 0A setup, not full extraction.** Question version 3, dataset audits,
 CPU/storage checks and all five open-weight tokenizer audits have passed previously.
 Clef's container is now built/sealed and its A100/CUDA tensor check passed. Its model
-contract test stopped before inference because the saved token-audit report was missing;
-restore that CPU audit before retrying. All five checkpoints were staged; only Clef/Intern's
+contract test stopped before inference because the saved token-audit report was missing.
+The replacement audit reports now cover all five tokenizers with zero overflows, but two
+overlapping jobs collided while writing counts and both failed. Duplicate-run protection
+is fixed locally; run one resumable audit to verify saved counts, then retry Clef's GPU test.
+All five checkpoints were staged; only Clef/Intern's
 older native runtimes have passed model inference tests. Jev 1.13 passed three live
 local task probes; its larger dataset pilot and account limits remain pending. E5 and
 predictor runtime tests are also pending. Historical evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a new frozen 0A run will supersede it.
 The owner handles Git commits/pushes. Full extraction and benchmark switches stay disabled.
+The 20 October implementation adds compact prediction stores, source/input/runtime-bound
+acceptance, prompt diagnostics and checked batching. These changes passed local synthetic
+tests; current VSC/GPU and live Jev diagnostic evidence is still required before extraction.
 
 ## Research contract
 
@@ -76,6 +82,9 @@ identical text and saves 384-dimensional vectors. PCA is fitted **inside each in
 training partition**, producing 32 components per text column plus a missingness flag.
 Insufficient training rank leaves unused components missing. Held-out rows never fit PCA.
 Non-text/decision features are not reduced. All six predictors use the same E5 source.
+Every decision/E5 arm receives the same per-text-column missing indicator, exactly once
+in combined arms. The non-text baseline contains no text-derived information. E5 batches
+chunks across different texts; content-token weighting and row mappings are preserved.
 
 Use five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, followed
@@ -92,6 +101,9 @@ before comparative outcomes are reviewed. Exact protocol/settings live in
 Cheap text statistics, permutation controls and retained-probability ablations are also
 available. Public-data pretraining overlap is a limitation; “label-free” describes the
 inputs to extraction, not a guarantee about pretraining. See [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md).
+The uncertainty view computes normalized entropy, maximum probability and, for regression,
+directional variance from the saved probabilities. Raw provider confidence is retained for
+traceability but is not treated as the same quantity across models.
 
 ## Workflow and notebooks
 
@@ -149,17 +161,23 @@ not all together in the notebook environment. Full setup/transfer commands are i
 | `data/decision_inputs/<dataset>.sqlite3` | Exactly 18 versioned question/input stores with row mappings. |
 | `data/jev_cache/<dataset>.sqlite3` | Permanent provider-specific responses, accounting and feature tables. |
 | `data/jev_cache/_control/jev_smoke/` | Permanent smoke-test payment ledger and responses. |
+| `data/jev_cache/_control/jev_robustness/` | Separate permanent 15-call diagnostic ledger and responses. |
 | `data/text_embeddings/<dataset>.sqlite3` | Permanent E5 vectors and row mappings. |
 | `output_JEVPFN/figures/<phase>/<notebook>/` | PDF figures only. |
 | `output_JEVPFN/{logs,manifests,results}/notebooks/<phase>/<notebook>/` | Local execution logs, figure/config receipts, full reports and analysis tables. |
 | `output_JEVPFN/figures/Captions.md` | One combined captions document. |
 | `output_JEVPFN/All Results.md` | One complete notebook report. |
 | `output_JEVPFN/<number>. phase/{logs,manifests,results}/` | Experiment output, including 0A_local/0A_vsc receipts. |
+| `<phase>/results/evaluation/<dataset>.sqlite3` | All predictions, metrics, timings and resumable fold records; Parquet payloads inside one database. |
 
 On VSC, PROJECT holds large inputs, weights/containers, caches, exact-token databases,
 predictions and large results. DATA holds the checkout, small CPU environment, compact
 manifests and logs. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
 Large VSC writes fail rather than falling back to DATA. Free filesystem capacity is not quota.
+Evaluation creates one PROJECT database and one small DATA locator per dataset/phase.
+Fold locks use a bounded pool (at most 4,096 files per phase), not a new directory and
+several files for every fit. Transfer imports merge databases transactionally and reject
+conflicting records; legacy per-fold files remain readable. Failed-fit diagnostics stay visible.
 
 The cleanup utility previews by default and never deletes data, weights, environments,
 containers or secrets. Run it on the machine being cleaned:
@@ -188,6 +206,9 @@ merge local/VSC caches, never wholesale SCP replacement of populated feature sto
 `python -m src.cluster.experiment_zero --site local` or `--site vsc` previews 0A. Explicit
 execution requires a matching frozen revision. Local 0A covers dependencies, full question
 mapping, synthetic contracts and Jev smoke; `--dataset-pilot` adds the configured paid pilot.
+Local 0A also runs a separate bounded Jev wording/repetition/instruction diagnostic
+(15 attempts, at most USD 0.04032 under the configured bounds, excluding a separately
+authorized authentication retry). Saved diagnostic responses survive output cleanup.
 VSC 0A covers CPU/storage/tokens/E5 and five real provider contract/pilot pairs. It submits
 one job at a time, resumes by job ID and stops after failure. See [VSC](docs/VSC.md) for commands.
 
@@ -196,6 +217,10 @@ independent backups and provider acceptance. Jev additionally needs verified org
 RPS/TPS, context/billing bounds and the approved pilot budget. Its ignored private config
 is created by `python -m src.jev.setup_pilot --configure`; the local ignored credential file
 is loaded automatically and never transferred. No cleanup dispatches API calls.
+Approval matches current source/config/runtime fingerprints. Supply `accept_features
+--campaign PATH_TO_COMPLETED_0A_RECEIPT` to select exact job evidence when several successful
+runs exist; it never selects an arbitrary “latest” report. Prompt sensitivity requires review,
+not a claim that every equivalent sentence must produce identical probabilities.
 
 Freeze source/configuration after runtime setup and cleanup with `src.cluster.freeze --record`.
 Slurm jobs reject changes; local/VSC receipts compare source identity. Notebook outputs do

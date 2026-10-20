@@ -72,7 +72,7 @@ Record the library pin when operational evidence depends on it.
 
 ## Shared Decision Models Library
 
-`decision-models-library/` is an independent pinned read-only submodule. Read
+`dm-library/` is an independent pinned read-only submodule. Read
 its summaries, synthesis, papers and official source snapshots for decision-model
 claims; cite source paths and symbols and record the pin. Never edit, refresh,
 lint or test shared files there. The sole local exception is its ignored

@@ -76,6 +76,11 @@ def fold_marker(recipe, phase):
 
 def completed_fold(recipe, phase):
     """Reuse a fold only when all role records and prediction checksums still match."""
+    from src.evaluation.store import completed
+
+    compact = completed(recipe, phase)
+    if compact is not None:
+        return compact
     marker = fold_marker(recipe, phase)
     if not marker.is_file():
         return None
@@ -110,6 +115,10 @@ def completed_fold(recipe, phase):
 
 
 def complete_fold(recipe, records, phase):
+    from src.evaluation.store import RecordRef, complete
+
+    if records and isinstance(records[0], RecordRef):
+        return complete(recipe, records, phase)
     root = paths.results_dir(phase=phase).resolve()
     write_json(
         fold_marker(recipe, phase),
@@ -225,6 +234,48 @@ def save_evaluation(
     if folder is None and run_id is None:
         raise ValueError("Supply a run_id for automatically routed prediction storage")
     run_id = paths.output_component(run_id) if run_id else digest(metadata)
+    if folder is None:
+        import hashlib
+        import io
+
+        from src.evaluation.store import save
+
+        with timer.measure("prediction_serialization"):
+            buffer = io.BytesIO()
+            predictions.to_parquet(buffer, index=False)
+            payload = buffer.getvalue()
+        record = {
+            "created_utc": datetime.now(UTC).isoformat(),
+            "metadata": metadata,
+            "scores": scores,
+            "timing": timer.to_dict(),
+            "resources": {
+                "peak_rss_bytes": None,
+                "peak_gpu_allocated_bytes": None,
+                "peak_gpu_reserved_bytes": None,
+                **(resources or {}),
+            },
+            "warnings": warnings or [],
+            "environment": {
+                "python": platform.python_version(),
+                "platform": platform.platform(),
+                "cpu_count": os.cpu_count(),
+            },
+            "predictions": {
+                "format": "parquet",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "columns": list(predictions.columns),
+            },
+        }
+        ref = save(record, payload, run_id, phase)
+        append_event(
+            paths.logs_dir(phase) / "evaluations.log",
+            "evaluation_saved",
+            run_id=run_id,
+            rows=len(predictions),
+            record_path=str(ref),
+        )
+        return ref
     folder = paths.require_project_output(folder or paths.prediction_dir(run_id, phase=phase))
     folder.mkdir(parents=True, exist_ok=True)
     record_path = folder / "record.json"

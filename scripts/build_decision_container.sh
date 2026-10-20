@@ -3,7 +3,13 @@
 set -euo pipefail
 JEVPFN_BUILD_PROVIDER="${1:?Pass cloudflare|intern|liquid|strands|perplexity}"
 JEVPFN_BUILD_MODE="${2:-wrap}"
-case "$JEVPFN_BUILD_PROVIDER" in cloudflare|intern|liquid|strands|perplexity) ;; *) exit 2 ;; esac
+case "$JEVPFN_BUILD_PROVIDER" in
+    cloudflare|intern|liquid|strands|perplexity) JEVPFN_BUILD_DECISION=1 ;;
+    catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab)
+        JEVPFN_BUILD_DECISION=0
+        [[ "$JEVPFN_BUILD_MODE" == wrap ]] || { echo 'Predictors: wrap a separately reviewed environment; no guessed dependency installation.' >&2; exit 2; } ;;
+    *) exit 2 ;;
+esac
 case "$JEVPFN_BUILD_MODE" in wrap|new) ;; *) echo 'Mode must be wrap or new.' >&2; exit 2 ;; esac
 [[ -n "${SLURM_JOB_ID:-}" ]] || { echo 'Build in a compute allocation.' >&2; exit 2; }
 JEVPFN_BUILD_REPO="${VSC_DATA:?}/JEVPFN"
@@ -14,7 +20,9 @@ source scripts/activate_conda.sh
 JEVPFN_BUILD_PYTHON="${JEVPFN_PYTHON:?}"
 source scripts/check_container_tools.sh
 "$JEVPFN_BUILD_PYTHON" -c 'from src.cluster.freeze import check_if_present; assert not check_if_present()["frozen"], "Runtime builds belong before the final frozen validation"'
-"$JEVPFN_BUILD_PYTHON" -c 'import sys; from src.jev.checkpoints import verify_checkpoint; verify_checkpoint(sys.argv[1]); print("Pinned checkpoint verified")' "$JEVPFN_BUILD_PROVIDER"
+if [[ "$JEVPFN_BUILD_DECISION" == 1 ]]; then
+    "$JEVPFN_BUILD_PYTHON" -c 'import sys; from src.jev.checkpoints import verify_checkpoint; verify_checkpoint(sys.argv[1]); print("Pinned checkpoint verified")' "$JEVPFN_BUILD_PROVIDER"
+fi
 JEVPFN_BUILD_DEST="$JEVPFN_STAGING_ROOT/JEVPFN/containers/$JEVPFN_BUILD_PROVIDER"
 if [[ -d "$JEVPFN_BUILD_DEST" && ! -L "$JEVPFN_BUILD_DEST" ]]; then
     rmdir -- "$JEVPFN_BUILD_DEST" 2>/dev/null || true  # Only an empty failed-build directory.
@@ -72,6 +80,8 @@ PY
     export CW_DEBUG_KEEP_FILES=1
     bash "$JEVPFN_PRIVATE_WRAPPER/frontends/wrap-install" --mask -w bin "$JEVPFN_BUILD_SOURCE" --prefix "$JEVPFN_BUILD_DEST"
 else
+    # Fail before building/copying an environment if the allocation has no index access.
+    "$JEVPFN_BUILD_PYTHON" -m src.cluster.build_network
     "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_BUILD_WORK" "$JEVPFN_BUILD_REPO" "$JEVPFN_BUILD_PROVIDER" "$JEVPFN_STAGING_ROOT" <<'PY'
 import sys,shlex
 from pathlib import Path

@@ -2,26 +2,67 @@
 
 ## 20-10-2026
 
+Implementation after the read-only review: evaluation now stores Parquet prediction payloads,
+metrics and fold-completion records inside one SQLite file per dataset/phase on PROJECT.
+DATA gets one locator per dataset; fixed fold-lock stripes bound file growth. Transfer merges
+these stores transactionally; legacy file readers remain. Source/input/runtime fingerprints
+and optional exact 0A campaign/job selection now bind CPU/storage/GPU/pilot acceptance.
+New synthetic prompt-robustness tests require explicit review. Jev's separate bounded
+15-attempt diagnostic has permanent accounting outside output (maximum USD 0.04032 under
+the configured bounds, before any explicit auth-rejection retry reservation).
+No live calls were made in this implementation turn.
+
+E5 batches across texts/chunks; all decision/E5 arms share text-missing indicators.
+Uncertainty views derive entropy/peak/directional variance rather than comparing unlike
+provider confidence fields. Clef/Perplexity batch two inputs, with serial parity required
+in GPU contracts; other providers remain serial. Their new adapter/settings identities
+require new GPU/pilot evidence. Both fingerprinted tokenizer modules are unchanged.
+Container inventory/guarded replacement retirement covers obsolete partial installations;
+all eight predictor runtimes can also be wrapped once separately configured. Their retirement
+requires matching predictor contracts. New installations test package-index connectivity first.
+
+Local validation: 660 tests passed, two skipped (PyTorch absent locally; POSIX-only link test).
+All five notebooks executed successfully and saved 24 figures. Dependency consistency and
+lint passed. Live VSC runs, native E5 batching/decision batch parity, actual quota reduction
+and Jev prompt diagnostics remain unverified. No output, environment, question store, model
+weight or paid feature was deleted; no submodule, Git index, branch or remote was changed.
+The pre-existing DM-library rename is still unstaged: .gitmodules names dm-library while the
+index still contains decision-models-library. The owner must stage/publish the complete rename
+before VSC pulls/submodule updates. No automatic cleanup or paid inference should follow a
+local test pass alone. Finish runtime setup/retirement, then perform the requested clean 0A.
+
 - Added DM Library as an independent read-only submodule for this project only; canonical maintenance and pin propagation run from `0. Literature`. No model settings changed.
 
 - Added the independent read-only VSC Library submodule and daily pin-update proposals; shared HPC guidance moved out of TFM Library, with project instructions retained in docs/VSC.md. No cluster workload was submitted.
 
 Current stage: Experiment 0A setup, before the owner-requested final clean validation.
-Newest Downloads `output_JEVPFN.zip` (343,145 bytes; local modified 19-10 14:00) contains
-13 files. Build 62369713 succeeded: wrapper installation completed, source-only sentinel
-was invisible, package equivalence passed, and container a701323896f9554825df71b5d9eec617abcda30704142b21fd846aafd2a0a40d
-was sealed. GPU job 62370298 selected that packed runtime and passed the CUDA tensor check
-on an A100 80 GB, then stopped with FileNotFoundError for DATA
-`3. experiment_0/manifests/before_extraction/token_audit.json`. Its synthetic/real result
-lists are empty: no Clef model inference was reached. The ZIP contains no token report;
-it does not establish whether detailed PROJECT counts survive. Re-run the CPU token job
-to reuse/recount and republish evidence, then retry only GPU contracts. Do not rebuild
-Clef, retire its native source or clean output yet. The code now gives the recovery command
-and a read-only `gpu_contracts --check-inputs` check for use before allocating a GPU.
-Local validation: 646 tests passed, one POSIX-only skip; lint/dependency checks and all
-17 shell syntax/LF checks passed. One separate Git Bash syntax-check process transiently
-exited 0xC0000005 on Windows; the identical check and complete shell pass then succeeded,
-as did the full shell integration suite. No shell source was changed for that host event.
+Newest Downloads `output_JEVPFN.zip` (383,820 bytes; local modified 19-10 15:05)
+contains token jobs 62370453 and 62370457. Both failed because they ran concurrently
+against the same PROJECT count databases: `UNIQUE constraint failed: counts.dataset_id,
+counts.input_no`. Job 62370453 completed Clef, Liquid, Strands and Perplexity; job 62370457
+completed Intern. The combined report and all five individual reports cover 18 datasets
+and 1,698,127 unique inputs each, with zero overflows. Maximum tokens / context limits:
+Clef 3,140 / 16,384; Liquid 3,042 / 32,768; Strands 3,169 / 4,096;
+Perplexity 3,083 / 8,192; Intern 3,276 / 8,192. This downloaded DATA archive contains
+summary evidence, not the large PROJECT databases; verify those on VSC by one resumed audit.
+The local fix adds an exclusive coordinator lock, per-database writer locks and serialized
+report merging. Existing tokenizer fingerprints/input identities are unchanged, so matching
+counts are reused. Do not clean output, rebuild containers or regenerate questions now.
+Local validation: token/GPU tests passed (25). Full suite: 648 passed, one POSIX-only
+skip and one 30-second Windows Git Bash timeout in the packed-runtime fixture. The same
+test passed unchanged in 1.28 seconds; the complete shell suite then passed 36 tests with
+one POSIX-only skip. No shell code was changed for the non-reproduced timeout. Lint,
+formatting, dependency consistency and diff checks passed. VSC validation of the new
+concurrency guards remains pending; no remote jobs, inference or deletion were performed.
+
+Build 62369713 succeeded: wrapper installation completed, source-only sentinel was
+invisible, package equivalence passed, and container
+a701323896f9554825df71b5d9eec617abcda30704142b21fd846aafd2a0a40d was sealed.
+GPU job 62370298 selected that packed runtime and passed the CUDA tensor check on an
+A100 80 GB, then stopped because DATA `before_extraction/token_audit.json` was absent.
+No Clef model inference was reached. That missing-report diagnosis is superseded by
+the new token reports above; retry the read-only `gpu_contracts --check-inputs` gate after
+the resumed audit passes, then only the GPU contract job. Do not retire its native source yet.
 Downloaded `jevpfn-container-build_62369139.log` (19-10, 1,042 bytes) shows copying/setup
 progressed to SquashFS creation, then failed with `mksquashfs: command not found`.
 No sealed image, GPU pass or source retirement is established. The terminal's missing

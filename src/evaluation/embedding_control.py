@@ -44,7 +44,14 @@ class EmbeddingControl:
             if pca is not None and present.any():
                 values[present, : pca.n_components_] = pca.transform(matrix[present])
             addition = pd.DataFrame(values, index=x.index, columns=names)
-            addition[f"e5_pca__{i:03d}__missing"] = (~present).astype(int)
+            from src.evaluation.features import missing_column
+
+            name = missing_column(i)
+            if name in result:
+                if not np.array_equal(result[name].to_numpy(), (~present).astype(int)):
+                    raise ValueError("Text presence and embedding availability disagree")
+            else:
+                addition[name] = (~present).astype(int)
             if set(addition) & set(result):
                 raise ValueError("Embedding PCA names collide with non-text columns")
             result = result.join(addition, validate="one_to_one")

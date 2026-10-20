@@ -14,9 +14,10 @@ proposal: true
 feature_artifacts: []
 candidate_views: [probability_vectors, scalar_summary, probability_vectors_plus_uncertainty]
 task_applicability:
-  binary: probability_only  # Do not fabricate confidence unavailable from Noul.
-  multiclass: [class_probabilities, class_probabilities_plus_confidence]
-  regression: [expected_direction, nine_probabilities, nine_probabilities_plus_confidence]
+  binary: probability_only
+  multiclass: [class_probabilities, probabilities_with_normalized_entropy_and_peak]
+  regression: [expected_direction, nine_probabilities, probabilities_with_entropy_peak_and_direction_variance]
+uncertainty_definition: derived_from_full_probabilities_not_provider_specific_confidence
 model_catalog: experiment_1/models
 candidate_models: [tabpfn_3_5, catboost]
 fixed_feature_mode_proposal: per_column_and_joint

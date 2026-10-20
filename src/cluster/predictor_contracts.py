@@ -71,6 +71,12 @@ def run(model, *, execute=False):
         "fixtures": [],
         "full_dataset_profile": False,
     }
+    from src.cluster.containers import active_identity
+    from src.cluster.evidence import current_identity
+
+    report["execution_container"] = active_identity() or {}
+    report["settings_sha256"] = digest(settings)
+    report["validation_identity"] = current_identity()
     write_json(manifest, report)
     try:
         for dataset in fixtures():

@@ -15,7 +15,7 @@ import os
 import sqlite3
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from contextlib import closing
+from contextlib import ExitStack, closing, contextmanager
 from datetime import UTC, datetime
 from itertools import islice
 from uuid import uuid4
@@ -33,6 +33,7 @@ from src.jev.decision_tokenization import (
 from src.jev.inputs import _read_set, input_origins, iter_prepared_inputs
 from src.utils import paths
 from src.utils.config import load_yaml
+from src.utils.locking import file_lock
 from src.utils.serialization import canonical_json, digest, file_sha256, write_json
 
 # Keep the fingerprinted tokenizer implementations stable while filtering the active roster.
@@ -41,6 +42,20 @@ HOSTED_UNAVAILABLE = {
     for provider, reason in HOSTED_UNAVAILABLE.items()
     if provider in load_yaml("extractors")["candidates"]
 }
+
+
+@contextmanager
+def _exclusive_audit(path):
+    """Reject duplicate writers; the OS releases the lock even after a killed job."""
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(file_lock(path, timeout=1))
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"A token audit is already running for {path}. Wait for that job; "
+                "do not delete its lock or saved counts. Rerunning later resumes them."
+            ) from exc
+        yield
 
 
 def selected_inputs():
@@ -154,7 +169,12 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
 
     summaries = []
     started = time.perf_counter()
-    with closing(sqlite3.connect(destination, timeout=60)) as db:
+    # Hold the lock before reading the saved prefix, not just during INSERT.
+    # SQLite transactions alone allow two jobs to count the same next batch.
+    with (
+        _exclusive_audit(destination.with_suffix(".lock")),
+        closing(sqlite3.connect(destination, timeout=60)) as db,
+    ):
         db.executescript("""
             CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1), recipe_json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS counts (
@@ -331,24 +351,26 @@ def check_tokenizers(providers):
 def save_reports(reports):
     """Publish completed providers even if a different worker subsequently fails."""
     report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
-    retained = {}
-    if report_path.exists():
-        retained = {
-            r["provider"]: r
-            for r in json.loads(report_path.read_text(encoding="utf-8"))["self_hosted"]
-        }
-    retained.update({r["provider"]: r for r in reports})
-    write_json(
-        report_path,
-        {
-            "created_utc": datetime.now(UTC).isoformat(),
-            "stage": "experiment_0_before_extraction",
-            "self_hosted": list(retained.values()),
-            "hosted_unverified": HOSTED_UNAVAILABLE,
-            "all_selected_models_verified": False,
-            "rows_removed": False,
-        },
-    )
+    # Atomic replacement prevents torn JSON; the lock also prevents lost updates.
+    with file_lock(report_path.with_suffix(".lock"), timeout=60):
+        retained = {}
+        if report_path.exists():
+            retained = {
+                r["provider"]: r
+                for r in json.loads(report_path.read_text(encoding="utf-8"))["self_hosted"]
+            }
+        retained.update({r["provider"]: r for r in reports})
+        write_json(
+            report_path,
+            {
+                "created_utc": datetime.now(UTC).isoformat(),
+                "stage": "experiment_0_before_extraction",
+                "self_hosted": list(retained.values()),
+                "hosted_unverified": HOSTED_UNAVAILABLE,
+                "all_selected_models_verified": False,
+                "rows_removed": False,
+            },
+        )
 
 
 def main():
@@ -388,11 +410,21 @@ def main():
         raise RuntimeError(
             "Full token counting on VSC requires a CPU allocation; stage files on the login host separately"
         )
-    if args.stage_tokenizers:
-        stage_tokenizers(providers)
-    check_tokenizers(providers)
     if args.check_only:
+        if args.stage_tokenizers:
+            stage_tokenizers(providers)
+        check_tokenizers(providers)
         return 0
+    lock = paths.require_project_output(paths.token_audit_dir()) / ".token_audit.lock"
+    with _exclusive_audit(lock):
+        if args.stage_tokenizers:
+            stage_tokenizers(providers)
+        return _count_selected(providers)
+
+
+def _count_selected(providers):
+    """Run one coordinator; independent provider workers still execute in parallel."""
+    check_tokenizers(providers)
     inputs = selected_inputs()
     reports, failures = [], []
     with ProcessPoolExecutor(

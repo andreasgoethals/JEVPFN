@@ -11,6 +11,7 @@ import pandas as pd
 
 from src.evaluation.features import EMBEDDING_BASELINE, decision_feature_set, uses_embeddings
 from src.evaluation.records import completed_fold
+from src.evaluation.store import recipes
 from src.utils import paths
 from src.utils.serialization import digest, write_json
 
@@ -18,9 +19,12 @@ from src.utils.serialization import digest, write_json
 def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
     rows = []
     for phase in phases:
-        for marker in sorted(paths.results_dir("cv_folds", phase=phase).glob("*.json")):
-            stored = json.loads(marker.read_text(encoding="utf-8"))
-            recipe = stored["recipe"]
+        legacy = [
+            json.loads(p.read_text(encoding="utf-8"))["recipe"]
+            for p in sorted(paths.results_dir("cv_folds", phase=phase).glob("*.json"))
+        ]
+        unique = {digest(r): r for r in [*legacy, *recipes(phase)]}
+        for recipe in unique.values():
             records = completed_fold(recipe, phase)
             arm_id = digest({k: v for k, v in recipe.items() if k != "outer_fold"})
             for path in records:

@@ -129,7 +129,7 @@ def test_pca_uses_only_training_rows_and_preserves_non_text_values():
     assert wrapped.estimator.seen.x.equals(train.x)
     assert wrapped.estimator.seen.decision.equals(train.decision)
     assert wrapped.transform(test).decision.equals(test.decision)
-    assert wrapped.estimator.seen.iloc[2]["e5_pca__000__missing"] == 1
+    assert wrapped.estimator.seen.iloc[2]["text_presence__000__missing"] == 1
     assert (
         wrapped.estimator.seen.iloc[2]["e5_pca__000__000"]
         != wrapped.estimator.seen.iloc[2]["e5_pca__000__000"]
@@ -156,6 +156,54 @@ def test_long_embedding_text_is_fully_covered_with_room_for_prefix_and_special_t
     assert all(len(prefix) + len(chunk) + 2 <= 512 for chunk in chunks)
     with pytest.raises(ValueError, match="No room"):
         embeddings.token_chunks(Tokenizer(), "long text", prefix="query: ", max_tokens=4)
+
+
+def test_encoder_batches_across_texts_and_preserves_chunk_weighting():
+    from types import SimpleNamespace
+
+    torch = pytest.importorskip("torch")
+    calls = []
+
+    class Batch(dict):
+        def to(self, _):
+            return self
+
+    class Tokenizer:
+        def encode(self, text, **_):
+            return [2] if text == "query: " else list(range(3, 3 + len(text.split())))
+
+        def num_special_tokens_to_add(self, _):
+            return 2
+
+        def prepare_for_model(self, ids, **_):
+            return {"input_ids": [1, *ids, 1]}
+
+        def pad(self, rows, **_):
+            width = max(len(r["input_ids"]) for r in rows)
+            ids = [r["input_ids"] + [0] * (width - len(r["input_ids"])) for r in rows]
+            tensor = torch.tensor(ids)
+            return Batch(input_ids=tensor, attention_mask=tensor.ne(0).int())
+
+    def model(**inputs):
+        ids = inputs["input_ids"].float()
+        calls.append(len(ids))
+        return SimpleNamespace(last_hidden_state=torch.stack([ids, torch.ones_like(ids)], -1))
+
+    encoder = object.__new__(embeddings.E5Encoder)
+    encoder.cfg = {
+        "dimensions": 2,
+        "batch_size": 2,
+        "max_tokens": 6,
+        "prefix": "query: ",
+        "device": "cpu",
+    }
+    encoder.torch, encoder.tokenizer, encoder.model = torch, Tokenizer(), model
+    texts = ["one", "two", "a b c d e f g"]
+    batched = encoder(texts)
+    assert calls == [2, 2, 1]  # Three chunks in the long text, two short texts together.
+    calls.clear()
+    encoder.cfg["batch_size"] = 1
+    np.testing.assert_allclose(encoder(texts), batched, atol=1e-7)
 
 
 def test_combined_join_preserves_both_artifact_identities_and_missingness():
@@ -265,7 +313,8 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
         assert kw["representation_recipe"]["provider"] == arm["provider"]
         wrapped = factory().fit(features.iloc[:3], data.frame.y.iloc[:3])
         np.testing.assert_allclose(wrapped.pcas[0].mean_, [1, 3])
-        assert len([c for c in received[0] if c.startswith("e5_pca")]) == 33
+        assert len([c for c in received[0] if c.startswith("e5_pca")]) == 32
+        assert received[0]["text_presence__000__missing"].tolist() == [0, 0, 1]
         assert not any(c.startswith("e0") or c.startswith("e1") for c in received[0])
         if mode:
             assert received[0].decision.equals(base.decision.iloc[:3])

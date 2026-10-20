@@ -5,7 +5,7 @@
 	path = vsc-library
 	url = https://github.com/andreasgoethals/VSC_Library.git
 	branch = main
-[submodule "decision-models-library"]
-	path = decision-models-library
+[submodule "dm-library"]
+	path = dm-library
 	url = https://github.com/andreasgoethals/DM_Library.git
 	branch = main

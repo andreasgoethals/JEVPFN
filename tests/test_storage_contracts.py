@@ -47,6 +47,10 @@ def receipt_clock(monkeypatch):
 
 @pytest.fixture
 def storage_run(isolated_output, monkeypatch, receipt_clock):
+    monkeypatch.setattr(
+        "src.cluster.evidence.current_identity",
+        lambda: {"source_sha256": "fixture", "runtime_pins_sha256": "fixture"},
+    )
     monkeypatch.setenv("SLURM_JOB_ID", "synthetic-test")
     monkeypatch.setenv("SLURM_JOB_NODELIST", "node[1-2]")
     monkeypatch.setenv("SLURMD_NODENAME", "node1")

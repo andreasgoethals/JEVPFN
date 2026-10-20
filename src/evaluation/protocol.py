@@ -20,7 +20,6 @@ from src.evaluation.records import (
     ResourceMonitor,
     complete_fold,
     completed_fold,
-    fold_marker,
     save_evaluation,
 )
 from src.evaluation.text_overlap import (
@@ -291,7 +290,11 @@ def evaluate_cv(
         if fold_numbers is not None and number not in fold_numbers:
             continue
         fold_recipe = {**recipe, "outer_fold": number}
-        with file_lock(fold_marker(fold_recipe, phase).with_suffix(".lock"), timeout=1):
+        # Fixed lock stripes bound filesystem entries independently of campaign size.
+        lock_slot = int(digest(fold_recipe)[:8], 16) % 4096
+        with file_lock(
+            paths.results_dir("cv_locks", f"{lock_slot:04d}.lock", phase=phase), timeout=86400
+        ):
             reused = completed_fold(fold_recipe, phase)
             if reused is not None:
                 records.extend(reused)

@@ -153,6 +153,9 @@ def run(*, execute=False):
         "quota_verified": False,
         "independent_backup_verified": False,
     }
+    from src.cluster.evidence import current_identity
+
+    report["validation_identity"] = current_identity()
     write_json(manifest, report)
     try:
         with closing(sqlite3.connect(folder / "probe.sqlite3")) as db, db:

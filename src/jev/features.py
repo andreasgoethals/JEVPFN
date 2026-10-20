@@ -583,11 +583,29 @@ def feature_view(block: FeatureBlock, task: str, view: str = "main") -> pd.DataF
         chosen = [c for c in columns if c.endswith("__expected_direction")]
     else:
         chosen = [c for c in columns if c.rsplit("__", 1)[-1].startswith("p_")]
-        if view == "probabilities_plus_confidence":
-            chosen += [c for c in columns if c.endswith("__confidence")]
     if not chosen:
         raise ValueError("Requested feature view is absent")
-    return block.values.loc[:, ["row_id", *chosen]].copy()
+    result = block.values.loc[:, ["row_id", *chosen]].copy()
+    if view == "probabilities_plus_confidence":
+        # Provider confidence fields have different definitions. Compute comparable
+        # summaries from probabilities; raw provider values remain in retained view.
+        groups = {}
+        for column in chosen:
+            groups.setdefault(column.rsplit("__", 1)[0], []).append(column)
+        for prefix, names in groups.items():
+            probs = result[names].to_numpy(dtype=float)
+            if task == "binary_classification":
+                probs = np.column_stack([1 - probs[:, 0], probs[:, 0]])
+            safe = np.clip(probs, np.finfo(float).tiny, 1)
+            result[prefix + "__entropy_normalized"] = -(probs * np.log(safe)).sum(1) / np.log(
+                probs.shape[1]
+            )
+            result[prefix + "__max_probability"] = probs.max(1)
+            if task == "regression":
+                levels = np.arange(-4, 5, dtype=float)
+                mean = probs @ levels
+                result[prefix + "__direction_variance"] = probs @ (levels**2) - mean**2
+    return result
 
 
 def feature_plan(audit, cfg: dict) -> pd.DataFrame:

@@ -50,30 +50,38 @@ class ClefRuntime:
         self.limit = limit
 
     def predict(self, request):
+        return self.predict_many([request])[0]
+
+    def predict_many(self, requests):
         # Upstream silently slices state at max_length. Count/encode without slicing,
         # then reject; never allow its implicit truncation to change our evidence.
-        record = self.publisher.encode_record(
-            self.processor.tokenizer, request, max_length=sys.maxsize
-        )
-        if len(record.input_ids) > self.limit:
+        records = [
+            self.publisher.encode_record(self.processor.tokenizer, request, max_length=sys.maxsize)
+            for request in requests
+        ]
+        if any(len(record.input_ids) > self.limit for record in records):
             raise ValueError("Clef context overflow; truncation forbidden")
         device = next(self.model.parameters()).device
         batch = self.publisher.collate_records(
-            [record], self.processor.tokenizer.pad_token_id, device
+            records, self.processor.tokenizer.pad_token_id, device
         )
-        logits = self.model(batch)[0]
-        answers = {}
-        for question, values in zip(record.questions, logits, strict=True):
-            probabilities = dict(
-                zip(question.option_ids, values.float().softmax(-1).tolist(), strict=True)
+        result = []
+        for request, record, logits in zip(requests, records, self.model(batch), strict=True):
+            answers = {}
+            for question, values in zip(record.questions, logits, strict=True):
+                probabilities = dict(
+                    zip(question.option_ids, values.float().softmax(-1).tolist(), strict=True)
+                )
+                answers[question.question_id] = probability_answer(
+                    request["questions"][question.question_id], probabilities
+                )
+            result.append(
+                {
+                    "answers": answers,
+                    "usage": {"input_tokens": len(record.input_ids), "output_tokens": 0},
+                }
             )
-            answers[question.question_id] = probability_answer(
-                request["questions"][question.question_id], probabilities
-            )
-        return {
-            "answers": answers,
-            "usage": {"input_tokens": len(record.input_ids), "output_tokens": 0},
-        }
+        return result
 
 
 def load_runtime(provider, folder, limit):

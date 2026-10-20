@@ -307,7 +307,16 @@ def import_bundle(bundle: Path) -> dict:
                 # Refuse pre-existing symlink parents pointing outside the local output root.
                 if not destination.resolve().is_relative_to(paths.outputs_dir().resolve()):
                     raise ValueError("Output destination escapes the local output folder")
-                status, published = _publish_file(source, destination)
+                if relative.suffix == ".sqlite3" and relative.parts[-3:-1] == (
+                    "results",
+                    "evaluation",
+                ):
+                    from src.evaluation.store import merge as merge_evaluations
+
+                    status = merge_evaluations(source, destination)
+                    published = destination
+                else:
+                    status, published = _publish_file(source, destination)
                 report["outputs"].append({"status": status, "path": str(published)})
                 if (
                     relative.name == "token_audit.json"

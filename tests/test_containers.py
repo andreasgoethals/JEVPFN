@@ -98,6 +98,30 @@ def test_active_identity_rejects_different_launch_image(packed, monkeypatch):
         containers.active_identity()
 
 
+def test_new_image_needs_explicit_replacement_review_before_retiring_partial_source(
+    packed, monkeypatch
+):
+    root, native = packed
+    marker = containers.verify("cloudflare")
+    marker["wrapped_existing"] = False
+    marker["container_id"] = digest({k: v for k, v in marker.items() if k != "container_id"})
+    write_json(root / containers.MARKER, marker)
+    with pytest.raises(ValueError, match="allow-replacement"):
+        containers.retire("cloudflare")
+    assert containers.retire("cloudflare", allow_replacement=True)["native_entries_to_remove"] == 2
+    with pytest.raises(ValueError, match="GPU evidence"):
+        containers.retire("cloudflare", allow_replacement=True, apply=True, writers_stopped=True)
+    assert (native / "bin/python").is_file()
+
+
+def test_inventory_counts_entries_without_verifying_or_deleting(packed):
+    root, native = packed
+    result = containers.inventory()
+    cf = next(x for x in result["providers"] if x["provider"] == "cloudflare")
+    assert cf["native_entries"] == 2 and cf["sealed_container_present"]
+    assert (native / "bin/python").exists() and root.exists()
+
+
 def test_external_wrapper_symlink_is_rejected(packed, tmp_path):
     root, _ = packed
     outside = tmp_path / "outside"

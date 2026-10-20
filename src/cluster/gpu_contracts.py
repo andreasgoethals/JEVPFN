@@ -21,7 +21,7 @@ from uuid import uuid4
 import pandas as pd
 
 from src.cluster.preflight import storage_policy_failures
-from src.cluster.semantic_contracts import exercise_semantics
+from src.cluster.semantic_contracts import exercise_robustness, exercise_semantics, probes
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.jev.cache import ResponseCache
@@ -63,6 +63,50 @@ class MeasuredClient:
             return self.client.evaluate(request)
         finally:
             self.seconds.append(time.perf_counter() - started)
+
+    def evaluate_many(self, requests):
+        if self.calls + len(requests) > self.maximum:
+            raise RuntimeError("GPU contract-test request ceiling reached")
+        self.calls += len(requests)
+        started = time.perf_counter()
+        try:
+            return self.client.evaluate_many(requests)
+        finally:
+            self.seconds.append(time.perf_counter() - started)
+
+
+def exercise_batch_parity(client, *, tolerance):
+    size = client.settings["request_configuration"].get("batch_size", 1)
+    if size == 1:
+        return {"passed": True, "mode": "serial_only", "batch_size": 1}
+    # Different tasks/lengths catch padding and per-row option mapping errors.
+    requests = [
+        request
+        for name, request, _ in probes(client.settings)
+        if name in {"binary_True", "score_4"}
+    ]
+    serial = [response_features(r, client.evaluate(r)) for r in requests]
+    batch = [
+        response_features(r, raw)
+        for r, raw in zip(requests, client.evaluate_many(requests), strict=True)
+    ]
+    maximum = max(
+        abs(a[key] - b[key])
+        for a, b in zip(serial, batch, strict=True)
+        for key in a
+        if key.startswith("p_")
+    )
+    if maximum > tolerance:
+        raise ValueError(
+            f"Serial/batch probability difference {maximum} exceeds {tolerance}; review batching"
+        )
+    return {
+        "passed": True,
+        "mode": "native_batch",
+        "batch_size": size,
+        "maximum_probability_difference": maximum,
+        "tolerance": tolerance,
+    }
 
 
 class CacheOnlyClient:
@@ -305,14 +349,17 @@ def run(provider, *, execute=False):
         "real_datasets": [],
     }
     client = metered = None
+    from src.cluster.evidence import current_identity
+
+    report["validation_identity"] = current_identity()
     started = time.perf_counter()
     write_json(manifest, report)
     append_event(log, "started", run_id=run_id, provider=provider)
     try:
         evidence, counts = checked_inputs(provider)
         sample = real_sample(evidence, counts)
-        # 30 fixture inputs, one wide-choice, seven semantic probes, two per dataset.
-        if 38 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
+        # 30 fixtures + wide choice + 7 known-answer + 15 robustness + 4 batch probes.
+        if 57 + sum(len(numbers) for _, numbers in sample) > cfg["max_live_requests"]:
             raise ValueError("GPU contract plan exceeds the configured request budget")
         directory.mkdir(parents=True, exist_ok=True)
         print(f"Loading pinned {provider} on the allocated GPU (offline)", flush=True)
@@ -345,6 +392,11 @@ def run(provider, *, execute=False):
             raise ValueError(
                 "Known-answer diagnostics need review; inspect saved raw answers before blaming the decoder"
             )
+        report["prompt_robustness"] = exercise_robustness(metered)
+        report["batch_parity"] = exercise_batch_parity(
+            metered, tolerance=cfg["batch_probability_tolerance"]
+        )
+        write_json(manifest, report)
         report["real_datasets"] = exercise_real_inputs(metered, sample, log)
         report["status"] = "gpu_contracts_passed_requires_review"
         report["runtime_token_count_parity"] = True  # SelfHostedClient rejects every mismatch.
@@ -372,19 +424,27 @@ def main():
     parser.add_argument("--provider", required=True, choices=SELF_HOSTED)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--execute", action="store_true")
-    mode.add_argument("--check-inputs", action="store_true", help="Read-only validation of saved counts and input hashes; no GPU or inference")
+    mode.add_argument(
+        "--check-inputs",
+        action="store_true",
+        help="Read-only validation of saved counts and input hashes; no GPU or inference",
+    )
     args = parser.parse_args()
     if args.check_inputs:
         evidence, counts = checked_inputs(args.provider)
-        print(canonical_json({
-            "status": "token_input_evidence_passed",
-            "provider": args.provider,
-            "token_audit_id": evidence["audit_id"],
-            "datasets": len(evidence["datasets"]),
-            "counts_database": str(counts),
-            "inference_executed": False,
-            "gpu_execution_verified": False,
-        }))
+        print(
+            canonical_json(
+                {
+                    "status": "token_input_evidence_passed",
+                    "provider": args.provider,
+                    "token_audit_id": evidence["audit_id"],
+                    "datasets": len(evidence["datasets"]),
+                    "counts_database": str(counts),
+                    "inference_executed": False,
+                    "gpu_execution_verified": False,
+                }
+            )
+        )
     elif args.execute:
         run(args.provider, execute=True)
     else:

@@ -22,10 +22,21 @@ from src.utils import paths
 from src.utils.serialization import digest, file_sha256, write_json
 
 MARKER = "_JEVPFN_CONTAINER.json"
+PREDICTORS = (
+    "catboost",
+    "tabpfn_3_5",
+    "tabicl_v2",
+    "limix_2",
+    "kumo_tabular",
+    "linear",
+    "tabstar",
+    "contexttab",
+)
+RUNTIMES = (*SELF_HOSTED, *PREDICTORS)
 
 
 def container_dir(provider):
-    if provider not in SELF_HOSTED:
+    if provider not in RUNTIMES:
         raise ValueError("Unknown decision provider")
     return paths.checkpoints_dir().parent / "containers" / provider
 
@@ -177,12 +188,35 @@ def active_identity():
     }
 
 
-def retire(provider, *, apply=False, writers_stopped=False):
+def inventory():
+    """Count only JEVPFN runtime entries; shared-project quota must be checked separately."""
+    records = []
+    for provider in RUNTIMES:
+        native, image = native_dir(provider), container_dir(provider)
+        native_entries = list(native.rglob("*")) if native.is_dir() else []
+        image_entries = list(image.rglob("*")) if image.is_dir() else []
+        records.append(
+            {
+                "provider": provider,
+                "native_path": str(native),
+                "native_entries": len(native_entries),
+                "native_python_present": (native / "bin/python").exists(),
+                "container_entries": len(image_entries),
+                "sealed_container_present": (image / MARKER).is_file(),
+                "retirement_recorded": (image / "retired_source.json").is_file(),
+            }
+        )
+    return {"scope": "JEVPFN only; not other projects or a quota measurement", "providers": records}
+
+
+def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=False):
     """Retire only a wrapped source whose same image passed real GPU contracts."""
     manifest = verify(provider)
     target = reject_links(native_dir(provider))
-    if not manifest["wrapped_existing"]:
-        raise ValueError("This container has no redundant source environment to retire")
+    if not manifest["wrapped_existing"] and not allow_replacement:
+        raise ValueError(
+            "New container: use --allow-replacement to retire its obsolete/partial native environment after GPU verification"
+        )
     evidence = []
     root = paths.manifests_dir("experiment_0") / "before_extraction" / "gpu_contracts"
     for p in root.glob("*.json"):
@@ -200,12 +234,25 @@ def retire(provider, *, apply=False, writers_stopped=False):
             and report.get("semantic_diagnostics", {}).get("passed") is True
         ):
             evidence.append(str(p))
+    if provider in PREDICTORS:
+        root = paths.manifests_dir("experiment_0") / "after_extraction"
+        for p in root.glob(f"predictor_{provider}_*.json"):
+            report = json.loads(p.read_text(encoding="utf-8"))
+            if (
+                report.get("model") == provider
+                and report.get("status") == "predictor_contracts_passed_requires_full_fold_profile"
+                and report.get("execution_container", {}).get("container_id")
+                == manifest["container_id"]
+                and report.get("settings_sha256") == digest(report.get("settings", {}))
+            ):
+                evidence.append(str(p))
     result = {
         "action": "retire_redundant_unpacked_environment",
         "path": str(target),
         "container": str(container_dir(provider)),
         "gpu_evidence": evidence,
         "applied": False,
+        "native_entries_to_remove": sum(1 for _ in target.rglob("*")) if target.is_dir() else 0,
         "preserved": ["weights", "data", "outputs", "other_environments", "container"],
     }
     if not apply:
@@ -232,13 +279,19 @@ def retire(provider, *, apply=False, writers_stopped=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("seal", "verify", "retire"))
-    parser.add_argument("provider", choices=SELF_HOSTED)
+    parser.add_argument("action", choices=("seal", "verify", "retire", "inventory"))
+    parser.add_argument("provider", choices=RUNTIMES, nargs="?")
     parser.add_argument("--wrapped-existing", action="store_true")
     parser.add_argument("--shell", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--writers-stopped", action="store_true")
+    parser.add_argument("--allow-replacement", action="store_true")
     args = parser.parse_args()
+    if args.action == "inventory":
+        print(json.dumps(inventory(), indent=2))
+        return
+    if args.provider is None:
+        parser.error("Select one provider")
     if args.shell and args.action != "verify":
         parser.error("--shell is for verified runtime selection only")
     if args.action == "seal":
@@ -246,7 +299,12 @@ def main():
     elif args.action == "verify":
         result = verify(args.provider)
     else:
-        result = retire(args.provider, apply=args.apply, writers_stopped=args.writers_stopped)
+        result = retire(
+            args.provider,
+            apply=args.apply,
+            writers_stopped=args.writers_stopped,
+            allow_replacement=args.allow_replacement,
+        )
     if args.shell:
         print(f"export JEVPFN_CONTAINER_PROVIDER={shlex.quote(args.provider)}")
         print(f"export JEVPFN_CONTAINER_ID={shlex.quote(result['container_id'])}")

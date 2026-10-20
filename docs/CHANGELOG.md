@@ -2,11 +2,32 @@
 
 ## 20-10-2026
 
+- Implemented the review follow-up: per-dataset/phase SQLite evaluation stores containing
+  checksummed Parquet predictions and immutable fold records, bounded lock-file growth,
+  transactional portable merging and legacy reading. Added corruption, concurrency,
+  resume and import-conflict tests.
+- Bound validation evidence to normalized source/configuration, prepared inputs and runtime
+  pins; exact 0A campaign selection resolves multiple successful job reports without choosing
+  the newest implicitly. Added prompt sensitivity/repetition diagnostics, reviewed acceptance
+  and independent durable Jev diagnostic spending records.
+- Unified text-missing indicators across representation arms, derived provider-neutral
+  uncertainty summaries, batched E5 across texts, and added bounded Clef/Perplexity batches
+  with serial-probability parity checks. Main questions and protected tokenizer files remain unchanged.
+- Added runtime inode inventory, guarded retirement of replaced partial environments,
+  predictor-container wrapping support and build-node index preflight. Updated research
+  interpretation, storage and VSC instructions. Local suite: 660 passed, two platform/runtime
+  skips; five notebooks passed with 24 figures. Actual GPU/batch/throughput validation and
+  remote retirement remain pending. No paid inference, remote submission, cleanup or Git publication.
+
+- Renamed the DM Library submodule to `dm-library`, preserving its exact library revision and updating references and tooling exclusions.
+
 - Added DM Library as an independent read-only submodule for this project only; canonical maintenance and pin propagation run from `0. Literature`. No model settings changed.
 
 - Added the independent read-only VSC Library submodule and daily pin-update proposals; shared HPC guidance moved out of TFM Library, with project instructions retained in docs/VSC.md. No cluster workload was submitted.
 
 ## 19-10-2026
+
+- Diagnosed overlapping token jobs 62370453/62370457: duplicate writers collided on SQLite primary keys, although their combined reports cover all five tokenizers with zero overflows. Added coordinator/database writer locks and serialized report merging; matching saved counts remain reusable. Regression tests reproduce duplicate-run and lost-report-update gaps before the fix. No inputs, tokenizer fingerprints, containers or model settings changed. Local full suite: 648 passed, one POSIX-only skip and one Windows shell timeout; the timed-out test and all 36 shell tests passed on unchanged reruns. Token/GPU regression checks, lint and dependency checks passed; VSC retry is pending.
 
 - Inspected the newer VSC ZIP: Clef container build 62369713 sealed successfully; GPU job 62370298 passed CUDA but stopped before model loading because the token-audit summary was absent. Added an actionable recovery error and read-only `gpu_contracts --check-inputs` CLI, shared with the execution gate. Added tests for missing-evidence refusal before model loading, dataset coverage, and rebuilding a lost summary from surviving exact counts without retokenization. Validation: 646 tests passed, one POSIX-only skip; lint, dependencies and 17 shell syntax/LF checks passed. Updated setup order and observed status; no model/container rebuild, cleanup, paid call, remote submission or Git publication performed.
 

@@ -10,6 +10,9 @@ from src.utils.serialization import digest, write_json
 
 @pytest.fixture
 def evidence(isolated_output, monkeypatch):
+    from src.cluster.evidence import current_identity
+
+    validation = current_identity()
     root = paths.manifests_dir("experiment_0")
     before = root / "before_extraction"
     inputs = [{"dataset_id": "fixture", "input_set_id": "v3", "input_file_sha256": "sha"}]
@@ -24,7 +27,12 @@ def evidence(isolated_output, monkeypatch):
         },
     )
     identity = {"provider": "liquid", "version": "pin"}
-    common = {"token_audit_id": "token", "settings_sha256": digest(identity), "settings": identity}
+    common = {
+        "token_audit_id": "token",
+        "settings_sha256": digest(identity),
+        "settings": identity,
+        "validation_identity": validation,
+    }
     write_json(
         before / "gpu_contracts/liquid_fixed.json",
         common
@@ -32,6 +40,8 @@ def evidence(isolated_output, monkeypatch):
             "status": "gpu_contracts_passed_requires_review",
             "runtime_token_count_parity": True,
             "semantic_diagnostics": {"passed": True},
+            "prompt_robustness": {"structurally_valid": True},
+            "batch_parity": {"passed": True},
             "real_datasets": [{"dataset_id": "fixture"}],
         },
     )
@@ -48,6 +58,7 @@ def evidence(isolated_output, monkeypatch):
         root / "preflight_cpu.json",
         {
             "status": "preflight_passed",
+            "validation_identity": validation,
             "execution_site": "vsc_compute_node",
             "stage": "before_extraction",
             "contract_tests": {"status": "passed"},
@@ -59,6 +70,7 @@ def evidence(isolated_output, monkeypatch):
         {
             "status": "storage_contracts_passed_requires_quota_and_backup_review",
             "snapshot_restore": True,
+            "validation_identity": validation,
         },
     )
     write_json(
@@ -83,6 +95,7 @@ def test_evidence_preview_is_not_approval_and_signature_preserves_hashes(evidenc
         quota_verified=True,
         backup_verified=True,
         throughput_reviewed=True,
+        robustness_reviewed=True,
         apply=True,
     )
     assert (
@@ -95,6 +108,7 @@ def test_evidence_preview_is_not_approval_and_signature_preserves_hashes(evidenc
             quota_verified=True,
             backup_verified=True,
             throughput_reviewed=True,
+            robustness_reviewed=True,
             apply=True,
         )
 
@@ -132,3 +146,49 @@ def test_stale_or_incomplete_tests_cannot_be_signed(evidence, fault):
             apply=True,
         )
     assert not (before / "accepted_liquid.json").exists()
+
+
+def test_stale_cpu_code_identity_cannot_approve(evidence):
+    root, _, _ = evidence
+    file = root / "preflight_cpu.json"
+    body = json.loads(file.read_text())
+    body["validation_identity"]["source_sha256"] = "old-code"
+    write_json(file, body)
+    with pytest.raises(ValueError, match="matching"):
+        acceptance.evidence_for("liquid")
+
+
+def test_explicit_completed_campaign_disambiguates_successful_reruns(evidence, monkeypatch):
+    from src.cluster.experiment_zero import steps
+    from src.cluster.freeze import runtime_pins
+
+    root, before, _ = evidence
+    frozen = {"frozen": True, "source_sha256": "frozen-fixture"}
+    monkeypatch.setattr("src.cluster.freeze.check_if_present", lambda: frozen)
+    plan = steps("vsc")
+    identity = digest({"source": frozen, "runtime_pins": runtime_pins(), "steps": plan})
+    jobs = {s["name"]: str(i + 100) for i, s in enumerate(plan)}
+    for name, file in (
+        ("cpu", root / "preflight_cpu.json"),
+        ("storage", before / "storage_contracts/fixed.json"),
+        ("liquid_contracts", before / "gpu_contracts/liquid_fixed.json"),
+        ("liquid_pilot", before / "liquid_fixed.json"),
+    ):
+        body = json.loads(file.read_text())
+        write_json(file, body | {"job_id": jobs[name]})
+    gpu = json.loads((before / "gpu_contracts/liquid_fixed.json").read_text())
+    write_json(before / "gpu_contracts/liquid_older.json", gpu | {"job_id": "old"})
+    with pytest.raises(ValueError, match="found 2"):
+        acceptance.evidence_for("liquid")
+    receipt = root / "0A_vsc/chosen.json"
+    write_json(
+        receipt,
+        {
+            "status": "vsc_checks_completed_requires_review",
+            "stage_identity": identity,
+            "steps": [s | {"status": "completed", "job_id": jobs[s["name"]]} for s in plan],
+        },
+    )
+    result = acceptance.evidence_for("liquid", campaign=receipt)
+    assert not any("older" in item["path"] for item in result["evidence"])
+    assert result["evidence"][-1]["path"] == str(receipt.resolve())

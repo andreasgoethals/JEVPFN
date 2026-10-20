@@ -157,7 +157,9 @@ def test_missing_token_report_stops_before_model_loading(isolated_output, monkey
     with pytest.raises(ValueError, match="experiment_0_tokens.slurm"):
         gc.run("cloudflare", execute=True)
     loader.assert_not_called()
-    reports = list((paths.manifests_dir("experiment_0") / "before_extraction/gpu_contracts").glob("*.json"))
+    reports = list(
+        (paths.manifests_dir("experiment_0") / "before_extraction/gpu_contracts").glob("*.json")
+    )
     report = json.loads(reports[0].read_text())
     assert report["status"] == "failed" and report["synthetic"] == []
     assert "Do not rebuild the container" in report["error"]
@@ -166,12 +168,18 @@ def test_missing_token_report_stops_before_model_loading(isolated_output, monkey
 @pytest.mark.parametrize("all_datasets", [True, False])
 def test_login_input_check_checks_coverage_without_gpu(monkeypatch, capsys, all_datasets):
     monkeypatch.setattr(gc, "ExactCounter", Mock())
-    monkeypatch.setattr(gc, "token_evidence", lambda *a: (
-        {"datasets": [{"dataset_id": "fixture"}], "audit_id": "checked"}, Path("counts.sqlite3")
-    ))
-    monkeypatch.setattr("src.cluster.token_audit.selected_inputs", lambda: [
-        {"dataset_id": "fixture" if all_datasets else "another"}
-    ])
+    monkeypatch.setattr(
+        gc,
+        "token_evidence",
+        lambda *a: (
+            {"datasets": [{"dataset_id": "fixture"}], "audit_id": "checked"},
+            Path("counts.sqlite3"),
+        ),
+    )
+    monkeypatch.setattr(
+        "src.cluster.token_audit.selected_inputs",
+        lambda: [{"dataset_id": "fixture" if all_datasets else "another"}],
+    )
     loader = Mock()
     monkeypatch.setattr(gc, "SelfHostedClient", loader)
     monkeypatch.setattr("sys.argv", ["gpu_contracts", "--provider", "cloudflare", "--check-inputs"])
@@ -219,6 +227,8 @@ def test_success_report_exposes_acceptance_identity(isolated_output, monkeypatch
     monkeypatch.setattr(gc, "synthetic_datasets", lambda: [])
     monkeypatch.setattr(gc, "exercise_boundaries", lambda *a: {})
     monkeypatch.setattr(gc, "exercise_semantics", lambda *a: {"passed": True})
+    monkeypatch.setattr(gc, "exercise_robustness", lambda *a: {"structurally_valid": True})
+    monkeypatch.setattr(gc, "exercise_batch_parity", lambda *a, **kw: {"passed": True})
     monkeypatch.setattr(gc, "exercise_real_inputs", lambda *a: [])
     cuda = Mock()
     cuda.get_device_name.return_value = "fixture GPU"

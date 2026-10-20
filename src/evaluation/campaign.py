@@ -195,6 +195,10 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         features = add_embeddings(features, embeddings)
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     representation = {
+        "missingness_policy": features.attrs.get("missingness_policy"),
+        "uncertainty_summary": "normalized_entropy_peak_and_direction_variance_v1"
+        if arm.get("view") == "probabilities_plus_confidence"
+        else None,
         "provider": arm["provider"],
         "selector": selector,
         "control": arm.get("control"),
@@ -239,7 +243,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             device=settings["device"],
             estimator_settings=settings,
             representation_recipe=representation,
-            permutation_columns=[c for c in features if c not in dataset.metadata.non_text_columns]
+            permutation_columns=[
+                c
+                for c in features
+                if c not in dataset.metadata.non_text_columns
+                and not c.startswith("text_presence__")
+            ]
             if arm.get("control") == "permuted"
             else None,
             fold_numbers=[0] if profile else None,

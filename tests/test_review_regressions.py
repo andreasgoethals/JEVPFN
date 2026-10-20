@@ -210,8 +210,11 @@ def test_cv_resumes_only_completed_folds_and_detects_corruption(isolated_output,
     assert summary["complete_arms"] == 1 and not means.empty
     assert set(rows.outer_fold) == set(range(5))
     assert any(name.startswith("text.unseen_joint.") for name in rows.metric)
-    (records[0].parent / "predictions.parquet").write_bytes(b"corrupt")
-    with pytest.raises(ValueError, match="corrupt"):
+    from src.evaluation.store import connect
+
+    with connect(records[0].database) as db:
+        db.execute("UPDATE records SET predictions=? WHERE id=?", (b"corrupt", records[0].key))
+    with pytest.raises(ValueError, match="[Cc]orrupt"):
         protocol.evaluate_cv(dataset, matrix, factory, **kwargs)
 
 

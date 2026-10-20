@@ -5,6 +5,7 @@ providers: [liquid, strands, perplexity, cloudflare, intern]
 sample: first_middle_last_rows_and_ten_longest_exact_inputs_per_dataset
 max_pilot_requests: 1000
 batch_size: 1  # Profile memory and timing before increasing; serialized per model.
+provider_batch_sizes: {cloudflare: 2, perplexity: 2}  # Must pass serial/batch parity in 0A.
 max_recorded_failures_per_dataset: 10  # --continue-on-error remains incomplete, never accepted.
 full_feature_creation_enabled: false
 accepted_before_extraction_manifest: null
