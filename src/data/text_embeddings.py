@@ -360,7 +360,7 @@ def validate(path, *, require_complete=False):
         return recipe
 
 
-def load(dataset, cfg, *, source=None):
+def _validated_dataset_rows(dataset, cfg, source):
     source = Path(source or cache_path(dataset.metadata.dataset_id))
     recipe = validate(source, require_complete=True)
     _, columns = input_rows(dataset)
@@ -372,6 +372,17 @@ def load(dataset, cfg, *, source=None):
         or recipe["encoder"] != expected_encoder
     ):
         raise ValueError("Embedding cache does not match the current dataset/encoder")
+    return recipe, columns
+
+
+def validate_dataset(dataset, cfg, *, source=None):
+    """Validate the complete artifact against raw rows without expanding dense row vectors."""
+    return _validated_dataset_rows(dataset, cfg, source)[0]
+
+
+def load(dataset, cfg, *, source=None):
+    source = Path(source or cache_path(dataset.metadata.dataset_id))
+    _, columns = _validated_dataset_rows(dataset, cfg, source)
     matrices, groups = [], []
     with closing(_connect(source, readonly=True)) as db:
         vectors = {

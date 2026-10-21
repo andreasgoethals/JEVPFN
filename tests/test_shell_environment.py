@@ -25,6 +25,31 @@ def bash_executable():
     return bash
 
 
+def test_new_conda_container_cannot_inherit_host_environment_directory(tmp_path):
+    image, host = tmp_path / "image root", tmp_path / "personal DATA"
+    image.mkdir()
+    host.mkdir()
+    (host / "preserve").write_text("host remains untouched")
+    driver = tmp_path / "preinstall.sh"
+    driver.write_text(
+        'set -euo pipefail\n'
+        'if [[ "$OSTYPE" == msys* ]]; then CW_INSTALLATION_PATH="$(cygpath -u "$CW_INSTALLATION_PATH")"; fi\n'
+        'source "$TEST_HOOK"\n'
+        '[[ "$CONDA_ENVS_PATH" == "$CW_INSTALLATION_PATH/miniforge/envs" ]]\n'
+        'mkdir "$CONDA_ENVS_PATH/env1"\n', encoding="utf-8")
+    result = subprocess.run(
+        [bash_executable(), str(driver)],
+        env=dict(os.environ, CW_INSTALLATION_PATH=image.as_posix(), CONDA_ENVS_PATH=host.as_posix(),
+                 TEST_HOOK=(ROOT / "scripts/container_conda_pre_install.sh").as_posix()),
+        capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (image / "miniforge/envs/env1").is_dir()
+    assert list(host.iterdir()) == [host / "preserve"]
+    source = (ROOT / "scripts/build_decision_container.sh").read_text()
+    assert '--pre-install "$JEVPFN_BUILD_REPO/scripts/container_conda_pre_install.sh"' in source
+
+
 @pytest.mark.parametrize("selection", ["packed", "corrupt", "native"])
 def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selection):
     repo = tmp_path / "repo"

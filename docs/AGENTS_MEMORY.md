@@ -1,5 +1,50 @@
 # Operational evidence
 
+## 21-10-2026
+
+Owner's newer Downloads output_JEVPFN.zip: 497,502 bytes, modified 09:16:28. Token job
+62378350 completed all five providers over 18 datasets / 1,698,127 unique inputs each,
+with zero overflows. Clef 62378354 and Intern 62378432 passed actual container GPU
+contracts (106 and 102 dispatches respectively); the owner's guarded retire commands
+removed 55,640 and 55,442 native entries. Quota after retirement has not yet been supplied.
+Do not repeat those installations. Intern's former pending state is superseded.
+
+Liquid build 62378491 FAILED: packages went to /data/leuven/383/vsc38338/conda_envs/env1;
+the image expected /LOCAL_TYKKY_SsbThB9/miniforge/envs/env1. Pip/tokenizer checks succeeded
+outside the image, but the wrapper warned "Created env is empty" and sealing found no
+containers/liquid/bin/python. The build now overrides CONDA_ENVS_PATH inside the pre-install
+hook and asserts the Python prefix before pip. Remove only this unsealed image with the
+new preview/apply command before retrying. The accidental DATA env1 needs separate inspection;
+do not remove the CPU JEVPFN environment. Strands/Perplexity/E5 were not reached by that loop.
+
+Real-text sensitivity is NOT an invariance pass: Clef's binary example moved from 0.304
+to 0.867 under injected instructions; Intern's multiclass option-order probe changed its
+top answer (aligned total variation 0.647). Keep frozen questions/order and review these
+limited diagnostics before extraction; they are observations, not automatically decoder bugs.
+
+The local exhaustive readonly question audit passed 18 datasets, 1,698,127 unique inputs
+and 3,294,340 row/slot links; file hashes before/after match. Reviewed all 18 documented
+task sentences; no wording change. V3 and exact tokenizer fingerprints remain untouched.
+The local setup failure was the literal "$0.042" passed to float(); numeric prompts now
+accept currency notation and reprompt. Owner confirmed organization console limits of
+80 RPS / 100,000 TPS at console.typesafe.ai/rate-limits. Public models/errors docs specify
+32k state-plus-question / 64k request and 400 max_tokens_exceeded. Setup now uses this
+server-enforced policy with a separate 32 MiB HTTP-body check; it does not claim exact
+local tokenization or turn on long context. No paid calls made during repair.
+
+PCA16 is an optional E5-only ablation across all six predictors; PCA32 remains main.
+0B now checks every complete E5 artifact and main predictor fixture paths with both PCA
+dimensions/combined decision features. Actual predictor runtimes/full-fold profiling remain
+outstanding. Current checkout at start: 375c3e5; all three committed library links matched:
+TFM cbaff2f5fa0a6e910d7e7d1cd148437a3e0c217a,
+DM a0e40a60e7f3be4a791b0063046767633641ecc4,
+VSC 9e376b5ee9106e82d37eca86ca6acb861f580c93.
+Finish runtime setup and local pilot before the owner's final clean/frozen 0A campaign.
+Local validation completed: 698 passed, two skipped (local PyTorch and POSIX-only link
+behavior); lint, pip check, 18 shell syntax checks and library-pin checks passed. No
+notebook/visualization source changed. Liquid's corrected build and the expanded 0B
+predictor contracts still need execution in their VSC environments.
+
 ## 20-10-2026
 
 Latest supplied VSC terminal: checkout 6a12e8f, setup write checks passed. Token job

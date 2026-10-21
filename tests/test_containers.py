@@ -34,6 +34,8 @@ def test_image_and_wrapper_hashes_are_checked_and_no_overwrite(packed):
     assert containers.verify("cloudflare")["wrapped_existing"]
     with pytest.raises(ValueError, match="already exists"):
         containers.seal("cloudflare")
+    with pytest.raises(ValueError, match="sealed container"):
+        containers.discard_unsealed("cloudflare", apply=True, writers_stopped=True)
     (root / "bin/python").write_bytes(b"changed wrapper")
     with pytest.raises(ValueError, match="fingerprint"):
         containers.verify("cloudflare")
@@ -86,6 +88,33 @@ def test_retirement_needs_matching_gpu_evidence_and_never_touches_other_data(pac
     assert native.is_dir() and list(native.iterdir()) == []
     assert (other / "preserved").read_text() == "keep"
     assert containers.verify("cloudflare")["container_id"] == marker["container_id"]
+
+
+def test_discard_failed_build_is_guarded_and_scoped(isolated_output, monkeypatch):
+    failed = containers.container_dir("liquid")
+    failed.mkdir(parents=True)
+    (failed / "bad.sqfs").write_text("incomplete")
+    weights = paths.checkpoints_dir() / "decision_models/liquid/keep"
+    weights.parent.mkdir(parents=True)
+    weights.write_text("weights")
+    native = containers.native_dir("liquid")
+    native.mkdir(parents=True)
+    (native / "keep").write_text("preserve")
+    assert containers.discard_unsealed("liquid")["applied"] is False
+    assert failed.exists()
+    with pytest.raises(ValueError, match="writers stopped"):
+        containers.discard_unsealed("liquid", apply=True)
+
+    def busy():
+        raise RuntimeError("jobs remain")
+
+    monkeypatch.setattr(containers, "require_idle_vsc", busy)
+    with pytest.raises(RuntimeError, match="jobs remain"):
+        containers.discard_unsealed("liquid", apply=True, writers_stopped=True)
+    assert failed.exists()
+    monkeypatch.setattr(containers, "require_idle_vsc", lambda: None)
+    assert containers.discard_unsealed("liquid", apply=True, writers_stopped=True)["applied"]
+    assert not failed.exists() and weights.read_text() == "weights" and (native / "keep").exists()
 
 
 def test_active_identity_rejects_different_launch_image(packed, monkeypatch):

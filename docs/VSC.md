@@ -390,6 +390,27 @@ until the failure is understood; do not reset output while runtime setup is stil
 The container-build script resolves `default_config/config.yaml` from the installed wrapper;
 KU Leuven does not necessarily export `CW_GLOBAL_YAML` from the module itself.
 
+New builds use `container_conda_pre_install.sh` to override inherited Conda `envs_dirs`
+with the image's own `miniforge/envs`. The post-install script verifies `sys.prefix`
+before pip runs. Without this, the 21 October Liquid build installed into personal
+DATA `conda_envs/env1` and produced an image without `bin/python`. That image was not
+sealed and must not be used. The fix follows the wrapper's v0.4.2 pre-install hook;
+it does not change working Clef/Intern containers or the user's global Conda config.
+After publishing the fix and confirming no JEVPFN job is active, remove only that failed
+image, then retry Liquid (the commands preserve logs, weights and other runtimes):
+
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.containers discard-unsealed liquid
+"$JEVPFN_PYTHON" -m src.cluster.containers discard-unsealed liquid --apply --writers-stopped
+sbatch --wait scripts/slurm/experiment_0_container_build.slurm liquid new
+sbatch --wait scripts/slurm/experiment_0_decision_contracts.slurm liquid
+```
+
+The cleanup refuses sealed containers and active JEVPFN allocations. The misplaced
+`$VSC_DATA/conda_envs/env1` is outside the project environment folder and is deliberately
+not removed by this helper. Inspect its Conda history/size before separately deleting
+it; never remove `$VSC_DATA/conda_envs/JEVPFN`, the working CPU environment.
+
 ## Bounded GPU contract tests and larger pilots
 
 After exact counts for the chosen provider are complete, submit its prepared environment:
@@ -556,9 +577,10 @@ is not reversed. Local 0A includes this when `--dataset-pilot` is selected. Repo
 variation and top-option agreement; this small sample is not comprehensive robustness evidence.
 
 The console's user menu → Settings → Organization displays the organization ID. Billing
-shows credits and auto-recharge; neither that page nor Home/Organization/Usage exposed
-RPS/TPS during the observed check. Request those values from the existing TypeSafe contact
-or `support@typesafe.ai`; do not substitute proposed traffic settings for account limits.
+shows credits and auto-recharge. Account RPS/TPS are at
+https://console.typesafe.ai/rate-limits. On 21 October the owner confirmed 80 RPS and
+100,000 input TPS; these are recorded in `throughput_review`, not inferred from public
+defaults. Recheck before full extraction; increases go through `sales@typesafe.ai`.
 Keep the organization ID and credentials out of public configuration/docs.
 
 Jev calls run locally after an approved small pilot. Install `.[jev]`, use the local credential
@@ -575,18 +597,27 @@ Microsoft is outside the selected roster.
 flag runs the bounded local pilot; `--execute --full` needs a separate full-run switch and
 accepted pilot evidence. Configure `live_extraction` in `feature_creation.yaml`, including the
 reviewed context envelope, full-campaign dataset allocations, and the pilot request ceiling.
-The envelope must justify a maximum complete-body byte size and its billing-token bound;
-do not infer either from characters/4. Unknown bounds keep dispatch blocked. HTTP 429 has
+The default setup uses `provider_enforced` context validation: public Jev 1.13 documentation
+specifies 32k state-plus-question tokens, 64k per complete request, and HTTP 400 with
+`max_tokens_exceeded` for context overflow. The local guard checks the separate 32 MiB
+HTTP body ceiling; it does not pretend that byte size proves token fit. No long-context
+header is sent. Reserve 64k billed tokens per attempt conservatively, retain actual usage,
+and stop on overflow without truncation or an automatic retry. The older explicitly
+reviewed byte-envelope mode remains available for existing private configurations. HTTP 429 has
 bounded exponential backoff; 529/timeouts remain review stops because retryable does not
 establish that an earlier attempt was unbilled. Raw responses received by the dispatcher
 survive a subsequent feature-decoder failure.
 
 Alternatively, keep the tracked defaults disabled and run
-`python -m src.jev.setup_pilot --configure` locally. It prompts for verified price, RPS/TPS,
-context/billing bounds and a conservative EUR/USD conversion, then writes the Git-ignored
+`python -m src.jev.setup_pilot --configure` locally. It accepts `0.042`, `$0.042` or
+`USD 0.042`, reprompts invalid numbers and supplies the recorded RPS/TPS defaults. It
+asks for a conservative EUR/USD conversion and evidence, then writes the Git-ignored
 `config/2. feature_creation/jev.local.yaml`. It enforces the approved EUR 5 pilot, includes
-all 18 dataset allocations and never enables full extraction. Unknown provider bounds must
-be obtained before this step; a guessed byte/token ratio is not acceptable evidence.
+all 18 dataset allocations and never enables full extraction. Context/billing policy comes
+from https://docs.typesafe.ai/models and https://docs.typesafe.ai/api/errors (checked
+21 October), without an invented tokenizer or byte/token ratio. The pilot uses one worker
+and at least five seconds between calls, below the account ceilings. Configuration performs
+no inference and never overwrites an existing private spending policy.
 Use `python -m src.jev.hosted --config feature_creation/jev.local --execute` for that pilot.
 `python -m src.jev.setup_pilot --check-account` sends only the authenticated model-list GET;
 it verifies neither paid inference, balance, rate limits nor access to the exact version.
@@ -630,6 +661,9 @@ artifacts and real predictor fits on all task types. Main extras are `models`, `
 `tabicl`, `limix`, `kumo`; original-text extras are `tabstar`, `contexttab`. Stage/hash their
 checkpoints and any text encoders separately; choose exact assets/runtime pins in
 `config/4. experiment_1/models.yaml`. Use isolated environments when dependencies conflict.
+The after-extraction preflight also validates all 18 complete E5 stores against current
+raw rows/column hashes and the frozen encoder recipe, without expanding dense feature
+matrices. Missing/corrupt/wrong-version embeddings fail 0B rather than being skipped.
 
 The injector/factories are synthetically tested; actual full-fold resources remain pending.
 ConTextTab uses one bag and the full training context rather than default row sampling;
@@ -640,6 +674,9 @@ and prediction-time input availability still need review before interpreting res
 Enable only the bounded `predictor_execution_enabled` switch in `experiment_0/debug.yaml`
 for `python -m src.cluster.predictor_contracts --model MODEL --execute`. This runs actual
 binary/three-class/30-class/regression fixtures, five-fold CV and no-refit restart checks.
+Each main predictor tests non-text, PCA16, PCA32 and PCA32 with both decision-feature blocks.
+The vectors are synthetic downstream-interface fixtures; actual E5 encoding is tested in
+0A and saved dataset vectors in 0B. TabSTAR/ConTextTab retain original text in their fixtures.
 `sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 /lustre1/project/stg_00211/JEVPFN/environments/tabpfn_3_5`
 supplies a regular A100 allocation once that selected predictor environment exists. Run CPU
 CatBoost/linear checks in a CPU allocation with the same module command.

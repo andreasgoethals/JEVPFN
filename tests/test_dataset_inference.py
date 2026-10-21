@@ -80,6 +80,13 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
         ("catboost", "experiment_1", "non_text_plus_frozen_e5_and_joint", 0.5, "jev"),
         ("catboost", "experiment_1", "non_text_plus_frozen_e5_and_joint", 0.25, "liquid"),
         ("tabstar", "experiment_2", "original_features", 1, None),
+        (
+            "catboost",
+            "experiment_3",
+            "non_text_plus_frozen_e5__embedding_dimension__pca_16",
+            2.5,
+            None,
+        ),
     ):
         evaluate_cv(
             data,
@@ -131,6 +138,13 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
         == 10
     )
     assert "descriptive" in report["fold_sd"]
+    pca_contrast = paired.loc[
+        paired.feature_set.eq("non_text_plus_frozen_e5__embedding_dimension__pca_16")
+        & paired.reference.eq("frozen_e5")
+        & paired.metric.eq("rmse")
+    ]
+    assert len(pca_contrast) == 5
+    np.testing.assert_allclose(pca_contrast.difference, 0.5)
 
 
 def test_target_unit_error_magnitudes_are_not_pooled_across_datasets():

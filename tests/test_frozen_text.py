@@ -63,6 +63,7 @@ def test_resume_skips_completed_text_deduplicates_and_retains_missing(
     assert embeddings.build(dataset, recipe, resumed, destination=path) == identity
     assert len(resumed.calls) == 2
     features = embeddings.load(dataset, recipe, source=path)
+    assert embeddings.validate_dataset(dataset, recipe, source=path)["rows"] == 4
     assert list(features.index) == ["csv:0", "csv:1", "csv:2", "csv:3"]
     np.testing.assert_array_equal(features.iloc[0, :3], features.iloc[1, :3])
     assert features.iloc[2, :3].isna().all() and features.iloc[1, 3:].isna().all()
@@ -72,6 +73,8 @@ def test_resume_skips_completed_text_deduplicates_and_retains_missing(
     changed.frame.loc[0, "a"] = "different"
     with pytest.raises(ValueError, match="does not match"):
         embeddings.load(changed, recipe, source=path)
+    with pytest.raises(ValueError, match="does not match"):
+        embeddings.validate_dataset(changed, recipe, source=path)
 
 
 def test_corruption_and_conflicting_merge_are_rejected(isolated_output, tmp_path, recipe):
@@ -241,7 +244,7 @@ def test_combined_join_preserves_both_artifact_identities_and_missingness():
 )
 @pytest.mark.parametrize("mode", ["joint", "per_column", "both", None])
 def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
-    isolated_output, monkeypatch, model, mode
+    isolated_output, monkeypatch, model, mode, pca_ablation=False
 ):
     from types import SimpleNamespace
 
@@ -256,6 +259,10 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
         feature_set=name,
         phase="experiment_1",
     )
+    if pca_ablation:
+        arm.update(
+            phase="experiment_3", control="embedding_dimension", view="pca_16", pca_components=16
+        )
     real_load = campaign.load_yaml
     selector = dict(
         provider="jev",
@@ -321,7 +328,12 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
         assert kw["representation_recipe"]["provider"] == arm["provider"]
         wrapped = factory().fit(features.iloc[:3], data.frame.y.iloc[:3])
         np.testing.assert_allclose(wrapped.pcas[0].mean_, [1, 3])
-        assert len([c for c in received[0] if c.startswith("e5_pca")]) == 32
+        assert len([c for c in received[0] if c.startswith("e5_pca")]) == (
+            16 if pca_ablation else 32
+        )
+        assert kw["representation_recipe"]["embedding"]["pca_components_per_column"] == (
+            16 if pca_ablation else 32
+        )
         assert received[0]["text_presence__000__missing"].tolist() == [0, 0, 1]
         assert not any(c.startswith("e0") or c.startswith("e1") for c in received[0])
         if mode:
@@ -332,3 +344,18 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
     monkeypatch.setattr(campaign, "evaluate_cv", evaluate)
     campaign.run_arm(arm, allow_model_runs=True, profile=True)
     assert selected == expected_modes
+
+
+@pytest.mark.parametrize(
+    "model", ["catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear"]
+)
+def test_pca16_arm_applies_reduction_to_the_same_cached_vectors(
+    isolated_output, monkeypatch, model
+):
+    test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
+        isolated_output,
+        monkeypatch,
+        model,
+        None,
+        pca_ablation=True,
+    )

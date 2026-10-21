@@ -23,7 +23,7 @@ stages:
     embedding_contract_command: python -m src.cluster.embedding_contracts --execute
     acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
   after_extraction:
-    requires: [complete_selected_provider_features]
+    requires: [complete_selected_provider_features, complete_E5_features]
     acceptance_ids: [feature_campaign_coverage, consistent_transfer_and_backup, predictor_task_compatibility, predictive_pipeline_boundaries, full_fold_resource_profile, real_run_output_and_resume]
 checks:
   - python_and_dependency_versions
@@ -61,7 +61,7 @@ acceptance_checks:
     evidence: Rate limiting, timeout ambiguity, bounded retry, interruption/resume, deduplication, spending stop and model-version drift are exercised against the selected transport.
   - id: feature_campaign_coverage
     site: local_and_vsc
-    evidence: Every selected dataset/provider/question version has complete numeric tables, all original row IDs, declared missing inputs, source hashes and explicit immutable artifact selections.
+    evidence: Every selected dataset/provider/question version and E5 cache has complete numeric tables, all original row IDs, declared missing inputs, source hashes and explicit immutable artifact selections.
   - id: consistent_transfer_and_backup
     site: local_and_vsc
     evidence: Closed dataset stores survive transfer and independent restore with matching checksums; interrupted transfer cannot be accepted as complete.
@@ -73,7 +73,7 @@ acceptance_checks:
     evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.
   - id: predictor_task_compatibility
     site: vsc_compute_node
-    evidence: Every selected prediction engine supports all assigned task/class counts, missing values and chosen feature widths on small actual fits; class probability order is checked.
+    evidence: All six main engines fit non-text, PCA16, PCA32 and PCA32-plus-decision fixtures for binary, multiclass, 30-class and regression tasks; TabSTAR/ConTextTab fit original-text fixtures. Missing values, class order and cache reuse pass. Synthetic vectors test the downstream interface; separate E5 contracts and cache checks validate real embeddings.
   - id: predictive_pipeline_boundaries
     site: local_and_vsc
     evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds, fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.

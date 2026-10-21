@@ -26,9 +26,9 @@ from src.utils.serialization import canonical_json, digest, write_json
 class ReviewedContextEnvelope:
     """An explicitly verified request-size envelope, never a pretend exact tokenizer.
 
-    The supplied evidence must justify BOTH the byte envelope for the full API body
-    and its billing-token upper bound. No bytes/token conversion is inferred here.
-    If this cannot be obtained/verified, live dispatch remains blocked.
+    Legacy reviewed_byte_envelope needs evidence for a byte/token upper envelope.
+    provider_enforced uses the documented HTTP body ceiling and server context rejection.
+    It makes no claim to count tokens locally; HTTP 400 stops without truncation or retry.
     """
 
     def __init__(self, cfg):
@@ -47,13 +47,23 @@ class ReviewedContextEnvelope:
             != cfg["live_extraction"]["max_billed_input_tokens_per_attempt"]
         ):
             raise ValueError("Context and spending bounds disagree")
+        mode = c.get("mode", "reviewed_byte_envelope")
+        if mode not in {"reviewed_byte_envelope", "provider_enforced"}:
+            raise ValueError("Unknown context policy")
+        if mode == "provider_enforced" and (
+            c["model"] != "jev-1.13.0"
+            or c["max_request_utf8_bytes"] != 32 * 1024 * 1024
+            or c["max_billed_input_tokens"] != 64000
+            or c.get("per_question_context_tokens") != 32000
+        ):
+            raise ValueError("Provider-enforced policy differs from the pinned documented limits")
 
     def __call__(self, request):
         wire = api_preview(request)
         if wire["model"] != self.contract["model"]:
             raise ValueError("Context envelope belongs to a different model")
         if len(canonical_json(wire).encode("utf-8")) > self.contract["max_request_utf8_bytes"]:
-            raise ValueError("Request exceeds the reviewed context envelope; no truncation")
+            raise ValueError("Request exceeds the reviewed body-size ceiling; no truncation")
 
 
 def pilot_input_numbers(path, input_set_id):
@@ -217,9 +227,7 @@ def main(argv=None):
             "Jev is disabled. Configure live_extraction account rates, budgets and verified context envelope; then --execute runs a bounded pilot. --full additionally requires pilot acceptance."
         )
         return 0
-    result = run(
-        load_yaml(args.config), execute=True, full=args.full, dataset_ids=args.dataset
-    )
+    result = run(load_yaml(args.config), execute=True, full=args.full, dataset_ids=args.dataset)
     return int(result["status"] != "completed_requires_review")
 
 

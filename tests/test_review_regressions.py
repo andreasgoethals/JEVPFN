@@ -230,8 +230,9 @@ def test_controls_are_executable_without_duplicating_main_embedding_arms():
         "text_statistics",
         "permuted",
         "retained_view",
+        "embedding_dimension",
     }
-    assert {a["model"] for a in added if a["control"] != "text_presence"} == {
+    assert {a["model"] for a in added if a["control"] not in {"text_presence", "embedding_dimension"}} == {
         "catboost",
         "tabpfn_3_5",
     }
@@ -286,7 +287,7 @@ def test_request_rejection_has_bounded_exponential_backoff(isolated_output):
     assert extractor.log.is_file()
 
 
-@pytest.mark.parametrize("status", [200, 429])
+@pytest.mark.parametrize("status", [200, 400, 413, 429])
 def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
     monkeypatch, status
 ):
@@ -302,6 +303,7 @@ def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
     }
 
     def handler(request):
+        assert "TypeSafe-Danger-Zone-Long-Context" not in request.headers
         calls.append(json.loads(request.content))
         return httpx.Response(
             status,
@@ -340,6 +342,10 @@ def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
         with pytest.raises(RejectedRetryable) as error:
             transport.evaluate(request)
         assert error.value.retry_after_seconds == 3
+    elif status in {400, 413}:
+        with pytest.raises(sdk.TypeSafeAPIError) as error:
+            transport.evaluate(request)
+        assert error.value.status == status  # No truncation, retry or new long-context request.
     else:
         assert transport.evaluate(request) == raw
     assert len(calls) == 1 and calls[0]["model"] == cfg["jev"]["model"]

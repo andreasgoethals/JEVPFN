@@ -7,7 +7,8 @@ the exact references used. This document keeps JEVPFN-specific interpretation.
 Maintenance and published-pin propagation run from the canonical `0. Literature`
 workspace; installing one library never installs another automatically.
 
-Primary-source findings checked through 16 October 2026. This reference records prior art,
+Primary-source findings checked through 16 October 2026, with E5/PCA, native-text baseline
+selection/licences and TypeSafe context/rate documentation rechecked on 21 October. This reference records prior art,
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
 execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
@@ -91,6 +92,14 @@ revision must be declared. Comparing Jev's longer inputs with truncated embeddin
 changes text coverage; it is not solely a comparison of representation quality.
 [E5-small-v2 model card](https://huggingface.co/intfloat/e5-small-v2)
 
+The E5 family is introduced in Wang et al., [Text Embeddings by Weakly-Supervised Contrastive
+Pre-training](https://arxiv.org/abs/2212.03533). Contrastive training brings related texts
+closer in vector space; a frozen encoder makes no task-specific probability prediction.
+E5-small-v2's card declares MIT weights. Alternatives include
+[all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) and
+[BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5); these are background
+references, not additions to the selected encoder roster.
+
 JEVPFN's conventional control pins E5-small-v2 to
 `ffb93f3bd4047442299a41ebb6fa998a38507c52`, uses the card's `query: ` prefix for
 classification/features, attention-mask mean pooling and L2 normalization. Its long-text
@@ -104,7 +113,10 @@ be verified; the combinations test complementarity without assuming it in advanc
 The fixed 32 components per column are a resource choice, not a literature-established
 optimum. Training-fold explained variance is recorded; it measures compression, not
 target relevance. Full vectors remain saved, so a separately agreed dimensionality
-ablation would not require new E5 inference. Any supervised choice of dimensionality
+ablation would not require new E5 inference. The optional PCA16-versus-PCA32 E5-only
+ablation is now configured for all six predictors, separately from the main eight arms.
+MulTaBench v2 studies PCA15/30/60; this motivates sensitivity analysis but does not
+establish that 16 or 32 is optimal. Any supervised choice of dimensionality
 must be made inside training folds, never from the outer test scores.
 
 Non-text-versus-text-augmented gains include text availability as well as content.
@@ -243,6 +255,15 @@ learning. Both task families and missing values are supported. Its reference set
 Python 3.11; the recommended 8,192-row context and bagging can require 80GB GPUs. Weights
 derive from real-table data with research restrictions.
 [ConTextTab implementation](https://github.com/SAP-samples/sap-rpt-1-oss)
+
+Repository review on 21 October: TabSTAR code uses MIT; SAP's repository uses Apache-2.0
+for code but explicitly limits checkpoint use to research under inherited data conditions.
+These are locally runnable academic baselines, not interchangeable licence promises.
+MulTaBench v2 does not identify them as its two strongest methods: it reports ConTextTab
+below TabSTAR and AutoGluon-MM on its text analysis. Selecting these two is a scoped
+comparison of supervised adaptation and semantic in-context prediction; AutoGluon-MM
+remains excluded by the owner's compute constraint. Do not call this exhaustive SOTA
+coverage. [MulTaBench v2, text results and PCA ablations](https://arxiv.org/html/2605.10616v2)
 
 TabSTAR and ConTextTab provide original-text controls with language encoders; their supervised
 adaptation and training-context policies must be distinguished from cached label-free features.

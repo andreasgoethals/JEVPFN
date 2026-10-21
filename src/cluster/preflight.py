@@ -178,6 +178,24 @@ def contract_tests(run_id: str) -> dict:
     }
 
 
+def embedding_checks(cfg: dict) -> list[dict]:
+    """Experiment 0B must validate all saved E5 datasets, not just an encoder smoke test."""
+    from src.data.text_embeddings import cache_path, validate_dataset
+
+    encoder = load_yaml("feature_creation/text_embeddings")
+    results = []
+    for entry in selected_entries(load_catalog(), cfg):
+        item = {"dataset_id": entry["id"], "status": "failed", "path": str(cache_path(entry["id"]))}
+        try:
+            dataset = load_dataset(entry, allow_download=False)
+            recipe = validate_dataset(dataset, encoder)
+            item.update(status="passed", rows=recipe["rows"], text_columns=recipe["text_columns"])
+        except Exception as exc:
+            item["error_type"] = type(exc).__name__
+        results.append(item)
+    return results
+
+
 def run_preflight(
     *,
     network: bool = False,
@@ -296,6 +314,13 @@ def run_preflight(
                 f"{failed} selected dataset(s) failed offline data/CV checks."
             )
     _validate_artifacts(cfg, report)
+    if stage == "after_extraction":
+        report["embedding_artifacts"] = embedding_checks(cfg)
+        failed = sum(item["status"] != "passed" for item in report["embedding_artifacts"])
+        if failed:
+            report["failures"].append(
+                f"{failed} E5 dataset cache(s) failed complete artifact/row validation."
+            )
     if stage == "after_extraction" and not cfg["feature_artifacts"]:
         report["failures"].append(
             "Experiment 0B requires explicit complete feature artifact selections."
@@ -321,6 +346,7 @@ def run_preflight(
         "model_weights_loaded": False,
         "live_decision_inference": False,
         "predictive_models_fitted": False,
+        "complete_E5_artifacts_against_raw_rows": stage == "after_extraction",
     }
     report["status"] = "failed" if report["failures"] else "preflight_passed"
     return report

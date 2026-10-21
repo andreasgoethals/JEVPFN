@@ -5,21 +5,19 @@ This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18
 extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
 are excluded from experiments for text burden and 114-class feature size.
 
-**Stage: Experiment 0A setup, not full extraction.** Question version 3, dataset audits,
-CPU/storage checks and all five open-weight tokenizer audits have passed previously.
-Clef's container is now built/sealed and its A100/CUDA tensor check passed. Its model
-contract test stopped before inference because the saved token-audit report was missing.
-The replacement audit reports now cover all five tokenizers with zero overflows, but two
-overlapping jobs collided while writing counts and both failed. Duplicate-run protection
-is fixed locally; replacement job 62372655 was PENDING at 16:03 on 20 October.
-Verify its status before retrying Clef's GPU test.
-All five checkpoints were staged; only Clef/Intern's
-older native runtimes have passed model inference tests. Jev 1.13 passed three live
-local task probes and 15 synthetic sensitivity probes. A rounded-score decoder mismatch
-in the latter was repaired and saved responses revalidated without new calls.
-Its real-text diagnostics, larger dataset pilot and account limits remain pending. E5 and
-predictor runtime tests are also pending. Historical evidence is in
-[AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a new frozen 0A run will supersede it.
+**Stage: Experiment 0A setup, not full extraction.** On 21 October the resumed token
+audit completed for all five open-weight models, with zero overflows. Clef and Intern
+passed actual GPU contracts inside their containers; their redundant native environments
+were retired. Liquid's new build failed because Conda installed outside the image; the
+build now confines its environment to the image and checks that location before pip.
+Liquid, Strands, Perplexity and E5 still need successful current GPU runtime evidence.
+The exhaustive question-v3 audit passed all 18 datasets, 1,698,127 unique inputs and
+3,294,340 row/input links. Clef/Intern sensitivity probes show real prompt/option-order
+effects that require review; an interface pass is not a claim of robustness.
+Jev passed three live task probes and 15 synthetic probes. Account limits are now owner
+confirmed (80 RPS, 100,000 TPS); real-text diagnostics and the dataset pilot remain pending.
+Predictor runtime tests also remain pending. Historical evidence is in
+[AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a final frozen 0A run will supersede setup evidence.
 The owner handles Git commits/pushes. Full extraction and benchmark switches stay disabled.
 The 20 October implementation adds compact prediction stores, source/input/runtime-bound
 acceptance, prompt diagnostics and checked batching. These changes passed local synthetic
@@ -93,6 +91,11 @@ chunks across different texts; content-token weighting and row mappings are pres
 Experiment 3 additionally offers a non-text-plus-text-presence reference for all six
 predictors. It distinguishes gains from knowing that text exists from gains beyond that
 information. Analysis retains the original non-text contrast and adds this matched reference.
+An optional Experiment 3 PCA16 ablation compares E5-only features against the main PCA32
+arm in all six predictors (108 configurations / 540 outer folds). It reuses the same saved
+384-dimensional vectors and does not enable new feature extraction. Dimension is fixed
+per arm, never selected using outer-test performance. Run the plan with
+`python -m src.evaluation.campaign --control embedding_dimension`; execution stays disabled.
 
 Use five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, followed

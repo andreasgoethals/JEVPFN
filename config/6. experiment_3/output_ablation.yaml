@@ -23,7 +23,12 @@ candidate_models: [tabpfn_3_5, catboost]
 presence_control_models: [catboost, tabpfn_3_5, tabicl_v2, limix_2, kumo_tabular, linear]
 fixed_feature_mode_proposal: per_column_and_joint
 new_jev_calls_required: false
-executable_controls: [text_presence, text_statistics, permuted, retained_view]
+executable_controls: [text_presence, text_statistics, permuted, retained_view, embedding_dimension]
+embedding_dimension_ablation:
+  # Optional E5-only comparison against the existing PCA32 arm; no new encoding/calls.
+  components_per_column: [16]
+  models: [catboost, tabpfn_3_5, tabicl_v2, limix_2, kumo_tabular, linear]
+  feature_set: non_text_plus_frozen_e5
 notes: Freeze this experiment before viewing test results; reuse identical experiment-1 fits.
 
 dataset_selection:

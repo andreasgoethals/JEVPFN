@@ -84,6 +84,25 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
         cfg = load_yaml("experiment_3/output_ablation")
         semantics = load_yaml("dataset_semantics")["datasets"]
         for entry in selected_entries(load_catalog(), main):
+            dimension = cfg["embedding_dimension_ablation"]
+            for model in dimension["models"]:
+                for count in dimension["components_per_column"]:
+                    if type(count) is not int or not 0 < count < 384:
+                        raise ValueError(
+                            "Embedding ablation requires a valid integer PCA dimension"
+                        )
+                    rows.append(
+                        dict(
+                            dataset_id=entry["id"],
+                            model=model,
+                            feature_set=dimension["feature_set"],
+                            provider=None,
+                            phase="experiment_3",
+                            control="embedding_dimension",
+                            view=f"pca_{count}",
+                            pca_components=count,
+                        )
+                    )
             for model in cfg["presence_control_models"]:
                 rows.append(
                     dict(
@@ -194,7 +213,11 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         original_features(dataset)
         if arm["model"] in TEXT_MODELS
         else assemble_feature_set(
-            dataset, blocks, decision_set, selector=selector, view=arm.get("view", "main")
+            dataset,
+            blocks,
+            decision_set,
+            selector=selector,
+            view="main" if arm.get("control") == "embedding_dimension" else arm.get("view", "main"),
         )
     )
     if uses_embeddings(arm["feature_set"]):
@@ -202,6 +225,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         embedding_cfg = load_yaml("feature_creation/text_embeddings")
         embeddings = load(dataset, embedding_cfg)
+        if arm.get("control") == "embedding_dimension":
+            embedding_cfg = copy.deepcopy(embedding_cfg)
+            embedding_cfg["pca_components_per_column"] = arm["pca_components"]
         if arm["model"] not in embedding_cfg["models"]:
             raise ValueError("Predictor is not enabled for the embedding feature configurations")
         features = add_embeddings(features, embeddings)
@@ -292,11 +318,16 @@ def main():
     )
     parser.add_argument("--include-controls", action="store_true")
     parser.add_argument(
-        "--control", choices=("text_statistics", "text_presence", "permuted", "retained_view")
+        "--control",
+        choices=(
+            "text_statistics",
+            "text_presence",
+            "permuted",
+            "retained_view",
+            "embedding_dimension",
+        ),
     )
-    parser.add_argument(
-        "--view", choices=("main", "probabilities", "probabilities_plus_confidence")
-    )
+    parser.add_argument("--view", help="Retained feature view or PCA ablation name, e.g. pca_16")
     parser.add_argument("--provider", choices=tuple(load_yaml("extractors")["candidates"]))
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(

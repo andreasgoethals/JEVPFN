@@ -9,6 +9,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 from decimal import ROUND_DOWN, Decimal
 
 import yaml
@@ -21,6 +22,41 @@ from src.jev.hosted import ReviewedContextEnvelope
 from src.utils import paths
 from src.utils.config import _merge, load_yaml
 from src.utils.serialization import write_json
+
+
+def positive_number(text, *, currency=False, integer=False):
+    """Parse explicit decimal notation; accept USD decoration and grouped thousands."""
+    value = text.strip()
+    if currency:
+        value = re.sub(r"^(?:USD\s*|\$\s*)", "", value, flags=re.IGNORECASE)
+        value = re.sub(r"\s*USD$", "", value, flags=re.IGNORECASE)
+    if re.fullmatch(r"[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?", value):
+        value = value.replace(",", "")
+    if not re.fullmatch(r"(?:\d+(?:\.\d*)?|\.\d+)", value):
+        raise ValueError("Use a positive number with a decimal point, for example 0.042.")
+    number = Decimal(value)
+    if not number.is_finite() or number <= 0 or (integer and number != number.to_integral_value()):
+        raise ValueError(
+            "Enter a positive whole number." if integer else "Enter a positive number."
+        )
+    result = int(number) if integer else float(number)
+    if not integer and (result == float("inf") or result == 0):
+        raise ValueError("Number is outside the supported range.")
+    return result
+
+
+def prompt_number(label, *, currency=False, integer=False, default=None):
+    while True:
+        suffix = f" [{default}]" if default is not None else ""
+        raw = input(f"{label}{suffix}: ").strip()
+        try:
+            return positive_number(
+                str(default) if not raw and default is not None else raw,
+                currency=currency,
+                integer=integer,
+            )
+        except ValueError as exc:
+            print(str(exc))
 
 
 def account_check(client_factory=None):
@@ -61,6 +97,7 @@ def pilot_overlay(
     max_tokens,
     context_evidence,
     account_evidence,
+    context_mode="reviewed_byte_envelope",
 ):
     """Only verified user-supplied bounds; no inferred tokenizer, rates or currency parity."""
     if (
@@ -84,8 +121,10 @@ def pilot_overlay(
         "dataset_budget_allocations_usd": {e["id"]: float(each) for e in datasets},
         "usd_per_eur": usd_per_eur,
         "exchange_rate_evidence": exchange_evidence,
-        "requests_per_second": rps,
+        "requests_per_second": min(rps, 0.2),  # Slow pilot policy; one dispatch per five seconds.
         "input_tokens_per_second": tps,
+        "verified_account_requests_per_second": rps,
+        "verified_account_input_tokens_per_second": tps,
         "workers": 1,
         "account_limits_verified": True,
         "account_limits_evidence": account_evidence,
@@ -94,11 +133,17 @@ def pilot_overlay(
         "price_verified": True,
         "max_billed_input_tokens_per_attempt": max_tokens,
         "context_envelope": {
+            "mode": context_mode,
             "verified": True,
             "model": base["jev"]["model"],
             "max_request_utf8_bytes": max_bytes,
             "max_billed_input_tokens": max_tokens,
             "evidence": context_evidence,
+            **(
+                {"per_question_context_tokens": 32000}
+                if context_mode == "provider_enforced"
+                else {}
+            ),
         },
     }
     overlay = {"extends": "feature_creation", "live_extraction": live}
@@ -144,19 +189,34 @@ def main():
         )
     print("Enter verified values only. Do not guess. Ctrl+C stops without writing anything.")
     base = load_yaml("feature_creation")
-    price = float(input("Verified USD price per million input tokens: "))
+    print("Organization limits: https://console.typesafe.ai/rate-limits")
+    print("The 32 MiB HTTP body limit is NOT a verified token-context byte ceiling.")
+    print(
+        "Context is enforced by the API: 32k state+question / 64k request tokens; overlong inputs stop on HTTP 400."
+    )
+    price = prompt_number("Verified USD price per million input tokens", currency=True)
     if price != base["cost"]["input_price_per_million"]:
         raise ValueError("Published price differs; review the pinned price before continuing")
     overlay = pilot_overlay(
         base,
-        usd_per_eur=float(input("Conservative USD per EUR, allowing payment fees: ")),
+        usd_per_eur=prompt_number("Conservative USD per EUR, allowing payment fees", currency=True),
         exchange_evidence=input("Exchange-rate source/date and fee allowance: "),
-        rps=float(input("Verified organization requests per second: ")),
-        tps=float(input("Verified organization input tokens per second: ")),
-        account_evidence=input("Account limits source/date (no credentials): "),
-        max_bytes=int(input("Provider-confirmed safe complete-request UTF-8 byte ceiling: ")),
-        max_tokens=int(input("Provider-confirmed maximum billed input tokens per attempt: ")),
-        context_evidence=input("Context/billing-bound source or confirmation/date: "),
+        rps=prompt_number(
+            "Verified organization requests per second",
+            default=base["throughput_review"].get("account_requests_per_second"),
+        ),
+        tps=prompt_number(
+            "Verified organization input tokens per second",
+            default=base["throughput_review"].get("account_input_tokens_per_second"),
+        ),
+        account_evidence=input(
+            "Account limits source/date (Enter uses recorded confirmation): "
+        ).strip()
+        or base["throughput_review"].get("account_limits_evidence", ""),
+        max_bytes=32 * 1024 * 1024,
+        max_tokens=64000,
+        context_mode="provider_enforced",
+        context_evidence="https://docs.typesafe.ai/models and https://docs.typesafe.ai/api/errors checked 2026-10-21: default context limits; HTTP 400 max_tokens_exceeded; 32 MiB body ceiling. No long-context header, local token-count claim or byte-to-token conversion.",
     )
     with target.open("x", encoding="utf-8", newline="\n") as handle:
         yaml.safe_dump(overlay, handle, sort_keys=False)

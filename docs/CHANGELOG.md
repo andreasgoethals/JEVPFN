@@ -1,5 +1,24 @@
 # Changelog
 
+## 21-10-2026
+
+- Fixed pilot numeric input (`$0.042`, USD notation, grouped thousands), recorded owner-confirmed
+  80 RPS / 100k TPS, and replaced the need for an unpublished byte/token bound with documented
+  server context rejection plus conservative billing reservations. Pilot pacing remains slow;
+  full extraction stays disabled.
+- Added optional PCA16 E5-only arms for all six predictors, paired with main PCA32 results.
+  Added complete E5-cache validation to 0B and actual predictor fixture paths for PCA16/32
+  and combined embeddings/decision features. No new extraction or model training was run.
+- Diagnosed Liquid build 62378491: Conda installed into host DATA `conda_envs/env1`, leaving
+  no image Python. Added an image-local environment override, a pre-pip interpreter check,
+  and guarded cleanup of one unsealed image. No environment or output was deleted locally.
+- Rechecked all 18 saved question stores and recorded current token/Clef/Intern evidence.
+  Input questions and both fingerprinted tokenizer modules are unchanged. No paid request,
+  remote job, submodule update, commit or push was performed.
+- Local validation: 698 tests passed, two skipped (PyTorch unavailable locally and a
+  POSIX-only link test). Lint, dependency consistency, 18 shell syntax checks and all
+  three pinned-library checks passed. The Liquid repair still requires a VSC build/test.
+
 ## 20-10-2026
 
 - Reproduced the Jev robustness decoder failure from its saved response (score 7.99

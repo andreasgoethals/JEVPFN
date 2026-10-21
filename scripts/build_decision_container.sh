@@ -89,7 +89,8 @@ work,repo,provider,root=sys.argv[1:]
 q=shlex.quote
 Path(work,'environment.yaml').write_text('channels: [conda-forge]\ndependencies: [python=3.12, pip]\n',encoding='utf-8')
 extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','strands':'strands','perplexity':'token-audit'}[provider]
-lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'cd {q(repo)}',
+prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); assert Path(sys.prefix).resolve()==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
+lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'python -I -c {q(prefix_check)}', f'cd {q(repo)}',
        f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}']
 if provider=='perplexity':
     requirements=Path(root,'JEVPFN/checkpoints/decision_models/perplexity/requirements.txt')
@@ -101,7 +102,7 @@ else:
 lines+=['python -m pip check',f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
 Path(work,'post_install.sh').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 PY
-    conda-containerize new --prefix "$JEVPFN_BUILD_DEST" --post-install "$JEVPFN_BUILD_WORK/post_install.sh" "$JEVPFN_BUILD_WORK/environment.yaml"
+    conda-containerize new --prefix "$JEVPFN_BUILD_DEST" --pre-install "$JEVPFN_BUILD_REPO/scripts/container_conda_pre_install.sh" --post-install "$JEVPFN_BUILD_WORK/post_install.sh" "$JEVPFN_BUILD_WORK/environment.yaml"
 fi
 cd "$JEVPFN_BUILD_REPO"
 if [[ "$JEVPFN_BUILD_MODE" == wrap ]]; then

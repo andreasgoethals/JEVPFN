@@ -277,9 +277,43 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
     return result
 
 
+def discard_unsealed(provider, *, apply=False, writers_stopped=False):
+    """Remove only one explicitly selected failed image, never a sealed runtime or weights."""
+    folder = reject_links(container_dir(provider))
+    paths.require_project_output(folder)
+    if (folder / MARKER).exists() or (folder / MARKER).is_symlink():
+        raise ValueError("A sealed container cannot be discarded as a failed build")
+    if folder.exists() and not folder.is_dir():
+        raise ValueError("Container destination is not a directory")
+    result = {
+        "action": "discard_unsealed_container",
+        "provider": provider,
+        "path": str(folder),
+        "exists": folder.exists(),
+        "applied": False,
+        "preserved": ["weights", "native_environments", "data", "outputs", "other_containers"],
+    }
+    if not apply:
+        return result
+    if not writers_stopped:
+        raise ValueError("Confirm writers stopped before removing a failed build")
+    require_idle_vsc()
+    if folder.is_dir():
+        if folder.is_mount() or any(p.is_mount() for p in folder.rglob("*") if not p.is_symlink()):
+            raise ValueError("Container contains a mount; removal refused")
+        # Recheck after scheduler inspection; a completed build must never be removed.
+        if (folder / MARKER).exists():
+            raise ValueError("Container was sealed during inspection")
+        shutil.rmtree(folder)
+    result["applied"] = True
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("seal", "verify", "retire", "inventory"))
+    parser.add_argument(
+        "action", choices=("seal", "verify", "retire", "inventory", "discard-unsealed")
+    )
     parser.add_argument("provider", choices=RUNTIMES, nargs="?")
     parser.add_argument("--wrapped-existing", action="store_true")
     parser.add_argument("--shell", action="store_true")
@@ -298,6 +332,10 @@ def main():
         result = seal(args.provider, wrapped_existing=args.wrapped_existing)
     elif args.action == "verify":
         result = verify(args.provider)
+    elif args.action == "discard-unsealed":
+        result = discard_unsealed(
+            args.provider, apply=args.apply, writers_stopped=args.writers_stopped
+        )
     else:
         result = retire(
             args.provider,

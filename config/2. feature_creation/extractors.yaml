@@ -20,7 +20,7 @@ candidates:
     published_requests_per_second: null  # Current documentation: organization-specific.
     published_input_tokens_per_second: null
     limits_are_dynamic: true
-    account_limits_verified: false
+    account_limits_verified: true  # Owner's console check, 2026-10-21; see feature_creation throughput_review.
     reference: https://docs.typesafe.ai/api
   liquid:
     enabled: false
