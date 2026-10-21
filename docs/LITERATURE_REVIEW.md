@@ -72,8 +72,8 @@ CatBoost. [Paper release](https://github.com/alanarazi7/MulTaBench/tree/paper_ve
 The pinned paper result tables distinguish frozen joint representations (`all`) from
 fine-tuned representations (`ft`). A read-only inspection of the core TEXT tables and
 `more_baselines/` identifies strong TabICLv2, TabM, AutoGluon-MM and TabSTAR results.
-AutoGluon and TabM are excluded from this project's roster by owner decision; these published
-results remain literature context only. Published ranks do not isolate the benefit of decision-derived features.
+TabM remains excluded. On 21 October the owner added AG-MM as the third standard
+original-text reference, alongside TabSTAR and ConTextTab. Published ranks do not isolate the benefit of decision-derived features.
 Older TabPFN-v2/v2.5 results cover only 18 of the 20 text datasets in the frozen comparison;
 coverage must accompany any rank. Rank within each dataset before averaging; never average
 raw AUC and R² together or pool text and image leaderboards. Published CSVs contain run
@@ -98,26 +98,43 @@ closer in vector space; a frozen encoder makes no task-specific probability pred
 E5-small-v2's card declares MIT weights. Alternatives include
 [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) and
 [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5); these are background
-references, not additions to the selected encoder roster.
+references, not additions to the selected encoder roster. E5-small is a reproducible and inexpensive
+control used in MulTaBench, not a claim about today's best encoder. MulTaBench v2 reports
+improved downstream performance from E5-large and studies PCA15/30/60 and an unreduced
+subset. Qwen3 Embedding (Zhang et al., 2025) reports strong MTEB results; these measure
+embedding tasks and do not establish superiority on our 18 tables. The owner selected
+E5-large-v2 and Qwen3-Embedding-0.6B as additional encoders. Both supply downloadable
+weights: E5-large's card declares MIT and Qwen's Apache-2.0. Immutable pins live in the
+encoder configuration, rather than duplicated here.
+[Qwen3 Embedding paper](https://arxiv.org/abs/2506.05176),
+[E5-large card](https://huggingface.co/intfloat/e5-large-v2),
+[Qwen 0.6B card](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
 
-JEVPFN's conventional control pins E5-small-v2 to
-`ffb93f3bd4047442299a41ebb6fa998a38507c52`, uses the card's `query: ` prefix for
-classification/features, attention-mask mean pooling and L2 normalization. Its long-text
-extension uses nonoverlapping token chunks, weighting chunk vectors by content-token count
-before final normalization; this is our declared coverage policy, not a claim to reproduce
-the MulTaBench encoder exactly. No source token is silently discarded. Full 384-dimensional
-vectors are reusable; per-column PCA is fitted only on the current training partition,
-including each inner threshold-selection fold. All six fixed predictors compare E5 alone,
-decision features alone and their combination on identical folds. Model inference remains to
-be verified; the combinations test complementarity without assuming it in advance.
-The fixed 32 components per column are a resource choice, not a literature-established
-optimum. Training-fold explained variance is recorded; it measures compression, not
-target relevance. Full vectors remain saved, so a separately agreed dimensionality
-ablation would not require new E5 inference. The optional PCA16-versus-PCA32 E5-only
-ablation is now configured for all six predictors, separately from the main eight arms.
-MulTaBench v2 studies PCA15/30/60; this motivates sensitivity analysis but does not
-establish that 16 or 32 is optimal. Any supervised choice of dimensionality
-must be made inside training folds, never from the outer test scores.
+JEVPFN uses the E5 `query: ` feature prefix, masked mean pooling and L2 normalization.
+Qwen uses its documented last-token pooling without a query instruction for these
+unconditional text vectors. Long text uses nonoverlapping chunks, content-token-weighted
+vector aggregation and normalization. This project policy covers all source tokens but
+is not guaranteed equivalent to full-window encoding or the MulTaBench implementation.
+The Qwen chunk size is a computational setting below its native context window.
+
+Per-column PCA32 and joint PCA256/128/64/32/16/8 are prespecified comparisons, not
+assumed optima. Per-column PCA keeps each column's representation separate but multiplies
+width by the number of text columns. Joint PCA limits total width and can capture
+cross-column covariance, but high-variance columns may dominate. Using the same K for
+both scopes changes total width (text-column count times K versus K); interpret it as
+a compression/grouping tradeoff, not an isolated grouping effect. Both are unsupervised;
+explained variance is not predictive relevance. Only training rows fit PCA or imputation,
+including each inner threshold-selection fold. Experiment 2 compares encoders without
+decision features; Experiment 3 compares native-text models. Combining selected winners
+belongs only to descriptive/exploratory Experiment 5 because the same test outcomes
+influence selection. More configurations do not provide independent evidence.
+
+The pinned Kumo default recipe adds count encodings for categorical columns with more
+than 50 categories, then selects the first 500 features. JEVPFN refuses such feature
+loss instead of treating it as a fair all-feature comparison. This is the selected
+recipe's limitation, not proof of an architectural maximum.
+[Pinned recipe](https://github.com/NVIDIA/structured-data-models/blob/bd2d55db104679393fcd6afe13305f37e40b5467/sdm/models/kumo/tabular/recipe.py),
+[count encoding](https://github.com/NVIDIA/structured-data-models/blob/bd2d55db104679393fcd6afe13305f37e40b5467/sdm/processing/categorical/count.py)
 
 Non-text-versus-text-augmented gains include text availability as well as content.
 The additional presence-only reference for every main predictor separates these effects.
@@ -260,12 +277,21 @@ Repository review on 21 October: TabSTAR code uses MIT; SAP's repository uses Ap
 for code but explicitly limits checkpoint use to research under inherited data conditions.
 These are locally runnable academic baselines, not interchangeable licence promises.
 MulTaBench v2 does not identify them as its two strongest methods: it reports ConTextTab
-below TabSTAR and AutoGluon-MM on its text analysis. Selecting these two is a scoped
-comparison of supervised adaptation and semantic in-context prediction; AutoGluon-MM
-remains excluded by the owner's compute constraint. Do not call this exhaustive SOTA
+below TabSTAR and AutoGluon-MM on its text analysis. All three are now selected, comparing
+supervised adaptation with semantic in-context prediction. This is not exhaustive SOTA
 coverage. [MulTaBench v2, text results and PCA ablations](https://arxiv.org/html/2605.10616v2)
 
-TabSTAR and ConTextTab provide original-text controls with language encoders; their supervised
+**AG-MM** uses AutoGluon's MultiModalPredictor, not a TabularPredictor model search.
+The fixed JEVPFN recipe is `medium_quality`, ELECTRA-base text encoding, numerical and
+categorical encoders and a fusion network, with HPO and model ensembling disabled.
+Official MulTaBench text annotations override automatic type detection. Internal validation
+is drawn only from the current training partition. Pinned 1.6.1 requires Transformers
+below 5.15, so it must not share E5's 5.17 runtime. Offline checkpoint assets and actual
+GPU compatibility remain 0B requirements. E2E in MulTaBench means native raw-text input
+to the prediction system; it does not mean every such model fine-tunes on each task.
+[Publisher fit API](https://auto.gluon.ai/stable/api/autogluon.multimodal.MultiModalPredictor.fit.html)
+
+TabSTAR, ConTextTab and AG-MM provide original-text controls with language encoders; their supervised
 adaptation and training-context policies must be distinguished from cached label-free features.
 
 Source audit on 13 October: TabSTAR `BaseTabSTAR.fit` performs supervised adaptation and
@@ -419,7 +445,7 @@ F1 and RMSE. Small task families (here only three binary datasets) have weak inf
 [Demšar (2006)](https://www.jmlr.org/papers/v7/demsar06a.html)
 
 TabArena highlights standardized evaluation and explicit treatment of tuning/ensembling budgets.
-Its methodology is relevant even though AutoGluon execution is excluded here. A checkpoint,
+Its methodology is relevant even though JEVPFN does not run a broad AutoML search. A checkpoint,
 an estimator preset, a fine-tuned model and a large ensemble are different comparison units.
 Training rows exposed to the wrapper and effective in-context rows must both be recorded;
 silently lowering only a failing model's context changes the comparison.

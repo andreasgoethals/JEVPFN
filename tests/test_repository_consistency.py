@@ -41,13 +41,18 @@ def test_active_rosters_and_provider_pins_agree():
 
 
 def test_execution_catalog_and_metric_version_match_implementation():
-    from src.evaluation.features import MAIN_FEATURE_SETS
-
-    assert tuple(load_yaml("experiment_1/main")["candidate_combinations"]) == MAIN_FEATURE_SETS
-    assert (
-        tuple(load_yaml("experiment_4/decision_models")["candidate_combinations"])
-        == MAIN_FEATURE_SETS
+    from src.evaluation.features import (
+        DECISION_FEATURE_SETS,
+        EMBEDDING_FEATURE_SETS,
+        NATIVE_FEATURE_SETS,
     )
+
+    for config, combinations in (
+        ("experiment_1/main", DECISION_FEATURE_SETS),
+        ("experiment_2/embeddings", EMBEDDING_FEATURE_SETS[:1]),
+        ("experiment_3/native_text", NATIVE_FEATURE_SETS[:1]),
+    ):
+        assert tuple(load_yaml(config)["candidate_combinations"]) == combinations
     assert tuple(load_yaml("feature_creation/text_embeddings")["models"]) == MAIN_MODELS
     assert set(load_yaml("experiment_1/models")["models"]) == set(MAIN_MODELS + TEXT_MODELS)
     assert (

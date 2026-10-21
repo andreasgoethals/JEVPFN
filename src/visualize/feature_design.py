@@ -9,11 +9,67 @@ from src.visualize import style
 MODE_LABELS = {"per_column": "Per-column", "joint": "Joint", "per_column_and_joint": "Both"}
 
 
+def pca_width_figure(table):
+    """Absolute model-input widths; axes/labels remain outside the cells."""
+    columns = [
+        "per_column_32",
+        "joint_256",
+        "joint_128",
+        "joint_64",
+        "joint_32",
+        "joint_16",
+        "joint_8",
+    ]
+    values = table[columns].to_numpy()
+    fig, ax = plt.subplots(figsize=style.figsize(ratio=1.3))
+    from matplotlib.colors import LinearSegmentedColormap
+
+    cmap = LinearSegmentedColormap.from_list("widths", [style.BACKGROUND_COLOR, style.MEDIAN_COLOR])
+    ax.imshow(values, cmap=cmap, vmin=0, vmax=500, aspect="auto")
+    ax.set_xticks(
+        range(7),
+        [
+            "Per-col.\n32",
+            "Joint\n256",
+            "Joint\n128",
+            "Joint\n64",
+            "Joint\n32",
+            "Joint\n16",
+            "Joint\n8",
+        ],
+        fontsize=7,
+    )
+    ax.set_yticks(range(len(table)), table.dataset, fontsize=7)
+    ax.tick_params(length=0)
+    for (i, j), value in np.ndenumerate(values):
+        ax.text(
+            j,
+            i,
+            str(value),
+            ha="center",
+            va="center",
+            fontsize=7,
+            color=style.BACKGROUND_COLOR if value > 300 else style.TEXT_COLOR,
+        )
+    ax.set_title("Total predictor input columns", fontsize=10)
+    return (
+        fig,
+        "pca_widths",
+        (
+            "Experiment 2 column counts, identical for all three encoders. Each cell includes "
+            "all original non-text columns, the PCA components and one missing-text indicator "
+            "per text column. Darker cells have more columns on a fixed 0–500 scale. "
+            "Kumo may additionally encode high-cardinality categorical counts; runtime checks "
+            "refuse silent feature removal. Decision features are not included in Experiment 2."
+        ),
+    )
+
+
 def benchmark_configurations_figure(table):
     """Binary design matrix: no performance measurements or invented results."""
     from matplotlib.colors import ListedColormap
 
-    columns = ["Non-text", "E5 / PCA", "Joint", "Per-column"]
+    columns = ["Non-text", "Embedding / PCA", "Joint", "Per-column"]
     values = table[columns].to_numpy(dtype=int)
     fig, ax = plt.subplots(figsize=style.figsize(ratio=style.AUDIT_RATIO))
     ax.imshow(
@@ -39,18 +95,19 @@ def benchmark_configurations_figure(table):
             va="center",
             color=style.BACKGROUND_COLOR if included else style.TEXT_COLOR,
         )
-    ax.set_title("Eight feature configurations for each of six predictors")
+    ax.axhline(3.5, color=style.TEXT_COLOR, linewidth=1.5)
+    ax.set_title("Feature families in Experiments 1 and 2")
     return (
         fig,
         "benchmark_feature_configurations",
         (
-            "Feature inclusion in the eight main benchmark configurations. Non-text includes all "
-            "original numerical and categorical columns. E5 is encoded separately per text column, "
-            "with PCA fitted only on each training partition (32 output columns per text column, "
-            "plus a missingness flag). Joint and per-column decision features use one extractor "
-            "at a time. The two configurations without decision features are fitted once per "
-            "dataset and predictor; the other six are repeated for each selected extractor. "
-            "TabSTAR and ConTextTab are separate references using all original features."
+            "Feature inclusion for the six fixed predictors. The first four rows belong to "
+            "Experiment 1; the last row belongs to Experiment 2, repeated for each encoder and "
+            "per-column PCA32 or joint PCA256/128/64/32/16/8. PCA is fitted on CPU using only training partitions. Non-text includes "
+            "numerical and categorical columns. Joint and per-column decision features use one "
+            "extractor at a time; all six extractors are included. Each baseline is fitted once "
+            "per applicable dataset/predictor/encoder/PCA setting. Experiment 3 uses original text. "
+            "Winner-selected combinations belong only to exploratory Experiment 5."
         ),
     )
 
@@ -93,9 +150,7 @@ def input_design_figure():
                 xytext=(start, y),
                 arrowprops={"arrowstyle": "->", "color": style.TOTAL_COLOR},
             )
-    ax.set_title(
-        "Separate and joint text inputs"
-    )
+    ax.set_title("Separate and joint text inputs")
     ax.text(
         0.5,
         0.02,

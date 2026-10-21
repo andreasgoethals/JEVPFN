@@ -18,4 +18,4 @@ export JEVPFN_STAGING_ROOT="${2:-/lustre1/project/stg_00211}"
 export JEVPFN_CONDA_ENV="${1:-$JEVPFN_STAGING_ROOT/JEVPFN/environments/cloudflare}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.embedding_contracts --execute
+python -m src.cluster.monitor -- python -m src.cluster.embedding_contracts --execute --encoder "${3:-e5_small_v2}"

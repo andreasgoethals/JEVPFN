@@ -1,0 +1,9 @@
+# One global extractor/mode for exploratory Experiment 5; filled after owner review.
+# Choosing it from Experiment 1 test outcomes makes follow-ups exploratory.
+provider: null
+mode: null  # joint, per_column, or both
+evidence: null  # path to the reviewed Experiment 1 results file
+evidence_sha256: null
+rationale: null  # include metric(s), aggregation and tie-breaking used
+inference_status: exploratory_post_selection
+embedding: null  # one reviewed {encoder, scope, components} from Experiment 2

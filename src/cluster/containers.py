@@ -31,6 +31,7 @@ PREDICTORS = (
     "linear",
     "tabstar",
     "contexttab",
+    "ag_mm",
 )
 RUNTIMES = (*SELF_HOSTED, *PREDICTORS)
 

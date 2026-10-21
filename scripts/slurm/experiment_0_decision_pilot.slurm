@@ -26,4 +26,4 @@ fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.preflight --gpu --stage before_extraction
-python -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute
+python -m src.cluster.monitor -- python -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute

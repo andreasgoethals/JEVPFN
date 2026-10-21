@@ -131,19 +131,19 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
         estimator_factory("tabpfn_3_5", dataset.metadata, {})
 
 
-def test_plan_eight_arms_six_engines_two_original_text_baselines():
+def test_plan_eight_arms_six_engines_three_original_text_baselines():
     plan = benchmark_plan()
     assert len({a["dataset_id"] for a in plan}) == 18
-    assert len(plan) == 18 * (6 * (2 + 6 * 6) + 2)
+    assert len(plan) == 4374
     for model in MAIN_MODELS:
         row = [a for a in plan if a["dataset_id"] == plan[0]["dataset_id"] and a["model"] == model]
-        assert len([a for a in row if a["provider"] is None]) == 2
+        assert len([a for a in row if a["provider"] is None]) == 22
         for provider in load_yaml("extractors")["candidates"]:
-            assert len([a for a in row if a["provider"] == provider]) == 6
+            assert len([a for a in row if a["provider"] == provider]) == 3
     text = [a for a in plan if a["model"] in TEXT_MODELS]
-    assert len(text) == 36 and {a["feature_set"] for a in text} == {"original_features"}
-    assert all(a["provider"] is None for a in text)
-    assert "autogluon" not in json.dumps(plan).lower()
+    assert len(text) == 54
+    assert len([a for a in text if a["provider"] is None]) == 54
+    assert "ag_mm" in {a["model"] for a in text}
     with pytest.raises(RuntimeError, match="disabled"):
         run_arm(plan[0], allow_model_runs=True)
 
@@ -200,7 +200,15 @@ def test_constructor_contracts_and_full_context(monkeypatch, tmp_path):
     output_one = calls[-1]["output_dir"]
     _backend("tabstar", "binary_classification", settings, encoder, 9000)
     assert calls[-1]["output_dir"] != output_one
-    assert "5. experiment_2" in output_one
+    assert "6. experiment_3" in output_one
+    _backend(
+        "tabstar",
+        "binary_classification",
+        settings | {"output_phase": "experiment_0"},
+        encoder,
+        9000,
+    )
+    assert "3. experiment_0" in calls[-1]["output_dir"]
     checkpoint.write_bytes(b"changed checkpoint")
     with pytest.raises(ValueError, match="SHA256"):
         _backend("tabicl_v2", "binary_classification", settings, encoder, 9000)

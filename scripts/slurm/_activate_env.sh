@@ -9,6 +9,8 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="$OMP_NUM_THREADS"
 export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export NUMEXPR_NUM_THREADS="$OMP_NUM_THREADS"
+export BLIS_NUM_THREADS="$OMP_NUM_THREADS"
+export OMP_MAX_ACTIVE_LEVELS=1
 # Compiler/runtime caches can also be large. Prefer disposable scratch, then PROJECT;
 # never use the small personal DATA allocation as a fallback for these caches.
 JEVPFN_RUNTIME_ROOT="${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-}}"

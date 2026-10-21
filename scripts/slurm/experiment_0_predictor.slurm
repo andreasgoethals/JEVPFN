@@ -5,7 +5,7 @@
 #SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=8
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=56000M
 #SBATCH --time=04:00:00
@@ -18,4 +18,4 @@ export JEVPFN_CONDA_ENV="${2:?Pass the isolated predictor environment prefix}"
 export JEVPFN_STAGING_ROOT="${3:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.predictor_contracts --model "$JEVPFN_MODEL" --execute
+python -m src.cluster.monitor -- python -m src.cluster.predictor_contracts --model "$JEVPFN_MODEL" --execute

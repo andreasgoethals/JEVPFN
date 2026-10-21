@@ -89,12 +89,13 @@ def export_bundle() -> Path:
                 add(copied, f"data/jev_cache/{source.name}", "cache")
             from src.data.text_embeddings import validate as validate_embeddings
 
-            for source in sorted(paths.jev_cache_path("text_embeddings").glob("*.sqlite3")):
+            for source in sorted(paths.jev_cache_path("text_embeddings").rglob("*.sqlite3")):
                 with file_lock(source.with_suffix(".lock"), timeout=1):
-                    copied = snapshot(source, Path(scratch) / "embeddings" / source.name)
+                    relative = source.relative_to(paths.jev_cache_path("text_embeddings"))
+                    copied = snapshot(source, Path(scratch) / "embeddings" / relative)
                 if validate_embeddings(copied)["dataset_id"] != source.stem:
                     raise ValueError("Embedding cache filename and identity differ")
-                add(copied, f"data/text_embeddings/{source.name}", "embedding_cache")
+                add(copied, f"data/text_embeddings/{relative.as_posix()}", "embedding_cache")
             for tier, output_root in enumerate(
                 dict.fromkeys([paths.large_outputs_dir(), paths.outputs_dir()])
             ):
@@ -113,6 +114,7 @@ def export_bundle() -> Path:
                             "experiment_2",
                             "experiment_3",
                             "experiment_4",
+                            "experiment_5",
                         )
                     }:
                         continue
@@ -247,7 +249,8 @@ def import_bundle(bundle: Path) -> dict:
                     folder = "jev_cache" if record["kind"] == "cache" else "text_embeddings"
                     if (
                         relative.parts[:2] != ("data", folder)
-                        or len(relative.parts) != 3
+                        or len(relative.parts)
+                        not in ((3, 4) if record["kind"] == "embedding_cache" else (3,))
                         or relative.suffix != ".sqlite3"
                     ):
                         raise ValueError("Invalid cache destination")
@@ -274,9 +277,19 @@ def import_bundle(bundle: Path) -> dict:
                 if record["kind"] == "cache" and validate_cache(target) != relative.stem:
                     raise ValueError("Cache dataset and filename differ")
                 if record["kind"] == "embedding_cache":
+                    from src.data.text_embeddings import encoder_id_for_model
                     from src.data.text_embeddings import validate as validate_embeddings
 
-                    if validate_embeddings(target)["dataset_id"] != relative.stem:
+                    recipe = validate_embeddings(target)
+                    encoder_id = encoder_id_for_model(recipe["encoder"]["model"])
+                    expected_parts = (
+                        ("data", "text_embeddings")
+                        + (() if encoder_id == "e5_small_v2" else (encoder_id,))
+                        + (relative.name,)
+                    )
+                    if relative.parts != expected_parts:
+                        raise ValueError("Embedding namespace differs from its model")
+                    if recipe["dataset_id"] != relative.stem:
                         raise ValueError("Embedding dataset and filename differ")
                 prepared.append((record, target, relative))
             if set(names) != expected:
@@ -299,9 +312,17 @@ def import_bundle(bundle: Path) -> dict:
                     )
                 )
             elif record["kind"] == "embedding_cache":
-                from src.data.text_embeddings import cache_path, merge
+                from src.data.text_embeddings import (
+                    cache_path,
+                    encoder_id_for_model,
+                    merge,
+                    validate,
+                )
 
-                report["embedding_caches"].append(merge(source, cache_path(relative.stem)))
+                encoder_id = encoder_id_for_model(validate(source)["encoder"]["model"])
+                report["embedding_caches"].append(
+                    merge(source, cache_path(relative.stem, {"encoder_id": encoder_id}))
+                )
             else:
                 destination = paths.outputs_dir().joinpath(*relative.parts[1:])
                 # Refuse pre-existing symlink parents pointing outside the local output root.

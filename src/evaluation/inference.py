@@ -47,6 +47,8 @@ def dataset_differences(paired):
     if paired.empty:
         return pd.DataFrame(columns=GROUP + ["dataset_id", "mean_difference", "defined_folds"])
     keys = GROUP + ["dataset_id", "split_id"]
+    if "inference_status" in paired:
+        keys += ["inference_status"]
     if paired.duplicated(keys + ["outer_fold"]).any():
         raise ValueError("Duplicate fold comparison; choose one campaign")
     result = (
@@ -88,6 +90,9 @@ def across_datasets(datasets):
                 else None,
                 "power_note": "Ideal lower bound before multiplicity correction; ties/zeros reduce information. Three binary datasets cannot establish p < .05 using this exact test.",
                 "interpretation": "Descriptive; positive is better only for higher-is-better metrics. Raw magnitudes with dataset-specific units are not pooled.",
+                "inference_status": ",".join(sorted(group.inference_status.unique()))
+                if "inference_status" in group
+                else "prespecified",
             }
         )
     return pd.DataFrame(records)
@@ -119,6 +124,10 @@ def confirmatory_tests(datasets, plan):
             raise ValueError("Duplicate planned statistical contrast")
         identities.add(identity)
         chosen = datasets.loc[np.logical_and.reduce([datasets[k].eq(v) for k, v in keys.items()])]
+        if "inference_status" in chosen and not chosen.inference_status.eq("prespecified").all():
+            raise ValueError(
+                "Post-selection exploratory combinations cannot enter confirmatory tests"
+            )
         expected = contrast["datasets"]
         if (
             len(set(expected)) != len(expected)

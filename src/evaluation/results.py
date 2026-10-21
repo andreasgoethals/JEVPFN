@@ -16,7 +16,7 @@ from src.utils import paths
 from src.utils.serialization import digest, write_json
 
 
-def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
+def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_5")):
     rows = []
     for phase in phases:
         legacy = [
@@ -41,6 +41,21 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
                     "feature_set": recipe["feature_set"],
                     "feature_artifact_ids": json.dumps(recipe["feature_artifact_ids"]),
                     "provider": (recipe.get("representation_recipe") or {}).get("provider"),
+                    "inference_status": (recipe.get("representation_recipe") or {}).get(
+                        "inference_status", "prespecified"
+                    ),
+                    "encoder": (
+                        (recipe.get("representation_recipe") or {}).get("embedding") or {}
+                    ).get("encoder_id"),
+                    "pca_components": (
+                        (recipe.get("representation_recipe") or {}).get("embedding") or {}
+                    ).get("pca_components_per_column"),
+                    "pca_scope": (
+                        (recipe.get("representation_recipe") or {}).get("embedding") or {}
+                    ).get("pca_scope"),
+                    "embedding_recipe_id": digest(
+                        (recipe.get("representation_recipe") or {}).get("embedding")
+                    ),
                     "decision_recipe_id": digest(
                         {
                             k: v
@@ -48,7 +63,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
                                 recipe.get("representation_recipe")
                                 or {"legacy_artifacts": recipe["feature_artifact_ids"]}
                             ).items()
-                            if k != "embedding"
+                            if k not in {"embedding", "selection", "inference_status"}
                         }
                     ),
                     # A representation recipe is shared across datasets; row artifact IDs are not.
@@ -119,6 +134,11 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
         "feature_set",
         "feature_artifact_ids",
         "provider",
+        "inference_status",
+        "embedding_recipe_id",
+        "encoder",
+        "pca_components",
+        "pca_scope",
         "decision_recipe_id",
         "comparison_id",
         "split_id",
@@ -143,7 +163,10 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
     ]
     if baseline.duplicated(keys).any():
         raise ValueError("Multiple baseline recipes match; select one campaign before comparison")
-    augmented = chosen.loc[~chosen.feature_set.isin(["non_text", "original_features"])]
+    augmented = chosen.loc[
+        ~chosen.feature_set.isin(["non_text", "original_features"])
+        & ~chosen.feature_set.str.startswith("original_features")
+    ]
     paired = augmented.merge(
         baseline.rename(columns={"value": "non_text_value"}),
         on=keys,
@@ -156,7 +179,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
     paired["difference"] = paired.difference_from_non_text
     presence_name = "non_text_plus_presence__text_presence__main"
     presence = chosen.loc[
-        chosen.phase.eq("experiment_3") & chosen.feature_set.eq(presence_name),
+        chosen.phase.eq("experiment_5") & chosen.feature_set.eq(presence_name),
         keys + ["value"],
     ]
     if presence.duplicated(keys).any():
@@ -172,17 +195,21 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
         compared["difference"] = compared.value - compared.reference_value
         paired = pd.concat([paired, compared], ignore_index=True)
     embedding = chosen.loc[
-        (chosen.phase == "experiment_1") & chosen.feature_set.eq(EMBEDDING_BASELINE),
-        keys + ["value"],
+        (chosen.phase == "experiment_2") & chosen.feature_set.eq(EMBEDDING_BASELINE),
+        keys + ["embedding_recipe_id", "value"],
     ]
-    if embedding.duplicated(keys).any():
+    embedding_keys = keys + ["embedding_recipe_id"]
+    if embedding.duplicated(embedding_keys).any():
         raise ValueError(
             "Multiple embedding baselines match; select one campaign before comparison"
         )
     if not embedding.empty:
-        compared = augmented.loc[~augmented.feature_set.eq(EMBEDDING_BASELINE)].merge(
+        compared = augmented.loc[
+            augmented.feature_set.map(uses_embeddings)
+            & ~augmented.feature_set.eq(EMBEDDING_BASELINE)
+        ].merge(
             embedding.rename(columns={"value": "reference_value"}),
-            on=keys,
+            on=embedding_keys,
             how="inner",
             validate="many_to_one",
         )
@@ -193,9 +220,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
     # This measures the benefit of adding embeddings, while comparison with E5 alone
     # measures the benefit of adding decision features. Never match another provider.
     combined = chosen.loc[
-        (chosen.phase == "experiment_1")
-        & chosen.feature_set.map(uses_embeddings)
-        & ~chosen.feature_set.eq(EMBEDDING_BASELINE)
+        chosen.feature_set.map(uses_embeddings) & ~chosen.feature_set.eq(EMBEDDING_BASELINE)
     ].copy()
     if not combined.empty:
         combined["reference_feature_set"] = combined.feature_set.map(decision_feature_set)
@@ -217,14 +242,29 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
         compared["reference"] = "same_decision_features_without_e5"
         compared["difference"] = compared.value - compared.reference_value
         paired = pd.concat([paired, compared], ignore_index=True)
+    native = chosen.loc[
+        chosen.phase.eq("experiment_3") & chosen.feature_set.eq("original_features"),
+        keys + ["value"],
+    ]
+    if native.duplicated(keys).any():
+        raise ValueError("Multiple original-text baselines match")
+    compared = chosen.loc[chosen.feature_set.str.startswith("original_features_plus_")].merge(
+        native.rename(columns={"value": "reference_value"}),
+        on=keys,
+        how="left",
+        validate="many_to_one",
+    )
+    compared["reference"] = "original_text_without_decision_features"
+    compared["difference"] = compared.value - compared.reference_value
+    paired = pd.concat([paired, compared], ignore_index=True)
     return (
         {
             "status": "collected",
             "complete_arms": len(complete),
             "incomplete_arms": int((counts != 5).sum()),
-            "difference_definition": "augmented minus named reference (non_text, non_text_plus_presence, frozen_e5, or same decision features without E5); improvement direction depends on metric",
+            "difference_definition": "augmented minus named reference (non_text, non_text_plus_presence, frozen_e5, or same decision features without embeddings, or original text); improvement direction depends on metric",
             "fold_sd": "descriptive variation; not a standard error or confidence interval",
-            "native_text_results": "descriptive reference results; no matched same-predictor non-text arm",
+            "native_text_results": "original-text references plus paired within-model effects of decision features",
             "single_text_rule": "Separate/joint/both use identical information for one-text-column datasets; exclude those datasets from representation contrasts.",
         },
         folds,
@@ -246,11 +286,11 @@ def main():
         from src.utils.config import load_yaml
 
         inference = confirmatory_tests(
-            dataset_differences(paired), load_yaml("experiment_4/analysis")
+            dataset_differences(paired), load_yaml("experiment_5/analysis")
         )
         print(inference.to_string(index=False))
     if args.save and not folds.empty:
-        destination = paths.results_dir("paired_summary", phase="experiment_4")
+        destination = paths.results_dir("paired_summary", phase="experiment_5")
         destination.mkdir(parents=True, exist_ok=True)
         for name, table in (("folds", folds), ("per_dataset", summary), ("paired", paired)):
             table.to_parquet(destination / f"{name}.parquet", index=False)
@@ -264,7 +304,7 @@ def main():
         summary.loc[summary.feature_set.eq("original_features")].to_parquet(
             destination / "native_text_references.parquet", index=False
         )
-        write_json(paths.manifests_dir("experiment_4") / "paired_summary.json", report)
+        write_json(paths.manifests_dir("experiment_5") / "paired_summary.json", report)
     print(json.dumps(report, indent=2))
 
 

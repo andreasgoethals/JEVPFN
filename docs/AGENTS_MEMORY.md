@@ -2,6 +2,91 @@
 
 ## 21-10-2026
 
+Final verification of this revision: 743 tests passed, two skipped (PyTorch unavailable
+locally; POSIX-only link behavior). All five notebooks ran with zero errors and 25 figures;
+the revised feature-grid and PCA-width figures were visually inspected. Ruff lint, pip
+check, 23 shell syntax/LF checks and all three library pin checks passed. Both tokenizer
+source files remain byte-identical. GPU telemetry preserves child exit codes; unsupported
+array widths are explicitly reported. No cleanup, paid calls, VSC submission or Git publication.
+
+Latest owner correction supersedes the earlier full factorial design: Exp1 decision features
+2,052 configurations; Exp2 three encoders × seven PCA settings (per-column32, joint
+256/128/64/32/16/8) × six predictors ×18 datasets =2,268; Exp3 three native predictors
+×18 datasets=54. Exp2/3 contain no decision additions. Later selected-winner combinations
+belong only to descriptive/exploratory Exp5; config keeps the single decision and embedding
+recipe unset until reviewed. Never select test winners and present the same-test follow-up
+as confirmatory. The owner will review the grid before final cleanup/freeze.
+
+All 18 actual loaded datasets match catalog text/non-text column counts. Largest Exp2
+input: Rotten Tomatoes per-column32=431; with one provider's both mode=445 (Kumo upper
+bound including possible non-text categorical counts=447). Optional all-six-provider both
+mode gives Wine Review 545 and must be rejected by Kumo. Wine has 30 classes; Data Scientist
+Salary has 6. Do not confuse these vocabularies.
+
+Reviewed pinned VSC Library 9e376b5ee9106e82d37eca86ca6acb861f580c93, guides/templates and
+relevant Leuven snapshot sources (upstream 9475d631a15849b70d84642b17c226b1b89fd28d).
+Regular queues permit concurrent independent tests; debug has a single A100 job queue limit.
+GPFS allocation for Mindwell is still unconfigured: no claim of tested B200 compatibility.
+New CPU PCA reuse, parallel scheduler and telemetry need their real VSC exercise. No reset,
+remote submission, model install/download or paid inference was performed during this edit.
+
+
+Earlier validation before the latest grid revision: 732 tests passed, two skipped (local PyTorch
+unavailable and a POSIX-only link test). All five notebooks executed without errors,
+producing 24 figures; the changed feature-design figure was visually inspected. Lint,
+19 shell syntax checks, dependency checks and pinned-library checks passed. No paid calls,
+model downloads, installs, Git publication, cleanup or VSC submissions occurred in this
+refactor. Real three-encoder and predictor compatibility is still unverified on VSC.
+The full extraction and benchmark switches remain disabled.
+
+The resumed local Jev dataset pilot completed: 288 completed requests across all 18
+datasets, 238,111 reported input tokens, USD 0.010000662 total recorded cost, zero pending
+reservations. Receipt: hosted/9f844b4ee73c4ece9c3dacff37fb611e.json, status
+completed_requires_review. Both previously rejected paid vectors recovered without
+redispatch. These deterministic diagnostic samples are not a representative cost sample;
+full extraction and final acceptance remain disabled.
+
+Earlier validation after the rounding fix: 724 passed, two skipped (no local
+PyTorch; POSIX-only link behavior). Five notebooks ran with zero error cells/24 figures;
+lint, pip check, 18 shell syntax checks and all three pinned-library checks passed.
+Both tokenizer source files remain byte-identical. Owner publication is still required;
+no Git staging/commit/push or VSC job submission was done by the agent.
+
+Latest archive in this turn: Downloads/output_JEVPFN (1).zip, 502,544 bytes, modified
+09:55:58. Liquid retry 62378847 failed the pre-pip image-prefix assertion, even though
+the pre-install CONDA_ENVS_PATH override ran. Actual wrong prefix was not logged, so do
+not claim this retry modified env1. The new private template patch forces create/activate
+to the absolute image prefix and prints both prefixes. Local shell tests pass; a VSC
+build/GPU retry is still required. No remote deletion or submission was made here.
+
+The local 13-request real-text Jev diagnostics completed (USD 0.000399252). Binary base
+0.20 changed to 0.70 under the inserted instruction; multiclass option reversal had
+aligned TV 0.07 without a top-class change, while paraphrasing changed the top class.
+These are sensitivity observations, not invariant semantic correctness. The following
+pilot stopped after 90 completed requests: US Accidents probabilities were .05/.33/.34/.27
+(sum .99). The raw paid response/707 input tokens remained in its dataset SQLite store.
+A bounded two-decimal normalization now recovers this response without paying twice.
+The existing authorized local dataset pilot was resumed; full extraction is disabled.
+It subsequently reached Mercari and exposed another .99 sum with a dominant .93 entry.
+Proportional rescaling would move that entry beyond its rounding interval. The final
+policy projects to the nearest sum-one vector within all half-hundredth bounds; it is
+permutation-equivariant, Jev-only and explicitly does not recover latent precision.
+The complete raw vectors, reported scores and accounting remain unchanged. Actual saved
+US Accidents and Mercari responses both decode under this policy without redispatch.
+
+Owner selected AG-MM as the third standard native-text reference; it is not optional.
+The adapter is offline and uses fixed medium_quality/ELECTRA-base/fusion, no HPO or
+ensemble. AG-MM 1.6.1 needs its own environment (Transformers <5.15); it has not been
+installed, staged or fitted. All its real 0B tests remain outstanding. That earlier PCA/experiment layout was subsequently superseded by the design above.
+
+Current frozen-question budget recheck: 1,698,127 unique requests; complete JSON at
+3/4/5 characters per token gives 1,046,290,608 / 784,919,303 / 628,106,967 approximate
+input tokens, or USD 43.94 / 32.97 / 26.38 at .042/M. These are not Jev exact counts.
+The account theoretical request floor is 5.90 h at 80 RPS; current 64k-token reservations
+impose at least .64 s/start at 100k TPS, i.e. 12.58 days even with a higher RPS setting.
+The pilot remains .2 RPS/one worker. Do not extrapolate the theoretical account floor
+as a measured run time or enable full extraction without throughput/spending review.
+
 Owner's newer Downloads output_JEVPFN.zip: 497,502 bytes, modified 09:16:28. Token job
 62378350 completed all five providers over 18 datasets / 1,698,127 unique inputs each,
 with zero overflows. Clef 62378354 and Intern 62378432 passed actual container GPU
@@ -32,9 +117,9 @@ accept currency notation and reprompt. Owner confirmed organization console limi
 server-enforced policy with a separate 32 MiB HTTP-body check; it does not claim exact
 local tokenization or turn on long context. No paid calls made during repair.
 
-PCA16 is an optional E5-only ablation across all six predictors; PCA32 remains main.
-0B now checks every complete E5 artifact and main predictor fixture paths with both PCA
-dimensions/combined decision features. Actual predictor runtimes/full-fold profiling remain
+Earlier in the day PCA16 was added; the later update above also approves PCA8.
+0B now checks every complete E5 artifact and main predictor fixture paths with PCA8/16/32
+and combined decision features. Actual predictor runtimes/full-fold profiling remain
 outstanding. Current checkout at start: 375c3e5; all three committed library links matched:
 TFM cbaff2f5fa0a6e910d7e7d1cd148437a3e0c217a,
 DM a0e40a60e7f3be4a791b0063046767633641ecc4,
@@ -386,6 +471,7 @@ An earlier unauthenticated TypeSafe HEAD returned 405: reachability only, not li
 Historical change details belong in CHANGELOG/Git, not duplicated status narratives here.
 
 Independent review verified recovery/cleanup/resource gaps. TabICL's many-class default was
-already true; it is now explicit. Rounded documentation examples do not prove rounded live
-Jev responses. Keep strict decoding until a real precision probe supplies evidence. Known-answer
-probe failure requires inspecting the saved raw response; it is not automatically a decoder bug.
+already true; it is now explicit. Rounded documentation examples alone did not prove live
+rounding; the 20–21 October saved responses now provide that evidence for the bounded policy
+above. Known-answer probe failure still requires inspecting the raw response; it is not
+automatically a decoder bug.

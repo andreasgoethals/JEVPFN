@@ -138,6 +138,92 @@ def test_complete_multiclass_vector(dataset, cfg):
         response_features(request, supplied)
 
 
+def test_observed_jev_rounding_is_normalized_without_changing_raw_response(dataset, cfg):
+    from src.jev.provider import probability_distribution
+
+    dataset.metadata = replace(
+        dataset.metadata, task_type="multiclass_classification", classes=(1, 2, 3, 4)
+    )
+    request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
+    values = [0.05, 0.33, 0.34, 0.27]
+    supplied = {
+        "model": "jev-1.13.0",
+        "answers": {
+            "semantic": {
+                "type": "choice",
+                "choice": "c002",
+                "confidence": 0.12,
+                "probabilities": {f"c{i:03d}": p for i, p in enumerate(values)},
+            }
+        },
+    }
+    before = copy.deepcopy(supplied)
+    features = response_features(request, supplied)
+    assert supplied == before
+    assert sum(features[f"p_c{i:03d}"] for i in range(4)) == pytest.approx(1)
+    assert features["p_c002"] == pytest.approx(0.3425)
+    _, diagnostic = probability_distribution(values, "jev")
+    assert diagnostic["normalization_applied"]
+    assert diagnostic["maximum_absolute_adjustment"] < 0.005
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [0, 0, 0.01, 0.04, 0.93, 0.01, 0, 0, 0],  # Actual Mercari response.
+        [0.03] * 30,
+        [0.34, 0.34, 0.33],
+    ],
+)
+def test_rounding_projection_is_bounded_and_independent_of_answer_order(values):
+    from src.jev.provider import probability_distribution
+
+    normalized, _ = probability_distribution(values, "jev")
+    reverse, _ = probability_distribution(values[::-1], "jev")
+    assert normalized == pytest.approx(reverse[::-1], abs=1e-12)
+    assert sum(normalized) == pytest.approx(1)
+    assert all(0 <= p <= 1 and abs(p - v) <= 0.005 + 1e-12 for p, v in zip(normalized, values))
+
+
+@pytest.mark.parametrize(
+    "values,provider",
+    [
+        ([0.05, 0.33, 0.34, 0.27], "intern"),
+        ([0.051, 0.33, 0.34, 0.27], "jev"),
+        ([0.4, 0.4], "jev"),
+        ([0, 0, 0], "jev"),
+        ([float("nan"), 1], "jev"),
+        ([True, 0], "jev"),
+    ],
+)
+def test_rounding_does_not_repair_malformed_or_other_provider_vectors(values, provider):
+    from src.jev.provider import probability_distribution
+
+    with pytest.raises(ValueError):
+        probability_distribution(values, provider)
+
+
+def test_rounded_regression_uses_normalized_distribution(dataset, cfg):
+    dataset.metadata = replace(dataset.metadata, task_type="regression", classes=())
+    request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
+    criteria = api_preview(request)["questions"]["semantic"]["criteria"]
+    probabilities = dict(zip(map(str, range(9)), [0, 0, 0.33, 0.33, 0.33, 0, 0, 0, 0]))
+    supplied = {
+        "model": "jev-1.13.0",
+        "answers": {
+            "semantic": {
+                "type": "score",
+                "score": 3.0,
+                "legend": dict(zip(probabilities, criteria)),
+                "probabilities": probabilities,
+                "confidence": 0.1,
+            }
+        },
+    }
+    # Nearest sum-one vector adds 0.01/9 to every entry: weighted index 3.01.
+    assert response_features(request, supplied)["expected_direction"] == pytest.approx(-0.99)
+
+
 def test_regression_preserves_nine_probabilities_and_maps_index(dataset, cfg):
     dataset.metadata = replace(dataset.metadata, task_type="regression", classes=())
     request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
@@ -197,9 +283,7 @@ def test_dataset_sqlite_roundtrip_idempotence_and_corruption(dataset, cfg, tmp_p
         / f"{block.manifest['artifact_id']}.json"
     )
     assert json.loads(index.read_text())["artifact_path"] == str(folder)
-    events = (
-        paths.logs_dir("feature_creation") / "builds" / f"{block.manifest['artifact_id']}.log"
-    )
+    events = paths.logs_dir("feature_creation") / "builds" / f"{block.manifest['artifact_id']}.log"
     assert {json.loads(line)["event"] for line in events.read_text().splitlines()} >= {
         "materialization_started",
         "materialization_complete",

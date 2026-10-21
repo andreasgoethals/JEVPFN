@@ -17,7 +17,7 @@ feature_creation:
     regression: expected_direction
   feature_schema_version: 2
   feature_directory: jev_cache  # One <dataset_id>.sqlite3 per dataset.
-  pilot_rows_per_dataset: 3  # Proposed pilot size, deterministic CSV positions, no calls yet.
+  pilot_rows_per_dataset: 3  # Deterministic first/middle/last positions; the dispatcher also samples longest inputs.
   full_build_requires_provider_pilot_pass: true
   context_overflow_policy: reject_without_truncation  # Exact open-weight precheck; documented Jev server rejection.
   missing_text_policy: skip_empty_store_nan

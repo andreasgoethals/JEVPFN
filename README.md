@@ -9,19 +9,24 @@ are excluded from experiments for text burden and 114-class feature size.
 audit completed for all five open-weight models, with zero overflows. Clef and Intern
 passed actual GPU contracts inside their containers; their redundant native environments
 were retired. Liquid's new build failed because Conda installed outside the image; the
-build now confines its environment to the image and checks that location before pip.
-Liquid, Strands, Perplexity and E5 still need successful current GPU runtime evidence.
+build now uses an explicit image prefix for both Conda creation and activation, and
+checks that location before pip. This repair still needs a VSC retry.
+Liquid, Strands, Perplexity and the three embedding encoders still need successful current GPU runtime evidence.
 The exhaustive question-v3 audit passed all 18 datasets, 1,698,127 unique inputs and
 3,294,340 row/input links. Clef/Intern sensitivity probes show real prompt/option-order
 effects that require review; an interface pass is not a claim of robustness.
 Jev passed three live task probes and 15 synthetic probes. Account limits are now owner
-confirmed (80 RPS, 100,000 TPS); real-text diagnostics and the dataset pilot remain pending.
-Predictor runtime tests also remain pending. Historical evidence is in
+confirmed (80 RPS, 100,000 TPS). The 13 real-text probes completed with sensitivity
+to wording/injected instructions; the dataset pilot exposed rounded probability sums.
+The decoder now permits only bounded two-decimal normalization, preserving raw responses.
+The resumed local dataset pilot completed 288 requests across all 18 datasets, with
+238,111 reported input tokens and USD 0.010000662 recorded cost. This is a small diagnostic
+sample, not full feature extraction or final acceptance. Predictor runtime tests remain pending. Historical evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a final frozen 0A run will supersede setup evidence.
 The owner handles Git commits/pushes. Full extraction and benchmark switches stay disabled.
-The 20 October implementation adds compact prediction stores, source/input/runtime-bound
-acceptance, prompt diagnostics and checked batching. These changes passed local synthetic
-tests; current VSC/GPU and live Jev diagnostic evidence is still required before extraction.
+Compact prediction stores, source/input/runtime-bound acceptance, prompt diagnostics and
+checked batching passed local tests. Remaining VSC runtimes, reviewed diagnostics and a
+fresh frozen 0A campaign are required before full extraction.
 
 ## Research contract
 
@@ -38,7 +43,10 @@ are documented from dataset sources; questions do not require a generative LLM.
 
 Binary evidence probabilities are not assumed to be calibrated target probabilities.
 Regression scores express directional evidence, not target units. Full responses and
-probability vectors are retained. The rubric distinguishes indirect hints, qualified
+probability vectors are retained. Jev sometimes reports rounded vectors whose sum is 0.99
+or 1.01. Only complete two-decimal vectors with a feasible rounding correction are
+projected to the nearest sum-one vector (each entry changes by at most 0.005). Raw
+responses remain unchanged; this is a recorded decoding policy, not recovered precision. The rubric distinguishes indirect hints, qualified
 support, clear direct evidence and explicit supported comparisons; zero favors neither direction.
 
 Empty text produces missing numeric features without an inference call. Exact request
@@ -62,40 +70,66 @@ are in `config/2. feature_creation/extractors.yaml`. Open weights have no vendor
 fee; GPU credits and licence conditions still apply. Compatibility requires real testing.
 
 The six main predictors are **CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular,
-and logistic/linear regression**. Each uses eight feature configurations:
+and logistic/linear regression**. All use the same rows and folds. The approved experiments are:
 
-1. All original non-text columns, including categorical columns.
-2. Non-text + joint decision features.
-3. Non-text + per-column decision features.
-4. Non-text + both decision representations.
-5. Non-text + frozen E5 embeddings reduced by PCA.
-6. Non-text + E5 + joint decision features.
-7. Non-text + E5 + per-column decision features.
-8. Non-text + E5 + both decision representations.
+| Experiment | Comparison |
+|---|---|
+| 0A | Before extraction: local Jev interfaces/pilot; VSC storage, exact decision token counts, five decision runtimes and three embedding encoders. |
+| 0B | After extraction: complete caches/row mappings; all nine predictors, PCA widths/scopes, native-text augmentation, resume and full-fold feasibility. |
+| 1 | Each of six predictors: non-text alone, then joint, per-column and both decision features for each of six extractors. |
+| 2 | Six predictors, three frozen encoders: per-column PCA32 and joint PCA256/128/64/32/16/8. No decision features. |
+| 3 | TabSTAR, ConTextTab and AG-MM on original text and non-text features. |
+| 4 | Label-blind question/context/option-order sensitivity; analysis reuses explicit real diagnostic reports. |
+| 5 | Presence/statistics, shuffled decision features, probability/uncertainty controls; separate descriptive winner-selected combinations. |
 
-Configurations 1 and 5 are shared across extractors; the other six are repeated for each
-extractor. This gives 4,104 main configurations plus 36 native-text references, each with
-five outer folds. **TabSTAR and ConTextTab** use the original text and non-text columns;
-they are descriptive reference results, not matched within-predictor effects.
+Experiments 1/2/3 contain **2,052 / 2,268 / 54 configurations**: 21,870 outer fits,
+plus 10,935 binary inner fits. A configuration means one dataset/predictor/representation;
+it has five outer folds. No expensive HPO is performed. Experiment 1 shares its non-text
+baseline across extractors. Experiment 2 has seven PCA settings, not their Cartesian
+product with every decision model. Experiment 3 has one original-feature setting per model.
 
-E5-small-v2 encodes each text column once, covers long inputs with token chunks, reuses
-identical text and saves 384-dimensional vectors. PCA is fitted **inside each inner/outer
-training partition**, producing 32 components per text column plus a missingness flag.
-Insufficient nonempty training rows leave unused components missing. Held-out rows never fit PCA.
-Each fit records the component count and training explained-variance fraction; 32 is a
-fixed computational compromise, not an established optimum or a guarantee of predictive quality.
-Non-text/decision features are not reduced. All six predictors use the same E5 source.
-Every decision/E5 arm receives the same per-text-column missing indicator, exactly once
-in combined arms. The non-text baseline contains no text-derived information. E5 batches
-chunks across different texts; content-token weighting and row mappings are preserved.
-Experiment 3 additionally offers a non-text-plus-text-presence reference for all six
-predictors. It distinguishes gains from knowing that text exists from gains beyond that
-information. Analysis retains the original non-text contrast and adds this matched reference.
-An optional Experiment 3 PCA16 ablation compares E5-only features against the main PCA32
-arm in all six predictors (108 configurations / 540 outer folds). It reuses the same saved
-384-dimensional vectors and does not enable new feature extraction. Dimension is fixed
-per arm, never selected using outer-test performance. Run the plan with
-`python -m src.evaluation.campaign --control embedding_dimension`; execution stays disabled.
+Optional concatenation of all six decision models is exposed with
+`--control combined_extractors` (324 configurations before width exclusions).
+Experiment 5's later combinations use one reviewed decision extractor/mode and one
+reviewed encoder/PCA recipe, plus the three native-text models: 162 additional
+configurations. Record the selected recipes, result-file checksum and selection rationale
+in `config/4. experiment_1/followup_selection.yaml`. Choosing them from test results makes
+those follow-ups **descriptive/exploratory**; code records that status and excludes them
+from confirmatory testing. They remain absent from the executable grid until selected.
+The primary experiments do not depend on a selected winner.
+
+The encoders are **E5-small-v2 (384 dimensions), E5-large-v2 (1,024), and
+Qwen3-Embedding-0.6B (1,024)**. Immutable revisions, prefix/pooling, licences and batch sizes
+are in `config/2. feature_creation/embedding_models.yaml`. E5 uses masked mean pooling;
+Qwen uses the last nonpadding token. All encoders are frozen and run on VSC. Identical
+text reuses its vector; missing text stays missing. Long text is covered by nonoverlapping
+chunks (512 tokens for E5; a configured 2,048 for Qwen, below its native 32,768 window).
+Chunk vectors are content-token-weighted then normalized. This is a declared coverage
+policy, not a claim of equivalence to encoding the whole text in one window.
+
+PCA uses **32 components per original text column**, or **256/128/64/32/16/8 total
+components** after concatenating the text vectors. These compare both grouping and
+compression budget; no setting is claimed optimal. Neither reduces non-text or decision
+features. Joint PCA imputes missing blocks with training coordinate means; every text
+column retains its missingness flag. Validation/test rows transform through the same
+training projection. Insufficient training rank leaves unused components missing.
+
+Prepare PCA on a CPU allocation with `python -m src.evaluation.prepare_pca --dataset ID
+--encoder ENCODER`. It prepares the exact five outer-training partitions and, for binary
+tasks, the three inner-training partitions per fold. Numeric parameters are stored in
+one PROJECT `results/pca/<encoder>/<dataset>.sqlite3` file and reused across predictors.
+Cache identity includes training row IDs, encoder artifact, PCA settings, implementation
+and scikit-learn version. Missing/stale preparations stop the benchmark, rather than
+fitting PCA while a GPU waits. These parameters are rebuildable output, not paid features.
+
+The widest Experiment 2 input is Rotten Tomatoes with per-column PCA32: **431 columns**
+(13×32 components, 13 missingness flags, two non-text columns). Adding one provider's
+separate and joint features later gives 445; even a conservative bound on Kumo's category
+expansion is 447. The optional all-six-provider combination reaches 545 on Wine Reviews,
+so Kumo refuses that arm. The recipe's 500-column guard prevents silent feature selection.
+Other models still require checkpoint/resource checks; width compatibility does not prove
+full-fold feasibility. AG-MM uses fixed medium-quality ELECTRA-base/fusion, no HPO or
+ensemble, in its separate runtime. Actual native-model compatibility remains unverified.
 
 Use five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, followed
@@ -108,7 +142,7 @@ timings, resource use and artifact identities. Analyze paired feature effects wi
 predictor, including seen/unseen text cohorts. Fold SD is descriptive, not a standard error.
 Headline metrics and optional dataset-level Wilcoxon/Holm contrasts remain unapproved until
 before comparative outcomes are reviewed. Exact protocol/settings live in
-`config/4. experiment_1/`; optional analysis is in `config/7. experiment_4/`.
+`config/4. experiment_1/`; optional analysis is in `config/8. experiment_5/`.
 Cheap text statistics, permutation controls and retained-probability ablations are also
 available. Public-data pretraining overlap is a limitation; “label-free” describes the
 inputs to extraction, not a guarantee about pretraining. See [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md).
@@ -174,7 +208,8 @@ not all together in the notebook environment. Full setup/transfer commands are i
 | `data/jev_cache/_control/jev_smoke/` | Permanent smoke-test payment ledger and responses. |
 | `data/jev_cache/_control/jev_robustness/` | Separate permanent 15-call diagnostic ledger and responses. |
 | `data/jev_cache/_control/jev_dataset_robustness/` | Separate 13-call real-text sensitivity diagnostic; never production feature blocks. |
-| `data/text_embeddings/<dataset>.sqlite3` | Permanent E5 vectors and row mappings. |
+| `data/text_embeddings/<dataset>.sqlite3` | Permanent E5-small vectors and row mappings. |
+| `data/text_embeddings/<encoder>/<dataset>.sqlite3` | Separate E5-large/Qwen vectors and row mappings. |
 | `output_JEVPFN/figures/<phase>/<notebook>/` | PDF figures only. |
 | `output_JEVPFN/{logs,manifests,results}/notebooks/<phase>/<notebook>/` | Local execution logs, figure/config receipts, full reports and analysis tables. |
 | `output_JEVPFN/figures/Captions.md` | One combined captions document. |
@@ -225,8 +260,8 @@ With `--dataset-pilot`, local 0A also checks 13 deterministic real-text variants
 three task types, using the reviewed private context envelope. VSC contracts check that
 same label-blind sample, including aligned multiclass option reversal. These measurements
 require human review; they do not select wording by predictive performance.
-VSC 0A covers CPU/storage/tokens/E5 and five real provider contract/pilot pairs. It submits
-one job at a time, resumes by job ID and stops after failure. See [VSC](docs/VSC.md) for commands.
+VSC 0A covers CPU/storage/tokens, all three encoders and five real provider contract/pilot pairs. It submits
+ready independent jobs concurrently, resumes by job ID and stops new submissions after failure. See [VSC](docs/VSC.md) for commands.
 
 Before full extraction, review real task/robustness tests, measured throughput, quota,
 independent backups and provider acceptance. Jev additionally needs verified organization

@@ -76,17 +76,13 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
         ("catboost", "experiment_1", "non_text", 3, None),
         ("catboost", "experiment_1", "non_text_plus_joint", 1, "jev"),
         ("catboost", "experiment_1", "non_text_plus_joint", 1.5, "liquid"),
-        ("catboost", "experiment_1", "non_text_plus_frozen_e5", 2, None),
-        ("catboost", "experiment_1", "non_text_plus_frozen_e5_and_joint", 0.5, "jev"),
-        ("catboost", "experiment_1", "non_text_plus_frozen_e5_and_joint", 0.25, "liquid"),
-        ("tabstar", "experiment_2", "original_features", 1, None),
-        (
-            "catboost",
-            "experiment_3",
-            "non_text_plus_frozen_e5__embedding_dimension__pca_16",
-            2.5,
-            None,
-        ),
+        ("catboost", "experiment_2", "non_text_plus_frozen_e5", 2, None),
+        ("catboost", "experiment_5", "non_text_plus_frozen_e5_and_joint", 0.5, "jev"),
+        ("catboost", "experiment_5", "non_text_plus_frozen_e5_and_joint", 0.25, "liquid"),
+        ("catboost", "experiment_2", "non_text_plus_frozen_e5", 4, None),
+        ("catboost", "experiment_5", "non_text_plus_frozen_e5_and_joint", 3.5, "jev"),
+        ("tabstar", "experiment_3", "original_features", 1, None),
+        ("tabstar", "experiment_5", "original_features_plus_joint", 0.5, "jev"),
     ):
         evaluate_cv(
             data,
@@ -104,26 +100,30 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
             feature_artifact_ids=[],
             representation_recipe={
                 "provider": provider,
+                **(
+                    {"inference_status": "exploratory_post_selection", "selection": {"id": "test"}}
+                    if phase == "experiment_5"
+                    else {}
+                ),
                 "view": "main",
-                "embedding": {"model": "synthetic"} if "e5" in features else None,
+                "embedding": {"model": "encoder2" if error >= 3.5 else "encoder1"}
+                if "e5" in features
+                else None,
             },
         )
     report, _, summary, paired = collect()
-    assert "tabstar" in set(summary.model_id) and "tabstar" not in set(paired.model_id)
-    contrast = paired.loc[
-        (paired.feature_set == "non_text_plus_joint")
-        & (paired.provider == "jev")
-        & (paired.reference == "frozen_e5")
-        & (paired.metric == "rmse")
-    ]
-    assert len(contrast) == 5
-    np.testing.assert_allclose(contrast.difference, -1)
+    assert "tabstar" in set(summary.model_id)
+    native = paired.loc[paired.model_id.eq("tabstar") & paired.metric.eq("rmse")]
+    assert len(native) == 5
+    assert set(native.reference) == {"original_text_without_decision_features"}
+    np.testing.assert_allclose(native.difference, -0.5)
     for provider, expected in (("jev", -0.5), ("liquid", -1.25)):
         contrast = paired.loc[
             (paired.feature_set == "non_text_plus_frozen_e5_and_joint")
             & (paired.provider == provider)
             & (paired.reference == "same_decision_features_without_e5")
             & (paired.metric == "rmse")
+            & (paired.value < 1)
         ]
         assert len(contrast) == 5
         np.testing.assert_allclose(contrast.difference, expected)
@@ -135,16 +135,18 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
                 & paired.metric.eq("rmse")
             ]
         )
-        == 10
+        == 15
     )
-    assert "descriptive" in report["fold_sd"]
-    pca_contrast = paired.loc[
-        paired.feature_set.eq("non_text_plus_frozen_e5__embedding_dimension__pca_16")
+    second_encoder = paired.loc[
+        paired.feature_set.eq("non_text_plus_frozen_e5_and_joint")
         & paired.reference.eq("frozen_e5")
         & paired.metric.eq("rmse")
+        & paired.value.gt(3)
     ]
-    assert len(pca_contrast) == 5
-    np.testing.assert_allclose(pca_contrast.difference, 0.5)
+    assert len(second_encoder) == 5
+    np.testing.assert_allclose(second_encoder.reference_value, 4)
+    np.testing.assert_allclose(second_encoder.difference, -0.5)
+    assert "descriptive" in report["fold_sd"]
 
 
 def test_target_unit_error_magnitudes_are_not_pooled_across_datasets():
@@ -153,3 +155,17 @@ def test_target_unit_error_magnitudes_are_not_pooled_across_datasets():
     result = across_datasets(dataset_differences(rows))
     assert result.mean_difference.isna().all() and result.median_difference.isna().all()
     assert result.positive_deltas.iloc[0] == 4
+
+
+def test_test_selected_combinations_never_enter_confirmatory_analysis():
+    base, rows = example()
+    rows["inference_status"] = "exploratory_post_selection"
+    datasets = dataset_differences(rows)
+    assert across_datasets(datasets).iloc[0].inference_status == "exploratory_post_selection"
+    plan = {
+        "approved_before_results": True,
+        "reviewed_by": "fixture",
+        "contrasts": [{"match": base, "datasets": [f"data{i}" for i in range(4)], "direction": 1}],
+    }
+    with pytest.raises(ValueError, match="exploratory"):
+        confirmatory_tests(datasets, plan)

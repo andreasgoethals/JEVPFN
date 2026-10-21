@@ -1,6 +1,6 @@
 """Explicit Experiment 0A local/VSC entrypoint. Preview by default; never enables extraction.
 
-VSC submits one job at a time and resumes from its receipt after a terminal disconnect.
+VSC submits independent ready jobs concurrently, resuming its receipt after a disconnect.
 Local smoke responses reuse their durable cache. --dataset-pilot additionally requires
 a reviewed private Jev configuration. No passed receipt is inferred from submission.
 """
@@ -54,27 +54,53 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         ("cpu", "experiment_0_cpu.slurm", []),
         ("storage", "experiment_0_storage.slurm", []),
         ("tokens", "experiment_0_tokens.slurm", []),
-        ("embeddings", "experiment_0_embeddings.slurm", []),
     ]
+    from src.utils.config import load_yaml
+
+    for encoder_id in load_yaml("feature_creation/embedding_models")["models"]:
+        items.append(
+            (
+                "embeddings_" + encoder_id,
+                "experiment_0_embeddings.slurm",
+                ["cloudflare", "/lustre1/project/stg_00211", encoder_id],
+            )
+        )
     for provider in PROVIDERS:
         for task, script in (
             ("contracts", "experiment_0_decision_contracts.slurm"),
             ("pilot", "experiment_0_decision_pilot.slurm"),
         ):
             items.append((f"{provider}_{task}", script, [provider]))
-    return [
-        {
-            "name": name,
-            "command": [
-                "sbatch",
-                "--parsable",
-                *(["--mem=112000M"] if name.startswith("perplexity_") else []),
-                f"scripts/slurm/{script}",
-                *args,
-            ],
-        }
-        for name, script, args in items
-    ]
+    scheduling = load_yaml("experiment_0/scheduling")
+    result = []
+    for name, script, args in items:
+        dependencies = [] if name in {"cpu", "storage", "tokens"} else ["cpu"]
+        cluster, flags = "wice", []
+        if name not in {"cpu", "storage", "tokens"}:
+            from src.cluster.scheduling import gpu_profile
+
+            profile = gpu_profile(scheduling["routes"].get(name, scheduling["default_gpu_profile"]))
+            cluster, root = profile["cluster"], profile["staging_root"]
+            flags = [f"--clusters={cluster}", f"--partition={profile['partition']}"]
+            if name.startswith("embeddings_"):
+                args = ["cloudflare", root, name.removeprefix("embeddings_")]
+            else:
+                provider = args[0]
+                args = [provider, provider, root]
+                dependencies = ["cpu", "storage", "tokens"]
+                if name.endswith("_pilot"):
+                    dependencies.append(provider + "_contracts")
+                if provider == "perplexity":
+                    flags.append("--mem=112000M")
+        result.append(
+            {
+                "name": name,
+                "cluster": cluster,
+                "depends_on": dependencies,
+                "command": ["sbatch", "--parsable", *flags, f"scripts/slurm/{script}", *args],
+            }
+        )
+    return result
 
 
 def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/jev.local"):
@@ -136,26 +162,37 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
     report.update(status="running" if site == "local" else "submitting", run_id=run_id)
     write_json(receipt, report)
     try:
+        if site == "vsc":
+            # Reconcile ALL existing jobs before dispatch: a failed prerequisite stops new work.
+            for step in plan:
+                if step.get("status") == "completed":
+                    continue
+                if step.get("job_id"):
+                    state = scheduler_state(step["job_id"], cluster=step["cluster"])
+                    if state is not None:
+                        if state != ("COMPLETED", "0:0"):
+                            raise RuntimeError(
+                                f"Job {step['job_id']} ended {state}; inspect its Slurm log"
+                            )
+                        step["status"] = "completed"
+                elif step.get("status") == "starting":
+                    raise ValueError(
+                        "Interrupted submission has no job ID; inspect Slurm before retrying"
+                    )
+            write_json(receipt, report)
         for step in plan:
-            if step.get("status") == "completed":
+            if step.get("status") == "completed" or step.get("job_id"):
                 continue
-            if site == "vsc" and step.get("job_id"):
-                state = scheduler_state(step["job_id"])
-                if state is None:
-                    report["status"] = "waiting_for_job"
-                    log.info("Waiting for %s (job %s)", step["name"], step["job_id"])
-                    return report
-                if state != ("COMPLETED", "0:0"):
-                    raise RuntimeError(f"Job {step['job_id']} ended {state}; inspect its Slurm log")
-                step["status"] = "completed"
-                write_json(receipt, report)
-                continue
-            if site == "vsc" and step.get("status") == "starting":
-                raise ValueError(
-                    "Interrupted submission has no job ID; inspect Slurm before retrying"
-                )
             if site == "vsc":
-                require_idle_vsc()
+                from src.utils.config import load_yaml
+
+                limit = load_yaml("experiment_0/scheduling")["max_active_jobs"]
+                if type(limit) is not int or limit < 1:
+                    raise ValueError("max_active_jobs must be a positive integer")
+                active = sum(bool(s.get("job_id")) and s.get("status") != "completed" for s in plan)
+                completed = {s["name"] for s in plan if s.get("status") == "completed"}
+                if active >= limit or not set(step["depends_on"]) <= completed:
+                    continue
             command = step["command"][:]
             step.update(status="starting", command=command)
             write_json(receipt, report)  # Interrupted submission is explicit; never auto-resubmit.
@@ -170,15 +207,15 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
                     timeout=60,
                 )
                 job = result.stdout.strip()
-                if not re.fullmatch(r"[0-9]+(?:;wice)?", job):
+                if not re.fullmatch(r"[0-9]+(?:;" + step["cluster"] + r")?", job):
                     raise ValueError(
                         "Unrecognized sbatch receipt; inspect scheduler before any retry"
                     )
                 job_id = job.split(";")[0]
                 step.update(status="submitted_not_verified", job_id=job_id)
                 log.info("Submitted %s as %s", step["name"], job_id)
-                report["status"] = "waiting_for_job"
-                return report
+                write_json(receipt, report)
+                continue
             else:
                 with subprocess.Popen(
                     command,
@@ -195,6 +232,9 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
                         raise RuntimeError(f"{step['name']} failed; see {receipt}")
                 step["status"] = "completed"
             write_json(receipt, report)
+        if site == "vsc" and any(s.get("status") != "completed" for s in plan):
+            report["status"] = "waiting_for_job"
+            return report
         report["status"] = (
             "vsc_checks_completed_requires_review"
             if site == "vsc"
@@ -215,11 +255,11 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
     return report
 
 
-def scheduler_state(job_id):
+def scheduler_state(job_id, *, cluster="wice"):
     result = subprocess.run(
         [
             "sacct",
-            "--clusters=wice",
+            f"--clusters={cluster}",
             "-j",
             job_id,
             "--noheader",
@@ -262,7 +302,7 @@ def main(argv=None):
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="VSC: poll once/minute and submit the next test after success; safe to interrupt/resume",
+        help="VSC: poll once/minute and submit ready independent tests after prerequisites pass; safe to interrupt/resume",
     )
     args = parser.parse_args(argv)
     if args.watch and (args.site != "vsc" or not args.execute):

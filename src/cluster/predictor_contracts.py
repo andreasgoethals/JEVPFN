@@ -30,8 +30,8 @@ def fixtures():
         ("wide_multiclass", 30),
         ("regression", 0),
     ):
-        # Even binary inner training folds must have enough present rows for PCA32.
-        count = max(90, 6 * classes)
+        # Binary inner-training partitions must have enough present rows for PCA256.
+        count = max(540, 6 * classes)
         values = np.arange(count)
         frame = pd.DataFrame(
             {
@@ -53,7 +53,7 @@ def fixtures():
             text_columns=["text"],
         )
         yield LoadedDataset(
-            frame, meta, official, {"data_identity": digest({"fixture": kind, "version": 2})}, []
+            frame, meta, official, {"data_identity": digest({"fixture": kind, "version": 5})}, []
         )
 
 
@@ -62,6 +62,18 @@ def feature_cases(dataset, model):
     original = original_features(dataset)
     if model in TEXT_MODELS:
         yield "original_text", original, None
+        for mode in ("joint", "per_column", "both"):
+            values = original.copy()
+            width = (
+                len(dataset.metadata.classes)
+                if dataset.metadata.task_type == "multiclass_classification"
+                else 1
+            )
+            for i in range(width * (2 if mode == "both" else 1)):
+                values[f"decision__{i}"] = np.where(
+                    dataset.frame["text"].isna(), np.nan, (i + 1) / (width + 2)
+                )
+            yield "original_text_plus_" + mode, values, None
         return
     base = original.drop(columns=list(dataset.metadata.text_columns))
     base.attrs["feature_artifact_ids"] = []
@@ -75,8 +87,26 @@ def feature_cases(dataset, model):
     encoded = pd.DataFrame(vectors, index=base.index, columns=names)
     encoded.attrs.update(feature_artifact_ids=[], embedding_groups=[names])
     combined = add_embeddings(base, encoded)
-    for count in (16, 32):
+    for count in (32,):
         yield f"e5_pca_{count}", combined, count
+    second = encoded.copy()
+    second.columns = [c.replace("text_000", "text_001") for c in second]
+    second.iloc[1] = np.nan
+    two_groups = encoded.join(second)
+    two_groups.attrs.update(feature_artifact_ids=[], embedding_groups=[names, list(second)])
+    joint = add_embeddings(base, two_groups)
+    joint.attrs["pca_scope"] = "joint"
+    for count in (256, 128, 64, 32, 16, 8):
+        yield f"embedding_joint_pca_{count}", joint, count
+    # 1024-dimensional encoders share the downstream contract, independently of weights.
+    wide = pd.DataFrame(
+        rng.normal(size=(len(base), 1024)),
+        index=base.index,
+        columns=[f"wide__{i}" for i in range(1024)],
+    )
+    wide.loc[missing, :] = np.nan
+    wide.attrs.update(feature_artifact_ids=[], embedding_groups=[list(wide)])
+    yield "embedding_1024_pca_64", add_embeddings(base, wide), 64
     combined = combined.copy()
     for mode in ("per_column", "joint"):
         task = dataset.metadata.task_type
@@ -105,6 +135,7 @@ def case_factory(base_factory, features, components):
         base_factory(),
         features.attrs["embedding_groups"],
         components=components,
+        scope=features.attrs.get("pca_scope", "per_column"),
     )
 
 
@@ -115,6 +146,11 @@ def run(model, *, execute=False):
     if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Predictor tests belong in a compute allocation")
     settings = copy.deepcopy(load_yaml("experiment_1/models")["models"][model]["runtime"])
+    settings["threads"] = min(
+        settings["threads"], int(os.environ.get("SLURM_CPUS_PER_TASK", settings["threads"]))
+    )
+    if model == "tabstar":
+        settings["output_phase"] = "experiment_0"
     run_id = f"predictor_{model}_{uuid4().hex}"
     manifest = paths.manifests_dir("experiment_0") / "after_extraction" / f"{run_id}.json"
     report = {
@@ -124,7 +160,7 @@ def run(model, *, execute=False):
         "fixtures": [],
         "full_dataset_profile": False,
         "embedding_vectors": "synthetic_interface_fixtures_not_real_E5_encoding",
-        "contract_version": 2,
+        "contract_version": 5,
     }
     from src.cluster.containers import active_identity
     from src.cluster.evidence import current_identity
@@ -152,7 +188,7 @@ def run(model, *, execute=False):
                 checkpoint_id=digest(settings),
                 feature_set=f"predictor_fixture__{case}",
                 representation_recipe={
-                    "contract_version": 2,
+                    "contract_version": 5,
                     "pca_components": components,
                     "synthetic_vectors": components is not None,
                 },
@@ -175,7 +211,10 @@ def run(model, *, execute=False):
                     "classes": len(dataset.metadata.classes),
                     "rows": len(features),
                     "feature_case": case,
-                    "pca_components_per_column": components,
+                    "pca_components": components,
+                    "pca_scope": features.attrs.get("pca_scope", "per_column")
+                    if components
+                    else None,
                     "records": [str(p) for p in records],
                     "resume_without_refitting": True,
                 }
@@ -199,7 +238,7 @@ def main():
         run(args.model, execute=True)
     else:
         print(
-            "Disabled: four tasks; main predictors test non-text, PCA16, PCA32 and PCA32+decision features; native-text models test original text. Five-fold CV, inner binary thresholds and resume checks. No inference performed."
+            "Disabled: four tasks; main predictors test non-text, per-column PCA32, joint PCA256/128/64/32/16/8, 1024-dimensional vectors and combined decision features; native-text models test original text with and without decision features. Five-fold CV, inner binary thresholds and resume checks. No inference performed."
         )
 
 

@@ -1,5 +1,5 @@
-extends: experiment_1/protocol
-phase: experiment_2
+extends: experiment_1/main
+phase: experiment_3
 name: original_text_baselines
 enabled: false
 proposal: false
@@ -7,6 +7,7 @@ model_catalog: experiment_1/models
 candidate_models:
 - tabstar
 - contexttab
+- ag_mm
 feature_artifacts: []
 candidate_combinations:
 - original_features
@@ -21,6 +22,6 @@ dataset_selection:
   - REG_TEXT_ZOMATO_RESTAURANTS
   - MUL_TEXT_SPOTIFY_GENRES
 experiment_0_acceptance: null
-input: all_original_non_text_and_text_columns_no_decision_features
-model_required_adaptation: TabSTAR_default_training_and_internal_validation_not_HPO
+input: all_original_non_text_and_text_columns
+model_required_adaptation: TabSTAR_and_AGMM_fixed_training_and_internal_validation_not_HPO
 contexttab_context_policy: all_training_rows_bagging_1_no_8192_row_subsampling

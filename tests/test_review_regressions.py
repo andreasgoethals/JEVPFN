@@ -223,16 +223,15 @@ def test_controls_are_executable_without_duplicating_main_embedding_arms():
 
     main = benchmark_plan()
     plan = benchmark_plan(include_controls=True)
-    assert len(main) == 4140
-    added = [a for a in plan if a["phase"] == "experiment_3"]
+    assert len(main) == 4374
+    added = [a for a in plan if a["phase"] == "experiment_5"]
     assert {a["control"] for a in added} == {
         "text_presence",
         "text_statistics",
         "permuted",
         "retained_view",
-        "embedding_dimension",
     }
-    assert {a["model"] for a in added if a["control"] not in {"text_presence", "embedding_dimension"}} == {
+    assert {a["model"] for a in added if a["control"] not in {"text_presence"}} == {
         "catboost",
         "tabpfn_3_5",
     }

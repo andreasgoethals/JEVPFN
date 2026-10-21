@@ -230,7 +230,7 @@ VSC login terminal, after input installation and matching frozen receipts:
 "$JEVPFN_PYTHON" -m src.cluster.experiment_zero --site vsc --execute --watch
 ```
 
-The runner submits **one job at a time**: CPU → two-node storage → exact tokens → E5 →
+The runner submits **independent ready jobs concurrently**: CPU → two-node storage → exact tokens → three encoders →
 contracts and larger pilot for Clef, Intern, Liquid, Strands and Perplexity. The debug GPU
 partition permits only one queued job, so no batch of pending GPU jobs is submitted.
 `--watch` polls accounting once per minute, performs no inference on the login node, and
@@ -283,25 +283,34 @@ All model/Hugging Face/Xet caches use PROJECT. Optional Strands kernel accelerat
 a matching CUDA toolkit and a compute-node build; a slow fallback must be profiled before
 acceptance. Changing packages changes runtime identity and requires new contract evidence.
 
-E5 is shared by all six main predictors. Its requirements match the existing Clef runtime
-(Torch/Transformers); no additional CUDA environment or package installation is needed there.
-After resolving PROJECT file quota, stage its pinned weights from the connected CPU environment:
+The three frozen encoders share the Clef Torch/Transformers container; their weights and
+cache namespaces remain separate. Stage weights from the connected CPU setup environment:
 
 ```bash
-python -m src.data.text_embeddings --stage
-sbatch --wait scripts/slurm/experiment_0_embeddings.slurm
+for encoder in e5_small_v2 e5_large_v2 qwen3_embedding_0_6b; do
+    "${JEVPFN_PYTHON:?}" -m src.data.text_embeddings --encoder "$encoder" --stage || break
+done
 ```
 
-The bounded test uses the Clef environment in a separate GPU process. It tests short and long
-inputs, missing inputs, exact reuse, unit-norm vectors and restart without re-encoding.
-It writes a synthetic fixture store to PROJECT Experiment 0 and its small report/log to DATA.
-It does not create benchmark features or enable full extraction. After acceptance, enable
-`config/2. feature_creation/text_embeddings.yaml` and run
-`python -m src.data.text_embeddings --execute` in a compute allocation using that environment.
-The permanent cache is PROJECT `data/text_embeddings/<dataset_id>.sqlite3`; logs use DATA
-feature-creation logs. These embeddings are required before the comparison benchmark;
-decision-model extraction can proceed independently. PCA is computed inside each CV training
-fit, not in the permanent embedding cache.
+After Clef's container works, test each encoder in a GPU allocation:
+
+```bash
+for encoder in e5_small_v2 e5_large_v2 qwen3_embedding_0_6b; do
+    sbatch --wait scripts/slurm/experiment_0_embeddings.slurm cloudflare /lustre1/project/stg_00211 "$encoder" || break
+done
+```
+
+These bounded tests cover multiple chunks, missing text, reuse, unit norms and resume.
+They save fixture stores to PROJECT Experiment 0 and compact reports/logs to DATA.
+No benchmark features are created. After acceptance, enable the shared `text_embeddings.yaml`
+execution switch and run `python -m src.data.text_embeddings --encoder ENCODER --execute`
+inside a compute allocation using this container, or submit
+`sbatch scripts/slurm/embedding_creation.slurm ENCODER` (optional later arguments:
+container/environment, PROJECT root, dataset ID). This job uses the regular A100 queue
+and resumes completed embedding batches. Small E5 retains the existing
+`data/text_embeddings/<dataset>.sqlite3` path; other encoders use an additional encoder
+subfolder. All three caches reside on PROJECT; logs use DATA feature-creation logs.
+PCA is fitted later on CPU for each exact CV training partition, never in these permanent embedding stores.
 
 ## Compact decision runtimes
 
@@ -391,10 +400,12 @@ The container-build script resolves `default_config/config.yaml` from the instal
 KU Leuven does not necessarily export `CW_GLOBAL_YAML` from the module itself.
 
 New builds use `container_conda_pre_install.sh` to override inherited Conda `envs_dirs`
-with the image's own `miniforge/envs`. The post-install script verifies `sys.prefix`
+with the image's own `miniforge/envs`, and patch a private copy of the checked 0.4.2
+Conda template to create/activate by absolute image prefix. The envs-dir override alone
+was insufficient in Liquid job 62378847; the pre-pip assertion correctly stopped it. The post-install script verifies `sys.prefix`
 before pip runs. Without this, the 21 October Liquid build installed into personal
 DATA `conda_envs/env1` and produced an image without `bin/python`. That image was not
-sealed and must not be used. The fix follows the wrapper's v0.4.2 pre-install hook;
+sealed and must not be used. The fix checks exact template anchors and refuses an unknown site template;
 it does not change working Clef/Intern containers or the user's global Conda config.
 After publishing the fix and confirming no JEVPFN job is active, remove only that failed
 image, then retry Liquid (the commands preserve logs, weights and other runtimes):
@@ -410,6 +421,22 @@ The cleanup refuses sealed containers and active JEVPFN allocations. The misplac
 `$VSC_DATA/conda_envs/env1` is outside the project environment folder and is deliberately
 not removed by this helper. Inspect its Conda history/size before separately deleting
 it; never remove `$VSC_DATA/conda_envs/JEVPFN`, the working CPU environment.
+The following narrowly scoped removal refuses active JEVPFN jobs, symlinks and a Conda
+history without the failed Liquid build path. If the history check fails, inspect the
+folder instead of weakening the guard. It does not require the failed image to work:
+
+```bash
+(
+set -euo pipefail
+cd "$VSC_DATA/JEVPFN"
+export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+export JEVPFN_CONDA_ENV=JEVPFN
+source scripts/activate_conda.sh
+"${JEVPFN_PYTHON:?}" -c 'from pathlib import Path; import os; from src.cluster.maintenance import require_idle_vsc,reject_links; require_idle_vsc(); root=Path(os.environ["VSC_DATA"])/"conda_envs"; p=reject_links(root/"env1"); assert p.resolve()==root.resolve()/"env1"; h=(p/"conda-meta/history").read_text(); assert "jevpfn-container-liquid-" in h, "History does not identify the failed Liquid build; inspect before deleting"; print("Verified misplaced Liquid environment:",p)'
+conda env remove --prefix "$VSC_DATA/conda_envs/env1" --yes
+myquota
+)
+```
 
 ## Bounded GPU contract tests and larger pilots
 
@@ -441,7 +468,7 @@ Preserve the databases, prepared inputs and sealed containers during this recove
 
 After Clef completes successfully, repeat for `intern`, `liquid` and `strands`.
 Perplexity uses `sbatch --mem=112000M scripts/slurm/experiment_0_decision_contracts.slurm perplexity`.
-The 0A coordinator handles sequential submission. For individual setup jobs, submit without
+The 0A coordinator handles dependency-aware concurrent submission. For individual setup jobs, submit without
 `--wait` and inspect the recorded ID with `sacct` before the next command; a disconnected
 login terminal is not proof that the submitted job was cancelled.
 The provider, optional environment prefix and optional project root are script arguments.
@@ -656,14 +683,31 @@ and earlier requests retain their original price/policy identity. Unchanged rest
 no new revision. A revised context envelope also needs new matching pilot acceptance before
 full extraction; spending review alone does not approve context or provider compatibility.
 
+The account's 80 RPS / 100,000 TPS are ceilings, not the current dispatcher speed.
+The pilot uses one worker and a five-second minimum interval. Even when its RPS setting
+is raised, the current RateGate conservatively reserves 64,000 tokens for every attempt,
+so TPS alone enforces at least 0.64 seconds between starts. Full extraction needs a
+separate reviewed throughput configuration and spending-policy revision; do not present
+the account's theoretical six-hour request floor as this implementation's runtime.
+
 After full feature creation and validated transfer, Experiment 0B checks complete selected
 artifacts and real predictor fits on all task types. Main extras are `models`, `baselines`,
-`tabicl`, `limix`, `kumo`; original-text extras are `tabstar`, `contexttab`. Stage/hash their
+`tabicl`, `limix`, `kumo`; original-text extras are `tabstar`, `contexttab`, `ag-mm`. Stage/hash their
 checkpoints and any text encoders separately; choose exact assets/runtime pins in
 `config/4. experiment_1/models.yaml`. Use isolated environments when dependencies conflict.
-The after-extraction preflight also validates all 18 complete E5 stores against current
+The after-extraction preflight also validates all 54 complete encoder/dataset stores against current
 raw rows/column hashes and the frozen encoder recipe, without expanding dense feature
 matrices. Missing/corrupt/wrong-version embeddings fail 0B rather than being skipped.
+
+AG-MM is a standard selected reference, with a fixed medium-quality recipe and no HPO
+or model ensemble. Install `.[dev,ag-mm]` in its own reviewed environment, not with
+`token-audit` or `embeddings` (AG-MM 1.6.1 requires Transformers <5.15). Stage
+`google/electra-base-discriminator` at an immutable reviewed revision, record every
+encoder file hash in `models.ag_mm.runtime.assets` and set its local `text_checkpoint_path`.
+The adapter refuses unreviewed files and model loading is offline. Intermediate training
+checkpoints use a temporary fit directory; individual predictions and metrics still use
+PROJECT. It can be wrapped/verified with provider name `ag_mm`, like other predictors.
+Its real 0B tests and full-fold resource profile are outstanding.
 
 The injector/factories are synthetically tested; actual full-fold resources remain pending.
 ConTextTab uses one bag and the full training context rather than default row sampling;
@@ -674,12 +718,13 @@ and prediction-time input availability still need review before interpreting res
 Enable only the bounded `predictor_execution_enabled` switch in `experiment_0/debug.yaml`
 for `python -m src.cluster.predictor_contracts --model MODEL --execute`. This runs actual
 binary/three-class/30-class/regression fixtures, five-fold CV and no-refit restart checks.
-Each main predictor tests non-text, PCA16, PCA32 and PCA32 with both decision-feature blocks.
-The vectors are synthetic downstream-interface fixtures; actual E5 encoding is tested in
-0A and saved dataset vectors in 0B. TabSTAR/ConTextTab retain original text in their fixtures.
+Each main predictor tests non-text, per-column PCA32, joint PCA256/128/64/32/16/8, 1,024-dimensional vectors and
+PCA32 with both decision-feature blocks.
+The vectors are synthetic downstream-interface fixtures; actual encoder inference is tested in
+0A and saved dataset vectors in 0B. TabSTAR/ConTextTab/AG-MM test original text alone and with joint/per-column/both decision features.
 `sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 /lustre1/project/stg_00211/JEVPFN/environments/tabpfn_3_5`
 supplies a regular A100 allocation once that selected predictor environment exists. Run CPU
-CatBoost/linear checks in a CPU allocation with the same module command.
+CatBoost/linear checks with `scripts/slurm/experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX`.
 For full-size feasibility, separately enable `full_fold_profile_enabled` and run
 `python -m src.evaluation.campaign --dataset ID --model MODEL --feature-set ARM --provider PROVIDER --profile-fold --execute`
 inside the chosen allocation (omit provider for the non-text baseline). It executes only
@@ -696,17 +741,30 @@ as accepted by a test.
 Inspect the actual evidence, quota/backup and runtime coverage before signing acceptance.
 
 CV folds have completion records in the dataset database with record/prediction checksums. Restarts skip only
-complete matching folds; interrupted attempts remain evidence. Experiment 3's statistics,
+complete matching folds; interrupted attempts remain evidence. Experiment 5's statistics,
 permutation and retained-view arms use `campaign --include-controls` and the explicit
 `--control`/`--view` filters. `python -m src.evaluation.results --save` writes complete-arm
-per-dataset metrics and paired differences to PROJECT Experiment 4, with its compact index on
+per-dataset metrics and paired differences to PROJECT Experiment 5, with its compact index on
 DATA. Negative differences are improvements for loss metrics, not for higher-is-better metrics.
-E5 is part of Experiment 1: `--feature-set non_text_plus_frozen_e5` selects the shared baseline;
-`non_text_plus_frozen_e5_and_joint`, `non_text_plus_frozen_e5_and_per_column` and
-`non_text_plus_frozen_e5_and_both` also require `--provider`. No `--control` is used for E5.
-Analysis matches non-text, E5-only and the same extractor without E5 references, plus a
-separate native-text reference table and dataset-level summaries. `--infer` additionally
-requires an approved `experiment_4/analysis` plan; it does not select headline metrics itself.
+Experiment 1 selects decision arms with `--phase experiment_1`. Experiment 2 additionally
+requires `--encoder`, `--pca-components 8|16|32|64|128|256` and `--pca-scope per_column|joint`;
+per-column scope uses only 32; joint scope uses all six dimensions. The internal feature-set identifiers retain
+`frozen_e5` for cache compatibility, but the encoder argument selects E5-small, E5-large
+or Qwen. Example read-only inspection:
+
+```bash
+python -m src.evaluation.campaign --phase experiment_2 --encoder e5_large_v2 --pca-components 32 --pca-scope per_column --model catboost
+python -m src.evaluation.campaign --phase experiment_3 --model tabstar
+```
+
+Primary comparisons are fixed before outcomes. Experiment 3 uses original text only.
+Later winner-selected combinations live in exploratory Experiment 5; select one decision
+extractor/mode and one encoder/PCA recipe with checksummed evidence and rationale. Analysis
+pairs these additions with the matching Experiment 2 or 3 baseline and labels them
+exploratory; confirmatory inference rejects them. Optional
+`--infer` needs an approved `experiment_5/analysis` plan; no headline metric is selected
+automatically. Experiment 4 analyzes explicit real diagnostic reports using
+`python -m src.evaluation.prompt_ablation --report PATH --save`; it makes no new calls.
 
 ## Transfer results
 
@@ -737,3 +795,85 @@ entire dataset. A retry safely reuses completed merges. Non-cache output collisi
 both versions; compatible token summaries are combined and paths rebased for local notebooks.
 Keep the original bundle and backups. Imported spending records are historical evidence,
 not a replacement for an active budget or extraction queue.
+
+## Parallel execution and resource measurement
+
+Reviewed VSC Library pin: `9e376b5ee9106e82d37eca86ca6acb861f580c93`, upstream
+`9475d631a15849b70d84642b17c226b1b89fd28d` (20 October). The reviewed Leuven
+Slurm, hardware and parallel-filesystem guides require explicit cluster selection,
+native filesystems and actual application compatibility checks. They do not promise
+current queue availability or unlimited concurrent jobs.
+
+`experiment_zero --site vsc --execute --watch` now starts CPU, storage and token checks
+independently. Encoders follow CPU validation; provider contracts follow CPU/storage/tokens;
+each provider pilot follows its contract. At most eight jobs are active by default.
+Submission receipts survive disconnects. A failed job stops new submissions without
+cancelling other jobs automatically. No repeated submission is used to improve priority.
+
+Routes are configured in `config/3. experiment_0/scheduling.yaml`. The default is regular
+wICE A100; H100 is an explicit alternate. Debug queues are unsuitable for parallel sweeps:
+only one A100 debug job may be queued per user. Mindwell B200 requires the actual **GPFS**
+group allocation in its profile, inputs/checkpoints/runtime staged there, and real B200
+compatibility evidence. Its root deliberately remains unset. Never stream heavy I/O from
+Lustre on Mindwell. Container wrappers can contain absolute prefixes: build/verify their
+GPFS copy; copying the wrapper alone does not establish relocatability. Use verified cache
+transfer/merge after separate-cluster extraction. Do not run overlapping writers against
+one dataset store; provider contracts now defer busy stores as extraction already did.
+
+Check current queue limits and availability before increasing concurrency:
+
+```bash
+sacctmgr show qos debug,interactive,long,normal format=Name%20,MaxSubmitJobsPerUser%15,MaxTRESPerUser%30
+sinfo --clusters=wice,mindwell
+squeue --clusters=all --me
+```
+
+Realistic short walltimes, measured memory and several independent single-GPU jobs make
+more schedulable work than one oversized allocation. Priority remains under Slurm/site
+policy. More credits do not give priority. P100/V100 are not enabled for these modern
+runtimes without compatible precision/kernels/VRAM evidence. Multi-GPU speed comes from
+independent array tasks; no unimplemented distributed execution is implied.
+
+GPU inference scripts record a compressed telemetry stream in the phase's DATA
+`logs/telemetry/` and one summary in `manifests/telemetry/`. The configurable default
+sampling interval is ten seconds. It records allocated-device utilization, VRAM and
+power alongside job/cluster/partition/CPU identity. Missing sampling is explicit, never
+reported as 100% utilization. Slurm keeps command stdout/stderr; application reports keep
+load/inference/fit/predict timing. GPU use can fall during I/O, synchronization, kernel
+launches and small batches. Increase measured batch sizes only after parity/memory tests.
+
+After frozen embeddings are complete, prepare PCA on CPU **before** predictor GPU jobs:
+
+```bash
+mkdir -p "output_JEVPFN/5. experiment_2/logs"
+sbatch scripts/slurm/prepare_pca.slurm REG_TEXT_ROTTEN_TOMATOES e5_small_v2
+```
+
+Repeat for the 18 selected datasets and three encoders (54 independently resumable CPU
+jobs). Each job prepares all seven settings and the correct outer/inner training
+partitions. Persistent numeric parameters go to PROJECT in one SQLite per dataset/encoder.
+Their schema/version includes the scikit-learn version; prepare with the same version
+used by the predictor runtime. Non-text preprocessing remains fold-local inside its
+predictor adapter. It is not legitimate to fit it or PCA once on the entire dataset.
+
+After 0B acceptance and explicit experiment enablement, this command **writes a plan and
+prints its exact submission command; it does not submit**:
+
+```bash
+python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --profile wice_a100 --concurrency 8 --write
+```
+
+The manifest assigns one unique dataset/representation per array item, all five folds.
+Only CPU resources are requested for CatBoost/linear; GPU predictors request one GPU per
+item. Use `--profile wice_h100` for a separately verified runtime or `mindwell_b200` after
+GPFS setup. Submit each logical array once, on one chosen profile. The per-array concurrency
+is not a global quota: several arrays add their active tasks. Check MaxSubmitJobsPerUser
+before submitting large arrays. `--profile-fold` routes first-fold resource tests to
+Experiment 0 instead of benchmark output. Full-run gates and frozen-source checks still
+apply, and no feature/row cap is introduced. Array jobs resume checksummed completed folds.
+
+For the final reset, retain weights, containers and permanent response/embedding stores.
+Use the existing preview/apply cleanup only after setup fixes and runtime tests pass, with
+no active JEVPFN writers. Then rebuild questions, upload verified inputs, freeze once, rerun
+0A, create features, prepare PCA, run 0B, and only then enable the benchmark. A clean output
+directory is not itself evidence that the code is bug-free.

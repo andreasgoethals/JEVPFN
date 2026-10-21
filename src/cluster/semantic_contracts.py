@@ -170,6 +170,12 @@ def robustness_summary(records):
                     np.abs(np.asarray(vector) - reference).sum() / 2
                 ),
                 "same_top_option": int(np.argmax(vector)) == int(np.argmax(reference)),
+                "maximum_probability_change": float(np.max(np.abs(np.asarray(vector) - reference))),
+                "expected_direction_change": float(
+                    np.dot(np.asarray(vector) - reference, np.arange(-4, 5))
+                )
+                if "expected_direction" in features
+                else None,
             }
         )
     return {

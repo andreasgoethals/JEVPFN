@@ -32,16 +32,24 @@ def test_new_conda_container_cannot_inherit_host_environment_directory(tmp_path)
     (host / "preserve").write_text("host remains untouched")
     driver = tmp_path / "preinstall.sh"
     driver.write_text(
-        'set -euo pipefail\n'
+        "set -euo pipefail\n"
         'if [[ "$OSTYPE" == msys* ]]; then CW_INSTALLATION_PATH="$(cygpath -u "$CW_INSTALLATION_PATH")"; fi\n'
         'source "$TEST_HOOK"\n'
         '[[ "$CONDA_ENVS_PATH" == "$CW_INSTALLATION_PATH/miniforge/envs" ]]\n'
-        'mkdir "$CONDA_ENVS_PATH/env1"\n', encoding="utf-8")
+        'mkdir "$CONDA_ENVS_PATH/env1"\n',
+        encoding="utf-8",
+    )
     result = subprocess.run(
         [bash_executable(), str(driver)],
-        env=dict(os.environ, CW_INSTALLATION_PATH=image.as_posix(), CONDA_ENVS_PATH=host.as_posix(),
-                 TEST_HOOK=(ROOT / "scripts/container_conda_pre_install.sh").as_posix()),
-        capture_output=True, text=True, timeout=20,
+        env=dict(
+            os.environ,
+            CW_INSTALLATION_PATH=image.as_posix(),
+            CONDA_ENVS_PATH=host.as_posix(),
+            TEST_HOOK=(ROOT / "scripts/container_conda_pre_install.sh").as_posix(),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
     assert result.returncode == 0, result.stderr
     assert (image / "miniforge/envs/env1").is_dir()
@@ -264,8 +272,17 @@ def test_unknown_runtime_is_rejected_before_any_install():
 
 
 @pytest.mark.parametrize(
-    "case", ["path", "bundled", "absent", "broken", "config_error", "relative_config",
-             "missing_wrapper", "module_error"]
+    "case",
+    [
+        "path",
+        "bundled",
+        "absent",
+        "broken",
+        "config_error",
+        "relative_config",
+        "missing_wrapper",
+        "module_error",
+    ],
 )
 def test_container_tools_resolve_bundle_or_stop_before_build(tmp_path, case):
     bindir = tmp_path / "isolated bin"
@@ -306,14 +323,21 @@ def test_container_tools_resolve_bundle_or_stop_before_build(tmp_path, case):
         'export TEST_LIBEXEC PATH="$TEST_BIN"\n'
         'module() { [[ "$*" == "load hpc-container-wrapper/0.4.2" && "$TEST_CASE" != module_error ]]; }\n'
         'source "$TEST_CHECK"\n'
-        'mksquashfs -version\nprintf "ready-to-build\\n"\n', encoding="utf-8"
+        'mksquashfs -version\nprintf "ready-to-build\\n"\n',
+        encoding="utf-8",
     )
     result = subprocess.run(
         [bash_executable(), str(driver)],
-        env=dict(os.environ, TEST_CASE=case, TEST_BIN=bindir.as_posix(),
-                 TEST_LIBEXEC=bundled.parent.parent.as_posix(),
-                 TEST_CHECK=(ROOT / "scripts/check_container_tools.sh").as_posix()),
-        capture_output=True, text=True, timeout=20,
+        env=dict(
+            os.environ,
+            TEST_CASE=case,
+            TEST_BIN=bindir.as_posix(),
+            TEST_LIBEXEC=bundled.parent.parent.as_posix(),
+            TEST_CHECK=(ROOT / "scripts/check_container_tools.sh").as_posix(),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
     if case in {"path", "bundled"}:
         assert result.returncode == 0, result.stderr
@@ -334,7 +358,7 @@ def test_container_tools_resolve_bundle_or_stop_before_build(tmp_path, case):
 def test_container_retry_reuses_only_an_empty_destination(tmp_path, kind):
     source = (ROOT / "scripts/build_decision_container.sh").read_text()
     start = source.index('if [[ -d "$JEVPFN_BUILD_DEST"')
-    guard = source[start:source.index("# The wICE", start)]
+    guard = source[start : source.index("# The wICE", start)]
     destination = tmp_path / "container with spaces"
     if kind in {"empty", "nonempty"}:
         destination.mkdir()
@@ -385,15 +409,22 @@ def test_private_wrap_template_preserves_contents_and_executable_bits(tmp_path, 
         '  [[ "$1" == -R && "$2" == --preserve=links,timestamps ]] || return 28\n'
         '  command cp "$@"\n}\n'
         'source "$TEST_TEMPLATE"\n'
-        '"$CW_INSTALLATION_PATH/tool"\n', encoding="utf-8"
+        '"$CW_INSTALLATION_PATH/tool"\n',
+        encoding="utf-8",
     )
     result = subprocess.run(
         [bash_executable(), str(driver)],
-        env=dict(os.environ, CW_SOURCE_MOUNT_POINT=source.as_posix(),
-                 CW_INSTALLATION_PATH=destination.as_posix(), CW_WORKDIR=work.as_posix(),
-                 TEST_FAILURE=failure,
-                 TEST_TEMPLATE=(ROOT / "scripts/wrap_environment_template.sh").as_posix()),
-        capture_output=True, text=True, timeout=20,
+        env=dict(
+            os.environ,
+            CW_SOURCE_MOUNT_POINT=source.as_posix(),
+            CW_INSTALLATION_PATH=destination.as_posix(),
+            CW_WORKDIR=work.as_posix(),
+            TEST_FAILURE=failure,
+            TEST_TEMPLATE=(ROOT / "scripts/wrap_environment_template.sh").as_posix(),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
     assert result.returncode == {"none": 0, "copy": 27, "post_install": 29}[failure], result.stderr
     assert (source / "package.txt").read_text(encoding="utf-8") == "unchanged package bytes α\n"
@@ -418,8 +449,15 @@ def test_private_wrap_template_keeps_symlinks_and_hardlinks(tmp_path):
     (dest / "_post_install.sh").write_text(":\n")
     result = subprocess.run(
         [bash_executable(), "-e", str(ROOT / "scripts/wrap_environment_template.sh")],
-        env=dict(os.environ, CW_SOURCE_MOUNT_POINT=str(source), CW_INSTALLATION_PATH=str(dest),
-                 CW_WORKDIR=str(tmp_path)), capture_output=True, text=True, timeout=20,
+        env=dict(
+            os.environ,
+            CW_SOURCE_MOUNT_POINT=str(source),
+            CW_INSTALLATION_PATH=str(dest),
+            CW_WORKDIR=str(tmp_path),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
     assert result.returncode == 0, result.stderr
     assert (dest / "alias").is_symlink() and os.readlink(dest / "alias") == "original"
@@ -428,10 +466,12 @@ def test_private_wrap_template_keeps_symlinks_and_hardlinks(tmp_path):
 
 @pytest.mark.parametrize("changed_template", [False, True])
 @pytest.mark.parametrize("existing_alias", [False, True])
-def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_template, existing_alias):
+def test_private_wrapper_patch_rejects_unknown_site_templates(
+    tmp_path, changed_template, existing_alias
+):
     script = (ROOT / "scripts/build_decision_container.sh").read_text()
     start = script.index("import sys\nfrom pathlib import Path\nroot,repo=")
-    code = script[start:script.index("\nPY", start)]
+    code = script[start : script.index("\nPY", start)]
     wrapper = tmp_path / "private wrapper"
     (wrapper / "templates").mkdir(parents=True)
     (wrapper / "frontends").mkdir()
@@ -446,7 +486,9 @@ def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_
         alias.write_text("site dispatcher placeholder")
     result = subprocess.run(
         [sys.executable, "-c", code, str(wrapper), str(ROOT)],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if changed_template:
         assert result.returncode != 0 and "Site wrap template changed" in result.stderr
@@ -462,3 +504,52 @@ def test_private_wrapper_patch_rejects_unknown_site_templates(tmp_path, changed_
         assert result.returncode == 0, result.stderr
         assert template.read_bytes() == (ROOT / "scripts/wrap_environment_template.sh").read_bytes()
         assert alias.is_symlink() and os.readlink(alias) == "containerize"
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_new_conda_template_uses_image_prefix_even_with_host_env1(tmp_path, changed):
+    from src.cluster.container_templates import explicit_conda_prefix
+
+    template = """if false; then
+mamba $_EC create --name $CW_ENV_NAME $_FF environment.yaml
+else
+conda $_EC create --name $CW_ENV_NAME $_FF environment.yaml
+fi
+conda activate $CW_ENV_NAME
+"""
+    if changed:
+        with pytest.raises(ValueError, match="template changed"):
+            explicit_conda_prefix(template.replace("conda activate", "conda run"))
+        return
+    image = tmp_path / "image"
+    (image / "miniforge/bin").mkdir(parents=True)
+    executable = image / "miniforge/bin/conda"
+    executable.write_text(
+        "#!/bin/bash\nset -eu\n"
+        '[[ "$1" == create && "$2" == --prefix && "$3" == "$env_root" ]] || exit 61\n'
+        'mkdir -p "$3"\nprintf "created image prefix\\n"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    executable.chmod(0o755)
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        "set -euo pipefail\n"
+        'if [[ "$OSTYPE" == msys* ]]; then CW_INSTALLATION_PATH="$(cygpath -u "$CW_INSTALLATION_PATH")"; fi\n'
+        'export env_root="$CW_INSTALLATION_PATH/miniforge/envs/env1"\n'
+        'CW_ENV_NAME=env1; _EC=""; _FF=""\n'
+        "# Name-based lookup would select the unrelated host env1: refuse it.\n"
+        'conda() { [[ "$1" == activate && "$2" == "$env_root" && -d "$2" ]] || return 62; printf "activated image prefix\\n"; }\n'
+        + explicit_conda_prefix(template),
+        encoding="utf-8",
+        newline="\n",
+    )
+    result = subprocess.run(
+        [bash_executable(), str(driver)],
+        env=dict(os.environ, CW_INSTALLATION_PATH=image.as_posix()),
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["created image prefix", "activated image prefix"]

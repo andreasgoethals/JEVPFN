@@ -198,6 +198,7 @@ def evaluate_cv(
         "experiment_2",
         "experiment_3",
         "experiment_4",
+        "experiment_5",
     }:
         raise ValueError("Evaluation requires an experiment phase")
     row_ids = [f"csv:{i}" for i in range(len(dataset.frame))]

@@ -1,4 +1,4 @@
-"""Explicit, bounded offline E5 test; never creates features for a benchmark dataset."""
+"""Explicit, bounded offline embedding test; never creates features for a benchmark dataset."""
 
 import argparse
 import json
@@ -17,8 +17,10 @@ from src.utils.serialization import digest, write_json
 
 
 def exercise(cfg, encoder, destination):
-    """Exercise the real persistence path with repeated, missing and over-512-token text."""
-    long_text = "A detailed description of a research observation. " * 160
+    """Exercise the real persistence path with repeated, missing and text longer than the configured chunk size."""
+    long_text = "A detailed description of a research observation. " * max(
+        160, cfg["max_tokens"] // 3
+    )
     short = "The observation describes a useful product."
     frame = pd.DataFrame(
         {
@@ -73,10 +75,10 @@ def exercise(cfg, encoder, destination):
     }
 
 
-def run(*, execute=False, encoder_factory=embeddings.E5Encoder):
+def run(*, execute=False, encoder_factory=embeddings.E5Encoder, encoder_id="e5_small_v2"):
     if not execute:
-        raise RuntimeError("Pass --execute for the bounded E5 contract test")
-    cfg = load_yaml("feature_creation/text_embeddings")
+        raise RuntimeError("Pass --execute for the bounded embedding contract test")
+    cfg = embeddings.encoder_config(encoder_id)
     run_id = uuid4().hex
     manifest = (
         paths.manifests_dir("experiment_0") / "before_extraction" / "embeddings" / f"{run_id}.json"
@@ -86,6 +88,7 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder):
     )
     report = {
         "status": "running",
+        "encoder_id": encoder_id,
         "config": cfg,
         "fixture_cache": str(destination),
         "full_feature_creation_enabled": False,
@@ -108,10 +111,15 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--encoder",
+        default="e5_small_v2",
+        choices=tuple(load_yaml("feature_creation/embedding_models")["models"]),
+    )
     args = parser.parse_args()
     print(
         json.dumps(
-            run(execute=True)
+            run(execute=True, encoder_id=args.encoder)
             if args.execute
             else {
                 "execution_enabled": False,

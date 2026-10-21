@@ -5,7 +5,7 @@ JEVPFN_BUILD_PROVIDER="${1:?Pass cloudflare|intern|liquid|strands|perplexity}"
 JEVPFN_BUILD_MODE="${2:-wrap}"
 case "$JEVPFN_BUILD_PROVIDER" in
     cloudflare|intern|liquid|strands|perplexity) JEVPFN_BUILD_DECISION=1 ;;
-    catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab)
+    catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
         JEVPFN_BUILD_DECISION=0
         [[ "$JEVPFN_BUILD_MODE" == wrap ]] || { echo 'Predictors: wrap a separately reviewed environment; no guessed dependency installation.' >&2; exit 2; } ;;
     *) exit 2 ;;
@@ -89,7 +89,7 @@ work,repo,provider,root=sys.argv[1:]
 q=shlex.quote
 Path(work,'environment.yaml').write_text('channels: [conda-forge]\ndependencies: [python=3.12, pip]\n',encoding='utf-8')
 extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','strands':'strands','perplexity':'token-audit'}[provider]
-prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); assert Path(sys.prefix).resolve()==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
+prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); actual=Path(sys.prefix).resolve(); print(f"Image interpreter: {actual}; expected: {expected}"); assert actual==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
 lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'python -I -c {q(prefix_check)}', f'cd {q(repo)}',
        f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}']
 if provider=='perplexity':
@@ -102,7 +102,24 @@ else:
 lines+=['python -m pip check',f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
 Path(work,'post_install.sh').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 PY
-    conda-containerize new --prefix "$JEVPFN_BUILD_DEST" --pre-install "$JEVPFN_BUILD_REPO/scripts/container_conda_pre_install.sh" --post-install "$JEVPFN_BUILD_WORK/post_install.sh" "$JEVPFN_BUILD_WORK/environment.yaml"
+    # Name-based creation/activation can resolve an existing host env1 despite envs_dirs.
+    # Force the absolute image prefix in a private copy, leaving the site install untouched.
+    JEVPFN_PRIVATE_WRAPPER="$JEVPFN_BUILD_WORK/wrapper"
+    mkdir "$JEVPFN_PRIVATE_WRAPPER"
+    cp -R -- "$JEVPFN_WRAPPER_ROOT/." "$JEVPFN_PRIVATE_WRAPPER"
+    "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_PRIVATE_WRAPPER" <<'PY'
+import sys
+from pathlib import Path
+from src.cluster.container_templates import explicit_conda_prefix
+root=Path(sys.argv[1])
+template=root/'templates/conda.sh'
+template.write_text(explicit_conda_prefix(template.read_text()),encoding='utf-8')
+alias=root/'frontends/conda-containerize'
+alias.unlink(missing_ok=True)
+alias.symlink_to('containerize')
+print('Private Conda template: explicit image prefix for creation and activation')
+PY
+    bash "$JEVPFN_PRIVATE_WRAPPER/frontends/conda-containerize" new --prefix "$JEVPFN_BUILD_DEST" --pre-install "$JEVPFN_BUILD_REPO/scripts/container_conda_pre_install.sh" --post-install "$JEVPFN_BUILD_WORK/post_install.sh" "$JEVPFN_BUILD_WORK/environment.yaml"
 fi
 cd "$JEVPFN_BUILD_REPO"
 if [[ "$JEVPFN_BUILD_MODE" == wrap ]]; then

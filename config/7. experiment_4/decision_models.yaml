@@ -1,61 +1,14 @@
-extends: experiment_1/protocol
 phase: experiment_4
-name: decision_model_text_representation_comparison
+name: decision_model_input_sensitivity
 enabled: false
-proposal: true
-extractor_catalog: extractors
-candidate_extractors:
-- jev
-- liquid
-- perplexity
-- cloudflare
-- strands
-- intern
-candidate_models:
-- catboost
-- tabpfn_3_5
-- tabicl_v2
-- limix_2
-- kumo_tabular
-- linear
-model_catalog: experiment_1/models
-candidate_combinations:
-- non_text
-- non_text_plus_joint
-- non_text_plus_per_column
-- non_text_plus_both
-- non_text_plus_frozen_e5
-- non_text_plus_frozen_e5_and_joint
-- non_text_plus_frozen_e5_and_per_column
-- non_text_plus_frozen_e5_and_both
-common_question_templates: src.jev.semantics
-question_bank_id: null
-question_variant: documented
-feature_selection: provider_model_version_question_bank_and_representation
-inputs: identical_task_metadata_and_text_only
-missing_policy: skip_empty_store_nan
-feature_view: main
-new_extraction_requires:
-- approved_provider_pilot
-- verified_revision
-- reviewed_common_input_coverage
-- approved_budget
-context_mismatch: report_coverage_and_review_never_silent_provider_truncation
-long_text_policy: unresolved
-refusal_policy: unresolved_never_treat_as_missing_text
-comparison: paired_feature_benefit_within_fixed_predictor
-record:
-- prediction_metrics
-- extraction_input_tokens
-- extraction_cost
-- extraction_latency
-- throughput
-- downstream_fit_time
-- downstream_predict_time
-- failure_coverage
+candidate_extractors: [jev, liquid, perplexity, cloudflare, strands, intern]
+implementation: src.evaluation.prompt_ablation
+sample: shared_label_blind_real_text_contracts
+variants: [base, paraphrase, option_order, irrelevant_context, embedded_instruction]
+metrics: [total_variation, maximum_probability_change, top_class_change, expected_direction_change]
+selection: no_prompt_selection_from_target_labels_or_final_CV_results
+new_calls: explicit_bounded_provider_contract_execution_only
+reuse_existing_responses: true
+
 dataset_selection:
-  exclude:
-  - REG_TEXT_ZOMATO_RESTAURANTS
-  - MUL_TEXT_SPOTIFY_GENRES
-comparison_implemented_in: experiment_1/main
-new_model_fits_required: false
+  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]

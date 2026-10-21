@@ -106,17 +106,30 @@ def mode_budget(estimates, cfg, ratio=4):
 
 
 def throughput_table(requests, tokens, cfg):
-    tps = cfg["throughput_review"]["proposed_input_tokens_per_second"]
-    proposed_rps = cfg["throughput_review"]["proposed_requests_per_second"]
+    review = cfg["throughput_review"]
+    tps = review["account_input_tokens_per_second"]
+    rps = review["account_requests_per_second"]
+    from src.utils.config import load_yaml
+
+    bound = load_yaml("experiment_0/jev_smoke")["documented_request_context_tokens"]
     return pd.DataFrame(
         [
             {
-                "requests_per_second": rps,
-                "input_tokens_per_second": tps,
-                "request_bound_hours": requests / rps / 3600,
-                "token_bound_hours": tokens / tps / 3600,
-                "ideal_minimum_hours": max(requests / rps, tokens / tps) / 3600,
+                "scenario": label,
+                "requests_per_second": request_rate,
+                "input_tokens_per_second": token_rate,
+                "request_bound_hours": requests / request_rate / 3600,
+                "estimated_token_bound_hours": tokens / token_rate / 3600,
+                "ideal_minimum_hours": max(requests / request_rate, tokens / token_rate) / 3600,
+                "current_dispatcher_minimum_hours": requests
+                * max(1 / request_rate, bound / token_rate)
+                / 3600,
+                "limitation": "Latency, workers, failures and other account traffic add time; token estimate is not exact",
             }
-            for rps in (proposed_rps / 2, proposed_rps, proposed_rps * 2)
+            for label, request_rate, token_rate in (
+                ("Current owner-confirmed account", rps, tps),
+                ("Hypothetical double RPS only", rps * 2, tps),
+                ("Hypothetical 10x TPS only", rps, tps * 10),
+            )
         ]
     )

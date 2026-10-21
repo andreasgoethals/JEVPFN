@@ -16,6 +16,53 @@ from src.utils.serialization import canonical_json, digest
 MAPPING_VERSION = "typesafe-systemone-v1"
 QUESTION_ID = "semantic"
 SCORE_VALIDATION_VERSION = "jev-two-decimal-envelope-v1"
+PROBABILITY_VALIDATION_VERSION = "jev-two-decimal-simplex-v1"
+
+
+def probability_distribution(values, provider):
+    """Normalize only Jev's observed two-decimal rounding, retaining the raw response.
+
+    Find the closest sum-one vector in squared distance, with every entry within
+    half a hundredth of its reported value. This is a bounded compatibility policy,
+    not a provider precision guarantee or recovery of the unknown unrounded values.
+    Full-precision open-weight outputs keep the original strict sum check.
+    """
+    values = [_number(v, 0, 1) for v in values]
+    total = math.fsum(values)
+    normalized = values
+    adjusted = not math.isclose(total, 1, rel_tol=0, abs_tol=1e-5)
+    if adjusted:
+        if (
+            provider != "jev"
+            or total <= 0
+            or not all(
+                math.isclose(v * 100, round(v * 100), rel_tol=0, abs_tol=1e-8) for v in values
+            )
+        ):
+            raise ValueError("Response probabilities do not sum to one.")
+        lows, highs = [max(0, v - 0.005) for v in values], [min(1, v + 0.005) for v in values]
+        if math.fsum(lows) > 1 + 1e-12 or math.fsum(highs) < 1 - 1e-12:
+            raise ValueError("Rounded probabilities cannot represent a distribution.")
+        # Projection onto the bounded probability simplex has form clip(p + shift).
+        # Bisection is permutation-equivariant; class order cannot affect the repair.
+        left, right = -0.005, 0.005
+        for _ in range(60):
+            shift = (left + right) / 2
+            normalized = [min(hi, max(lo, v + shift)) for v, lo, hi in zip(values, lows, highs)]
+            if math.fsum(normalized) < 1:
+                left = shift
+            else:
+                right = shift
+        if not math.isclose(math.fsum(normalized), 1, abs_tol=1e-10, rel_tol=0):
+            raise ValueError("Probability rounding reconstruction failed.")
+    return normalized, {
+        "policy": PROBABILITY_VALIDATION_VERSION,
+        "reported_sum": total,
+        "normalization_applied": adjusted,
+        "maximum_absolute_adjustment": max(
+            (abs(a - b) for a, b in zip(values, normalized)), default=0
+        ),
+    }
 
 
 def score_consistency(score, values, provider):
@@ -124,7 +171,7 @@ def _number(value, low: float, high: float) -> float:
 
 
 def response_features(request: IntendedRequest, response: dict) -> dict[str, float]:
-    """Validate a supplied response and preserve all probabilities; never synthesize them."""
+    """Decode a response; only bounded Jev wire-rounding normalization is permitted."""
     settings = json.loads(request.settings_json)
     provider = settings.get("provider", "jev")
     if provider == "jev":
@@ -161,21 +208,21 @@ def response_features(request: IntendedRequest, response: dict) -> dict[str, flo
     probabilities = answer.get("probabilities", {})
     if set(probabilities) != set(keys):
         raise ValueError("Response probability keys do not match the complete answer space.")
-    values = [_number(probabilities[k], 0, 1) for k in keys]
-    if not math.isclose(sum(values), 1, abs_tol=1e-5):
-        raise ValueError("Response probabilities do not sum to one.")
+    raw_values = [_number(probabilities[k], 0, 1) for k in keys]
+    values, _ = probability_distribution(raw_values, provider)
     features = {f"p_{key}": value for key, value in zip(keys, values)}
     features["confidence"] = _number(answer.get("confidence"), 0, 1)
     if answer["type"] == "choice":
         if answer.get("choice") not in keys:
             raise ValueError("Selected class is outside the allowed answer space.")
-        if probabilities[answer["choice"]] < max(values) - 1e-5:
+        if probabilities[answer["choice"]] < max(raw_values) - 1e-5:
             raise ValueError("Selected class is inconsistent with its probabilities.")
     else:
         if answer.get("legend") != dict(zip(keys, question["criteria"])):
             raise ValueError("Regression legend differs from the requested scale.")
         score = _number(answer.get("score"), 0, 8)
-        expected = score_consistency(score, values, provider)["probability_weighted_score"]
+        score_consistency(score, raw_values, provider)
+        expected = sum(i * p for i, p in enumerate(values))
         # Jev indexes levels 0..8; our agreed directional values are -4..+4.
         features["expected_direction"] = expected - 4
     return features

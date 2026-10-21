@@ -4,10 +4,9 @@ common_tasks:
 - binary_classification
 - multiclass_classification
 - regression
-roster_status: owner_selected_six_numeric_predictors_two_original_text_models
+roster_status: owner_selected_six_numeric_predictors_three_original_text_models
 text_comparison_rule: distinguish_text_encoders_from_categorical_string_encoding
-excluded_frameworks:
-- autogluon
+excluded_frameworks: []
 excluded_models:
 - TabM
 - Google_Research_TabFM
@@ -16,7 +15,7 @@ hyperparameter_search: false
 models:
   tabpfn_3_5:
     name: TabPFN-3.5
-    priority: selected_eight_feature_arms
+    priority: selected_decision_and_embedding_experiments
     package: tabpfn==9.0.0
     model_selector: ModelVersion.V3_5
     extra: models
@@ -31,7 +30,7 @@ models:
         tabpfn: 9.0.0
       seed: 20260929
       device: cuda
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints:
         binary_classification:
@@ -45,7 +44,7 @@ models:
           sha256: null
   catboost:
     name: CatBoost
-    priority: selected_eight_feature_arms
+    priority: selected_decision_and_embedding_experiments
     package: catboost==1.2.10
     extra: baselines
     device_proposal: cpu
@@ -57,12 +56,12 @@ models:
         catboost: 1.2.10
       seed: 20260929
       device: cpu
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints: {}
   linear:
     name: Logistic regression for classification; linear regression for regression
-    priority: selected_eight_feature_arms
+    priority: selected_decision_and_embedding_experiments
     package: scikit-learn==1.9.1
     extra: baselines
     device_proposal: cpu
@@ -77,12 +76,12 @@ models:
         scikit-learn: 1.9.1
       seed: 20260929
       device: cpu
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints: {}
   tabicl_v2:
     name: TabICL v2
-    priority: selected_eight_feature_arms
+    priority: selected_decision_and_embedding_experiments
     package: tabicl==2.2.0
     classification_checkpoint: tabicl-classifier-v2-20260212.ckpt
     regression_checkpoint: tabicl-regressor-v2-20260212.ckpt
@@ -96,7 +95,7 @@ models:
         tabicl: 2.2.0
       seed: 20260929
       device: cuda
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints:
         binary_classification:
@@ -110,7 +109,7 @@ models:
           sha256: null
   limix_2:
     name: LimiX-2
-    priority: selected_eight_feature_arms
+    priority: selected_decision_and_embedding_experiments
     package: null
     extra: limix
     checkpoint: LimiX-2.ckpt
@@ -131,7 +130,7 @@ models:
         LimiX: git:516bf396333feb3198cf7aff8a6c10421f218e24
       seed: 20260929
       device: cuda
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints:
         binary_classification:
@@ -170,7 +169,7 @@ models:
         tabstar: 1.1.16
       seed: 20260929
       device: cuda
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints: {}
       pretrain_dataset_or_path: null
@@ -195,11 +194,34 @@ models:
         sap-rpt-oss: git:a0067b3c9db56bc35a6dcab09a9223a3ff0821e0
       seed: 20260929
       device: cuda
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints: {}
       checkpoint_filename: null
       assets: []
+  ag_mm:
+    name: AutoGluon-Multimodal (AG-MM)
+    priority: selected_original_text_baseline
+    extra: ag-mm
+    source: https://auto.gluon.ai/stable/api/autogluon.multimodal.MultiModalPredictor.html
+    raw_text: supervised_text_encoder_and_numeric_categorical_fusion
+    fixed_recipe: medium_quality_no_HPO_no_model_ensemble
+    text_encoder_source: google/electra-base-discriminator
+    runtime:
+      packages:
+        autogluon.multimodal: 1.6.1
+      seed: 20260929
+      device: cuda
+      threads: 8  # capped to the actual Slurm CPU allocation
+      parameters: {}
+      checkpoints: {}
+      text_checkpoint_path: null
+      assets: []
+    review:
+    - immutable_text_encoder_revision_and_all_file_hashes
+    - separate_runtime_transformers_less_than_5_15
+    - offline_GPU_binary_multiclass_regression_contracts
+    - full_fold_training_time_and_memory
   kumo_tabular:
     name: NVIDIA Kumo Tabular
     source: https://github.com/NVIDIA/structured-data-models
@@ -207,13 +229,13 @@ models:
     extra: kumo
     checkpoint_revision: v1.0.1
     regression_point: mean_of_999_predicted_quantiles
-    priority: selected_eight_feature_arms
+    priority: selected_decision_and_embedding_experiments
     runtime:
       packages:
         structured-data-models: git:bd2d55db104679393fcd6afe13305f37e40b5467
       seed: 20260929
       device: cuda
-      threads: 1
+      threads: 8  # capped to the actual Slurm CPU allocation
       parameters: {}
       checkpoints:
         binary_classification:

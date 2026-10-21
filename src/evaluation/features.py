@@ -71,6 +71,14 @@ MAIN_FEATURE_SETS = (
 
 EMBEDDING_BASELINE = "non_text_plus_frozen_e5"
 PROVIDER_INDEPENDENT_SETS = ("non_text", EMBEDDING_BASELINE)
+DECISION_FEATURE_SETS = MAIN_FEATURE_SETS[:4]
+EMBEDDING_FEATURE_SETS = MAIN_FEATURE_SETS[4:]
+NATIVE_FEATURE_SETS = (
+    "original_features",
+    "original_features_plus_joint",
+    "original_features_plus_per_column",
+    "original_features_plus_both",
+)
 
 
 def uses_embeddings(name):
@@ -79,20 +87,49 @@ def uses_embeddings(name):
 
 def decision_feature_set(name):
     """Select the decision block independently of the optional embedding addition."""
-    return dict(zip(MAIN_FEATURE_SETS[4:], MAIN_FEATURE_SETS[:4])).get(name, name)
+    return (
+        dict(zip(EMBEDDING_FEATURE_SETS, DECISION_FEATURE_SETS))
+        | dict(zip(NATIVE_FEATURE_SETS, DECISION_FEATURE_SETS))
+    ).get(name, name)
+
+
+def combine_representations(base, additions):
+    """Concatenate extractor outputs, retaining non-text/presence columns exactly once."""
+    result = base.copy()
+    artifacts = list(base.attrs.get("feature_artifact_ids", []))
+    for namespace, matrix in additions:
+        if not result.index.equals(matrix.index) or not matrix.index.is_unique:
+            raise ValueError("Decision feature row identities differ")
+        new = {}
+        for column in matrix:
+            if column in base:
+                if not matrix[column].equals(base[column]):
+                    raise ValueError("Shared non-text or presence values differ")
+            elif column.startswith("text_presence__") and column in result:
+                if not matrix[column].equals(result[column]):
+                    raise ValueError("Shared text presence differs")
+            else:
+                name = column if column.startswith("text_presence__") else f"{namespace}__{column}"
+                if name in result:
+                    raise ValueError("Duplicate decision feature namespace")
+                new[name] = matrix[column]
+        result = result.join(pd.DataFrame(new, index=result.index), validate="one_to_one")
+        artifacts.extend(matrix.attrs.get("feature_artifact_ids", []))
+    result.attrs = dict(base.attrs)
+    result.attrs["feature_artifact_ids"] = list(dict.fromkeys(artifacts))
+    if any(c.startswith("text_presence__") for c in result):
+        result.attrs["missingness_policy"] = MISSINGNESS_VERSION
+    return result
 
 
 def benchmark_feature_table():
-    """The eight reviewed configurations, shared by the notebook and campaign."""
+    """Feature families in Experiments 1 and 2, shared by notebook and campaign."""
     labels = (
         "Non-text",
         "+ Joint",
         "+ Per-column",
         "+ Both",
-        "+ E5",
-        "+ E5 + Joint",
-        "+ E5 + Per-column",
-        "+ E5 + Both",
+        "+ Embedding",
     )
     return pd.DataFrame(
         [
@@ -100,13 +137,13 @@ def benchmark_feature_table():
                 "configuration": label,
                 "feature_set": name,
                 "Non-text": True,
-                "E5 / PCA": uses_embeddings(name),
+                "Embedding / PCA": uses_embeddings(name),
                 "Joint": decision_feature_set(name)
                 in ("non_text_plus_joint", "non_text_plus_both"),
                 "Per-column": decision_feature_set(name)
                 in ("non_text_plus_per_column", "non_text_plus_both"),
             }
-            for name, label in zip(MAIN_FEATURE_SETS, labels)
+            for name, label in zip(MAIN_FEATURE_SETS[:5], labels)
         ]
     )
 

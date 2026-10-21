@@ -6,7 +6,11 @@ JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}/JEVPFN"
 JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/$JEVPFN_RUNTIME_NAME"
 unset JEVPFN_CONTAINER_PROVIDER JEVPFN_CONTAINER_ID
 case "$JEVPFN_RUNTIME_NAME" in
-    cloudflare|intern|liquid|strands|perplexity|catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab)
+    cloudflare|intern|liquid|strands|perplexity|catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
+        if [[ "$JEVPFN_REQUESTED_ENV" == "$JEVPFN_RUNTIME_NAME" ]]; then
+            JEVPFN_REQUESTED_ENV="$JEVPFN_RUNTIME_BASE/environments/$JEVPFN_RUNTIME_NAME"
+            export JEVPFN_CONDA_ENV="$JEVPFN_REQUESTED_ENV"
+        fi
         if [[ ( "$JEVPFN_REQUESTED_ENV" == "$JEVPFN_RUNTIME_BASE/environments/$JEVPFN_RUNTIME_NAME" || "$JEVPFN_REQUESTED_ENV" == "$JEVPFN_PACKED_ENV" ) && -f "$JEVPFN_PACKED_ENV/_JEVPFN_CONTAINER.json" ]]; then
             export JEVPFN_CONDA_ENV=JEVPFN
             source scripts/activate_conda.sh || return

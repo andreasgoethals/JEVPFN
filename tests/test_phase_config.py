@@ -28,8 +28,9 @@ def test_phase_inheritance_preserves_defaults():
     for number, name in [
         (0, "debug"),
         (1, "main"),
-        (2, "native_text"),
-        (3, "output_ablation"),
+        (2, "embeddings"),
+        (3, "native_text"),
+        (5, "output_ablation"),
     ]:
         assert load_yaml(f"experiment_{number}/{name}")["enabled"] is False
 
@@ -57,7 +58,7 @@ def test_cannot_enable_live_features():
 
 def test_shared_experiment_proposals_preserve_validation_boundary_and_catalog():
     models = load_yaml("experiment_1/models")["models"]
-    for name in ("experiment_1/main", "experiment_2/native_text", "experiment_3/output_ablation"):
+    for name in ("experiment_1/main", "experiment_3/native_text", "experiment_5/output_ablation"):
         cfg = load_yaml(name)
         assert cfg["enabled"] is False
         assert set(cfg["candidate_models"]) <= set(models)
@@ -97,8 +98,8 @@ def test_experiment_selection_excludes_zomato_but_audit_keeps_it():
         "feature_creation",
         "experiment_0/debug",
         "experiment_1/main",
-        "experiment_2/native_text",
-        "experiment_3/output_ablation",
+        "experiment_3/native_text",
+        "experiment_5/output_ablation",
         "experiment_4/decision_models",
     ):
         entries = selected_entries(catalog, load_yaml(name))

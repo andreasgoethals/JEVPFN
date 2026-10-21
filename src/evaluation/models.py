@@ -22,7 +22,7 @@ from src.utils import paths
 from src.utils.serialization import canonical_json, file_sha256, scalar
 
 MAIN_MODELS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear")
-TEXT_MODELS = ("tabstar", "contexttab")
+TEXT_MODELS = ("tabstar", "contexttab", "ag_mm")
 
 
 class FoldInput:
@@ -256,7 +256,11 @@ def _backend(model_id, task, settings, encoder, n_train):
             random_state=seed,
             pretrain_dataset_or_path=settings["pretrain_dataset_or_path"],
             output_dir=str(
-                paths.results_dir("tabstar_training", uuid4().hex, phase="experiment_2")
+                paths.results_dir(
+                    "tabstar_training",
+                    uuid4().hex,
+                    phase=settings.get("output_phase", "experiment_3"),
+                )
             ),
             **params,
         )
@@ -276,6 +280,11 @@ def _backend(model_id, task, settings, encoder, n_train):
         model.seed = seed
         model.tokenizer.random_seed = seed
         return model
+    if model_id == "ag_mm":
+        _verify_assets(settings)
+        from src.evaluation.ag_mm import AutoMMBackend
+
+        return AutoMMBackend(task, settings, encoder)
     raise ValueError(f"Unknown predictor: {model_id}")
 
 
@@ -316,8 +325,11 @@ class KumoBackend:
         )
 
     def fit(self, x, y):
-        if x.shape[1] > 500:
-            raise ValueError("Kumo default recipe selects 500 columns; refuse silent feature loss")
+        extra_counts = sum(x[c].nunique(dropna=True) > 50 for c in self.categorical_columns)
+        if x.shape[1] + extra_counts > 500:
+            raise ValueError(
+                "Kumo default recipe selects 500 columns after category-count expansion; refuse silent feature loss"
+            )
         self.classes_ = np.unique(y) if self.task != "regression" else None
         self.x_, self.y_ = (
             self._table(x),
@@ -376,6 +388,7 @@ class PredictorAdapter:
         if self.model_id in MAIN_MODELS and set(x.columns) & set(self.metadata.text_columns):
             raise ValueError("Original text cannot enter a numeric feature arm")
         self.encoder_ = FoldInput().fit(x)
+        self.encoder_.text_columns_ = list(self.metadata.text_columns)
         task = self.metadata.task_type
         self.classes_ = np.asarray(self.metadata.classes, dtype=object)
         if task == "regression":

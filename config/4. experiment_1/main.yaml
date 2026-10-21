@@ -11,18 +11,13 @@ candidate_models:
 - limix_2
 - kumo_tabular
 - linear
-roster_note: six_predictors_eight_arms_two_separate_original_text_baselines
+roster_note: six_predictors_four_arms_baseline_shared_across_extractors
 feature_artifacts: []
 candidate_combinations:
 - non_text
 - non_text_plus_joint
 - non_text_plus_per_column
 - non_text_plus_both
-- non_text_plus_frozen_e5
-- non_text_plus_frozen_e5_and_joint
-- non_text_plus_frozen_e5_and_per_column
-- non_text_plus_frozen_e5_and_both
-embedding_configuration: feature_creation/text_embeddings
 text_statistics_baseline: src.evaluation.features.text_statistics
 include_non_text_features_in_jev: false
 feature_view:
@@ -40,7 +35,7 @@ dataset_selection:
   - REG_TEXT_ZOMATO_RESTAURANTS
   - MUL_TEXT_SPOTIFY_GENRES
 experiment_0_acceptance: null
-candidate_extractors:
+candidate_extractors: &id001
 - jev
 - liquid
 - perplexity
@@ -57,3 +52,6 @@ feature_selectors:
   cloudflare: null
   strands: null
   intern: null
+combined_extractor_groups:
+- *id001
+combined_extractors_in_main_plan: false

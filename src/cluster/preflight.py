@@ -179,20 +179,36 @@ def contract_tests(run_id: str) -> dict:
 
 
 def embedding_checks(cfg: dict) -> list[dict]:
-    """Experiment 0B must validate all saved E5 datasets, not just an encoder smoke test."""
-    from src.data.text_embeddings import cache_path, validate_dataset
+    """Experiment 0B must validate all saved encoder/dataset stores, not just an encoder smoke test."""
+    from src.data.text_embeddings import cache_path, encoder_config, validate_dataset
 
-    encoder = load_yaml("feature_creation/text_embeddings")
     results = []
     for entry in selected_entries(load_catalog(), cfg):
-        item = {"dataset_id": entry["id"], "status": "failed", "path": str(cache_path(entry["id"]))}
         try:
             dataset = load_dataset(entry, allow_download=False)
-            recipe = validate_dataset(dataset, encoder)
-            item.update(status="passed", rows=recipe["rows"], text_columns=recipe["text_columns"])
+            load_error = None
         except Exception as exc:
-            item["error_type"] = type(exc).__name__
-        results.append(item)
+            dataset, load_error = None, type(exc).__name__
+        for encoder_id in load_yaml("feature_creation/embedding_models")["models"]:
+            encoder = encoder_config(encoder_id)
+            item = {
+                "dataset_id": entry["id"],
+                "encoder_id": encoder_id,
+                "status": "failed",
+                "path": str(cache_path(entry["id"], encoder)),
+            }
+            try:
+                if load_error:
+                    item["error_type"] = load_error
+                    results.append(item)
+                    continue
+                recipe = validate_dataset(dataset, encoder)
+                item.update(
+                    status="passed", rows=recipe["rows"], text_columns=recipe["text_columns"]
+                )
+            except Exception as exc:
+                item["error_type"] = type(exc).__name__
+            results.append(item)
     return results
 
 

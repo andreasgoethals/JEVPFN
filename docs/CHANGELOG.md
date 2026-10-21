@@ -2,6 +2,46 @@
 
 ## 21-10-2026
 
+- Verified the current grid with 743 passing tests (two environment-specific skips), all
+  five executed notebooks/25 figures, lint, dependencies and 23 shell syntax checks.
+
+- Reduced primary Experiments 2/3 to embeddings-only/native-text-only; moved winner-selected
+  combinations into explicitly exploratory Experiment 5 with checked selection provenance.
+- Set per-column PCA32 and joint PCA256/128/64/32/16/8; prepare exact fold-local PCA on CPU
+  once and reuse across predictors. Added dataset width table/figure and cached-PCA tests.
+- Added concurrent prerequisite-aware 0A submission, regular A100/H100/B200 routing guards,
+  single-GPU benchmark arrays, CPU-only predictor tests and compressed GPU telemetry.
+  Fixed bare container aliases and parallel diagnostic cache contention; kept native-storage guards.
+- Distinguished measured account limits, estimated tokens and conservative dispatcher timing
+  in the throughput report; no automatic API limit/budget increase or additional paid calls.
+
+- Restructured Experiments 1/2/3 into decision features, frozen encoders and native text,
+  including all six extractors and three modes without test-score-based selection.
+  Added pinned E5-large/Qwen encoders, isolated transferable caches, PCA64/32/16/8 and
+  train-only joint PCA. Added explicit multi-extractor concatenation and width checks,
+  including Kumo's category-count expansion before its 500-column selection.
+- Expanded 0A to all three real encoders and 0B to the new PCA/native-text combinations;
+  added a bounded-report Experiment 4 analysis and moved remaining controls to Experiment 5.
+  Updated matched result comparisons, report identities, notebook figures and VSC commands.
+  TabSTAR diagnostic training output now follows Experiment 0 instead of Experiment 3.
+
+- Added the approved PCA8/PCA16 E5-only ablations across all six predictors and expanded
+  0B fixtures. Added AG-MM as a third standard native-text reference with a fixed recipe,
+  offline hashed encoder assets, no HPO/ensemble and a separate dependency runtime.
+- Fixed Jev's observed 0.99 probability-vector sum with bounded, Jev-only two-decimal
+  normalization. Preserve raw responses and spending; previously rejected saved responses
+  recover without redispatch. Added malformed-response and paid-cache recovery tests.
+- Liquid retry 62378847 still escaped the image despite the pre-install override. Creation
+  and activation now use absolute image prefixes in a checked private wrapper template;
+  the site installation is untouched. Added a host-env-name collision regression test.
+- Refreshed the feature-creation notebook and model/method/storage documentation. Added
+  guarded instructions for removing the accidental DATA env1, preserving the CPU environment.
+- Final local regression suite: 724 passed, two skipped (local PyTorch and POSIX links).
+  All five notebooks executed with zero error cells and 24 figures; lint, pip check,
+  18 shell syntax checks and the three pinned-library checks passed. Paid dataset pilot
+  completed all 18 datasets / 288 requests / 238,111 reported input tokens, costing
+  USD 0.010000662 in total. Full extraction and model training stay disabled.
+
 - Fixed pilot numeric input (`$0.042`, USD notation, grouped thousands), recorded owner-confirmed
   80 RPS / 100k TPS, and replaced the need for an unpublished byte/token bound with documented
   server context rejection plus conservative billing reservations. Pilot pacing remains slow;

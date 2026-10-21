@@ -1,0 +1,19 @@
+# Regular partitions allow independent tests to overlap; debug has a one-job queue limit.
+max_active_jobs: 8
+account: lp_verbekelab
+default_gpu_profile: wice_a100
+routes: {}  # e.g. liquid_contracts: wice_h100; route its pilot to the same profile
+profiles:
+  wice_a100:
+    cluster: wice
+    partition: gpu_a100
+    staging_root: /lustre1/project/stg_00211
+  wice_h100:
+    cluster: wice
+    partition: gpu_h100
+    staging_root: /lustre1/project/stg_00211
+  mindwell_b200:
+    cluster: mindwell
+    partition: gpu_b200
+    staging_root: null  # supply actual GPFS group allocation; never use cross-mounted Lustre
+monitor_interval_seconds: 10

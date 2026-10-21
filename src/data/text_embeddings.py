@@ -1,4 +1,4 @@
-"""Frozen E5 features, deduplicated and resumable in one SQLite file per dataset.
+"""Frozen text embeddings, deduplicated and resumable in one SQLite file per dataset.
 
 Encoding is label-free. PCA is deliberately absent here: it belongs inside CV fits.
 No weights are downloaded or loaded without an explicit CLI action.
@@ -29,14 +29,46 @@ from src.utils.provenance import code_identity
 from src.utils.serialization import canonical_json, digest, file_sha256, write_json
 
 SCHEMA = "jevpfn.frozen-text.v1"
+# Stable storage namespaces must also work when importing into a new checkout.
+MODEL_NAMESPACES = {
+    "intfloat/e5-small-v2": "e5_small_v2",
+    "intfloat/e5-large-v2": "e5_large_v2",
+    "Qwen/Qwen3-Embedding-0.6B": "qwen3_embedding_0_6b",
+}
 
 
-def cache_path(dataset_id):
-    return paths.jev_cache_path("text_embeddings") / f"{paths.output_component(dataset_id)}.sqlite3"
+def encoder_config(encoder_id="e5_small_v2"):
+    catalog = load_yaml("feature_creation/embedding_models")["models"]
+    if encoder_id not in catalog:
+        raise ValueError("Unknown embedding encoder")
+    return (
+        load_yaml("feature_creation/text_embeddings")
+        | catalog[encoder_id]
+        | {"encoder_id": encoder_id}
+    )
 
 
-def checkpoint_dir():
-    return paths.checkpoints_dir("text_embeddings", "e5-small-v2")
+def encoder_id_for_model(model):
+    if model not in MODEL_NAMESPACES:
+        raise ValueError("Unknown embedding model in cache")
+    return MODEL_NAMESPACES[model]
+
+
+def cache_path(dataset_id, cfg=None):
+    encoder_id = (cfg or {}).get("encoder_id", "e5_small_v2")
+    root = paths.jev_cache_path("text_embeddings")
+    # Preserve the existing small-E5 location; other encoders cannot overwrite it.
+    if encoder_id != "e5_small_v2":
+        if encoder_id not in MODEL_NAMESPACES.values():
+            raise ValueError("Unknown embedding cache namespace")
+        root = root / encoder_id
+    return root / f"{paths.output_component(dataset_id)}.sqlite3"
+
+
+def checkpoint_dir(cfg=None):
+    return paths.checkpoints_dir(
+        "text_embeddings", (cfg or {"model": "intfloat/e5-small-v2"})["model"].split("/")[-1]
+    )
 
 
 def _files(folder):
@@ -58,7 +90,7 @@ def stage(cfg):
     os.environ["HF_XET_CACHE"] = str(paths.checkpoints_dir("huggingface", "xet"))
     from huggingface_hub import snapshot_download
 
-    folder = paths.require_project_output(checkpoint_dir())
+    folder = paths.require_project_output(checkpoint_dir(cfg))
     marker = folder / "_JEVPFN_EMBEDDING.json"
     if marker.exists():
         manifest = json.loads(marker.read_text(encoding="utf-8"))
@@ -80,12 +112,14 @@ def stage(cfg):
             "model.safetensors",
             "tokenizer*",
             "vocab.txt",
+            "merges.txt",
+            "vocab.json",
             "special_tokens_map.json",
         ],
     )
     manifest = {"model": cfg["model"], "revision": cfg["revision"], "files": _files(folder)}
     if not (folder / "model.safetensors").is_file():
-        raise ValueError("E5 checkpoint weights were not downloaded")
+        raise ValueError("Embedding checkpoint weights were not downloaded")
     write_json(folder / "_JEVPFN_EMBEDDING.json", manifest)
     return manifest
 
@@ -101,28 +135,40 @@ def token_chunks(tokenizer, text, *, prefix, max_tokens):
 
 
 class E5Encoder:
-    """Publisher mean pooling and query prefix, extended to cover all text in chunks."""
+    """Publisher-specific E5 mean/Qwen last-token pooling; all text covered in chunks."""
 
     def __init__(self, cfg):
         from src.cluster.freeze import check_if_present
 
         check_if_present()
+        expected = {
+            "intfloat/e5-small-v2": (384, "attention_mask_mean", "query: "),
+            "intfloat/e5-large-v2": (1024, "attention_mask_mean", "query: "),
+            "Qwen/Qwen3-Embedding-0.6B": (1024, "last_nonpadding_token", ""),
+        }
+        if (cfg.get("dimensions"), cfg.get("pooling"), cfg.get("prefix")) != expected.get(
+            cfg.get("model")
+        ):
+            raise ValueError(
+                "Encoder dimensions, pooling and prefix must match its publisher recipe"
+            )
         if (
-            cfg["dimensions"] != 384
-            or cfg["prefix"] != "query: "
-            or not 4 <= cfg["max_tokens"] <= 512
+            cfg["dimensions"] not in (384, 1024)
+            or not 4
+            <= cfg["max_tokens"]
+            <= (32768 if cfg["pooling"] == "last_nonpadding_token" else 512)
             or cfg["batch_size"] < 1
-            or cfg["pooling"] != "attention_mask_mean"
+            or cfg["pooling"] not in ("attention_mask_mean", "last_nonpadding_token")
             or cfg["long_text"] != "nonoverlapping_token_chunks_weighted_by_content_tokens"
             or cfg["normalization"] != "l2_per_chunk_then_l2_weighted_mean"
         ):
             raise ValueError(
-                "Unsupported E5 encoding recipe; configuration must match implemented behavior"
+                "Unsupported frozen encoding recipe; configuration must match implemented behavior"
             )
         import torch
         from transformers import AutoModel, AutoTokenizer
 
-        folder = checkpoint_dir()
+        folder = checkpoint_dir(cfg)
         manifest = json.loads((folder / "_JEVPFN_EMBEDDING.json").read_text())
         if manifest != {
             "model": cfg["model"],
@@ -134,6 +180,8 @@ class E5Encoder:
             raise RuntimeError("Embedding inference on VSC requires a compute allocation")
         self.cfg, self.torch = cfg, torch
         self.tokenizer = AutoTokenizer.from_pretrained(folder, local_files_only=True)
+        if cfg["pooling"] == "last_nonpadding_token":
+            self.tokenizer.padding_side = "left"
         self.model = (
             AutoModel.from_pretrained(folder, local_files_only=True).to(cfg["device"]).eval()
         )
@@ -171,7 +219,16 @@ class E5Encoder:
             with torch.inference_mode():
                 hidden = self.model(**inputs).last_hidden_state
                 mask = inputs["attention_mask"].unsqueeze(-1)
-                pooled = (hidden * mask).sum(1) / mask.sum(1)
+                if cfg["pooling"] == "last_nonpadding_token":
+                    positions = torch.arange(hidden.shape[1], device=hidden.device).expand(
+                        hidden.shape[0], -1
+                    )
+                    last = (
+                        positions.masked_fill(inputs["attention_mask"] == 0, -1).max(dim=1).values
+                    )
+                    pooled = hidden[torch.arange(hidden.shape[0], device=hidden.device), last]
+                else:
+                    pooled = (hidden * mask).sum(1) / mask.sum(1)
                 pooled = torch.nn.functional.normalize(pooled, p=2, dim=1).cpu().numpy()
             for (row, _, ids), vector in zip(pending, pooled):
                 totals[row] += vector * max(1, len(ids))
@@ -219,7 +276,7 @@ def _connect(path, *, readonly=False):
 
 def build(dataset, cfg, encoder, *, destination=None):
     """Explicit caller owns inference permission; partial completed batches survive interruption."""
-    destination = Path(destination or cache_path(dataset.metadata.dataset_id))
+    destination = Path(destination or cache_path(dataset.metadata.dataset_id, cfg))
     unique, columns = input_rows(dataset)
     recipe = {
         "schema": SCHEMA,
@@ -361,7 +418,7 @@ def validate(path, *, require_complete=False):
 
 
 def _validated_dataset_rows(dataset, cfg, source):
-    source = Path(source or cache_path(dataset.metadata.dataset_id))
+    source = Path(source or cache_path(dataset.metadata.dataset_id, cfg))
     recipe = validate(source, require_complete=True)
     _, columns = input_rows(dataset)
     expected_encoder = {k: cfg[k] for k in recipe["encoder"]}
@@ -381,7 +438,7 @@ def validate_dataset(dataset, cfg, *, source=None):
 
 
 def load(dataset, cfg, *, source=None):
-    source = Path(source or cache_path(dataset.metadata.dataset_id))
+    source = Path(source or cache_path(dataset.metadata.dataset_id, cfg))
     _, columns = _validated_dataset_rows(dataset, cfg, source)
     matrices, groups = [], []
     with closing(_connect(source, readonly=True)) as db:
@@ -451,8 +508,13 @@ def main():
     parser.add_argument("--stage", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--dataset")
+    parser.add_argument(
+        "--encoder",
+        default="e5_small_v2",
+        choices=tuple(load_yaml("feature_creation/embedding_models")["models"]),
+    )
     args = parser.parse_args()
-    cfg = load_yaml("feature_creation/text_embeddings")
+    cfg = encoder_config(args.encoder)
     if args.stage:
         print(json.dumps(stage(cfg), indent=2))
     elif args.execute:

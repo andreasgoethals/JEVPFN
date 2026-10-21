@@ -1,7 +1,7 @@
 """Three sequential, synthetic Jev requests; separate from the dataset extraction pilot.
 
 No inference without --execute. Model/price/context bounds come from the official
-16 October model reference. Account throughput remains unverified; HTTP errors stop.
+16 October model reference. These slow probes do not establish sustained account throughput.
 The maximum three attempted requests reserve $0.008064 at the documented 64k
 per-request context ceiling and $0.042/M input. No SDK or application retries.
 """
@@ -269,6 +269,12 @@ def run(
                     "canonical_probability_order"
                 )
                 answer = raw["answers"]["semantic"]
+                if answer["type"] in {"choice", "score"}:
+                    from src.jev.provider import probability_distribution
+
+                    _, prior["probability_validation"] = probability_distribution(
+                        list(answer["probabilities"].values()), "jev"
+                    )
                 if answer["type"] == "score":
                     from src.jev.provider import score_consistency
 

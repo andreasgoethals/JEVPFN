@@ -1,6 +1,7 @@
 """Reviewed recovery never loses spending, repeats ambiguous calls, or repays for decoding."""
 
 import json
+from dataclasses import replace
 
 import pandas as pd
 import pytest
@@ -13,6 +14,56 @@ from src.jev.recovery import inspect, resolve
 from src.jev.requests import build_requests
 from src.utils.config import load_config
 from src.utils.serialization import file_sha256, write_json
+
+
+def test_paid_rounded_multiclass_response_recovers_without_redispatch(extraction, monkeypatch):
+    from src.jev import extraction as module
+    from src.jev.provider import response_features
+    from src.utils.serialization import canonical_json
+
+    extractor, client, request = extraction
+    payload = json.loads(request.payload_json)
+    payload["question"] = {
+        "kind": "choice",
+        "text": "Which class is supported?",
+        "allowed_answers": [1, 2, 3, 4],
+    }
+    request = replace(request, payload_json=canonical_json(payload))
+    response = {
+        "model": "jev-1.13.0",
+        "usage": {"input_tokens": 10},
+        "answers": {
+            "semantic": {
+                "type": "choice",
+                "choice": "c002",
+                "confidence": 0.12,
+                "probabilities": dict(
+                    zip([f"c{i:03d}" for i in range(4)], [0.05, 0.33, 0.34, 0.27])
+                ),
+            }
+        },
+    }
+
+    def evaluate(_):
+        client.calls += 1
+        return response
+
+    client.evaluate = evaluate
+
+    def legacy_decoder(*_):
+        raise ValueError("Legacy strict sum check")
+
+    monkeypatch.setattr(module, "response_features", legacy_decoder)
+    assert extractor.evaluate(request) == "invalid_response"
+    monkeypatch.setattr(module, "response_features", response_features)
+    assert extractor.evaluate(request) == "recovered_response"
+    assert extractor.evaluate(request) == "cache_hit" and client.calls == 1
+    with extractor.cache._connect() as db:
+        status, spent, raw = db.execute(
+            "SELECT status,spent_usd,raw_response_json FROM extraction_jobs"
+        ).fetchone()
+    assert status == "completed" and spent == pytest.approx(0.00001)
+    assert json.loads(raw) == response
 
 
 class Client:

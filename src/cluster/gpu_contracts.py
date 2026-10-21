@@ -34,12 +34,12 @@ from src.jev.self_hosted import (
     SelfHostedClient,
     cached_evaluate,
     inference_environment,
+    locked_datasets,
     token_evidence,
 )
 from src.utils import paths
 from src.utils.config import load_config, load_yaml
 from src.utils.events import append_event
-from src.utils.locking import file_lock
 from src.utils.serialization import canonical_json, digest, write_json
 
 
@@ -264,11 +264,14 @@ def real_sample(evidence, counts):
 
 def exercise_real_inputs(client, sample, log):
     records = []
-    for item, numbers in sample:
-        dataset_id = item["dataset_id"]
-        cache = ResponseCache.for_dataset(dataset_id)
-        added = reused = 0
-        with file_lock(cache.path.with_suffix(".extraction.lock"), timeout=1):
+    by_dataset = {item["dataset_id"]: numbers for item, numbers in sample}
+    schedule = locked_datasets([item for item, _ in sample], client.settings["provider"])
+    with closing(schedule):
+        for item in schedule:
+            numbers = by_dataset[item["dataset_id"]]
+            dataset_id = item["dataset_id"]
+            cache = ResponseCache.for_dataset(dataset_id)
+            added = reused = 0
             for record in iter_prepared_inputs(
                 paths.dataset_question_path(dataset_id),
                 input_set_id=item["input_set_id"],
@@ -282,21 +285,21 @@ def exercise_real_inputs(client, sample, log):
                 reused += status == "cache_hit"
                 reopened = ResponseCache.for_dataset(dataset_id)
                 cached_evaluate(reopened, CacheOnlyClient(), request)
-        if added + reused != len(numbers):
-            raise AssertionError("Real GPU sample coverage is incomplete")
-        result = {
-            "dataset_id": dataset_id,
-            "new": added,
-            "reused": reused,
-            "first_and_longest_verified": True,
-            "reopened_cache_hit": True,
-        }
-        records.append(result)
-        append_event(log, "dataset_checked", **result)
-        print(
-            f"{dataset_id}: {added} GPU responses, {reused} cached; restart check passed",
-            flush=True,
-        )
+            if added + reused != len(numbers):
+                raise AssertionError("Real GPU sample coverage is incomplete")
+            result = {
+                "dataset_id": dataset_id,
+                "new": added,
+                "reused": reused,
+                "first_and_longest_verified": True,
+                "reopened_cache_hit": True,
+            }
+            records.append(result)
+            append_event(log, "dataset_checked", **result)
+            print(
+                f"{dataset_id}: {added} GPU responses, {reused} cached; restart check passed",
+                flush=True,
+            )
     return records
 
 

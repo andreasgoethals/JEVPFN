@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs inside hpc-container-wrapper, before `conda create --name env1`.
+# Runs inside hpc-container-wrapper, before creation at the explicit image prefix.
 # A host .condarc / CONDA_ENVS_PATH must not redirect packages to personal DATA.
 [[ "${CW_INSTALLATION_PATH:?}" == /* && "$CW_INSTALLATION_PATH" != / ]] || {
     echo 'Expected an absolute container installation root.' >&2
