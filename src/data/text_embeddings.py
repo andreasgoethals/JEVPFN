@@ -27,6 +27,7 @@ from src.utils.events import append_event
 from src.utils.locking import file_lock
 from src.utils.provenance import code_identity
 from src.utils.serialization import canonical_json, digest, file_sha256, write_json
+from src.utils.timing import TimingJournal
 
 SCHEMA = "jevpfn.frozen-text.v1"
 # Stable storage namespaces must also work when importing into a new checkout.
@@ -134,12 +135,59 @@ def token_chunks(tokenizer, text, *, prefix, max_tokens):
     return prefix_ids, [content[i : i + capacity] for i in range(0, len(content), capacity)] or [[]]
 
 
+def model_input_chunks(tokenizer, text, *, prefix, max_tokens):
+    """Chunk token encodings, then apply the publisher's Rust special-token processor.
+
+    Transformers 5 tokenizers do not expose the legacy prepare_for_model API. Never
+    decode/re-encode chunks: a chunk can end inside a multi-token Unicode character.
+    """
+    from tokenizers import Encoding
+
+    backend = tokenizer.backend_tokenizer
+    backend.no_padding()
+    backend.no_truncation()
+    prefix_encoding = backend.encode(prefix, add_special_tokens=False)
+    content = backend.encode(text, add_special_tokens=False)
+    capacity = max_tokens - len(prefix_encoding.ids) - backend.num_special_tokens_to_add(False)
+    if capacity < 1:
+        raise ValueError("No room for embedding text")
+    if len(content.ids) > capacity:
+        # All overflow pieces are retained, with no overlap or discarded content.
+        content.truncate(capacity, stride=0, direction="right")
+    for chunk in [content, *content.overflowing]:
+        combined = Encoding.merge([prefix_encoding, chunk], growing_offsets=False)
+        prepared = backend.post_process(combined, add_special_tokens=True)
+        if len(prepared.ids) > max_tokens:
+            raise ValueError("Embedding input exceeds its context; never truncate")
+        inputs = {"input_ids": prepared.ids, "attention_mask": prepared.attention_mask}
+        if "token_type_ids" in tokenizer.model_input_names:
+            inputs["token_type_ids"] = prepared.type_ids
+        yield inputs, max(1, len(chunk.ids))
+
+
+def tokenizer_contract(tokenizer, *, prefix, max_tokens):
+    """Check actual input IDs/masks against the publisher's ordinary tokenizer call."""
+    samples = ("x", "A short sentence.", "Unicode: café 中文.", "<|endoftext|> literal")
+    for text in samples:
+        direct = tokenizer(prefix + text, truncation=False, padding=False)
+        chunks = list(model_input_chunks(tokenizer, text, prefix=prefix, max_tokens=max_tokens))
+        if len(chunks) != 1 or any(direct[key] != values for key, values in chunks[0][0].items()):
+            raise ValueError("Chunk preparation differs from the publisher's tokenizer")
+    return {
+        "publisher_input_parity": True,
+        "probe_count": len(samples),
+        "method": "backend_post_process_v1",
+    }
+
+
 class E5Encoder:
     """Publisher-specific E5 mean/Qwen last-token pooling; all text covered in chunks."""
 
     def __init__(self, cfg):
         from src.cluster.freeze import check_if_present
+        from src.cluster.scheduling import reject_a100_allocation
 
+        reject_a100_allocation()
         check_if_present()
         expected = {
             "intfloat/e5-small-v2": (384, "attention_mask_mean", "query: "),
@@ -182,11 +230,26 @@ class E5Encoder:
         self.tokenizer = AutoTokenizer.from_pretrained(folder, local_files_only=True)
         if cfg["pooling"] == "last_nonpadding_token":
             self.tokenizer.padding_side = "left"
-        self.model = (
-            AutoModel.from_pretrained(folder, local_files_only=True).to(cfg["device"]).eval()
+        self.tokenizer_contract = tokenizer_contract(
+            self.tokenizer, prefix=cfg["prefix"], max_tokens=cfg["max_tokens"]
         )
+        self.timings = TimingJournal(
+            "embeddings", phase=os.environ.get("JEVPFN_PHASE", "feature_creation"),
+            context={"model": cfg["model"], "revision": cfg["revision"],
+                     "device": cfg["device"], "dimensions": cfg["dimensions"]},
+        )
+        self.synchronize = torch.cuda.synchronize if cfg["device"].startswith("cuda") else None
+        try:
+            with self.timings.measure("model_loading", synchronize=self.synchronize, items=0):
+                self.model = (
+                    AutoModel.from_pretrained(folder, local_files_only=True).to(cfg["device"]).eval()
+                )
+        finally:
+            self.timings.write_summary()
+        self.load_seconds = self.timings.summary()["stages"][0]["wall_seconds"]
         self.identity = {
-            "batching": "cross_text_chunks_v1",
+            "batching": "cross_text_chunks_v2_publisher_postprocessor",
+            "tokenizer_contract": self.tokenizer_contract,
             "checkpoint_sha256": digest(manifest),
             "runtime": {
                 p: importlib.metadata.version(p) for p in ("torch", "transformers", "tokenizers")
@@ -207,10 +270,7 @@ class E5Encoder:
 
         def flush():
             inputs = self.tokenizer.pad(
-                [
-                    self.tokenizer.prepare_for_model(prefix + ids, truncation=False)
-                    for _, prefix, ids in pending
-                ],
+                [prepared for _, prepared, _ in pending],
                 padding=True,
                 return_tensors="pt",
             ).to(cfg["device"])
@@ -230,16 +290,16 @@ class E5Encoder:
                 else:
                     pooled = (hidden * mask).sum(1) / mask.sum(1)
                 pooled = torch.nn.functional.normalize(pooled, p=2, dim=1).cpu().numpy()
-            for (row, _, ids), vector in zip(pending, pooled):
-                totals[row] += vector * max(1, len(ids))
+            for (row, _, content_tokens), vector in zip(pending, pooled):
+                totals[row] += vector * content_tokens
             pending.clear()
 
         for row, text in enumerate(texts):
-            prefix, chunks = token_chunks(
+            chunks = model_input_chunks(
                 self.tokenizer, text, prefix=cfg["prefix"], max_tokens=cfg["max_tokens"]
             )
-            for ids in chunks:
-                pending.append((row, prefix, ids))
+            for prepared, content_tokens in chunks:
+                pending.append((row, prepared, content_tokens))
                 if len(pending) == cfg["batch_size"]:
                     flush()
         if pending:
@@ -278,6 +338,10 @@ def build(dataset, cfg, encoder, *, destination=None):
     """Explicit caller owns inference permission; partial completed batches survive interruption."""
     destination = Path(destination or cache_path(dataset.metadata.dataset_id, cfg))
     unique, columns = input_rows(dataset)
+    timings = getattr(encoder, "timings", None) or TimingJournal(
+        "embeddings", phase=os.environ.get("JEVPFN_PHASE", "feature_creation")
+    )
+    dataset_id = dataset.metadata.dataset_id
     recipe = {
         "schema": SCHEMA,
         "dataset_id": dataset.metadata.dataset_id,
@@ -324,6 +388,8 @@ def build(dataset, cfg, encoder, *, destination=None):
         validate(destination)
         existing = {v[0] for v in db.execute("SELECT key FROM embeddings")}
         pending = [(k, v) for k, v in unique.items() if k not in existing]
+        if existing:
+            timings.record("cache_reuse", dataset_id=dataset_id, items=len(existing))
         append_event(
             log,
             "embedding_started",
@@ -333,9 +399,13 @@ def build(dataset, cfg, encoder, *, destination=None):
         )
         for start in range(0, len(pending), cfg["batch_size"]):
             batch = pending[start : start + cfg["batch_size"]]
-            vectors = np.asarray(encoder([v for _, v in batch]), dtype="<f4")
-            if vectors.shape != (len(batch), cfg["dimensions"]) or not np.isfinite(vectors).all():
-                raise ValueError("Invalid embedding matrix")
+            with timings.measure(
+                "embedding_batch", dataset_id=dataset_id, item_keys=[k for k, _ in batch],
+                items=len(batch), synchronize=getattr(encoder, "synchronize", None),
+            ):
+                vectors = np.asarray(encoder([v for _, v in batch]), dtype="<f4")
+                if vectors.shape != (len(batch), cfg["dimensions"]) or not np.isfinite(vectors).all():
+                    raise ValueError("Invalid embedding matrix")
             with db:
                 for (key, text), vector in zip(batch, vectors):
                     blob = vector.tobytes()
@@ -359,7 +429,8 @@ def build(dataset, cfg, encoder, *, destination=None):
         with db:
             db.execute("INSERT OR REPLACE INTO metadata VALUES ('artifact_id', ?)", (identity,))
     validate(destination, require_complete=True)
-    append_event(log, "embedding_completed", dataset_id=recipe["dataset_id"], artifact_id=identity)
+    append_event(log, "embedding_completed", dataset_id=recipe["dataset_id"], artifact_id=identity,
+                 timing=timings.write_summary())
     return identity
 
 
@@ -530,12 +601,15 @@ def main():
         if not entries:
             raise ValueError("No selected dataset matches")
         encoder = E5Encoder(cfg)
-        for entry in entries:
-            print(
-                entry["id"],
-                build(load_dataset(entry, allow_download=False), cfg, encoder),
-                flush=True,
-            )
+        try:
+            for entry in entries:
+                print(
+                    entry["id"],
+                    build(load_dataset(entry, allow_download=False), cfg, encoder),
+                    flush=True,
+                )
+        finally:
+            encoder.timings.write_summary()
     else:
         print(json.dumps(cfg, indent=2))
 

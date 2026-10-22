@@ -86,7 +86,9 @@ evaluation:
     compact_manifests_and_logs_storage: data
     save_prediction_hash: true
     required_identity: [dataset_id, data_identity, model_id, feature_set, feature_input_identity, feature_artifact_ids, estimator_settings, outer_fold, split_id, checkpoint_id, n_train, n_validation, target_scale]
-    timing_stages: [data_loading, text_encoding, model_loading, preprocessing_fit, preprocessing_transform, inner_fit, threshold_selection, hyperparameter_search, fit, predict, metric_evaluation, prediction_serialization]
+    timing_stages: [inner_model_loading, inner_fit, inner_predict, threshold_selection, model_loading, fit, predict, metric_evaluation, prediction_serialization]
+    fit_scope: library_fit_including_deferred_loading_and_preprocessing
+    extraction_timing: separate_project_sqlite_journal_with_data_summary
     clocks: [wall_seconds, current_process_cpu_seconds]
     cuda_synchronize_before_and_after_timing: true
     record_fit_attempts_and_failures: true

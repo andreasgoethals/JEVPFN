@@ -1,6 +1,42 @@
 # Changelog
 
+## 22-10-2026
+
+- Excluded A100 by owner decision: H100 defaults for every GPU job and generated plan,
+  removal of the A100 profile, rejection of legacy overrides before model loading, and
+  updated operational guidance. CPU jobs and protected inputs/checkpoints are unchanged.
+- Hardware-policy validation: 771 tests passed/two environment skips; lint, dependencies,
+  23 shell syntax/LF checks and frozen-tokenizer preservation passed. No VSC execution.
+- Timing validation: 755 tests passed/two environment-specific skips; final targeted checks
+  73 passed/one skip after exception-flush refinements. Lint and dependencies passed.
+- Added compact extraction timing journals for Jev calls/rate waiting and open-weight/
+  embedding batches, with cache reuse separated, CUDA synchronization and safe transfer.
+  Kept paid response persistence ahead of timing writes and buffered filesystem commits.
+- Verified broad binary/multiclass/regression metric retention and prediction round trips;
+  aligned the configured predictor timing stages with the implemented measurements.
+- Local validation: 747 tests passed, two platform/runtime skips; lint, dependency and
+  whitespace checks passed. GPU execution remains subject to actual VSC acceptance.
+- Verified the latest VSC archive: three encoder failures reproduce the tokenizer issue
+  already fixed locally; five decision contracts are pending for scheduler priority.
+  Clarified current setup status and safe queue diagnosis without rebuilding weights.
+- Recorded direct tabular decision-model prior art and distinguished reusable feature
+  augmentation from direct decision benchmarks; clarified MulTaBench's core/extended scope.
+
 ## 21-10-2026
+
+- Validated the latest review fixes: 747 tests passed/two environment-specific skips;
+  all five notebooks/25 figures, dependency/lint/shell checks, and the three actual pinned
+  encoder tokenizer preparation/Unicode-coverage checks passed without loading weights.
+
+- Fixed TabSTAR cross-experiment pairing by excluding output routing from predictor identity;
+  retained exact output phases and all model/checkpoint settings. Added campaign regression tests.
+- Added presence-matched embedding and exploratory-combination comparisons, retaining the
+  plain non-text comparison. Added regression coverage across two encoder recipes.
+- Replaced removed Transformers 5 `prepare_for_model` with backend special-token processing;
+  verified pinned E5/Qwen tokenizers locally without weights, including full chunk coverage.
+  Every actual encoder now checks publisher token-ID parity before loading its model.
+- Matched the full embedding job's 56 GB allocation with eight requested CPU cores.
+  Recorded three successful container builds and the still-pending GPU setup evidence.
 
 - Verified the current grid with 743 passing tests (two environment-specific skips), all
   five executed notebooks/25 figures, lint, dependencies and 23 shell syntax checks.

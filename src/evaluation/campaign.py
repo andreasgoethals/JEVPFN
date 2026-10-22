@@ -27,7 +27,12 @@ from src.evaluation.features import (
     original_features,
     uses_embeddings,
 )
-from src.evaluation.models import MAIN_MODELS, TEXT_MODELS, estimator_factory
+from src.evaluation.models import (
+    MAIN_MODELS,
+    TEXT_MODELS,
+    estimator_factory,
+    predictor_settings_identity,
+)
 from src.evaluation.protocol import evaluate_cv, shared_splits
 from src.utils import paths
 from src.utils.acceptance import reviewed_acceptance
@@ -353,7 +358,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             factory,
             specification=shared_splits(dataset, seed=cfg["random_seed"], folds=5),
             model_id=arm["model"],
-            checkpoint_id=digest(settings),
+            checkpoint_id=predictor_settings_identity(settings),
             feature_set=arm["feature_set"]
             + (
                 "__" + arm["control"] + "__" + arm["view"]

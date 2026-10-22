@@ -1,13 +1,9 @@
-# Regular partitions allow independent tests to overlap; debug has a one-job queue limit.
+# Owner excluded A100 queues. H100 uses the existing native Lustre allocation.
 max_active_jobs: 8
 account: lp_verbekelab
-default_gpu_profile: wice_a100
+default_gpu_profile: wice_h100
 routes: {}  # e.g. liquid_contracts: wice_h100; route its pilot to the same profile
 profiles:
-  wice_a100:
-    cluster: wice
-    partition: gpu_a100
-    staging_root: /lustre1/project/stg_00211
   wice_h100:
     cluster: wice
     partition: gpu_h100

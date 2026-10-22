@@ -225,17 +225,34 @@ def test_job_arguments_survive_clean_submission_environment(tmp_path, script, ar
     assert all(value in result.stdout.splitlines() for value in expected)
 
 
-def test_gpu_memory_profiles_fit_a100_and_token_job_matches_four_cores():
+def test_gpu_memory_profiles_fit_h100_and_token_job_matches_four_cores():
+    gpu_jobs = 0
     for script in (ROOT / "scripts/slurm").glob("*.slurm"):
         text = script.read_text()
-        if "#SBATCH --partition=gpu_a100" in text:
+        assert "#SBATCH --partition=gpu_a100" not in text
+        if "#SBATCH --partition=gpu_h100" in text:
+            gpu_jobs += 1
             memory = next(
                 line.split("=")[1]
                 for line in text.splitlines()
                 if line.startswith("#SBATCH --mem=")
             )
-            assert memory.endswith("M") and int(memory[:-1]) <= 126000
+            assert memory.endswith("M") and int(memory[:-1]) <= 187200
+    assert gpu_jobs == 7
     assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+
+
+def test_a100_override_stops_before_environment_activation(tmp_path):
+    driver = tmp_path / "reject.sh"
+    driver.write_text((ROOT / "scripts/slurm/_activate_env.sh").read_text(), encoding="utf-8")
+    result = subprocess.run(
+        [bash_executable(), str(driver)], cwd=tmp_path,
+        env={**os.environ, "SLURM_JOB_PARTITION": "gpu_a100_debug"},
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 2
+    assert "A100 allocations are disabled" in result.stderr
+    assert "No such file" not in result.stderr
 
 
 def test_perplexity_requirements_guard_runs_before_packages_exist(tmp_path):

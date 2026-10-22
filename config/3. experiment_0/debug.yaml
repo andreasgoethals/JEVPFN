@@ -9,7 +9,7 @@ feature_config: feature_creation
 cluster:
   account: lp_verbekelab  # Same account as CreditPFN; verify current association on VSC.
   cpu: {name: wice, partition: interactive}
-  gpu: {name: wice, partition: gpu_a100, gpus: 1}
+  gpu: {name: wice, partition: gpu_h100, gpus: 1}
   gpu_alternative: {name: mindwell, partition: gpu_b200, gpus: 1}
 environment: JEVPFN
 feature_artifacts: []  # Populate after hosted-local and self-hosted-VSC extraction/validation.

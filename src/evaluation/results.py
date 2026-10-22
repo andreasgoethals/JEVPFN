@@ -185,7 +185,10 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
     if presence.duplicated(keys).any():
         raise ValueError("Multiple presence baselines match; select one campaign")
     if not presence.empty:
-        compared = augmented.loc[augmented.phase.eq("experiment_1")].merge(
+        compared = augmented.loc[
+            augmented.phase.isin(["experiment_1", "experiment_2"])
+            | augmented.feature_set.map(uses_embeddings)
+        ].merge(
             presence.rename(columns={"value": "reference_value"}),
             on=keys,
             how="inner",

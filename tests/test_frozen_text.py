@@ -180,14 +180,42 @@ def test_encoder_batches_across_texts_and_preserves_chunk_weighting():
             return self
 
     class Tokenizer:
-        def encode(self, text, **_):
-            return [2] if text == "query: " else list(range(3, 3 + len(text.split())))
+        model_input_names = ["input_ids", "attention_mask"]
 
-        def num_special_tokens_to_add(self, _):
-            return 2
+        def __init__(self):
+            from tokenizers import Tokenizer as Backend
+            from tokenizers import models, pre_tokenizers, processors
 
-        def prepare_for_model(self, ids, **_):
-            return {"input_ids": [1, *ids, 1]}
+            self.backend_tokenizer = Backend(
+                models.WordLevel(
+                    {
+                        word: i
+                        for i, word in enumerate(
+                            [
+                                "[PAD]",
+                                "[CLS]",
+                                "[SEP]",
+                                "[UNK]",
+                                "query:",
+                                "one",
+                                "two",
+                                "a",
+                                "b",
+                                "c",
+                                "d",
+                                "e",
+                                "f",
+                                "g",
+                            ]
+                        )
+                    },
+                    unk_token="[UNK]",
+                )
+            )
+            self.backend_tokenizer.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+            self.backend_tokenizer.post_processor = processors.TemplateProcessing(
+                single="[CLS] $A [SEP]", special_tokens=[("[CLS]", 1), ("[SEP]", 2)]
+            )
 
         def pad(self, rows, **_):
             width = max(len(r["input_ids"]) for r in rows)

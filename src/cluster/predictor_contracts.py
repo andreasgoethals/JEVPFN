@@ -16,7 +16,12 @@ from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.evaluation.embedding_control import EmbeddingControl
 from src.evaluation.features import add_embeddings, original_features
-from src.evaluation.models import MAIN_MODELS, TEXT_MODELS, estimator_factory
+from src.evaluation.models import (
+    MAIN_MODELS,
+    TEXT_MODELS,
+    estimator_factory,
+    predictor_settings_identity,
+)
 from src.evaluation.protocol import evaluate_cv, shared_splits
 from src.utils import paths
 from src.utils.config import load_yaml
@@ -185,7 +190,7 @@ def run(model, *, execute=False):
             args = dict(
                 specification=shared_splits(dataset),
                 model_id=model,
-                checkpoint_id=digest(settings),
+                checkpoint_id=predictor_settings_identity(settings),
                 feature_set=f"predictor_fixture__{case}",
                 representation_recipe={
                     "contract_version": 5,

@@ -1,7 +1,14 @@
 #!/bin/bash
 # Follow CreditPFN's Conda activation and interpreter verification, with a separate env.
 set -euo pipefail
+case "${SLURM_JOB_PARTITION:-}" in
+    gpu|gpu_a100*)
+        echo 'A100 allocations are disabled for JEVPFN. Use gpu_h100.' >&2
+        exit 2
+        ;;
+esac
 source scripts/activate_runtime.sh
+python -c 'from src.cluster.scheduling import reject_a100_allocation; reject_a100_allocation()'
 python -m src.cluster.freeze
 # Fail before any cache creation if PROJECT is missing or uses the other cluster's filesystem.
 python -c 'import os; from src.cluster.preflight import storage_policy_failures; failures = storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME")); assert not failures, "\n".join(failures)'

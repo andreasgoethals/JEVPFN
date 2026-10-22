@@ -299,6 +299,9 @@ def run_preflight(
             report["failures"].append("API HTTPS reachability was not established from this node.")
     if gpu:
         try:
+            from src.cluster.scheduling import reject_a100_allocation
+
+            reject_a100_allocation()
             import torch
 
             if not torch.cuda.is_available():

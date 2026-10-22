@@ -1,9 +1,9 @@
 #!/bin/bash -l
-# Submit one provider at a time after exact token counts and checkpoint staging.
+# Independent H100 contracts follow exact token counts and checkpoint staging.
 #SBATCH --job-name=jevpfn-exp0-contracts
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=wice
-#SBATCH --partition=gpu_a100_debug
+#SBATCH --partition=gpu_h100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

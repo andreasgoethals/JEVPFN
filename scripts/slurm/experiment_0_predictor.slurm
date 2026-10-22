@@ -2,7 +2,7 @@
 #SBATCH --job-name=jevpfn-exp0-predictor
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=wice
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_h100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

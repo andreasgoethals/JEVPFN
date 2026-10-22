@@ -1,6 +1,98 @@
 # Operational evidence
 
+## 22-10-2026
+
+Latest owner decision: **exclude every A100 allocation**, including debug and MIG slices.
+H100 is now the default in seven GPU Slurm headers, the 0A coordinator, array planner and
+debug config. Deleted the A100 profile; guards reject legacy profile/partition overrides
+and direct A100 model loading. CPU work stays on CPU partitions. Mindwell B200 remains
+unconfigured pending a real native GPFS root and application validation. This supersedes
+all earlier advice to move jobs to A100 debug. Existing exact token evidence is unaffected;
+fresh H100 contracts/pilots and encoder tests are required. No VSC jobs were cancelled or
+submitted by the agent, and no model inference or Git publication was performed.
+
+Local validation after the hardware-policy change: 771 tests passed, two skipped
+(PyTorch absent locally; POSIX-only link behavior), in 270.45 seconds. Ruff, pip check,
+diff whitespace and all 23 Bash syntax/LF checks passed. Frozen tokenizer modules remain
+byte-identical. A simulated scheduler listing verified that the supplied cancellation
+commands select JEVPFN jobs/array roots on both clusters and leave CreditPFN/CreditICL
+untouched. This does not establish live H100 performance or current VSC job state.
+
+Historical queue observation: owner reconfirmed the 18-dataset scope. Five A100 jobs pending,
+priority 412 (age 117, fair share 217, job size 2, TRES CPU 14/GPU 62). Estimated starts
+were 25 October, then the later single-job query estimated 24 October; estimates move.
+11:32 query: A100 debug k28i22 idle, MaxTime 01:00:00, DefaultTime 00:30:00; H100 one
+mixed node, three allocated and one down. Liquid job 62384605 requests four cores/28 GB,
+generic one GPU, no node constraint. The partition-only update returned invalid time
+limit despite MaxTime one hour; do not claim a proven cause. Owner was given a single
+update with explicit 30-minute limit for Liquid (now superseded). H100 shares native Lustre but each
+runtime still needs a bounded compatibility test. Mindwell GPFS remains unconfigured.
+
+Added output-only timing journals (PROJECT detailed SQLite, DATA compact summaries),
+separate from paid caches and feature identity. Jev records call latency after raw
+response/accounting persistence, so failed timing storage permits recovery without payment.
+GPU batches synchronize before/after measurement. Encoders record model loading once,
+batch inference and untimed cache reuse. Existing predictor timings and all three task
+metric families were traced through immutable prediction storage. No paid calls, weights,
+VSC submissions, remote changes or Git publication were performed by the agent.
+
+Validation after timing additions: full suite 755 passed/two environment-specific skips
+in 272.12 seconds; latest targeted timing/embedding/self-hosted checks 73 passed/one
+PyTorch skip after the final exception-flush changes. Ruff and dependency checks passed.
+Tests cover concurrent timing records, PROJECT/DATA routing, export/import, paid-response
+recovery after timing-write failure, embedding reuse and all three metric/prediction
+round trips. Both frozen decision-tokenizer source files remain unchanged. This is local
+contract evidence, not a substitute for fresh GPU execution on the published source.
+
+Inspected Downloads/output_JEVPFN.zip (610,895 bytes, 09:25:40, 123 entries; ZIP CRC
+check passed). Encoder jobs 62384604/62384609/62384611 failed because the older VSC
+checkout still calls removed prepare_for_model on BertTokenizer/Qwen2Tokenizer. The
+publisher-backend correction described below already exists locally and remains unpublished
+at HEAD 7ca6b6a; do not invent another cause, rebuild containers or recount unchanged
+decision inputs. The five owner-reported decision jobs 62384605/606/607/608/610 are
+PENDING on regular gpu_a100, priority 320, reason Priority. They have not executed; no new
+GPU receipt exists. Queue age alone does not establish their fair-share score or a fault.
+Leave the checkout unchanged while jobs are active. Earlier A100-debug routing advice is
+superseded by the owner's H100-only default and complete A100 exclusion. No remote mutation, paid inference or Git publication
+was performed. Prior work and MulTaBench's 40-core/80-release scope were checked against
+primary sources; see LITERATURE_REVIEW for the durable novelty boundary.
+
+Local verification: 747 tests passed, two skipped in 294.92 seconds (PyTorch absent;
+POSIX-only link behavior). Ruff, pip check and diff whitespace checks passed; all three
+submodule pins are unchanged. Existing prediction round-trip, corruption, concurrent-write
+and transfer-merge tests passed. The local source fixes remain uncommitted; this verification
+does not establish that the queued VSC jobs have those fixes or that CUDA inference passes.
+
 ## 21-10-2026
+
+Verification after the latest independent review fixes: 747 tests passed, two skipped
+(local PyTorch unavailable; POSIX-only link behavior). Five notebooks executed without
+errors, producing 25 figures. Ruff, pip check, 23 shell syntax/LF checks and all three
+library pins passed. The two frozen decision-tokenizer files remain byte-identical.
+Actual pinned E5-small, E5-large and Qwen tokenizers passed short-input parity and long
+Unicode chunk-coverage checks under Transformers 5.17/tokenizers 0.23.3; no model weights,
+paid inference, Git publication or VSC submissions were performed by the agent.
+
+Latest owner artifacts: Claude review of clean HEAD 7ca6b6a; local PowerShell transcript;
+VSC setup transcript; Downloads/output_JEVPFN.zip (599,227 bytes, 15:46). Local authentication
+GET passed; synthetic/real-text diagnostics revalidated stored responses, and all 288 dataset
+pilot requests were cache hits. Historical 401 entries are retained accounting, not new failures.
+Liquid 62383996, Strands 62384125 and Perplexity 62384290 each sealed successfully. Weights
+for all five decision models and three encoders were staged. PROJECT quota: 243 G/1 T and
+36,737/150,000 files; DATA: 54,261 M/76,800 M. No claim that DATA is empty or unlimited.
+Token job 62384579 exited 0; all five audited 1,698,127 inputs with zero overflows. GPU jobs
+62384604–62384611 were queued in the owner's snapshot; the ZIP has no current GPU receipts.
+Do not rebuild sealed images, repeat token counts, erase logs, pull code into active jobs,
+or infer runtime compatibility from staging. Prior Clef/Intern passes remain historical.
+
+Claude's TabSTAR identity and missingness-reference findings were confirmed and fixed.
+The uncertain tokenizer finding exposed a real Transformers 5.17 failure for BOTH BERT/Qwen:
+AutoTokenizer instances lack prepare_for_model. The pinned Qwen post-processor appends
+151643, while eos_token_id is 151645, so Claude's proposed EOS-ID assertion is incorrect.
+The backend post-processing fix preserves every content token and correct publisher markers;
+all three pinned encoder tokenizers passed local short-input and Unicode chunk checks.
+Only tokenizer/config files were fetched to temporary storage; no weights, training or paid
+calls. New GPU encoder tests are required. Reuse all sealed containers and decision counts.
 
 Final verification of this revision: 743 tests passed, two skipped (PyTorch unavailable
 locally; POSIX-only link behavior). All five notebooks ran with zero errors and 25 figures;

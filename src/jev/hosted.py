@@ -137,6 +137,10 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
             },
         )
     phase, run_id = ("feature_creation" if full else "experiment_0"), uuid4().hex
+    from src.utils.timing import TimingJournal
+
+    timings = TimingJournal("jev", phase=phase, run_id=run_id,
+                            context={"model": cfg["jev"]["model"], "settings_sha256": digest(settings)})
     report = {
         "run_id": run_id,
         "provider": "jev",
@@ -159,7 +163,8 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
     # One local campaign owns the account rate gate; merges wait for dataset writers.
     try:
         with file_lock(paths.jev_cache_path() / ".jev_campaign.lock", timeout=1):
-            client = transport_factory(cfg, allow_network=True)
+            with timings.measure("client_setup", items=0):
+                client = transport_factory(cfg, allow_network=True)
             for item in items:
                 dataset_id = item["dataset_id"]
                 with file_lock(
@@ -174,6 +179,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         validate_context=validator,
                         phase=phase,
                         policy_revision_manifest=review.get("spending_policy_revision_manifest"),
+                        timings=timings,
                     )
                     requests = (
                         prepared_request(
@@ -209,6 +215,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
         report.update(status="failed", error_type=type(exc).__name__)
         raise
     finally:
+        report["timing"] = timings.write_summary()
         write_json(manifest, report)
         if client is not None and callable(getattr(client, "close", None)):
             client.close()

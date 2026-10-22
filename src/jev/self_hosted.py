@@ -58,6 +58,9 @@ class SelfHostedClient:
                 "Self-hosted inference requires explicit execution and a VSC compute allocation"
             )
         from src.cluster.preflight import storage_policy_failures
+        from src.cluster.scheduling import reject_a100_allocation
+
+        reject_a100_allocation()
 
         failures = storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME"))
         if failures:
@@ -278,7 +281,34 @@ def batch_size_for(provider):
     return size
 
 
-def cached_batches(cache, client, requests, size, *, continue_on_error=False, retry_failed=False):
+def _record_timing(timings, stage, requests, *, seconds=None, error_type=None, synced=False):
+    if timings is not None:
+        timings.record(
+            stage, dataset_id=json.loads(requests[0].provenance_json)["dataset_id"],
+            item_keys=[r.cache_key for r in requests], items=len(requests),
+            seconds=seconds, error_type=error_type, cuda_synchronized=synced,
+        )
+
+
+def _timed_inference(client, requests, timings, *, batched):
+    cuda = getattr(getattr(client, "torch", None), "cuda", None)
+    synchronize = getattr(cuda, "synchronize", None)
+    if synchronize is not None:
+        synchronize()
+    started = time.perf_counter()
+    try:
+        raw = client.evaluate_many(requests) if batched else client.evaluate(requests[0])
+        if synchronize is not None:
+            synchronize()
+    except Exception as exc:
+        _record_timing(timings, "decision_inference", requests,
+                       seconds=time.perf_counter() - started, error_type=type(exc).__name__)
+        raise
+    return raw, time.perf_counter() - started, synchronize is not None
+
+
+def cached_batches(cache, client, requests, size, *, continue_on_error=False, retry_failed=False,
+                   timings=None):
     """Batch only uncached requests; persist every valid response before advancing."""
     iterator = iter(requests)
     while batch := list(islice(iterator, size)):
@@ -287,6 +317,7 @@ def cached_batches(cache, client, requests, size, *, continue_on_error=False, re
             raw = cache.get(request, kind="verified_response")
             if raw is not None:
                 response_features(request, raw)
+                _record_timing(timings, "cache_reuse", [request])
                 yield "cache_hit"
             elif continue_on_error and not retry_failed and cache.failure_count(request):
                 yield "failed_recorded"
@@ -294,13 +325,17 @@ def cached_batches(cache, client, requests, size, *, continue_on_error=False, re
                 pending.append(request)
         if not pending:
             continue
+        seconds = None
         try:
-            responses = client.evaluate_many(pending)
+            responses, seconds, synced = _timed_inference(client, pending, timings, batched=True)
             if len(responses) != len(pending):
                 raise ValueError("Batch returned wrong number of responses")
             for request, raw in zip(pending, responses, strict=True):
                 response_features(request, raw)
         except Exception as exc:
+            if seconds is not None:
+                _record_timing(timings, "decision_inference", pending,
+                               seconds=seconds, error_type=type(exc).__name__, synced=synced)
             if not continue_on_error:
                 for request in pending:
                     cache.record_failure(request, exc)
@@ -309,7 +344,7 @@ def cached_batches(cache, client, requests, size, *, continue_on_error=False, re
             # valid input with its failing neighbour on --retry-failed.
             for request in pending:
                 try:
-                    raw = client.evaluate(request)
+                    raw, seconds, synced = _timed_inference(client, [request], timings, batched=False)
                     response_features(request, raw)
                 except Exception as individual_error:
                     cache.record_failure(request, individual_error)
@@ -317,29 +352,39 @@ def cached_batches(cache, client, requests, size, *, continue_on_error=False, re
                     continue
                 # Storage errors must propagate, never become model failures.
                 cache.put(request, raw, kind="verified_response")
+                _record_timing(timings, "decision_inference", [request],
+                               seconds=seconds, synced=synced)
                 yield "completed"
             continue
         # A storage failure must stop, even in continue-on-model-error mode.
         for request, raw in zip(pending, responses, strict=True):
             cache.put(request, raw, kind="verified_response")
+        _record_timing(timings, "decision_inference", pending, seconds=seconds, synced=synced)
+        for _request in pending:
             yield "completed"
 
 
-def cached_evaluate(cache, client, request, *, skip_failed=False):
+def cached_evaluate(cache, client, request, *, skip_failed=False, timings=None):
     """Persist a validated response before advancing. A restart reuses its exact identity."""
     cached = cache.get(request, kind="verified_response")
     if cached is not None:
         response_features(request, cached)
+        _record_timing(timings, "cache_reuse", [request])
         return "cache_hit"
     if skip_failed and cache.failure_count(request):
         return "failed_recorded"
+    seconds = None
     try:
-        response = client.evaluate(request)
+        response, seconds, synced = _timed_inference(client, [request], timings, batched=False)
         response_features(request, response)
         cache.put(request, response, kind="verified_response")
     except Exception as exc:
         cache.record_failure(request, exc)
+        if seconds is not None:
+            _record_timing(timings, "decision_inference", [request],
+                           seconds=seconds, error_type=type(exc).__name__, synced=synced)
         raise
+    _record_timing(timings, "decision_inference", [request], seconds=seconds, synced=synced)
     return "completed"
 
 
@@ -495,6 +540,12 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         )
     phase = "feature_creation" if full else "experiment_0"
     run_id = uuid4().hex
+    from src.utils.timing import TimingJournal
+
+    timings = TimingJournal(provider, phase=phase, run_id=run_id,
+                            context={"settings_sha256": digest(client.settings)})
+    timings.record("model_loading", seconds=client.load_seconds, items=0,
+                   cuda_synchronized=True)
     log = (
         paths.logs_dir(phase)
         / ("full_extraction" if full else "before_extraction")
@@ -546,6 +597,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
                 batch_size,
                 continue_on_error=continue_on_error,
                 retry_failed=retry_failed,
+                timings=timings,
             ):
                 failed += status == "failed_recorded"
                 if failed > cfg.get("max_recorded_failures_per_dataset", 10):
@@ -572,6 +624,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
                 "reused": reused,
                 "failed_requests": failed,
                 "seconds": time.perf_counter() - started,
+                "timing": timings.summary(dataset_id=dataset_id),
             }
             summary["datasets"].append(result)
             write_json(manifest, summary)
@@ -588,6 +641,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         raise
     finally:
         schedule.close()
+        summary["timing"] = timings.write_summary()
         summary["peak_gpu_allocated_bytes"] = client.torch.cuda.max_memory_allocated()
         write_json(manifest, summary)
     return summary

@@ -8,7 +8,8 @@ Maintenance and published-pin propagation run from the canonical `0. Literature`
 workspace; installing one library never installs another automatically.
 
 Primary-source findings checked through 16 October 2026, with E5/PCA, native-text baseline
-selection/licences and TypeSafe context/rate documentation rechecked on 21 October. This reference records prior art,
+selection/licences and TypeSafe context/rate documentation rechecked on 21 October, and
+the closest tabular decision-model work and dataset scope rechecked on 22 October. This reference records prior art,
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
 execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
@@ -30,6 +31,24 @@ multi-dataset replication. JEVPFN must not claim to introduce the Jev-plus-TabPF
 [Project and results](https://github.com/edamame-labs/tab-jev),
 [evaluation procedure](https://github.com/edamame-labs/tab-jev/blob/main/demo/README.md)
 
+[Typed Decision Models on Tabular Data](https://arxiv.org/html/2610.19536v1)
+(Zhang, Ye and Zha, 14 October 2026 preprint) compares four decision models with three
+generative LLMs on ten TabLLM/FeatLLM classification datasets, TabFact and ReTabAD. It studies
+direct decisions, in-context examples and 21 request rewrites, including candidate and table
+ordering. This is close prior art for decision-model benchmarking and prompt robustness;
+those are not standalone novelty claims for JEVPFN. Its task design does not evaluate
+our reusable text-only numeric representations inside fixed trained tabular predictors,
+three target types and separate/joint text-column settings on MulTaBench. That distinction
+is a potential contribution to test, not proof that no other paper implements it.
+
+[Estimating Uncoded Crash Factors with Tabular Foundation and System One Models:
+Kumo Tabular and Jev](https://arxiv.org/html/2610.10321v1)
+(Rafe and Das, 7 October 2026 preprint) combines a coded-record Kumo reader with a Jev
+narrative reader and human recalibration in a sampled population-estimation design.
+It establishes prior combined use of a tabular foundation model and Jev on complementary
+data, but does not establish a six-extractor, fixed-predictor text-feature comparison.
+Its supervised human recalibration is outside our label-free extraction method.
+
 TypeSafe's feature-discovery cookbook also converts Jev answers into features for a CatBoost
 wine-score regressor. An LLM proposes questions; subsequent proposals use training labels
 and model errors. That procedure differs from JEVPFN's fixed, mechanical, label-free
@@ -44,6 +63,16 @@ and reuse/cost under a frozen protocol. No claim of firstness or publishability 
 this literature search alone. Evidence about a decision model's isolated accuracy is distinct
 from evidence that its features improve a tabular learner.
 
+A useful fourth representation family is **lexical word/character n-grams with TF-IDF**.
+These retain exact vocabulary and partial string matches, unlike task-conditioned answer
+probabilities or dense pretrained embeddings. Existing character/word-length controls do
+not provide this comparison. It is a recommendation, not part of the approved executable
+grid: raw sparse features suit linear/logistic models; TruncatedSVD can supply compact
+features to predictors with column limits. Vocabulary, IDF and SVD must fit separately on
+each inner/outer training partition, never validation/test rows. See the official
+[text-feature guide](https://scikit-learn.org/stable/modules/feature_extraction.html#text-feature-extraction)
+and [sparse dimensionality reduction](https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.TruncatedSVD.html).
+
 MulTaBench selects tasks where non-text and text/image inputs contribute jointly, and where
 target-aware encoder adaptation improves on frozen embeddings for several curation learners.
 Its text pipeline uses E5-small-v2; target-aware representations fine-tune with labels and
@@ -52,6 +81,17 @@ only text and allowed task metadata. The latter can be reused across folds; supe
 encoder adaptation and fitted dimension reduction belong inside each training partition.
 The curated collection is deliberately enriched for multimodal benefit, so conclusions should
 be scoped to these tasks rather than all tabular prediction. [MulTaBench paper v2, §§3 and A](https://arxiv.org/html/2605.10616v2)
+
+The paper's **40 core datasets comprise 20 text-tabular and 20 image-tabular tasks**;
+JEVPFN explores the complete core text subset and evaluates 18 after the two documented
+exclusions. The additional release contains another 20 text and 20 image datasets, not
+another 40 core text tasks. Those candidates meet Joint Signal but not necessarily
+Task-awareness; a separate extension could test sensitivity to this curation rule.
+Consumer Complaints includes complaint narratives; OSHA Injury includes accident abstracts
+and event descriptions. These are plausible narrative-rich additions requiring their own
+local audit and target/leakage review. News Channel contains article titles rather than
+article bodies, so its name alone does not establish long-text coverage. No datasets are
+added by this review. [Paper v2, §4 and Appendix F](https://arxiv.org/html/2605.10616v2#A6)
 
 The paper-era protocol uses classification AUC and regression R², five random seeds and a
 10,000-example training cap. The pinned `split_to_test` / `do_split` code uses repeated random
@@ -464,7 +504,7 @@ establish improvement on MulTaBench or equivalence of calibration across provide
 | Jev 1.13 | [TypeSafe model reference](https://docs.typesafe.ai/models), checked 12 October: $0.042/M input tokens, output free; published 80 RPS/100k TPS, dynamic. | Main extractor stays pinned; confirm organization-specific limits with TypeSafe. The owner's direct correspondence confirms the price but offers no research exemption. |
 | Microsoft-Decision-1 | [9 October release](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/): hosted Qwen3.5-9B decision head, Noul/Choice/Score. | Excluded by owner decision for practical access/throughput constraints before comparative outcomes; no inference adapter or evaluation arm. This is not evidence of inferior quality. |
 | Liquid d1-3B | [7 October open-weight release](https://www.liquid.ai/blog/d1-open); [publisher model card](https://huggingface.co/LiquidAI/d1-3B). Approximately 3B parameters, not 13B. Noul/Choice/Score, full probabilities, 32,768 context. | Close schema match and small self-hosted comparator. The [LFM Open License](https://huggingface.co/LiquidAI/d1-3B/blob/main/LICENSE) explicitly exempts qualifying nonprofits' noncommercial/research use from its commercial revenue threshold; attribution/redistribution conditions remain. Use its custom decision interface, not generated chat examples. No model downloaded. |
-| Cloudflare Clef-flash | [Hosted reference](https://developers.cloudflare.com/workers-ai/models/clef-flash/): $0.038/M input, 24,576 tokens. The [public Apache-2.0 checkpoint](https://huggingface.co/Cloudflare/clef-flash) is publicly available, including the Qwen3.5-9B backbone, joint schema head and complete encoding/inference source. Hub revision observed 14 October: `8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3` (public, ungated). | Selected for self-hosting only. `joint_schema_model.encode_record` renders state/questions; the joint head supplies logits for every option, normalized per question. The official runtime was tested on H200; an A100 pilot is still required. The pinned local encoder defaults to 16,384 tokens and silently slices the state. Our precheck rejects overflow and retains full-precision softmax instead of the convenience API's four-decimal rounding. Do not infer parity between the hosted and local context limits. |
+| Cloudflare Clef-flash | [Hosted reference](https://developers.cloudflare.com/workers-ai/models/clef-flash/): $0.038/M input, 24,576 tokens. The [public Apache-2.0 checkpoint](https://huggingface.co/Cloudflare/clef-flash) is publicly available, including the Qwen3.5-9B backbone, joint schema head and complete encoding/inference source. Hub revision observed 14 October: `8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3` (public, ungated). | Selected for self-hosting only. `joint_schema_model.encode_record` renders state/questions; the joint head supplies logits for every option, normalized per question. The official runtime was tested on H200; JEVPFN requires a fresh H100 pilot under its current hardware policy. The pinned local encoder defaults to 16,384 tokens and silently slices the state. Our precheck rejects overflow and retains full-precision softmax instead of the convenience API's four-decimal rounding. Do not infer parity between the hosted and local context limits. |
 | AWS Strands Decider | [1 October launch](https://strandsagents.com/blog/introducing-strands-decider/); [official repository](https://github.com/strands-labs/strands-decider). Apache-2.0, Noul/Choice/Score, full probability vectors; pointer readout over supplied options. | Small self-hosted comparator. The newer [Qwen3.5 2B checkpoint](https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610) was created 9 October and saves a 4,096-token window. Original launch and updated checkpoint are different revisions. Verify complete input and the remaining class vocabularies; published latency is hardware-specific. |
 | Perplexity Decider v1.1-27B | Original [v1 model](https://huggingface.co/perplexity-ai/pplx-decider-v1-27b) repository created 1 October; [v1.1 announcement](https://community.perplexity.ai/t/pplx-decider-v1-1-27b-our-updated-open-weights-multimodal-decision-model-is-now-available/6286), 6 October. Apache-2.0, native decision head, noncausal full attention, saved calibration temperature; Noul/Choice/Score supported by supplied inference code. | [Publisher card](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) reports stronger Decision Index results, not MulTaBench gains. Local weights require about 49 GiB plus working memory; preparation rejects over 8,192 tokens. Public Hub metadata is currently private=false/gated=false, despite stale private-access wording in the card; Check tasksource training overlap. Publisher announced hosted pricing of $0.02/M for v1.1; hosted access and version pin still require verification. |
 | Fastino GLiNER2.5-Decide | [Publisher release](https://fastino.ai/blog/gliner-2-5-decide-open-weight-decision-model): 340M encoder, Apache-2.0. However, current [deployment capabilities](https://docs.fastino.ai/concepts/gliner-2-5-decide-capabilities) describe unordered classification labels without label-description objects and direct ordered scoring to GLiDE. | Do not equate release claims with the current hosted schema. Complete probability mapping and long-input behavior of the selected local runtime need verification. `max_position_embeddings=512` in its DeBERTa config alone does not prove a 512-token hard cutoff for this relative-position architecture. Not admitted to the uniform extraction protocol yet. |

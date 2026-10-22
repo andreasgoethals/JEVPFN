@@ -74,6 +74,13 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
     matrix = frame[["x"]].set_axis([f"csv:{i}" for i in range(20)])
     for model, phase, features, error, provider in (
         ("catboost", "experiment_1", "non_text", 3, None),
+        (
+            "catboost",
+            "experiment_5",
+            "non_text_plus_presence__text_presence__main",
+            2.5,
+            None,
+        ),
         ("catboost", "experiment_1", "non_text_plus_joint", 1, "jev"),
         ("catboost", "experiment_1", "non_text_plus_joint", 1.5, "liquid"),
         ("catboost", "experiment_2", "non_text_plus_frozen_e5", 2, None),
@@ -147,6 +154,16 @@ def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isola
     np.testing.assert_allclose(second_encoder.reference_value, 4)
     np.testing.assert_allclose(second_encoder.difference, -0.5)
     assert "descriptive" in report["fold_sd"]
+    embedding_presence = paired.loc[
+        paired.phase.eq("experiment_2")
+        & paired.reference.eq("non_text_plus_presence")
+        & paired.metric.eq("rmse")
+    ]
+    assert len(embedding_presence) == 10  # Both frozen encoders, all five outer folds.
+    np.testing.assert_allclose(embedding_presence.reference_value, 2.5)
+    np.testing.assert_allclose(
+        embedding_presence.difference, embedding_presence.value.to_numpy() - 2.5
+    )
 
 
 def test_target_unit_error_magnitudes_are_not_pooled_across_datasets():

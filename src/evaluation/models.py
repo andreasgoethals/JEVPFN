@@ -19,10 +19,15 @@ import numpy as np
 import pandas as pd
 
 from src.utils import paths
-from src.utils.serialization import canonical_json, file_sha256, scalar
+from src.utils.serialization import canonical_json, digest, file_sha256, scalar
 
 MAIN_MODELS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear")
 TEXT_MODELS = ("tabstar", "contexttab", "ag_mm")
+
+
+def predictor_settings_identity(settings):
+    """Keep predictor/checkpoint identity independent of its diagnostic output folder."""
+    return digest({key: value for key, value in settings.items() if key != "output_phase"})
 
 
 class FoldInput:
@@ -456,6 +461,10 @@ def estimator_factory(model_id, metadata, settings, *, allow_model_runs=False):
         raise RuntimeError("Predictor execution is disabled")
     if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Predictor execution on VSC requires a compute allocation")
+    if settings.get("device", "cpu").startswith("cuda"):
+        from src.cluster.scheduling import reject_a100_allocation
+
+        reject_a100_allocation()
     if model_id not in MAIN_MODELS + TEXT_MODELS:
         raise ValueError("Predictor is outside the approved roster")
     verify_runtime(settings)

@@ -40,6 +40,8 @@ On VSC, PROJECT holds large inputs/weights/environments, permanent caches, token
 predictions and large results. DATA holds the checkout, compact manifests and operational
 logs. Both use JEVPFN/output_JEVPFN/<number>. phase/. Use the validated transfer export/import,
 never wholesale replacement of populated caches. See docs/VSC.md for commands/site details.
+The owner excludes all A100 allocations, including debug/MIG routes. GPU jobs default to
+wICE H100. Mindwell B200 requires a verified native GPFS allocation and tested runtime.
 
 PowerShell commands must remain compatible with Windows PowerShell 5.1: no &&, ternary or ??.
 Slurm files are Linux Bash and must use LF endings. New/editable text files are UTF-8.

@@ -5,13 +5,21 @@ This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18
 extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
 are excluded from experiments for text burden and 114-class feature size.
 
-**Stage: Experiment 0A setup, not full extraction.** On 21 October the resumed token
-audit completed for all five open-weight models, with zero overflows. Clef and Intern
-passed actual GPU contracts inside their containers; their redundant native environments
-were retired. Liquid's new build failed because Conda installed outside the image; the
-build now uses an explicit image prefix for both Conda creation and activation, and
-checks that location before pip. This repair still needs a VSC retry.
-Liquid, Strands, Perplexity and the three embedding encoders still need successful current GPU runtime evidence.
+**Stage: Experiment 0A setup, not full extraction.** The latest downloaded output, checked
+22 October, confirms sealed Liquid, Strands and Perplexity containers, alongside
+working Clef/Intern containers. All five decision checkpoints and three embedding checkpoints
+were staged. Token job 62384579 completed all five providers with zero input overflows.
+The three encoder jobs 62384604/62384609/62384611 failed in the older tokenizer code;
+the five decision contracts remain queued with reason `Priority` in the owner's 22 October
+snapshot. Historical Clef/Intern GPU contracts passed; fresh decision and encoder GPU
+evidence is still required. Queue submission is not successful inference.
+A reproduced Transformers 5 tokenizer incompatibility has been fixed: embedding chunks now
+use the publisher's backend post-processor, preserving E5 CLS/SEP and Qwen end-of-text.
+Updated encoder GPU contracts must pass before any full embedding extraction.
+These local corrections are not available to VSC until the owner publishes them and updates
+an idle checkout. The owner now excludes all A100 allocations: every GPU submission
+defaults to wICE H100, and runtime guards reject A100 overrides. Cancel only JEVPFN jobs
+before updating the VSC checkout; fresh H100 compatibility tests are still required.
 The exhaustive question-v3 audit passed all 18 datasets, 1,698,127 unique inputs and
 3,294,340 row/input links. Clef/Intern sensitivity probes show real prompt/option-order
 effects that require review; an interface pass is not a claim of robustness.
@@ -139,10 +147,20 @@ feature sampling. Full-fold feasibility must be tested before enabling the bench
 
 Save individual predictions, binary inner-OOF predictions, metrics, undefined-metric reasons,
 timings, resource use and artifact identities. Analyze paired feature effects within each
-predictor, including seen/unseen text cohorts. Fold SD is descriptive, not a standard error.
+predictor, including seen/unseen text cohorts. Decision and embedding arms also compare
+with the same predictor using missing-text indicators only when that control is available.
+Operational output folders do not change predictor/checkpoint comparison identities. Fold SD is descriptive, not a standard error.
 Headline metrics and optional dataset-level Wilcoxon/Holm contrasts remain unapproved until
 before comparative outcomes are reviewed. Exact protocol/settings live in
 `config/4. experiment_1/`; optional analysis is in `config/8. experiment_5/`.
+
+Extraction timings separate new inference, cache reuse and failures. Jev records client
+setup, rate-limit waiting and API round trips; open-weight models and encoders record loading
+and synchronized inference batches. Predictor records retain initialization, inner/final
+fit and prediction times. Detailed extraction timing journals use one SQLite file per run
+under the phase's PROJECT `results/timings/`; compact summaries use DATA `manifests/timings/`.
+All existing classification/regression metrics are saved, not just AUC; full probabilities
+and row-level predictions remain available for subsequent metrics and paired analyses.
 Cheap text statistics, permutation controls and retained-probability ablations are also
 available. Public-data pretraining overlap is a limitation; “label-free” describes the
 inputs to extraction, not a guarantee about pretraining. See [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md).

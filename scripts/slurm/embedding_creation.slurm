@@ -4,10 +4,10 @@
 #SBATCH --job-name=jevpfn-embeddings
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=wice
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_h100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=8
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=56000M
 #SBATCH --time=24:00:00

@@ -230,11 +230,13 @@ VSC login terminal, after input installation and matching frozen receipts:
 "$JEVPFN_PYTHON" -m src.cluster.experiment_zero --site vsc --execute --watch
 ```
 
-The runner submits **independent ready jobs concurrently**: CPU → two-node storage → exact tokens → three encoders →
-contracts and larger pilot for Clef, Intern, Liquid, Strands and Perplexity. The debug GPU
-partition permits only one queued job, so no batch of pending GPU jobs is submitted.
+The runner submits independent ready jobs concurrently: CPU, storage and token checks
+start independently; encoders follow CPU validation; decision contracts follow CPU/storage/
+token validation; each decision pilot also requires its own contract. Scheduling uses regular
+H100 by default, with explicit routes in `experiment_0/scheduling.yaml`. All A100 routes,
+including debug and interactive GPU slices, are excluded by owner decision.
 `--watch` polls accounting once per minute, performs no inference on the login node, and
-submits the next job only after COMPLETED/0:0. A failed/uncertain submission stops for
+submits newly ready jobs only after their prerequisites reach COMPLETED/0:0. A failed/uncertain submission stops for
 review. If OnDemand disconnects, the current Slurm job continues: reconnect, activate the
 CPU environment and repeat the same command. It resumes from recorded IDs, not a new run.
 Without `--watch`, one invocation checks/advances one step. The receipt records submitted,
@@ -301,12 +303,16 @@ done
 ```
 
 These bounded tests cover multiple chunks, missing text, reuse, unit norms and resume.
+They also verify prepared IDs/masks against the publisher tokenizer. Chunk preparation uses
+the backend special-token processor, not the removed Transformers 5 `prepare_for_model`
+method. Qwen adds end-of-text ID 151643 even though its configured EOS ID is 151645;
+compare against the actual publisher tokenization, never a guessed EOS assertion.
 They save fixture stores to PROJECT Experiment 0 and compact reports/logs to DATA.
 No benchmark features are created. After acceptance, enable the shared `text_embeddings.yaml`
 execution switch and run `python -m src.data.text_embeddings --encoder ENCODER --execute`
 inside a compute allocation using this container, or submit
 `sbatch scripts/slurm/embedding_creation.slurm ENCODER` (optional later arguments:
-container/environment, PROJECT root, dataset ID). This job uses the regular A100 queue
+container/environment, PROJECT root, dataset ID). This job uses the regular H100 queue
 and resumes completed embedding batches. Small E5 retains the existing
 `data/text_embeddings/<dataset>.sqlite3` path; other encoders use an additional encoder
 subfolder. All three caches reside on PROJECT; logs use DATA feature-creation logs.
@@ -407,8 +413,9 @@ before pip runs. Without this, the 21 October Liquid build installed into person
 DATA `conda_envs/env1` and produced an image without `bin/python`. That image was not
 sealed and must not be used. The fix checks exact template anchors and refuses an unknown site template;
 it does not change working Clef/Intern containers or the user's global Conda config.
-After publishing the fix and confirming no JEVPFN job is active, remove only that failed
-image, then retry Liquid (the commands preserve logs, weights and other runtimes):
+Liquid build 62383996 subsequently sealed successfully on 21 October; do not rebuild
+that sealed image. The following commands are recovery instructions only for a future
+unsealed build failure, with no active JEVPFN job (they preserve weights and other runtimes):
 
 ```bash
 "${JEVPFN_PYTHON:?}" -m src.cluster.containers discard-unsealed liquid
@@ -479,10 +486,9 @@ environment themselves and accept an optional project-root argument. The prepare
 environment is explicitly propagated to `srun` workers. See the guide’s Environment propagation
 section and [Slurm argument/export semantics](https://slurm.schedmd.com/sbatch.html).
 
-The job uses one full A100, four CPUs, 28,000 MiB host RAM and one hour in `gpu_a100_debug`,
-with the configured CreditPFN account. Only one debug GPU job may be queued at a time:
-wait for Clef to finish before submitting Intern. The pinned guide confirms that this is a
-full GPU, unlike the interactive MIG slice. Verify account/partition access on the actual cluster.
+The job uses one full H100, four CPUs, 28,000 MiB host RAM and one hour in `gpu_h100`,
+with account `lp_verbekelab`. Independent provider jobs can run concurrently, subject to
+site/account limits. Verify account/partition access and each runtime on the actual cluster.
 
 The contract job tests binary, three-class and nine-level regression fixtures, a 30-class
 vector, missing/duplicate/Unicode input, overflow rejection, cache reopen/reuse, original-row
@@ -522,7 +528,7 @@ it never enables extraction. Only pass those flags after doing the corresponding
 Set each path in `self_hosted.yaml`'s `accepted_before_extraction_manifests` map and enable
 its separate full-extraction switch between stages. Tests alone never sign acceptance.
 After acceptance, `scripts/slurm/feature_creation.slurm` runs full extraction on regular
-`gpu_a100`; its 24-hour allocation is a resumable segment, not a runtime prediction. Create
+`gpu_h100`; its 24-hour allocation is a resumable segment, not a runtime prediction. Create
 `output_JEVPFN/2. feature_creation/logs` before submission, then use
 `sbatch scripts/slurm/feature_creation.slurm cloudflare` (or its accepted provider). Provider jobs rotate datasets and
 wait for busy files. `--continue-on-error` is an explicit diagnostic mode with durable failed
@@ -530,9 +536,10 @@ request records; incomplete datasets cannot be materialized or accepted. Repair 
 and use `--retry-failed` to retry those inputs. No silent substitution by missing values.
 
 Small-model jobs start at 28,000 MiB host RAM; Perplexity uses 112,000 MiB. These are
-initial profiles, not measured minima. Regular A100 jobs must stay within 126,000 MiB per
-GPU; memory requests can bill extra CPU cores. Start on one wICE A100 80 GiB. Consider
-H100 or Mindwell B200/native GPFS only if measured throughput/memory justifies migration.
+initial profiles, not measured minima. The pinned H100 profile permits at most 187,200 MiB
+host RAM and 16 CPU cores per GPU; memory requests can bill extra CPU cores. H100 has
+80 GiB device memory. A100 is excluded. Mindwell B200 remains disabled until its native
+GPFS allocation is configured and the runtime/checkpoint passes a bounded GPU test there.
 Clef and Perplexity use batches of two; 0A checks their probabilities against serial execution
 with an absolute tolerance of 0.001. Liquid, Strands and Intern remain serial until a native
 batch interface is independently verified. All retain exact context checks, row ordering and
@@ -723,7 +730,7 @@ PCA32 with both decision-feature blocks.
 The vectors are synthetic downstream-interface fixtures; actual encoder inference is tested in
 0A and saved dataset vectors in 0B. TabSTAR/ConTextTab/AG-MM test original text alone and with joint/per-column/both decision features.
 `sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 /lustre1/project/stg_00211/JEVPFN/environments/tabpfn_3_5`
-supplies a regular A100 allocation once that selected predictor environment exists. Run CPU
+supplies a regular H100 allocation once that selected predictor environment exists. Run CPU
 CatBoost/linear checks with `scripts/slurm/experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX`.
 For full-size feasibility, separately enable `full_fold_profile_enabled` and run
 `python -m src.evaluation.campaign --dataset ID --model MODEL --feature-set ARM --provider PROVIDER --profile-fold --execute`
@@ -811,8 +818,8 @@ Submission receipts survive disconnects. A failed job stops new submissions with
 cancelling other jobs automatically. No repeated submission is used to improve priority.
 
 Routes are configured in `config/3. experiment_0/scheduling.yaml`. The default is regular
-wICE A100; H100 is an explicit alternate. Debug queues are unsuitable for parallel sweeps:
-only one A100 debug job may be queued per user. Mindwell B200 requires the actual **GPFS**
+wICE H100. A100 profiles are absent, and submission/runtime guards reject A100 overrides.
+This policy also covers debug partitions and interactive GPU slices. Mindwell B200 requires the actual **GPFS**
 group allocation in its profile, inputs/checkpoints/runtime staged there, and real B200
 compatibility evidence. Its root deliberately remains unset. Never stream heavy I/O from
 Lustre on Mindwell. Container wrappers can contain absolute prefixes: build/verify their
@@ -828,6 +835,28 @@ sinfo --clusters=wice,mindwell
 squeue --clusters=all --me
 ```
 
+For a pending job with reason `Priority`, inspect the priority factors and estimated
+start rather than treating queue age or the priority number as a queue position:
+
+```bash
+sprio --clusters=wice -j 62384605,62384606,62384607,62384608,62384610 -l
+squeue --clusters=wice --start -j 62384605,62384606,62384607,62384608,62384610
+sinfo --clusters=wice -p gpu_h100 -o "%P %a %l %D %t"
+squeue --clusters=wice --me -p gpu_h100 -o "%.18i %.10T %.10l %.35R"
+```
+
+These IDs are the owner's 22 October diagnostic jobs; use actual pending IDs in future
+runs. Leuven documents fair share and queue age as priority factors; the displayed
+`Priority` reason alone cannot identify which factor dominates. A long wait is not a
+Python failure. [VSC scheduling explanation](https://docs.vscentrum.be/compute/jobs/why_doesn_t_my_job_start.html).
+
+The owner excludes A100 even when its debug queue is idle. Cancel only this project's
+jobs before changing its checkout, then submit H100 tests from the updated source.
+Do not cancel by username alone: that would also cancel the owner's other projects.
+All project scripts use job names beginning `jevpfn`; inspect job names and IDs first.
+H100 waiting times remain scheduler-dependent, and compatibility must be established for
+each runtime. [wICE partitions](https://docs.vscentrum.be/leuven/wice_quick_start.html).
+
 Realistic short walltimes, measured memory and several independent single-GPU jobs make
 more schedulable work than one oversized allocation. Priority remains under Slurm/site
 policy. More credits do not give priority. P100/V100 are not enabled for these modern
@@ -841,6 +870,28 @@ power alongside job/cluster/partition/CPU identity. Missing sampling is explicit
 reported as 100% utilization. Slurm keeps command stdout/stderr; application reports keep
 load/inference/fit/predict timing. GPU use can fall during I/O, synchronization, kernel
 launches and small batches. Increase measured batch sizes only after parity/memory tests.
+
+`src.utils.timing.TimingJournal` retains extraction measurements in one PROJECT SQLite
+per run under `<phase>/results/timings/`, and a compact DATA summary under
+`<phase>/manifests/timings/`. Each observation identifies its dataset and input hashes or
+batch members, item count, elapsed wall seconds, failure type and CUDA synchronization.
+Jev API latency includes SDK/network/provider processing; rate-gate waiting is separate.
+Open-weight/embedding batch latency includes input preparation, forward processing and
+output conversion; it is not a GPU-kernel-only benchmark. Loading is recorded once per
+loaded runtime, and cache reuse is untimed rather than falsely reported as zero inference
+latency. Batch averages are not individual-request latency. Do not sum overlapping
+concurrent API durations and call them campaign walltime. Detailed measurements permit
+later latency quantiles without rerunning inference.
+
+Timing records are committed in groups of 64 to avoid a filesystem commit per call;
+dataset/run summaries and failures flush pending records. A killed process can lose at
+most 63 buffered measurements. Paid raw responses/accounting are persisted before timing
+writes, so timing failure cannot force a new paid call. Timing journals are output, not
+feature-cache identity; normal result export/import includes their consistent SQLite snapshots.
+Predictor timing remains in the permanent per-dataset evaluation store, with CPU and
+synchronized GPU wall timings for initialization, inner/final fit and prediction.
+Library work deferred until `fit`, including preprocessing or checkpoint loading, is
+included in fit time. No unsupported per-stage precision is implied.
 
 After frozen embeddings are complete, prepare PCA on CPU **before** predictor GPU jobs:
 
@@ -860,7 +911,7 @@ After 0B acceptance and explicit experiment enablement, this command **writes a 
 prints its exact submission command; it does not submit**:
 
 ```bash
-python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --profile wice_a100 --concurrency 8 --write
+python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --profile wice_h100 --concurrency 8 --write
 ```
 
 The manifest assigns one unique dataset/representation per array item, all five folds.

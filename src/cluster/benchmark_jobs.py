@@ -16,7 +16,7 @@ from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
 
-def plan(phase, model, *, profile="wice_a100", concurrency=8, controls=False, profile_fold=False):
+def plan(phase, model, *, profile="wice_h100", concurrency=8, controls=False, profile_fold=False):
     from src.cluster.scheduling import gpu_profile
 
     if type(concurrency) is not int or concurrency < 1:
@@ -114,7 +114,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase")
     parser.add_argument("--model")
-    parser.add_argument("--profile", default="wice_a100")
+    parser.add_argument("--profile", default="wice_h100")
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--controls", action="store_true")
     parser.add_argument("--profile-fold", action="store_true")

@@ -46,6 +46,10 @@ def exercise(cfg, encoder, destination):
         identity = encoder.identity
         texts = 0
 
+        def __init__(self):
+            self.timings = getattr(encoder, "timings", None)
+            self.synchronize = getattr(encoder, "synchronize", None)
+
         def __call__(self, texts):
             self.texts += len(texts)
             return encoder(texts)
@@ -71,7 +75,9 @@ def exercise(cfg, encoder, destination):
         "resume_without_inference": True,
         "rows": len(table),
         "dimensions_per_text": cfg["dimensions"],
+        "tokenizer_contract": getattr(encoder, "tokenizer_contract", None),
         "runtime": encoder.identity,
+        "timing": encoder.timings.summary() if getattr(encoder, "timings", None) else None,
     }
 
 
@@ -96,13 +102,17 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder, encoder_id="e5_s
     log = paths.logs_dir("experiment_0") / "embeddings.log"
     write_json(manifest, report)
     append_event(log, "embedding_contract_started", run_id=run_id)
+    encoder = None
     try:
-        report.update(exercise(cfg, encoder_factory(cfg), destination))
+        encoder = encoder_factory(cfg)
+        report.update(exercise(cfg, encoder, destination))
         report["status"] = "embedding_contracts_passed_requires_full_dataset_review"
     except Exception as exc:
         report.update(status="failed", error_type=type(exc).__name__)
         raise
     finally:
+        if getattr(encoder, "timings", None):
+            report["timing"] = encoder.timings.write_summary()
         write_json(manifest, report)
         append_event(log, "embedding_contract_finished", run_id=run_id, status=report["status"])
     return report

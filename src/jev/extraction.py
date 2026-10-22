@@ -22,6 +22,7 @@ from src.jev.spending import register_policy
 from src.utils import paths
 from src.utils.events import append_event
 from src.utils.serialization import canonical_json, digest
+from src.utils.timing import TimingJournal
 
 
 class RejectedRetryable(RuntimeError):
@@ -192,6 +193,7 @@ class DatasetExtractor:
         sleep=time.sleep,
         phase="feature_creation",
         policy_revision_manifest=None,
+        timings=None,
     ):
         if cache.dataset_id is None:
             raise ValueError("Extraction requires a dataset-bound cache")
@@ -202,6 +204,7 @@ class DatasetExtractor:
         self.validate_context = validate_context
         self.sleep = sleep
         self.session_id = uuid.uuid4().hex
+        self.timings = timings or TimingJournal("jev", phase=phase, run_id=self.session_id)
         self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.log"
         self.policy_sha256 = register_policy(
             cache, limits, revision_manifest=policy_revision_manifest, stage=phase
@@ -284,6 +287,8 @@ class DatasetExtractor:
         if cached is not None:
             response_features(request, cached)
             append_event(self.log, "cache_hit", request_key=request.cache_key)
+            self.timings.record("cache_reuse", dataset_id=self.cache.dataset_id,
+                                item_keys=[request.cache_key])
             return "cache_hit"
         with self.cache._connect() as db:
             saved = db.execute(
@@ -300,6 +305,8 @@ class DatasetExtractor:
             except Exception as exc:
                 return self._update(request, "invalid_response", error=type(exc).__name__)
             self._update(request, "completed")
+            self.timings.record("recovered_response", dataset_id=self.cache.dataset_id,
+                                item_keys=[request.cache_key])
             return "recovered_response"
         api_preview(request)
         self.validate_context(request)  # Fails BEFORE reserving money or calling a client.
@@ -308,17 +315,26 @@ class DatasetExtractor:
             if status != "claimed":
                 append_event(self.log, status, request_key=request.cache_key)
                 return status
+            started = None
             try:
-                self.gate.acquire()
+                with self.timings.measure("rate_limit_wait", dataset_id=self.cache.dataset_id):
+                    self.gate.acquire()
                 append_event(
                     self.log,
                     "request_started",
                     request_key=request.cache_key,
                     policy_sha256=self.policy_sha256,
                 )
+                started = time.perf_counter()
                 response = self.client.evaluate(request)
+                seconds = time.perf_counter() - started
             except RejectedRetryable as exc:
                 self._update(request, "pending", rejected=True, error="RejectedRetryable")
+                self.timings.record(
+                    "api_request", dataset_id=self.cache.dataset_id,
+                    item_keys=[request.cache_key], seconds=time.perf_counter() - started,
+                    error_type=type(exc).__name__,
+                )
                 if attempt + 1 < self.limits.max_attempts:
                     delay = min(
                         self.limits.backoff_max_seconds,
@@ -329,8 +345,18 @@ class DatasetExtractor:
                     self.sleep(delay)
                 continue
             except Exception as exc:
-                return self._update(request, "ambiguous", error=type(exc).__name__)
+                status = self._update(request, "ambiguous", error=type(exc).__name__)
+                if started is not None:
+                    self.timings.record(
+                        "api_request", dataset_id=self.cache.dataset_id,
+                        item_keys=[request.cache_key], seconds=time.perf_counter() - started,
+                        error_type=type(exc).__name__,
+                    )
+                return status
             status = self._update(request, "received", response=response)
+            # Preserve the paid raw response/accounting BEFORE writing optional timing evidence.
+            self.timings.record("api_request", dataset_id=self.cache.dataset_id,
+                                item_keys=[request.cache_key], seconds=seconds)
             if status == "ambiguous_usage":
                 return status
             if response["usage"]["input_tokens"] > self.limits.max_billed_input_tokens:
@@ -376,7 +402,8 @@ class DatasetExtractor:
                     }
                 if stop:
                     exhausted = True
-        append_event(self.log, "dispatch_finished", counts=counts)
+        append_event(self.log, "dispatch_finished", counts=counts,
+                     timing=self.timings.write_summary())
         return counts
 
 
