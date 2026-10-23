@@ -25,9 +25,9 @@ from uuid import uuid4
 
 from src.jev.cache import ResponseCache
 from src.jev.checkpoints import verify_checkpoint
-from src.jev.decision_tokenization import PINS, SELF_HOSTED, ExactCounter
 from src.jev.inputs import _read_set, iter_prepared_inputs, prepared_request
 from src.jev.provider import QUESTION_ID, response_features, semantic_question
+from src.jev.registry import ADDED, PINS, SELF_HOSTED, ExactCounter
 from src.jev.templates import TEMPLATE_VERSION
 from src.utils import paths
 from src.utils.acceptance import reviewed_acceptance
@@ -110,7 +110,14 @@ class SelfHostedClient:
             paths.REPO_ROOT / "src/jev/self_hosted.py"
         )
         started = time.perf_counter()
-        if provider == "liquid":
+        if provider in ADDED:
+            from src.jev.extended_runtimes import ExtendedRuntime
+
+            self.model = ExtendedRuntime(provider, folder, self.counter)
+            self.settings["request_configuration"]["additional_runtime_sha256"] = file_sha256(
+                paths.REPO_ROOT / "src/jev/extended_runtimes.py"
+            )
+        elif provider == "liquid":
             from transformers import AutoModel
 
             self.model = (
@@ -176,7 +183,9 @@ class SelfHostedClient:
             raise ValueError("Context overflow; no truncation or row removal")
         question = semantic_question(payload["question"])
         with self.torch.inference_mode():
-            if self.provider == "liquid":
+            if self.provider in ADDED:
+                raw = self.model.predict_payload(payload)
+            elif self.provider == "liquid":
                 raw = self.model.system_one(
                     state=canonical_json(payload["state"]), questions={QUESTION_ID: question}
                 )
@@ -466,6 +475,9 @@ def token_evidence(provider, counter):
         expected = {d["dataset_id"]: d["unique_inputs"] for d in report["datasets"]}
         if coverage != {k: v for k, v in expected.items() if v}:
             raise ValueError("Detailed token counts are incomplete")
+        if provider in ADDED:
+            from src.jev.registry import require_prepared_coverage
+            require_prepared_coverage(db)
     return report, database
 
 
@@ -529,6 +541,9 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         raise ValueError("Pilot exceeds its explicit request ceiling")
     # All cheap checks precede weight loading. GPU runtime is created once per job.
     client = SelfHostedClient(provider, allow_model_runs=True)
+    if provider in ADDED:
+        # Keep this read-only connection alive for the job. Counts were checked before load.
+        client.counter.attach_cache(sqlite3.connect(counts_path.resolve().as_uri() + "?mode=ro", uri=True))
     if full:
         reviewed_acceptance(
             accepted_file,

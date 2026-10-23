@@ -169,7 +169,9 @@ def test_long_embedding_text_is_fully_covered_with_room_for_prefix_and_special_t
         embeddings.token_chunks(Tokenizer(), "long text", prefix="query: ", max_tokens=4)
 
 
-def test_encoder_batches_across_texts_and_preserves_chunk_weighting():
+@pytest.mark.parametrize("pooling", ["attention_mask_mean", "last_nonpadding_token"])
+@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
+def test_encoder_batches_across_texts_and_preserves_chunk_weighting(pooling, dtype):
     from types import SimpleNamespace
 
     torch = pytest.importorskip("torch")
@@ -226,7 +228,9 @@ def test_encoder_batches_across_texts_and_preserves_chunk_weighting():
     def model(**inputs):
         ids = inputs["input_ids"].float()
         calls.append(len(ids))
-        return SimpleNamespace(last_hidden_state=torch.stack([ids, torch.ones_like(ids)], -1))
+        return SimpleNamespace(
+            last_hidden_state=torch.stack([ids, torch.ones_like(ids)], -1).to(getattr(torch, dtype))
+        )
 
     encoder = object.__new__(embeddings.E5Encoder)
     encoder.cfg = {
@@ -235,10 +239,13 @@ def test_encoder_batches_across_texts_and_preserves_chunk_weighting():
         "max_tokens": 6,
         "prefix": "query: ",
         "device": "cpu",
+        "pooling": pooling,
     }
     encoder.torch, encoder.tokenizer, encoder.model = torch, Tokenizer(), model
     texts = ["one", "two", "a b c d e f g"]
     batched = encoder(texts)
+    assert batched.dtype == np.float32 and np.isfinite(batched).all()
+    np.testing.assert_allclose(np.linalg.norm(batched, axis=1), 1, atol=1e-6)
     assert calls == [2, 2, 1]  # Three chunks in the long text, two short texts together.
     calls.clear()
     encoder.cfg["batch_size"] = 1

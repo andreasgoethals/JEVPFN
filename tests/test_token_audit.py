@@ -13,9 +13,9 @@ import pytest
 from src.cluster import token_audit
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
-from src.jev.decision_tokenization import ExactCounter
 from src.jev.inputs import iter_prepared_inputs, prepare_dataset_inputs
 from src.jev.question_bank import build_question_bank, save_question_bank
+from src.jev.registry import ExactCounter
 from src.jev.self_hosted import token_evidence
 from src.utils import paths
 from src.utils.config import load_yaml

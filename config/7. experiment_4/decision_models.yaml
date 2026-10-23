@@ -1,14 +1,35 @@
 phase: experiment_4
 name: decision_model_input_sensitivity
 enabled: false
-candidate_extractors: [jev, liquid, perplexity, cloudflare, strands, intern]
+candidate_extractors:
+- jev
+- liquid
+- perplexity
+- cloudflare
+- strands
+- intern
+- h2o
+- sii
+- kev
+- decision3
+- nimble
 implementation: src.evaluation.prompt_ablation
 sample: shared_label_blind_real_text_contracts
-variants: [base, paraphrase, option_order, irrelevant_context, embedded_instruction]
-metrics: [total_variation, maximum_probability_change, top_class_change, expected_direction_change]
+variants:
+- base
+- paraphrase
+- option_order
+- irrelevant_context
+- embedded_instruction
+metrics:
+- total_variation
+- maximum_probability_change
+- top_class_change
+- expected_direction_change
 selection: no_prompt_selection_from_target_labels_or_final_CV_results
 new_calls: explicit_bounded_provider_contract_execution_only
 reuse_existing_responses: true
-
 dataset_selection:
-  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]
+  exclude:
+  - REG_TEXT_ZOMATO_RESTAURANTS
+  - MUL_TEXT_SPOTIFY_GENRES

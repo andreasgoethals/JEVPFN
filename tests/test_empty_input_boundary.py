@@ -57,7 +57,20 @@ def test_all_empty_inputs_no_calls_all_derived_values_missing(
 
 
 @pytest.mark.parametrize(
-    "provider", ["jev", "liquid", "perplexity", "strands", "cloudflare", "intern"]
+    "provider",
+    [
+        "jev",
+        "liquid",
+        "perplexity",
+        "strands",
+        "cloudflare",
+        "intern",
+        "h2o",
+        "sii",
+        "kev",
+        "decision3",
+        "nimble",
+    ],
 )
 def test_even_hand_built_empty_request_is_rejected_for_every_provider(provider):
     request = IntendedRequest(

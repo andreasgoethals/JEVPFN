@@ -10,7 +10,7 @@ from __future__ import annotations
 import matplotlib as mpl
 
 # ---------------------------------------------------------------------------
-# DEFAULT FIGURE SIZES — final A4 print dimensions.
+# DEFAULT FIGURE SIZES â€” final A4 print dimensions.
 #
 # A4 is 210 x 297 mm. With 25 mm margins that leaves a 160 x 247 mm text block, and the numbers
 # below are that block in inches.
@@ -20,7 +20,7 @@ import matplotlib as mpl
 # legible on paper. So the point sizes in `_RC` are the point sizes ON THE PRINTED PAGE.
 # ---------------------------------------------------------------------------
 
-WIDTH_FULL = 6.30  # 160 mm — the full A4 text width
+WIDTH_FULL = 6.30  # 160 mm â€” the full A4 text width
 WIDTH_HALF = 3.05  # two side by side, with a ~5 mm gutter
 WIDTH_THIRD = 1.95  # three side by side. Label sparingly at this width.
 
@@ -35,7 +35,7 @@ GOLDEN = 0.618  # height = width * GOLDEN, unless the data wants otherwise
 def figsize(width: float = WIDTH_FULL, ratio: float = GOLDEN) -> tuple[float, float]:
     """(width, height) in inches, clamped to `MAX_HEIGHT`. `ratio` is height/width.
 
-    Pass `WIDTH_FULL`, `WIDTH_HALF` or `WIDTH_THIRD` — never a number of your own, because the
+    Pass `WIDTH_FULL`, `WIDTH_HALF` or `WIDTH_THIRD` â€” never a number of your own, because the
     whole point is that the figure arrives on the page at exactly the width it was drawn at.
     """
     return (width, min(width * ratio, MAX_HEIGHT))
@@ -48,7 +48,7 @@ def figsize(width: float = WIDTH_FULL, ratio: float = GOLDEN) -> tuple[float, fl
 
 #: Most preferred first. DejaVu Sans is LAST and is the one that matters: it ships with matplotlib,
 #: so it is the only face guaranteed present both locally and on a compute node. A missing face
-#: makes matplotlib fall back silently, which changes text metrics — moving every label and making
+#: makes matplotlib fall back silently, which changes text metrics â€” moving every label and making
 #: a cluster-drawn figure differ from the local one for no visible reason.
 _FONT_STACK = ["Source Sans 3", "Segoe UI", "Helvetica", "Arial", "DejaVu Sans"]
 
@@ -93,7 +93,7 @@ _RC = {
 # Two things worth deciding up front:
 #   * Give a colour a MEANING and keep it. If a name means one thing in one figure and another
 #     somewhere else, the legend has to be read twice.
-#   * Check the palette is readable when printed, and in greyscale — a paper gets photocopied.
+#   * Check the palette is readable when printed, and in greyscale â€” a paper gets photocopied.
 # ---------------------------------------------------------------------------
 
 _PROJECT_RC: dict = {}
@@ -134,10 +134,15 @@ DECISION_COLORS = {
     "cloudflare": "#846C9C",
     "intern": "#8C6D31",
     "strands": "#AF4C59",
+    "h2o": "#2D8C7C",
+    "sii": "#855C75",
+    "kev": "#647B9C",
+    "decision3": "#B56845",
+    "nimble": "#797D44",
 }
 COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, MAX_HEIGHT)
-COMPARISON_PENDING_SIZE = (WIDTH_FULL, 2.5)
+COMPARISON_PENDING_SIZE = (WIDTH_FULL, 3.6)
 COMPARISON_SCATTER_FIGURE_SIZE = (WIDTH_FULL, 2.5)
 COMPARISON_SCATTER_ALPHA = 0.3
 COMPARISON_SCATTER_SIZE = 6

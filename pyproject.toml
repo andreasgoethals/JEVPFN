@@ -26,7 +26,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.26,<3.0",
     "pandas>=2.1,<3.0",
-    "pyyaml>=6.0",            # config/*.yaml — the template's config idiom
+    "pyyaml>=6.0",            # config/*.yaml â€” the template's config idiom
     "matplotlib>=3.8",        # src/visualize/
     "tqdm>=4.66",
     "pyarrow==25.0.1",        # Versioned, reusable feature tables (Parquet).
@@ -69,6 +69,8 @@ liquid = ["transformers>=5.14,<6", "torch>=2.9", "torchvision", "pillow"]
 clef = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "accelerate", "pillow", "safetensors"]
 intern = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "pillow"]
 strands = ["strands-decider[cuda] @ git+https://github.com/strands-labs/strands-decider.git@b9fc83626bcca822d00f822d6c2e151b8d244ee9 ; sys_platform == 'linux'"]
+# Shared dependencies only; source/checkpoint pins live in extractors.yaml. Separate sealed images avoid runtime collisions.
+decision-open = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "accelerate==1.15.0", "peft==0.21.0", "safetensors>=0.6", "pillow>=10", "pydantic>=2,<3", "einops>=0.8"]
 # Perplexity supplies a checkpoint-specific requirements.txt; see docs/VSC.md.
 
 [project.urls]

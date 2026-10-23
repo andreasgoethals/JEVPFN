@@ -22,6 +22,11 @@ LABELS = {
     "cloudflare": "Clef-flash",
     "intern": "Intern-Decision-4B",
     "strands": "Strands",
+    "h2o": "H2O-Lightning-4B",
+    "sii": "SII-Decision-27B",
+    "kev": "Kev-27B",
+    "decision3": "Decision 3.0 Turbo",
+    "nimble": "Nimble-9B",
 }
 TASKS = {
     "binary_classification": "Binary",
@@ -69,7 +74,7 @@ def _matrix(data, *, title, label, vmin=0, vmax=1, cmap=None, percent=False):
 def coverage_figures(result, options):
     inventory = result.table("inventory")
     if not inventory.empty and inventory.status.eq("not_created").all():
-        # A single compact status replaces two identical 18-by-6 empty heatmaps.
+        # A compact status table replaces identical empty dataset/provider heatmaps.
         fig, ax = plt.subplots(figsize=style.COMPARISON_PENDING_SIZE)
         ax.set_axis_off()
         rows = []
@@ -86,18 +91,17 @@ def coverage_figures(result, options):
         table = ax.table(
             cellText=rows,
             colLabels=["Extractor", *[MODES[m] for m in options["representations"]]],
-            loc="center",
+            bbox=[0, 0, 1, 0.94],
             cellLoc="left",
             colLoc="left",
         )
         table.auto_set_font_size(False)
         table.set_fontsize(9)
-        table.scale(1, 1.35)
         for (row, _), cell in table.get_celld().items():
             cell.set_edgecolor(style.GRID_COLOR)
             if row == 0:
                 cell.set_facecolor(style.GRID_COLOR)
-        ax.set_title("Feature extraction pending · no measured agreement yet")
+        ax.set_title("Feature extraction pending · no measured agreement yet", pad=12)
         yield (
             fig,
             "coverage_pending",

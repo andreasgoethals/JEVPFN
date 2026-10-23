@@ -225,7 +225,7 @@ def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, 
         paths, "dataset_cache_path", lambda dataset: tmp_path / "protected" / f"{dataset}.sqlite3"
     )
     result = compare_saved_features(cfg, progress=None)
-    assert len(result.table("inventory")) == 18 * 6 * 2
+    assert len(result.table("inventory")) == 18 * 11 * 2
     assert result.table("inventory").status.eq("not_created").all()
     assert result.table("pairs").empty
     assert not (tmp_path / "protected").exists()

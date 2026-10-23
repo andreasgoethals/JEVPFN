@@ -1,5 +1,36 @@
 # Changelog
 
+## 23-10-2026
+
+- Added the owner-approved eleven-extractor setup: H2O Lightning 4B, SII-Decision-27B-Full,
+  Kev-27B, Decision3 d3-turbo and Apache Bespoke-Nimble-9B join the existing six.
+  Pinned weights, base models and required publisher source; preserved question v3 and
+  both historical tokenizer modules byte-for-byte. Library pins are unchanged.
+- Added native inference/complete probability decoding, 30-class and nine-level contracts,
+  provider-specific identities and compressed CPU-prepared tokens reused by GPU inference.
+  Checkpoint hash memoization avoids repeated Linux weight reads; Windows rehashes safely.
+- Added resumable, locked CPU-stage/build/count/H100-contract/pilot submission with Slurm
+  dependencies, bounded build concurrency, reused sealed images and no A100 route.
+  Submission ambiguity/failure retains IDs and diagnostics rather than resubmitting blindly.
+- Updated experiments, reports and durable docs for eleven extractors. Fixed the newly
+  exposed hard-coded decoder roster/context-screen windows and figure text/title overlap.
+  Experiment 1 has 3,672 configurations; Experiments 2 and 3 remain unchanged.
+- Final eleven-extractor validation: 826 tests passed, five platform/runtime skips;
+  all five notebooks executed without error cells (25 figures). Actual small pinned
+  tokenizer assets exercised binary, 30-class and nine-level formatting for all additions.
+  Ruff, pip check, whitespace and all 24 Bash syntax/LF checks passed. New VSC runs remain pending.
+
+- Verified the latest H100 output: CPU/storage, Clef/Intern and E5-small/E5-large passed.
+  Liquid/Strands/Perplexity stopped at container activation; Qwen stopped at bfloat16 export.
+- Clear the full inherited host Conda stack before launching a verified image, preserving
+  allocation/project settings. Reuse sealed containers and weights without rebuilding.
+- Normalize/export pooled embeddings in float32; reproduced the prior bfloat16 failure
+  and validated both pooling methods using an existing read-only PyTorch installation.
+- Run telemetry in the host interpreter around the selected workload interpreter; retain
+  bounded error diagnostics and allocation IDs instead of an unexplained empty CSV.
+- Validation: 774 tests passed/five platform/runtime skips; all four dtype/pooling cases
+  also passed with actual CPU PyTorch. Lint, dependencies and 23 shell syntax/LF checks passed.
+
 ## 22-10-2026
 
 - Excluded A100 by owner decision: H100 defaults for every GPU job and generated plan,

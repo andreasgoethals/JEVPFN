@@ -1,4 +1,4 @@
-checked_on: '2026-10-16'
+checked_on: '2026-10-23'
 enabled: false
 shared_semantics:
 - binary_probability
@@ -76,6 +76,66 @@ candidates:
     input_price_per_million_usd: null
     reference: https://github.com/strands-labs/strands-decider
     context_tokens: 4096
+  h2o:
+    enabled: false
+    model: h2oai/h2o-lightning-4b
+    revision: e7b32490c9d2a994bd75a4d1ea7e45716080175e
+    delivery: self_hosted
+    context_tokens: 32000
+    context_policy_note: conservative_total_request_cap_also_bounds_publisher_32000_state_cap
+    max_options: 255
+    license: Apache-2.0
+    input_price_per_million_usd: null
+    attention: bidirectional_full_attention_causal_deltanet
+    probability_policy: publisher_temperature_and_noul_floor_0.801
+    reference: https://huggingface.co/h2oai/h2o-lightning-4b
+  sii:
+    enabled: false
+    model: jylin001206/SII-Decision-27B-Full
+    revision: 8f5a51dcde7b0fd6a2eea3ab423bad5e3b11dfda
+    runtime_revision: 1723d83cbda69f48641c273280b5a2d06d6b3510
+    delivery: self_hosted
+    context_tokens: 6000
+    max_options: 255
+    license: Apache-2.0
+    input_price_per_million_usd: null
+    reference: https://github.com/amazingljy1206/SII-Decision
+  kev:
+    enabled: false
+    model: jaredpalmer/kev-27b
+    revision: af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf
+    runtime_revision: 2074cc44256200bb37540103fa4572901faa10f3
+    delivery: self_hosted
+    context_tokens: 65536
+    context_policy_note: conservative_total_request_cap_also_bounds_publisher_65536_state_cap
+    max_options: 255
+    license: Apache-2.0
+    input_price_per_million_usd: null
+    reference: https://github.com/jaredpalmer/kev
+  decision3:
+    enabled: false
+    model: vllm-sr/d3-turbo
+    revision: a0f3e9e59ebd1202fe1d4de1c4c0f9a986758cbb
+    delivery: self_hosted
+    context_tokens: 32768
+    max_options: 255
+    license: Apache-2.0
+    input_price_per_million_usd: null
+    attention: publisher_prefix_bidir
+    reference: https://huggingface.co/vllm-sr/d3-turbo
+  nimble:
+    enabled: false
+    model: bespokelabs/Bespoke-Nimble-9B
+    revision: bd792f44ec8e265be861bfcdf4e05967ffe0e858
+    base_model: Qwen/Qwen3.5-9B
+    base_model_revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
+    delivery: self_hosted
+    context_tokens: 8192
+    max_options: 255
+    license: Apache-2.0
+    calibration_temperature: 1.0
+    input_price_per_million_usd: null
+    reference: https://huggingface.co/bespokelabs/Bespoke-Nimble-9B
 readiness_required:
 - explicit_owner_roster_selection
 - verified_account_access_or_checkpoint_license

@@ -4,9 +4,12 @@ import argparse
 import csv
 import gzip
 import io
+import json
 import os
+import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 from contextlib import suppress
@@ -21,7 +24,7 @@ def gpu_sample():
         return []  # Never attribute another user's GPU to a CPU-only job.
     result = subprocess.run(
         [
-            "nvidia-smi",
+            os.environ.get("JEVPFN_NVIDIA_SMI") or "nvidia-smi",
             "-i",
             devices,
             "--query-gpu=uuid,name,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw",
@@ -49,7 +52,7 @@ def run(command, *, interval=10):
     receipt = paths.manifests_dir(phase) / "telemetry" / f"{identity}.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()
-    samples, errors = [], []
+    samples, errors, error_details = [], [], []
     started = time.monotonic()
 
     def sample():
@@ -78,6 +81,18 @@ def run(command, *, interval=10):
                 except (OSError, subprocess.SubprocessError) as exc:
                     if type(exc).__name__ not in errors:
                         errors.append(type(exc).__name__)
+                    detail = {"type": type(exc).__name__}
+                    if isinstance(exc, subprocess.CalledProcessError):
+                        detail.update(
+                            returncode=exc.returncode, command=exc.cmd,
+                            stderr=str(exc.stderr or "")[:2000],
+                            stdout=str(exc.stdout or "")[:2000],
+                        )
+                    else:
+                        detail["message"] = str(exc)[:2000]
+                    if detail not in error_details and len(error_details) < 8:
+                        error_details.append(detail)
+                        print("GPU telemetry warning: " + json.dumps(detail), flush=True)
                 stop.wait(interval)
 
     thread = threading.Thread(target=sample, daemon=True)
@@ -112,6 +127,15 @@ def run(command, *, interval=10):
                 "wall_seconds": time.monotonic() - started,
                 "gpu_samples": len(samples),
                 "sampling_errors": errors,
+                "sampling_error_details": error_details,
+                "monitor_python": sys.executable,
+                "nvidia_smi": os.environ.get("JEVPFN_NVIDIA_SMI") or shutil.which("nvidia-smi"),
+                "gpu_allocation": {
+                    k: os.environ.get(k) for k in (
+                        "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "CUDA_VISIBLE_DEVICES"
+                    )
+                },
+                "sampling_status": "sampled" if samples else "failed" if errors else "no_samples",
                 "mean_gpu_util_percent": sum(samples) / len(samples) if samples else None,
                 "peak_gpu_util_percent": max(samples) if samples else None,
                 "note": "Sampled device activity, not a guarantee of kernel efficiency or continuous saturation",

@@ -1,7 +1,7 @@
 phase: experiment_0
 enabled: true  # Only the explicitly submitted, bounded GPU pilot is authorized.
 execution_site: vsc_compute_node
-providers: [liquid, strands, perplexity, cloudflare, intern]
+providers: [liquid, strands, perplexity, cloudflare, intern, h2o, sii, kev, decision3, nimble]
 sample: first_middle_last_rows_and_ten_longest_exact_inputs_per_dataset
 max_pilot_requests: 1000
 batch_size: 1  # Profile memory and timing before increasing; serialized per model.

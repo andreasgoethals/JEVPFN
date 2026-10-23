@@ -1,5 +1,5 @@
 phase: experiment_0
-providers: [liquid, strands, perplexity, cloudflare, intern]
+providers: [liquid, strands, perplexity, cloudflare, intern, h2o, sii, kev, decision3, nimble]
 execution_site: vsc_gpu_allocation
 requires_explicit_execute: true
 max_live_requests: 110
@@ -10,3 +10,5 @@ real_prompt_robustness_forwards: 13
 batch_probability_tolerance: 0.001  # Numerical parity check; failures need review, not automatic relaxation.
 real_sample: first_and_longest_unique_input_per_dataset
 full_extraction_authorized: false
+
+publisher_startup_anchor_forwards: {h2o: 6}  # Separate fixed release-parity checks during loading.

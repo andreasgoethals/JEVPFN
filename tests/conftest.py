@@ -41,6 +41,8 @@ def _isolate_routing_environment(monkeypatch):
         "SLURM_CLUSTER_NAME",
         "JEVPFN_CONTAINER_PROVIDER",
         "JEVPFN_CONTAINER_ID",
+        "JEVPFN_MONITOR_PYTHON",
+        "JEVPFN_NVIDIA_SMI",
         "TYPESAFE_API_KEY",
     ):
         monkeypatch.delenv(variable, raising=False)

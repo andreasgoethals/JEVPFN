@@ -8,7 +8,7 @@ import argparse
 import json
 import os
 
-from src.jev.decision_tokenization import PINS, SELF_HOSTED, stage_tokenizers
+from src.jev.registry import ADDED, PINS, SELF_HOSTED, asset_urls, stage_tokenizers
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, file_sha256, write_json
@@ -19,13 +19,9 @@ def checkpoint_path(provider):
 
 
 def checkpoint_files(folder):
-    return {
-        p.relative_to(folder).as_posix(): file_sha256(p)
-        for p in sorted(folder.rglob("*"))
-        if p.is_file()
-        and ".cache" not in p.relative_to(folder).parts
-        and p.name != "_JEVPFN_CHECKPOINT.json"
-    }
+    from src.jev.checkpoint_hashes import hashes
+
+    return hashes(folder)
 
 
 def verify_checkpoint(provider):
@@ -40,16 +36,20 @@ def verify_checkpoint(provider):
     for name in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja"):
         if file_sha256(folder / name) != file_sha256(paths.tokenizer_dir(provider) / name):
             raise ValueError("Inference checkpoint and audited tokenizer differ")
-    if provider == "strands":
+    if provider in {"strands", "nimble"}:
         candidate = load_yaml("extractors")["candidates"][provider]
-        base = paths.checkpoints_dir("decision_models", "strands_base")
+        base = paths.checkpoints_dir("decision_models", provider + "_base")
         expected = manifest.get("base")
         if (
             not expected
             or expected["revision"] != candidate["base_model_revision"]
             or checkpoint_files(base) != expected["files"]
         ):
-            raise ValueError("Strands base checkpoint differs from the staged identity")
+            raise ValueError("Separate base checkpoint differs from the staged identity")
+    if provider in ADDED:
+        for name in asset_urls(provider):
+            if file_sha256(folder / name) != file_sha256(paths.tokenizer_dir(provider) / name):
+                raise ValueError("Runtime source differs from the audited provider assets")
     return folder, digest(manifest)
 
 
@@ -59,8 +59,8 @@ def stage(provider):
     failures = storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME"))
     if failures:
         raise ValueError("; ".join(failures))
-    if os.environ.get("SLURM_JOB_ID"):
-        raise RuntimeError("Stage downloads on a connected setup host before acquiring a GPU")
+    if os.environ.get("SLURM_JOB_GPUS") or os.environ.get("SLURM_JOB_PARTITION", "").startswith("gpu"):
+        raise RuntimeError("Stage downloads on a connected CPU setup allocation before acquiring a GPU")
     # HF constants are fixed at first import. Explicit cache_dir alone does not redirect
     # the potentially large Xet download cache away from HOME/personal storage.
     os.environ["HF_HOME"] = str(paths.checkpoints_dir("huggingface"))
@@ -75,13 +75,23 @@ def stage(provider):
     snapshot_download(
         candidate["model"], revision=PINS[provider], local_dir=folder, cache_dir=cache
     )
+    if provider in ADDED:
+        import shutil
+        for name in asset_urls(provider):
+            target = folder / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = paths.tokenizer_dir(provider) / name
+            if target.exists() and file_sha256(target) != file_sha256(source):
+                raise ValueError("Runtime source/checkpoint conflict; no files were overwritten")
+            if not target.exists():
+                shutil.copyfile(source, target)
     manifest = {
         "provider": provider,
         "model": candidate["model"],
         "revision": PINS[provider],
         "files": checkpoint_files(folder),
     }
-    if provider == "strands":
+    if provider in {"strands", "nimble"}:
         # Populate the HF cache used by the publisher's base-model ID lookup, and retain
         # a portable directory for verification. Symlinks avoid a second physical copy.
         source = snapshot_download(
@@ -89,7 +99,7 @@ def stage(provider):
         )
         from pathlib import Path
 
-        base = paths.checkpoints_dir("decision_models", "strands_base")
+        base = paths.checkpoints_dir("decision_models", provider + "_base")
         base.mkdir(parents=True, exist_ok=True)
         for file in Path(source).rglob("*"):
             if file.is_file():

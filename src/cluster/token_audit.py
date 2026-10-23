@@ -3,7 +3,7 @@
 python -m src.cluster.token_audit --stage-tokenizers  # small public files, then count
 python -m src.cluster.token_audit                     # offline; resume saved counts
 
-Five open-weight tokenizers are available. Jev's hosted counts remain explicitly
+Ten open-weight tokenizers are available. Jev's hosted counts remain explicitly
 unverified. This never removes rows, shortens text, loads weights or performs inference.
 """
 
@@ -24,13 +24,13 @@ import numpy as np
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
-from src.jev.decision_tokenization import (
+from src.jev.inputs import _read_set, input_origins, iter_prepared_inputs
+from src.jev.registry import (
     HOSTED_UNAVAILABLE,
     SELF_HOSTED,
     ExactCounter,
     stage_tokenizers,
 )
-from src.jev.inputs import _read_set, input_origins, iter_prepared_inputs
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
@@ -187,6 +187,8 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
             raise ValueError("Token audit identity differs from its saved counts")
         db.execute("INSERT OR IGNORE INTO identity VALUES (1,?)", (canonical_json(recipe),))
         db.commit()
+        if hasattr(counter, "attach_cache"):
+            counter.attach_cache(db, writable=True)
         for item in inputs:
             dataset_id = item["dataset_id"]
             n, last = db.execute(
@@ -275,6 +277,9 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
             progress(
                 f"{provider} / {dataset_id}: complete; max={summary['max_tokens']:,}; {len(overflows):,} overflowing inputs / {len(affected_rows):,} rows"
             )
+        if provider in {"h2o", "sii", "kev", "decision3", "nimble"}:
+            from src.jev.registry import require_prepared_coverage
+            require_prepared_coverage(db)
     report = {
         "schema": recipe["schema"],
         "audit_id": audit_id,
@@ -394,8 +399,9 @@ def main():
         "--provider",
         choices=SELF_HOSTED,
         action="append",
-        help="Default: all five self-hosted tokenizers",
+        help="Default: all ten self-hosted tokenizers",
     )
+    parser.add_argument("--independent", action="store_true", help="One provider per CPU job; provider database and report locks still apply")
     args = parser.parse_args()
     from src.cluster.preflight import storage_policy_failures
 
@@ -403,6 +409,8 @@ def main():
     if failures:
         raise ValueError("; ".join(failures))
     providers = list(dict.fromkeys(args.provider or SELF_HOSTED))
+    if args.independent and len(providers) != 1:
+        parser.error("--independent requires exactly one --provider")
     if args.stage_only:
         stage_tokenizers(providers)
         return 0
@@ -415,6 +423,8 @@ def main():
             stage_tokenizers(providers)
         check_tokenizers(providers)
         return 0
+    if args.independent:
+        return _count_selected(providers)
     lock = paths.require_project_output(paths.token_audit_dir()) / ".token_audit.lock"
     with _exclusive_audit(lock):
         if args.stage_tokenizers:

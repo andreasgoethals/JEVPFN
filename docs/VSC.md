@@ -66,6 +66,69 @@ PROJECT can be single-copy; transferring results to the laptop is part of the re
 
 ## CPU environment and input transfer
 
+### Set up the eleven-extractor roster
+
+The selected roster now includes Jev locally and ten open-weight VSC extractors.
+The additions are `h2o`, `sii`, `kev`, `decision3` and `nimble`; they have no prior
+VSC inference evidence. Existing weights and sealed containers are reusable. Do not
+reinstall environments merely because project source changed.
+
+After the owner publishes the tested code, update an idle checkout. With the existing
+CPU environment activated and `JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211`:
+
+```bash
+"${JEVPFN_PYTHON:?}" -m src.cluster.setup --cluster wice
+myquota
+"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all
+"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all --execute
+```
+
+The first setup-extractors command previews. Execution submits a persistent Slurm
+dependency graph, so disconnecting Open OnDemand does not lose the remaining steps.
+CPU jobs download immutable weights/source, build only missing containers in scratch,
+and count every prepared input. At most two stage chains and two build chains run
+concurrently. Existing verified sealed images are reused. Each H100 contract job waits
+for CPU/storage checks, its image and its exact counts; its bounded real-dataset pilot
+waits for that contract. This command does not enable full extraction or award acceptance.
+Use repeatable `--provider NAME` for a selected subset, or omit options for the five additions.
+All three embedding encoders are separately covered by the final 0A campaign.
+
+Submission IDs/dependencies are in DATA
+`output_JEVPFN/3. experiment_0/manifests/container_setup/open_models.json`.
+Repeat the same command after a terminal disconnect to resume submission without
+duplicating jobs. A failed prerequisite leaves dependent jobs blocked; inspect their
+logs before cancelling/replanning. Ambiguous submissions stop for scheduler review,
+rather than guessing whether a duplicate is safe. Changes of source/selection require
+reviewing the old receipt and waiting for its jobs, not silent replacement.
+
+GPU contracts request 30 minutes on wICE H100; the dataset pilot requests one hour.
+The 27B runtimes request eight CPU cores and 112,000 MiB host RAM; smaller models
+request four cores and 28,000 MiB. These are initial feasibility allocations, not measured
+optima. CPU token IDs for the five additions are compressed in each provider's PROJECT
+token-count SQLite database and reused by inference. The checkpoint hash index is
+also a single PROJECT SQLite file; Linux reuses hashes only while file metadata matches.
+Windows always rehashes because its creation time is not a reliable change indicator.
+Runtime code/calibration/option descriptions remain part of response-cache identities.
+
+H2O requires six publisher probability anchors during loading, recorded separately
+from its bounded diagnostic request budget. They reject an incorrect attention/readout
+implementation. The new runtimes initially use serial inference until measured batch
+parity and memory tests justify a change. Do not infer 100% utilization from requesting
+a GPU. Host telemetry records actual allocation GPU load/memory, power and errors.
+No A100 route is allowed. Mindwell requires an actual native GPFS allocation and a
+Blackwell-compatible tested runtime before using its configured B200 profile.
+
+To inspect only jobs from this setup graph after submission:
+
+```bash
+jevpfn_ids=$("${JEVPFN_PYTHON:?}" -c 'import json; from src.utils import paths; p=paths.manifests_dir("experiment_0")/"container_setup/open_models.json"; print(",".join(s["job_id"] for s in json.loads(p.read_text())["steps"] if s.get("job_id")))')
+sacct --clusters=wice -j "$jevpfn_ids" --format=JobID,JobName%30,State,ExitCode,Elapsed,MaxRSS
+squeue --clusters=wice --me -o "%.18i %.16P %.10T %.10l %.35R"
+```
+
+No raw/prepared/paid feature data is removed by setup. Check group quota before adding
+several 27B checkpoints: containerization reduces file counts, not weight byte size.
+
 The project uses the CreditPFN Conda bootstrap with a separate Python 3.12 environment.
 Skip environment creation when JEVPFN already exists:
 
@@ -298,7 +361,7 @@ After Clef's container works, test each encoder in a GPU allocation:
 
 ```bash
 for encoder in e5_small_v2 e5_large_v2 qwen3_embedding_0_6b; do
-    sbatch --wait scripts/slurm/experiment_0_embeddings.slurm cloudflare /lustre1/project/stg_00211 "$encoder" || break
+    sbatch --clusters=wice scripts/slurm/experiment_0_embeddings.slurm cloudflare /lustre1/project/stg_00211 "$encoder" || break
 done
 ```
 
@@ -343,6 +406,12 @@ copy template and frontend alias. It copies contents/links/timestamps without im
 native ACLs/ownership. The site installation and original environment remain untouched;
 unknown templates fail closed. See AGENTS_MEMORY for observed failures. Build work/logs
 remain available for diagnosis; do not reset output while setup is failing.
+
+`activate_runtime.sh` verifies an image using the native CPU interpreter, then removes
+the full inherited Conda activation stack before executing its Python wrapper. Clearing
+only CONDA_PREFIX while retaining CONDA_SHLVL breaks newly created images at startup.
+Slurm, CUDA, PROJECT paths and the verified container identity remain available. This
+launcher correction does not require rebuilding a sealed image or downloading weights.
 
 The build checks `apptainer`, both wrapper entry points and `mksquashfs` before hashing
 checkpoints or copying an environment. If the packer is absent from PATH, it reads
@@ -863,11 +932,18 @@ policy. More credits do not give priority. P100/V100 are not enabled for these m
 runtimes without compatible precision/kernels/VRAM evidence. Multi-GPU speed comes from
 independent array tasks; no unimplemented distributed execution is implied.
 
-GPU inference scripts record a compressed telemetry stream in the phase's DATA
+GPU inference scripts run the telemetry parent in the native host interpreter
+(`JEVPFN_MONITOR_PYTHON`) around the selected workload interpreter (`JEVPFN_PYTHON`).
+This keeps driver monitoring outside the model image and avoids a nested container just
+to start the workload. The host nvidia-smi path is captured during activation; only the
+Slurm-allocated GPU IDs are queried. No fallback queries another user's GPU.
+Scripts record a compressed telemetry stream in the phase's DATA
 `logs/telemetry/` and one summary in `manifests/telemetry/`. The configurable default
 sampling interval is ten seconds. It records allocated-device utilization, VRAM and
 power alongside job/cluster/partition/CPU identity. Missing sampling is explicit, never
-reported as 100% utilization. Slurm keeps command stdout/stderr; application reports keep
+reported as 100% utilization. Failures retain the sampler executable, allocation IDs,
+return code and bounded stderr/stdout; a successful model command does not imply successful
+telemetry. Inspect `sampling_status` and `gpu_samples` in the summary. Slurm keeps command stdout/stderr; application reports keep
 load/inference/fit/predict timing. GPU use can fall during I/O, synchronization, kernel
 launches and small batches. Increase measured batch sizes only after parity/memory tests.
 

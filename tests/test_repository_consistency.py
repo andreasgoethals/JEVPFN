@@ -11,7 +11,7 @@ from src.cluster.token_audit import HOSTED_UNAVAILABLE
 from src.evaluation.metrics import METRICS_VERSION
 from src.evaluation.models import MAIN_MODELS, TEXT_MODELS
 from src.jev.context import CONTEXT_LIMITS
-from src.jev.decision_tokenization import PINS, SELF_HOSTED
+from src.jev.registry import PINS, SELF_HOSTED
 from src.utils import paths
 from src.utils.config import load_yaml
 

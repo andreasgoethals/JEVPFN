@@ -26,7 +26,7 @@ from src.jev.provider import api_preview
 from src.jev.question_bank import payload_from_text
 from src.jev.requests import build_requests, text_groups
 from src.utils import paths
-from src.utils.config import load_config
+from src.utils.config import load_config, load_yaml
 from src.utils.serialization import canonical_json
 
 
@@ -69,6 +69,21 @@ def review_dataset(
     positions = sorted({0, len(features) // 2, len(features) - 1})
     ratios = cfg["budget_review"]["characters_per_token_scenarios"]
     price = cfg["cost"]["input_price_per_million"]
+    windows = sorted(
+        {
+            4096,
+            8192,
+            16384,
+            24576,
+            32000,
+            32768,
+            *(
+                v["context_tokens"]
+                for v in load_yaml("extractors")["candidates"].values()
+                if v["context_tokens"] is not None
+            ),
+        }
+    )
     estimates, pilot = [], []
     for context in (False,):
         for mode in ("per_column", "joint"):
@@ -118,7 +133,7 @@ def review_dataset(
                                 f"combined_requests_above_{limit}_approx": int(
                                     (combined_keep & (tokens > limit)).sum()
                                 )
-                                for limit in (4096, 8192, 16384, 24576, 32000, 32768)
+                                for limit in windows
                             },
                             "cost_unique_usd": None
                             if price is None

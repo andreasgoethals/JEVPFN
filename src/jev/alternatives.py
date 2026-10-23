@@ -28,6 +28,26 @@ def preview(request, provider):
     state = json.loads(request.payload_json)["state"]
     question = semantic_question(json.loads(request.payload_json)["question"])
     questions = {QUESTION_ID: question}
+    from src.jev.registry import ADDED
+
+    if provider in ADDED:
+        from src.utils.config import load_yaml
+
+        return {
+            "transport": "self_hosted_pinned_open_weights",
+            "initialization": "runtime = ExtendedRuntime(provider, staged_checkpoint, audited_counter)",
+            "call": "runtime.predict_payload(arguments)",
+            "arguments": json.loads(request.payload_json),
+            "native_question_semantics": questions,
+            "reference": load_yaml("extractors")["candidates"][provider]["reference"],
+            "pin_requirement": "checkpoint revision, source files, tokenizer, container and CPU-prepared-token hashes",
+            "runtime_requirements": [
+                "Reuse the exact publisher renderer and complete answer descriptions.",
+                "Reject overflow; retain every class probability and publisher calibration.",
+                "Use offline staged weights on an allocated H100; pass Experiment 0A before extraction.",
+            ],
+            "live_verified": False,
+        }
     if provider == "jev":
         return {
             "transport": "TypeSafeClient.system_one",

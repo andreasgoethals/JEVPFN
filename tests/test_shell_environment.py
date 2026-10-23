@@ -72,7 +72,13 @@ def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selec
     )
     host.chmod(0o755)
     wrapper = packed / "bin/python"
-    wrapper.write_text('#!/bin/bash\nprintf "packed-python\\n"\n')
+    wrapper.write_text(
+        '#!/bin/bash\n'
+        'for v in ${!CONDA_@} ${!_CONDA_@}; do echo "Stale host Conda stack: $v" >&2; exit 8; done\n'
+        '[[ -z "${_CE_M+x}${_CE_CONDA+x}" ]] || exit 8\n'
+        '[[ "$CUDA_VISIBLE_DEVICES" == 3 && "$SLURM_JOB_GPUS" == 3 ]] || exit 8\n'
+        'printf "packed-python\\n"\n'
+    )
     wrapper.chmod(0o755)
     (repo / "scripts/activate_conda.sh").write_text(
         'export JEVPFN_PYTHON="$TEST_HOST"\nprintf "native-activation\\n"\n'
@@ -86,8 +92,12 @@ def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selec
         '  JEVPFN_STAGING_ROOT="$(cygpath -u "$JEVPFN_STAGING_ROOT")"\nfi\n'
         'export TEST_HOST JEVPFN_STAGING_ROOT\ncd "$TEST_REPO"\n'
         'export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/cloudflare"\n'
+        'export CONDA_SHLVL=2 CONDA_PREFIX=/host/env CONDA_PREFIX_1=/host/base\n'
+        'export CONDA_DEFAULT_ENV=JEVPFN CONDA_EXE=/host/conda _CONDA_ROOT=/host/base\n'
+        'export _CE_M=m _CE_CONDA=conda CUDA_VISIBLE_DEVICES=3 SLURM_JOB_GPUS=3\n'
         '[[ "$TEST_CASE" != native ]] || export JEVPFN_CONDA_ENV=JEVPFN\n'
         'source "$TEST_ACTIVATION"\n'
+        '[[ "$JEVPFN_MONITOR_PYTHON" == "$TEST_HOST" ]]\n'
         'printf "selected-provider=%s\\n" "${JEVPFN_CONTAINER_PROVIDER:-none}"\n',
         encoding="utf-8",
     )
@@ -253,6 +263,17 @@ def test_a100_override_stops_before_environment_activation(tmp_path):
     assert result.returncode == 2
     assert "A100 allocations are disabled" in result.stderr
     assert "No such file" not in result.stderr
+
+
+def test_all_monitored_jobs_separate_host_monitor_from_workload_interpreter():
+    monitored = []
+    for script in (ROOT / "scripts/slurm").glob("*.slurm"):
+        calls = [line for line in script.read_text().splitlines() if "-m src.cluster.monitor" in line]
+        for call in calls:
+            assert call.startswith('"${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- ')
+            assert '-- "${JEVPFN_PYTHON:?}" -m ' in call
+            monitored.append(script.name)
+    assert len(monitored) == 8
 
 
 def test_perplexity_requirements_guard_runs_before_packages_exist(tmp_path):

@@ -1,13 +1,14 @@
 #!/bin/bash -l
 # Connected login-shell setup for isolated decision runtimes; no inference/job submission.
 set -euo pipefail
-JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern|liquid|strands|perplexity}"
+JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble}"
 case "$JEVPFN_SETUP_PROVIDER" in
     cloudflare) JEVPFN_SETUP_EXTRA=clef ;;
     intern) JEVPFN_SETUP_EXTRA=intern ;;
     liquid) JEVPFN_SETUP_EXTRA=liquid ;;
     strands) JEVPFN_SETUP_EXTRA=strands ;;
     perplexity) JEVPFN_SETUP_EXTRA=perplexity ;;
+    h2o|sii|kev|decision3|nimble) JEVPFN_SETUP_EXTRA=decision-open ;;
     *) echo 'Unknown selected decision provider.' >&2; exit 2 ;;
 esac
 cd "${VSC_DATA:?}/JEVPFN"

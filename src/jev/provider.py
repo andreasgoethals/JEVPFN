@@ -177,10 +177,12 @@ def response_features(request: IntendedRequest, response: dict) -> dict[str, flo
     if provider == "jev":
         wire = api_preview(request)
     else:
+        from src.jev.registry import SELF_HOSTED
+
         payload = json.loads(request.payload_json)
         require_nonempty_text(payload)
         if (
-            provider not in {"liquid", "strands", "perplexity", "cloudflare", "intern"}
+            provider not in SELF_HOSTED
             or settings.get("api_mapping_version") != f"{provider}-self-hosted-v1"
         ):
             raise ValueError("Provider response decoder is not implemented for this mapping")

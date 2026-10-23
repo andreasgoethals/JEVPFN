@@ -17,4 +17,8 @@ export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STAGING_ROOT="${1:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.token_audit
+if [[ -n "${2:-}" ]]; then
+    python -m src.cluster.token_audit --provider "$2" --independent
+else
+    python -m src.cluster.token_audit
+fi

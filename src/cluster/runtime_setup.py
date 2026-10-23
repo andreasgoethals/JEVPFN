@@ -7,6 +7,7 @@ import platform
 import sys
 from pathlib import Path
 
+from src.jev.registry import SELF_HOSTED
 from src.utils import paths
 from src.utils.serialization import write_json
 
@@ -31,7 +32,7 @@ def record(provider):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "provider", choices=("liquid", "strands", "perplexity", "cloudflare", "intern")
+        "provider", choices=SELF_HOSTED
     )
     args = parser.parse_args()
     print(json.dumps(record(args.provider), indent=2))

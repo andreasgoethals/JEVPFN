@@ -50,8 +50,10 @@ def test_direct_strands_preview_requires_strict_window_and_serialization(request
 
 
 def test_all_previews_are_inspectable_json_and_explicitly_unverified(request_by_task):
+    from src.jev.registry import SELF_HOSTED
+
     before = request_by_task.to_json()
-    for provider in ("jev", "liquid", "perplexity", "cloudflare", "strands", "intern"):
+    for provider in ("jev", *SELF_HOSTED):
         mapped = preview(request_by_task, provider)
         assert json.loads(json.dumps(mapped)) == mapped
         assert mapped["live_verified"] is False

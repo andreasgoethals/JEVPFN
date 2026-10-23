@@ -17,7 +17,7 @@ from uuid import uuid4
 import yaml
 
 from src.cluster.maintenance import reject_links, require_idle_vsc
-from src.jev.decision_tokenization import SELF_HOSTED
+from src.jev.registry import SELF_HOSTED
 from src.utils import paths
 from src.utils.serialization import digest, file_sha256, write_json
 

@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# Stage one model on a connected host first. Submit only one debug GPU job at a time.
+# Stage checkpoints first. Independent bounded pilots use the regular H100 partition.
 # Pass PROVIDER and its optional environment prefix as script arguments.
 #SBATCH --job-name=jevpfn-exp0-decision
 #SBATCH --account=lp_verbekelab
@@ -26,4 +26,4 @@ fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.preflight --gpu --stage before_extraction
-python -m src.cluster.monitor -- python -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute
+"${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute

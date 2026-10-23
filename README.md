@@ -5,21 +5,22 @@ This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18
 extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
 are excluded from experiments for text burden and 114-class feature size.
 
-**Stage: Experiment 0A setup, not full extraction.** The latest downloaded output, checked
-22 October, confirms sealed Liquid, Strands and Perplexity containers, alongside
-working Clef/Intern containers. All five decision checkpoints and three embedding checkpoints
-were staged. Token job 62384579 completed all five providers with zero input overflows.
-The three encoder jobs 62384604/62384609/62384611 failed in the older tokenizer code;
-the five decision contracts remain queued with reason `Priority` in the owner's 22 October
-snapshot. Historical Clef/Intern GPU contracts passed; fresh decision and encoder GPU
-evidence is still required. Queue submission is not successful inference.
-A reproduced Transformers 5 tokenizer incompatibility has been fixed: embedding chunks now
-use the publisher's backend post-processor, preserving E5 CLS/SEP and Qwen end-of-text.
-Updated encoder GPU contracts must pass before any full embedding extraction.
-These local corrections are not available to VSC until the owner publishes them and updates
-an idle checkout. The owner now excludes all A100 allocations: every GPU submission
-defaults to wICE H100, and runtime guards reject A100 overrides. Cancel only JEVPFN jobs
-before updating the VSC checkout; fresh H100 compatibility tests are still required.
+**Stage: Experiment 0A setup, not full extraction.** The VSC output checked on 23 October
+confirms successful H100 contracts for Clef and Intern across all three task types and
+18 real datasets, plus successful E5-small/E5-large GPU tests, CPU/data checks and two-node
+storage checks. Liquid, Strands and Perplexity failed before model loading because of a
+partially cleared host Conda activation stack. Qwen loaded but failed converting bfloat16
+embeddings to NumPy. Both failures are corrected locally and need new VSC tests. GPU
+telemetry also failed; sampling now runs outside the container and retains actual error
+details, requiring live verification. The images/weights remain reusable without rebuilding.
+The five original decision checkpoints and three embedding checkpoints are staged. Exact token
+counts cover those five open-weight providers with zero overflows. Five additional
+open-weight extractors are now implemented but still require checkpoint staging, complete
+CPU token counts and real H100 contracts/pilots. No GPU success is inferred from local tests.
+The tokenizer correction
+is now verified by the E5 GPU tests. The owner excludes all A100 allocations: GPU jobs
+default to wICE H100, with guards against A100 overrides. Publish local fixes and update
+an idle checkout before resubmission. Queue submission is not successful inference.
 The exhaustive question-v3 audit passed all 18 datasets, 1,698,127 unique inputs and
 3,294,340 row/input links. Clef/Intern sensitivity probes show real prompt/option-order
 effects that require review; an interface pass is not a claim of robustness.
@@ -72,31 +73,43 @@ per-column request; duplicate numeric columns are included only once in combined
 | Perplexity Decider v1.1-27B | Open weights, VSC |
 | Cloudflare Clef-flash | Open weights, VSC |
 | Intern-Decision-4B | Open weights, VSC |
+| H2O Lightning 4B | Open weights, VSC; publisher attention/calibration with startup anchors |
+| SII-Decision-27B-Full | Open weights, VSC |
+| Kev-27B | Open weights, VSC; native pointer head |
+| Decision3 d3-turbo | Open weights, VSC; native prefix-bidirectional runtime |
+| Bespoke-Nimble-9B | Open adapter and pinned Qwen3.5-9B base, VSC |
 
 Microsoft is excluded by owner decision. Pins, licences, context and price references
 are in `config/2. feature_creation/extractors.yaml`. Open weights have no vendor token
 fee; GPU credits and licence conditions still apply. Compatibility requires real testing.
+The five additions use Apache-2.0 releases, not additional hosted APIs. Decision3 uses
+the current selected d3-turbo checkpoint; Nimble uses the Apache release, not a later
+noncommercial variant. H2O's released binary formatter floors the winning probability
+at 0.801. Preserve and disclose that policy; it is not evidence of target calibration.
+Provider-specific renderers preserve the same question, text, class meanings and option
+order, while their framing/token IDs differ. Conservative complete-request caps also
+respect H2O's and Kev's separate state caps. Overflow stops execution without truncation.
 
 The six main predictors are **CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular,
 and logistic/linear regression**. All use the same rows and folds. The approved experiments are:
 
 | Experiment | Comparison |
 |---|---|
-| 0A | Before extraction: local Jev interfaces/pilot; VSC storage, exact decision token counts, five decision runtimes and three embedding encoders. |
+| 0A | Before extraction: local Jev interfaces/pilot; VSC storage, exact decision token counts, ten decision runtimes and three embedding encoders. |
 | 0B | After extraction: complete caches/row mappings; all nine predictors, PCA widths/scopes, native-text augmentation, resume and full-fold feasibility. |
-| 1 | Each of six predictors: non-text alone, then joint, per-column and both decision features for each of six extractors. |
+| 1 | Each of six predictors: non-text alone, then joint, per-column and both decision features for each of eleven extractors. |
 | 2 | Six predictors, three frozen encoders: per-column PCA32 and joint PCA256/128/64/32/16/8. No decision features. |
 | 3 | TabSTAR, ConTextTab and AG-MM on original text and non-text features. |
 | 4 | Label-blind question/context/option-order sensitivity; analysis reuses explicit real diagnostic reports. |
 | 5 | Presence/statistics, shuffled decision features, probability/uncertainty controls; separate descriptive winner-selected combinations. |
 
-Experiments 1/2/3 contain **2,052 / 2,268 / 54 configurations**: 21,870 outer fits,
-plus 10,935 binary inner fits. A configuration means one dataset/predictor/representation;
+Experiments 1/2/3 contain **3,672 / 2,268 / 54 configurations**: 29,970 outer fits,
+plus 14,985 binary inner fits. A configuration means one dataset/predictor/representation;
 it has five outer folds. No expensive HPO is performed. Experiment 1 shares its non-text
 baseline across extractors. Experiment 2 has seven PCA settings, not their Cartesian
 product with every decision model. Experiment 3 has one original-feature setting per model.
 
-Optional concatenation of all six decision models is exposed with
+Optional concatenation of all eleven decision models is exposed with
 `--control combined_extractors` (324 configurations before width exclusions).
 Experiment 5's later combinations use one reviewed decision extractor/mode and one
 reviewed encoder/PCA recipe, plus the three native-text models: 162 additional
@@ -113,7 +126,9 @@ Qwen uses the last nonpadding token. All encoders are frozen and run on VSC. Ide
 text reuses its vector; missing text stays missing. Long text is covered by nonoverlapping
 chunks (512 tokens for E5; a configured 2,048 for Qwen, below its native 32,768 window).
 Chunk vectors are content-token-weighted then normalized. This is a declared coverage
-policy, not a claim of equivalence to encoding the whole text in one window.
+policy, not a claim of equivalence to encoding the whole text in one window. Model inference
+retains checkpoint precision; chunk normalization and NumPy export use float32, including
+checkpoints that produce bfloat16 activations.
 
 PCA uses **32 components per original text column**, or **256/128/64/32/16/8 total
 components** after concatenating the text vectors. These compare both grouping and
@@ -133,7 +148,7 @@ fitting PCA while a GPU waits. These parameters are rebuildable output, not paid
 The widest Experiment 2 input is Rotten Tomatoes with per-column PCA32: **431 columns**
 (13×32 components, 13 missingness flags, two non-text columns). Adding one provider's
 separate and joint features later gives 445; even a conservative bound on Kumo's category
-expansion is 447. The optional all-six-provider combination reaches 545 on Wine Reviews,
+expansion is 447. The optional all-eleven-provider combination reaches 995 on Wine Reviews,
 so Kumo refuses that arm. The recipe's 500-column guard prevents silent feature selection.
 Other models still require checkpoint/resource checks; width compatibility does not prove
 full-fold feasibility. AG-MM uses fixed medium-quality ELECTRA-base/fusion, no HPO or
@@ -177,7 +192,7 @@ before full feature creation despite its higher folder number.
 | Local notebook | Purpose |
 |---|---|
 | [01_data_exploration](<notebooks/0. exploration/01_data_exploration.ipynb>) | All 20 datasets: text length, missingness, exact reuse, long text and feature dimensions. |
-| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | Task examples and exact request previews for all 18 datasets and six extractors. |
+| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | Task examples and request previews for all 18 datasets and eleven extractors. |
 | [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Frozen wording, source meanings, grouped inputs and original-row links. |
 | [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Token counts, workload, cost/throughput scenarios and feature combinations. |
 | [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Coverage, distributions, agreement and disagreements once real features exist. |
@@ -278,7 +293,7 @@ With `--dataset-pilot`, local 0A also checks 13 deterministic real-text variants
 three task types, using the reviewed private context envelope. VSC contracts check that
 same label-blind sample, including aligned multiclass option reversal. These measurements
 require human review; they do not select wording by predictive performance.
-VSC 0A covers CPU/storage/tokens, all three encoders and five real provider contract/pilot pairs. It submits
+VSC 0A covers CPU/storage/tokens, all three encoders and ten real provider contract/pilot pairs. It submits
 ready independent jobs concurrently, resumes by job ID and stops new submissions after failure. See [VSC](docs/VSC.md) for commands.
 
 Before full extraction, review real task/robustness tests, measured throughput, quota,

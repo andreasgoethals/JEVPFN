@@ -256,6 +256,7 @@ class E5Encoder:
             },
             "device": cfg["device"],
             "dtype": str(next(self.model.parameters()).dtype),
+            "normalization_dtype": "float32",
         }
         from src.cluster.containers import active_identity
 
@@ -289,7 +290,9 @@ class E5Encoder:
                     pooled = hidden[torch.arange(hidden.shape[0], device=hidden.device), last]
                 else:
                     pooled = (hidden * mask).sum(1) / mask.sum(1)
-                pooled = torch.nn.functional.normalize(pooled, p=2, dim=1).cpu().numpy()
+                # NumPy cannot represent PyTorch bfloat16. Normalize/export in float32
+                # while preserving the checkpoint's inference precision.
+                pooled = torch.nn.functional.normalize(pooled.float(), p=2, dim=1).cpu().numpy()
             for (row, _, content_tokens), vector in zip(pending, pooled):
                 totals[row] += vector * content_tokens
             pending.clear()

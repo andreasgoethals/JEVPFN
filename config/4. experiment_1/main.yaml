@@ -42,6 +42,11 @@ candidate_extractors: &id001
 - cloudflare
 - strands
 - intern
+- h2o
+- sii
+- kev
+- decision3
+- nimble
 non_text_columns: all_original_numerical_and_categorical_features
 additional_controls:
   text_statistics: optional_separate_ablation
@@ -52,6 +57,11 @@ feature_selectors:
   cloudflare: null
   strands: null
   intern: null
+  h2o: null
+  sii: null
+  kev: null
+  decision3: null
+  nimble: null
 combined_extractor_groups:
 - *id001
 combined_extractors_in_main_plan: false

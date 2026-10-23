@@ -343,15 +343,21 @@ def test_recorded_raw_response_recovers_without_another_call(tmp_path, intended_
     assert restarted.cache.get(intended_request, kind="verified_response") == raw
 
 
-def test_six_offline_mappings_share_identical_questions(intended_request):
+def test_eleven_offline_mappings_share_identical_questions(intended_request):
+    from src.jev.provider import semantic_question
+    from src.jev.registry import ADDED
     catalog = load_yaml("extractors")
-    assert len(catalog["candidates"]) == 6 and catalog["enabled"] is False
+    assert len(catalog["candidates"]) == 11 and catalog["enabled"] is False
     original = preview(intended_request, "jev")["body"]["questions"]
     for provider, candidate in catalog["candidates"].items():
         assert candidate["enabled"] is False
         mapped = preview(intended_request, provider)
         if provider == "perplexity":
             assert mapped["arguments"]["rows"][0]["question"] == original["semantic"]
+        elif provider in ADDED:
+            assert mapped["native_question_semantics"] == original
+            assert semantic_question(mapped["arguments"]["question"]) == original["semantic"]
+            assert mapped["arguments"]["state"] == json.loads(intended_request.payload_json)["state"]
         else:
             body = mapped.get("body", mapped.get("arguments"))
             assert body["questions"] == original

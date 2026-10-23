@@ -16,17 +16,18 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.cluster.maintenance import require_idle_vsc
+from src.jev.registry import SELF_HOSTED
 from src.utils import paths
 from src.utils.logging_setup import get_logger
 from src.utils.serialization import digest, write_json
 
-PROVIDERS = ("cloudflare", "intern", "liquid", "strands", "perplexity")
+PROVIDERS = SELF_HOSTED
 
 
 def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     if site == "vsc" and dataset_pilot:
         raise ValueError(
-            "--dataset-pilot selects the local Jev pilot; VSC always tests its five providers"
+            "--dataset-pilot selects the local Jev pilot; VSC always tests its ten open-weight providers"
         )
     if site == "local":
         items = [
@@ -90,8 +91,8 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 dependencies = ["cpu", "storage", "tokens"]
                 if name.endswith("_pilot"):
                     dependencies.append(provider + "_contracts")
-                if provider == "perplexity":
-                    flags.append("--mem=112000M")
+                if provider in {"perplexity", "sii", "kev", "decision3"}:
+                    flags.extend(["--mem=112000M", "--cpus-per-task=8"])
         result.append(
             {
                 "name": name,

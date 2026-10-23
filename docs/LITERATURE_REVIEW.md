@@ -9,7 +9,8 @@ workspace; installing one library never installs another automatically.
 
 Primary-source findings checked through 16 October 2026, with E5/PCA, native-text baseline
 selection/licences and TypeSafe context/rate documentation rechecked on 21 October, and
-the closest tabular decision-model work and dataset scope rechecked on 22 October. This reference records prior art,
+the closest tabular decision-model work and dataset scope rechecked on 22 October,
+and the five added open-weight releases checked on 23 October. This reference records prior art,
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
 execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
@@ -46,7 +47,7 @@ Kumo Tabular and Jev](https://arxiv.org/html/2610.10321v1)
 (Rafe and Das, 7 October 2026 preprint) combines a coded-record Kumo reader with a Jev
 narrative reader and human recalibration in a sampled population-estimation design.
 It establishes prior combined use of a tabular foundation model and Jev on complementary
-data, but does not establish a six-extractor, fixed-predictor text-feature comparison.
+data, but does not establish an eleven-extractor, fixed-predictor text-feature comparison.
 Its supervised human recalibration is outside our label-free extraction method.
 
 TypeSafe's feature-discovery cookbook also converts Jev answers into features for a CatBoost
@@ -361,7 +362,7 @@ A related 8 October preprint, [Estimating Uncoded Crash Factors with Tabular Fou
 System One Models](https://arxiv.org/abs/2610.10321), uses Kumo on coded crash records and Jev
 on narratives, with human recalibration and population-estimation methods. This was checked
 at abstract level. It is relevant prior art for combining tabular and decision systems, not
-evidence that this project's six-extractor/eight-configuration MulTaBench comparison has
+evidence that this project's eleven-extractor, separate/joint MulTaBench comparison has
 already been evaluated. Novelty must rest on the controlled representation comparison,
 coverage and reproducible extraction evidence rather than merely mentioning Jev plus a TFM.
 
@@ -513,9 +514,32 @@ establish improvement on MulTaBench or equivalence of calibration across provide
 | Intern-Decision-4B | [Publisher card/source](https://huggingface.co/internlm/Intern-Decision-4B): Apache-2.0, Qwen3.5-4B, one forward pass over candidate-symbol logits followed by checkpoint calibration; Noul/Choice/Score. Default complete-input limit 8,192, 62 options, strict rejection. | Selected open-weight candidate, pinned at `0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd`. All retained tasks have at most 30 classes or nine ordered levels; option capacity fits. Exact rendering and real hardware compatibility require independent verification. Preserve published calibration; do not fit it with benchmark targets. Author-run accuracy/latency do not establish our task performance. |
 | Torchcast Decision 27B | [Publisher card/source](https://huggingface.co/torchcast-ai/torchcast-decision-27b): all three typed outputs, full probabilities, published context up to 262,144; weights CC BY-NC 4.0 and code Apache-2.0. Choices above 26 options take additional rounds. | Excluded by owner choice; no adapter or exact token audit here. Adds another large GPU runtime; the 30-class Wine Review task must exercise its multi-round path. Published Decision Index results are author-run and guided model development; inspect training overlap and actual GPU throughput rather than using the headline to select it. |
 
-The six selected interfaces can represent binary probabilities, complete class vectors and
+The eleven selected interfaces can represent binary probabilities, complete class vectors and
 ordered regression probabilities. This does not establish coverage or calibrated target-unit
 prediction. Runtime-specific rendering and calibration must be preserved for fair comparison.
+
+### Approved open-weight additions — checked 23 October 2026
+
+The DM library at `5f1b3f8f1611681579aba052a86c2626a6a17b96` supplies the
+H2OLightning, SIIDecision, Kev, Decision3 and Nimble source snapshots. Live publisher
+checkpoint/source revisions were checked separately and are pinned in extractor configuration.
+The TFM and VSC reviews used `702d9ab0b66f6639ba8d443ff9c4a91231964465` and
+`3bcdf55e576d10161d6189b40ac39380bbba9eca`. No library pins were updated.
+
+| Added extractor | Relevant published implementation | Project handling |
+|---|---|---|
+| [H2O Lightning 4B](https://huggingface.co/h2oai/h2o-lightning-4b) | `h2o_lightning_shim.format_answer` and `pooled_readout.label_logits`: bidirectional full attention, causal recurrent layers, grouped label readout and type-specific calibration. Its released binary formatter imposes a 0.801 winning-probability floor. | Preserve that policy and disclose the distortion of uncertainty. Require all six publisher probability anchors to pass before any dataset inference. A native Transformers implementation is subject to that live parity gate. |
+| [SII-Decision-27B-Full](https://huggingface.co/jylin001206/SII-Decision-27B-Full) | `sii_decision.prompts.prompt` and `Readout.forward`: final answer-slot logits over ordered single-token labels, softmax at temperature one. General Decision Models/JEVal is related research; release-card performance is author evidence. | Use the full checkpoint, complete option descriptions and the publisher's 6,000-token default request cap. |
+| [Kev-27B](https://huggingface.co/jaredpalmer/kev-27b) | `kev.model.encode`, `DecisionModel.forward` and `PointerHead.forward`: branch-aware pointer readout and checkpoint temperature; not ordinary causal next-token classification. | Use its Torch runtime and saved head. Native state/branch limits are distinct; the project conservatively caps the entire request at 65,536 tokens. |
+| [Decision3 d3-turbo](https://huggingface.co/vllm-sr/d3-turbo) | `d3_format.render`/`encode_split` and native runtime `probabilities`: prefix-bidirectional attention and separate readout, with complete code probabilities. | Use the selected current checkpoint and its native runtime, not an ordinary vLLM chat server; cap complete requests at 32,768 tokens. |
+| [Bespoke-Nimble-9B](https://huggingface.co/bespokelabs/Bespoke-Nimble-9B) | `serving_schema.prepare_prompts`, `candidate_logits` and `decision_result`: candidate-code classification; the extended schema handles more than 26 options. | Pin adapter and Qwen3.5-9B base separately. Use enum fields for binary questions so both class descriptions survive; use all 30 Wine Review classes together. |
+
+All five selected releases declare Apache-2.0. This includes Nimble's original Apache
+release, not its separately licensed noncommercial variant. They add no vendor API fee;
+hardware, storage and runtime compatibility still need measurement. Their decision-index
+results are not evidence that they improve downstream MulTaBench prediction. Differences
+in temperatures, attention and probability floors limit claims about cross-model confidence;
+preserving released behavior is preferable to silently harmonizing it with benchmark labels.
 
 Native rendering, attention, option encoding and calibration differ despite shared typed
 semantics. Strands' reviewed engine has mutable option offsets, so concurrency is not assumed.
@@ -602,7 +626,7 @@ requires human provenance/leakage review; field validation cannot certify its co
 find that instructive-looking prompts need not be the cause of good NLI performance.
 [Sclar et al. (ICLR 2024)](https://proceedings.iclr.cc/paper_files/paper/2024/hash/6c0e99d736da621403018ca7b32b1a4d-Abstract-Conference.html)
 find substantial sensitivity to meaning-preserving prompt formatting and weak cross-model
-correlation of formats. Those experiments study generative/prompt-based models, not all six
+correlation of formats. Those experiments study generative/prompt-based models, not all eleven
 extractors here. Their relevance is methodological: freeze common semantics and inspect several
 predeclared paraphrases/orderings on a small shared pilot, without selecting prompts from final
 CV performance. Distinguish probability changes, class flips and extraction failures.

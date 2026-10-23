@@ -105,7 +105,7 @@ def benchmark_configurations_figure(table):
             "Experiment 1; the last row belongs to Experiment 2, repeated for each encoder and "
             "per-column PCA32 or joint PCA256/128/64/32/16/8. PCA is fitted on CPU using only training partitions. Non-text includes "
             "numerical and categorical columns. Joint and per-column decision features use one "
-            "extractor at a time; all six extractors are included. Each baseline is fitted once "
+            "extractor at a time; all eleven extractors are included. Each baseline is fitted once "
             "per applicable dataset/predictor/encoder/PCA setting. Experiment 3 uses original text. "
             "Winner-selected combinations belong only to exploratory Experiment 5."
         ),
@@ -121,9 +121,9 @@ def input_design_figure():
         (0.14, 0.80, "Text column A", style.MEDIAN_COLOR),
         (0.14, 0.55, "Text column B", style.MEDIAN_COLOR),
         (0.14, 0.30, "A + B text", style.P95_COLOR),
-        (0.50, 0.80, "Fixed question\n+ A → model", style.MEDIAN_COLOR),
-        (0.50, 0.55, "Fixed question\n+ B → model", style.MEDIAN_COLOR),
-        (0.50, 0.30, "Fixed question\n+ A + B → model", style.P95_COLOR),
+        (0.50, 0.80, "Model reads\nquestion + text A", style.MEDIAN_COLOR),
+        (0.50, 0.55, "Model reads\nquestion + text B", style.MEDIAN_COLOR),
+        (0.50, 0.30, "Model reads\nquestion + A + B", style.P95_COLOR),
         (0.86, 0.80, "A features", style.MEDIAN_COLOR),
         (0.86, 0.55, "B features", style.MEDIAN_COLOR),
         (0.86, 0.30, "Joint features", style.P95_COLOR),
@@ -251,13 +251,13 @@ def workload_figure(totals):
         color=style.MEDIAN_COLOR,
     )
     labels = [
-        f"{v:,.1f}M tokens" + (f" · ${cost:,.2f}" if np.isfinite(cost) else "")
+        f"{v:,.1f}M tokens" + (f" Â· ${cost:,.2f}" if np.isfinite(cost) else "")
         for v, cost in zip(tokens, totals.cost_usd.fillna(np.nan))
     ]
     ax.bar_label(bars, labels=labels, padding=4)
     ax.set_xlim(0, tokens.max() * 1.55)
     ax.set_xlabel("Approximate input tokens (millions)")
-    ax.set_title("Jev cost sensitivity after exact reuse · both input modes")
+    ax.set_title("Jev cost sensitivity after exact reuse Â· both input modes")
     return (
         fig,
         "deduplicated_budget",

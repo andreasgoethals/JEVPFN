@@ -12,6 +12,7 @@ from src.data.metadata import extract_metadata
 from src.jev.cache import ResponseCache
 from src.jev.features import load_block, materialize_cached_block, save_block
 from src.jev.provider import QUESTION_ID, response_features
+from src.jev.registry import SELF_HOSTED
 from src.jev.requests import IntendedRequest, build_requests
 from src.jev.self_hosted import SelfHostedClient, cached_evaluate, run
 from src.utils.config import load_config
@@ -29,7 +30,7 @@ def settings(provider):
     }
 
 
-@pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity", "cloudflare", "intern"])
+@pytest.mark.parametrize("provider", SELF_HOSTED)
 @pytest.mark.parametrize("kind", ["binary_probability", "choice", "ordered_choice"])
 def test_all_three_provider_transports_preserve_task_vectors(provider, kind):
     question = {"kind": kind, "text": "Evaluate the supplied text."}
@@ -67,6 +68,7 @@ def test_all_three_provider_transports_preserve_task_vectors(provider, kind):
     raw = {"answers": {QUESTION_ID: answer}, "usage": {"input_tokens": 12, "output_tokens": 0}}
     client.model = Mock()
     client.model.system_one.return_value = raw
+    client.model.predict_payload.return_value = raw
     client.model.evaluate.return_value = SimpleNamespace(model_dump=lambda **kwargs: raw)
     client.request_class = SimpleNamespace
     client.model.prepare.return_value = SimpleNamespace(input_tokens=12)
@@ -130,7 +132,7 @@ def test_cached_batch_reuses_existing_response_and_stops_on_invalid_reply(tmp_pa
     assert cache.get(third, kind="verified_response") is None
 
 
-@pytest.mark.parametrize("provider", ["liquid", "strands", "perplexity", "cloudflare", "intern"])
+@pytest.mark.parametrize("provider", SELF_HOSTED)
 def test_cache_resume_and_feature_materialization_for_every_provider(isolated_output, provider):
     frame = pd.DataFrame({"text": ["same", "same", None], "y": [0, 1, 0]})
     meta = extract_metadata(

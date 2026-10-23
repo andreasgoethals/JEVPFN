@@ -97,7 +97,7 @@ def test_all_six_share_saved_semantics_but_not_cache_entries(dataset, tmp_path):
     request = build_requests(dataset.features, dataset.metadata, 1, load_config())[0]
     store = ResponseCache(tmp_path / "fixture.sqlite3", dataset_id="fixture")
     bound = {name: bind_provider(request, name, catalog) for name in catalog["candidates"]}
-    assert len({r.cache_key for r in bound.values()}) == 6
+    assert len({r.cache_key for r in bound.values()}) == 11
     assert len({r.payload_json for r in bound.values()}) == 1
     for name, candidate in bound.items():
         store.put(candidate, {"mock_provider": name}, kind="mock")
@@ -129,7 +129,7 @@ def test_gallery_uses_exact_row_text_all_groups_and_no_true_target(dataset, monk
     assert "123456789" not in json.dumps(example)
     for group in example["groups"]:
         for variant in group["variants"].values():
-            assert len(variant["provider_previews"]) == 6
+            assert len(variant["provider_previews"]) == 11
             assert "row_id" not in variant["semantic_payload"]["state"]
             assert set(variant["semantic_payload"]["state"]) == {"task", "text"}
     changed = copy.deepcopy(dataset)

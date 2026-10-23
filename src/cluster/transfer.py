@@ -196,7 +196,7 @@ def _combine_token_reports(source, destination):
         report["counts_database"] = str(
             paths.token_audit_dir() / f"{report['provider']}_{report['audit_id']}.sqlite3"
         )
-    from src.jev.decision_tokenization import HOSTED_UNAVAILABLE
+    from src.jev.registry import HOSTED_UNAVAILABLE
 
     combined = {
         **existing,

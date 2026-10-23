@@ -13,7 +13,7 @@ from src.evaluation.widths import pca_width_table
 def test_primary_grid_and_widths():
     plan = benchmark_plan()
     assert Counter(a["phase"] for a in plan) == {
-        "experiment_1": 2052,
+        "experiment_1": 3672,
         "experiment_2": 2268,
         "experiment_3": 54,
     }
@@ -144,10 +144,56 @@ def test_gpu_sampling_uses_slurm_device_zero(monkeypatch):
 
     def query(command, **kwargs):
         assert command[:3] == ["nvidia-smi", "-i", "0"]
-        return SimpleNamespace(stdout="uuid, A100, 80, 20, 500, 80000, 190\n")
+        return SimpleNamespace(stdout="uuid, H100, 80, 20, 500, 80000, 190\n")
 
     monkeypatch.setattr(monitor.subprocess, "run", query)
     assert monitor.gpu_sample()[0][2] == "80"
+
+
+def test_gpu_sampling_uses_the_captured_host_binary_and_allocated_device(monkeypatch):
+    from src.cluster import monitor
+
+    monkeypatch.delenv("SLURM_STEP_GPUS", raising=False)
+    monkeypatch.setenv("SLURM_JOB_GPUS", "3")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("JEVPFN_NVIDIA_SMI", "/host/bin/nvidia-smi")
+
+    def query(command, **kwargs):
+        assert command[:3] == ["/host/bin/nvidia-smi", "-i", "3"]
+        return SimpleNamespace(stdout="allocated-uuid, H100, 80, 20, 500, 80000, 190\n")
+
+    monkeypatch.setattr(monitor.subprocess, "run", query)
+    assert monitor.gpu_sample()[0][0] == "allocated-uuid"
+
+
+def test_telemetry_failure_preserves_diagnostics_without_changing_model_result(monkeypatch, tmp_path):
+    import json
+    import subprocess
+    import sys
+
+    from src.cluster import monitor
+
+    monkeypatch.setenv("SLURM_JOB_ID", "1234")
+    monkeypatch.setenv("SLURM_JOB_GPUS", "3")
+    monkeypatch.setattr(monitor.paths, "on_vsc", lambda: True)
+    monkeypatch.setattr(monitor.paths, "logs_dir", lambda phase: tmp_path / "logs")
+    monkeypatch.setattr(monitor.paths, "manifests_dir", lambda phase: tmp_path / "manifests")
+
+    def failed_query():
+        raise subprocess.CalledProcessError(
+            6, ["nvidia-smi", "-i", "3"], output="fixture stdout", stderr="fixture NVML error"
+        )
+
+    monkeypatch.setattr(monitor, "gpu_sample", failed_query)
+    assert monitor.run([sys.executable, "-c", "pass"], interval=1) == 0
+    report = json.loads(next((tmp_path / "manifests").rglob("*.json")).read_text())
+    assert report["sampling_status"] == "failed"
+    assert report["gpu_samples"] == 0 and report["mean_gpu_util_percent"] is None
+    assert report["sampling_error_details"] == [{
+        "type": "CalledProcessError", "returncode": 6, "command": ["nvidia-smi", "-i", "3"],
+        "stdout": "fixture stdout", "stderr": "fixture NVML error",
+    }]
+    assert report["gpu_allocation"]["SLURM_JOB_GPUS"] == "3"
 
 
 def test_telemetry_preserves_child_failure_and_uses_separate_small_outputs(monkeypatch, tmp_path):

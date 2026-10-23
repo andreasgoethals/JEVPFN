@@ -1,5 +1,129 @@
 # Operational evidence
 
+## 23-10-2026
+
+### Eleven-extractor implementation after the library review
+
+Owner approved five additions, all open weights: h2oai/h2o-lightning-4b,
+jylin001206/SII-Decision-27B-Full, jaredpalmer/kev-27b, vllm-sr/d3-turbo and
+bespokelabs/Bespoke-Nimble-9B (the Apache release, not its noncommercial variant).
+Jev remains the only hosted extractor; the original five open models are retained.
+Immutable HF/base/GitHub pins live in extractor configuration and src/jev/registry.py.
+The active registry wraps the two frozen tokenizer modules without modifying them.
+
+Library pins read and verified unchanged: DM 5f1b3f8f1611681579aba052a86c2626a6a17b96;
+TFM 702d9ab0b66f6639ba8d443ff9c4a91231964465;
+VSC 3bcdf55e576d10161d6189b40ac39380bbba9eca. Reviewed relevant published source
+and live pinned release assets; did not execute scraped snapshots or maintain libraries.
+Local tokenizer tests used separately downloaded small pinned assets in task-specific
+Windows TEMP, not the library snapshots. No model weights were downloaded.
+
+CPU exact audits now persist compressed prepared IDs for the new providers inside their
+PROJECT token-count databases. A coverage gate rejects missing prepared tokens before
+model loading; per-payload checksums are verified on reuse. CPU staging stores checkpoint
+hashes in one PROJECT index. Linux reuse requires unchanged identity/size/mtime/ctime;
+Windows must rehash because st_ctime is creation time. Synthetic tests reproduced a
+same-size replacement with restored mtime and now detect it.
+
+Native attention/readouts are provider-specific. H2O checks all six publisher probability
+anchors and preserves its released 0.801 binary winning-probability floor. Do not interpret
+that floor as measured target confidence. Decision3 uses native prefix-bidirectional code;
+Kev uses its native pointer head and saved temperature. Nimble pins its separate base and
+uses its extended enum path for 30 classes. None of these five has new VSC GPU evidence.
+
+setup_extractors --all previews/submits a persistent Slurm dependency graph for all ten
+open models: CPU staging, missing-image builds, complete counts, then H100 contracts and
+bounded pilots. Existing sealed images are verified/reused. At most two staging/build
+chains proceed concurrently; independent ready GPU jobs can run together. No final
+acceptance is inferred. Startup H2O anchors are separate from diagnostic request counts.
+New runtimes remain serial until real batch-parity/memory/throughput evidence warrants
+acceleration. All A100 routes remain excluded. Final frozen 0A still tests three encoders.
+
+Additional sweep fixes: the response decoder had an old five-provider allowlist; the
+approximate budget table had fixed context thresholds and failed on SII's 6,000 cap.
+Both now derive active coverage from the registry/config, with eleven-provider pipeline,
+empty-input, cache-resume/materialization and preview tests. Visual inspection found
+corrupted arrow text and an overlapping eleven-row coverage title; both were corrected.
+
+Question wording, row links, dataset selection, PCA fitting boundaries and CV are unchanged.
+Experiment 1 is now 18 datasets × 6 predictors × (1 + 11 × 3) = 3,672 configurations.
+Experiment 2 remains 2,268 and Experiment 3 remains 54: 29,970 outer fits in total.
+Optional all-extractor concatenation reaches 995 columns on Wine Reviews and is refused
+by the Kumo recipe's 500-column guard. It is not added to the primary experiment.
+
+No paid calls, VSC jobs, remote mutations, Git commits/pushes or output resets were performed.
+Complete new token audits, all ten native runtime contracts/pilots, encoder retests and
+predictor feasibility remain live VSC work. Preserve setup diagnostics until that succeeds;
+then clean output once and run matching frozen local/VSC 0A before full extraction.
+
+Final local validation: 826 passed/five skipped in 187.72 seconds. Four skips need
+PyTorch in the lightweight notebook environment; one needs POSIX link behavior.
+The five new real tokenizer fixtures were separately staged and exercised without
+weights, including 30-class and nine-level paths, empty rejection, formatting/decoding,
+context rejection and compressed cache reuse. All five notebooks executed successfully
+and produced 25 figures; the request notebook was rerun after its final preview change.
+Rendered input-flow, PCA-width and eleven-model coverage figures were inspected.
+Ruff, pip check, diff whitespace, all 24 Bash syntax/LF checks and library checks passed.
+No claim of new GPU/checkpoint compatibility follows from these local results.
+
+### Earlier inspected VSC evidence (five original open models)
+
+Inspected Downloads/output_JEVPFN.zip (778,756 bytes, 09:13 local, 209 entries; CRC passed).
+This archive contains DATA logs/manifests, not the large PROJECT cache/timing databases.
+Do not infer that permanent feature stores were independently revalidated from this ZIP.
+Local HEAD at inspection: 3895ef09f8bafe9ea1c994ea94cc726c26d9db93, clean before these fixes.
+
+| Job | Check | Observed result |
+|---|---|---|
+| 62395400 | CPU/data/question audit | Passed: 756 tests, 14 environment skips, three notebook tests deselected. All 18 datasets checked. |
+| 62395401 | Two-node storage | Passed exclusion/release and snapshot/restore; quota and independent backup remain unverified. |
+| 62395402 | Clef / H100 | Contracts passed requiring review: 106 forwards, all three task types, 18 real datasets; 18.55 GiB peak allocated, 149 seconds. Native batch parity max difference 0.0002681 < 0.001. |
+| 62395403 | Intern / H100 | Contracts passed requiring review: 102 forwards, all three task types, 18 real datasets; 9.34 GiB peak allocated, 98 seconds. |
+| 62395404 / 62395406 / 62395407 | Liquid / Strands / Perplexity | Failed in image Conda activation, before model loading or GPU preflight. |
+| 62395408 / 62395409 | E5-small / E5-large | GPU embedding contracts passed: chunk coverage, exact reuse, missingness, persistence and resume. |
+| 62395410 | Qwen embedding | Weights loaded, then `TypeError: Got unsupported ScalarType BFloat16` at NumPy conversion. |
+
+Question v3 audit: 665,406 rows, 80 text columns across datasets, 1,698,127 unique inputs,
+3,294,340 slots, 79,461 empty slots and 1,516,752 reused nonempty slots. The existing complete
+five-provider token evidence has zero overflow and is unaffected by launch/export fixes.
+
+Confirmed activation cause: activate_runtime cleared CONDA_PREFIX/CONDA_DEFAULT_ENV but
+retained CONDA_SHLVL=2, CONDA_PREFIX_1 and the host Conda executable state. The newly built
+images initialize Conda and reached `_get_deactivate_scripts(None)`. Clear all CONDA_*/
+_CONDA_* and _CE_* activation state after image verification; retain Slurm/CUDA/project
+variables. A shell regression reproduced failure and then passed after the fix. Images
+and wrappers themselves remain unmodified; no rebuild/download is justified by this error.
+
+Qwen bridge cause reproduced with actual PyTorch 2.11 CPU from CreditPFN's existing
+interpreter, read-only with bytecode disabled. Both bfloat16 pooling tests failed before
+the float32 normalization/export fix; all four dtype/pooling cases passed afterwards.
+No packages, weights or other-project files were changed. Fresh target-CUDA execution is
+still needed. The existing local JEVPFN environment does not include PyTorch.
+
+All five current telemetry reports have zero samples and CalledProcessError, including
+successful inference jobs. Their former diagnostics omit stderr/return codes, so the
+precise NVML/device failure cannot be established from this archive. Run the sampler in
+the native host interpreter around the verified workload interpreter; capture the host
+nvidia-smi path and retain bounded actual errors/allocation IDs. Do not claim this live
+fix passed until a new VSC report contains samples. No sampling of unallocated devices.
+
+Clef/Intern reports still require robustness review: Clef changed the preferred outcome
+for four of 13 real-input variants (irrelevant context/embedded instructions), while
+Intern changed one multiclass answer under option reversal. These are small diagnostics,
+not estimated population rates and not proof of universal linguistic correctness.
+Both warn about uninstalled fast kernels; inference passed using reference kernels.
+Measure the larger pilot before choosing any optional acceleration/runtime rebuild.
+
+No VSC mutations, job submissions, paid calls, model-weight downloads or Git publication
+were performed by the agent. Preserve existing outputs/caches pending the four retests.
+
+Validation after these fixes: 774 passed/five skipped in the project environment
+(204.16 seconds). The four skipped PyTorch dtype/pooling cases were separately executed
+with the existing read-only CPU PyTorch interpreter and all passed; the remaining skip
+needs a POSIX filesystem. Ruff, pip check, diff whitespace and all 23 Bash syntax/LF checks
+passed. Both frozen decision-tokenizer modules and all three submodule pins are unchanged.
+No notebook/visualization source changed in this correction round.
+
 ## 22-10-2026
 
 Latest owner decision: **exclude every A100 allocation**, including debug and MIG slices.

@@ -22,4 +22,4 @@ cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 JEVPFN_EMBEDDING_ARGS=(--encoder "$JEVPFN_ENCODER" --execute)
 if [[ -n "${4:-}" ]]; then JEVPFN_EMBEDDING_ARGS+=(--dataset "$4"); fi
-python -m src.cluster.monitor -- python -m src.data.text_embeddings "${JEVPFN_EMBEDDING_ARGS[@]}"
+"${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.data.text_embeddings "${JEVPFN_EMBEDDING_ARGS[@]}"

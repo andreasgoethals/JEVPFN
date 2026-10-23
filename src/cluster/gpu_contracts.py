@@ -25,10 +25,10 @@ from src.cluster.semantic_contracts import exercise_robustness, exercise_semanti
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.jev.cache import ResponseCache
-from src.jev.decision_tokenization import SELF_HOSTED, ExactCounter
 from src.jev.features import load_block, materialize_cached_block, save_block
 from src.jev.inputs import iter_prepared_inputs, prepared_request
 from src.jev.provider import response_features
+from src.jev.registry import SELF_HOSTED, ExactCounter
 from src.jev.requests import IntendedRequest, build_requests
 from src.jev.self_hosted import (
     SelfHostedClient,
@@ -128,7 +128,7 @@ def synthetic_datasets():
                     "A positive review.",
                     None,
                     None,
-                    "Résumé 世界",
+                    "RÃ©sumÃ© ä¸–ç•Œ",
                     "Unusual punctuation:\n{ } [ ]",
                 ],
                 "text_b": [
@@ -367,6 +367,8 @@ def run(provider, *, execute=False):
         directory.mkdir(parents=True, exist_ok=True)
         print(f"Loading pinned {provider} on the allocated GPU (offline)", flush=True)
         client = SelfHostedClient(provider, allow_model_runs=True)
+        if provider in {"h2o", "sii", "kev", "decision3", "nimble"}:
+            client.counter.attach_cache(sqlite3.connect(counts.resolve().as_uri() + "?mode=ro", uri=True))
         metered = MeasuredClient(client, cfg["max_live_requests"])
         report.update(
             settings=client.settings,
@@ -379,6 +381,9 @@ def run(provider, *, execute=False):
                 "memory_bytes": client.torch.cuda.get_device_properties(0).total_memory,
             },
         )
+        if provider in {"h2o", "sii", "kev", "decision3", "nimble"}:
+            report["publisher_release_check"] = client.model.release_check
+            report["publisher_startup_anchor_forwards"] = 6 if provider == "h2o" else 0
         write_json(manifest, report)
         for dataset in synthetic_datasets():
             report["synthetic"].append(exercise_feature_pipeline(metered, dataset, directory))

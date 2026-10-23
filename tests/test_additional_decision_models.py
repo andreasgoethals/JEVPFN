@@ -4,9 +4,9 @@ import sys
 
 import pytest
 
-from src.jev.decision_tokenization import SELF_HOSTED, ExactCounter
 from src.jev.open_runtimes import ClefRuntime, probability_answer
 from src.jev.provider import QUESTION_ID, semantic_question
+from src.jev.registry import SELF_HOSTED, ExactCounter
 from src.utils import paths
 from src.utils.config import load_yaml
 
@@ -20,6 +20,11 @@ def test_owner_selected_roster_and_delivery():
         "perplexity",
         "cloudflare",
         "intern",
+        "h2o",
+        "sii",
+        "kev",
+        "decision3",
+        "nimble",
     }
     assert set(SELF_HOSTED) == {k for k, v in candidates.items() if v["delivery"] == "self_hosted"}
     assert all(not v["enabled"] for v in candidates.values())
@@ -38,7 +43,7 @@ def test_actual_publisher_renderer_parity_when_staged(provider, kind):
         question["allowed_answers"] = [{"score": i, "meaning": str(i)} for i in range(-4, 5)]
     counter = ExactCounter(provider)
     payload = {
-        "state": {"text": {"a": "Résumé, 世界!", "b": "Another field"}},
+        "state": {"text": {"a": "RÃ©sumÃ©, ä¸–ç•Œ!", "b": "Another field"}},
         "question": question,
     }
     row = {"state": payload["state"], "questions": {QUESTION_ID: semantic_question(question)}}
