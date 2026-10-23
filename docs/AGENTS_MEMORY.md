@@ -2,6 +2,51 @@
 
 ## 23-10-2026
 
+### Notebook, manuscript-story and B200 review
+
+Read the sibling JEVPFN arXiv draft/evidence notes, CreditICL notebook recommendations,
+the pinned library guides/synthesis and the complete MulTaBench v2 paper. Checked live
+primary sources for adjacent TILE/STRABLE work and Blackwell support. The same three
+library pins recorded below remain unchanged; no libraries or manuscript files were edited.
+MulTaBench's LoRA TAR is supervised, unlike frozen task-conditioned extraction here.
+TILE is important adjacent representation-interface work beyond the pinned summary;
+do not claim firstness or describe frozen extraction as supervised representation learning.
+The executable datasets, questions, model roster, PCA recipes and CV protocol are unchanged.
+
+Owner diagnostics establish GPFS scratch at /gpfs1/scratch/383/vsc38338 but no
+/gpfs1/project/stg_00211 allocation. The general /gpfs1/project root is not an allocation.
+B200 is preferred for subsequent work after native staging/runtime validation. Current
+setup dependencies remain wICE-only; scratch-to-durable mirroring is not implemented by
+the single project-root override. Existing cu126 images are not B200 acceptance evidence.
+No VSC jobs, paid calls, remote updates or output resets were performed during this review.
+The owner explicitly authorized Git publication of this revision only.
+
+Five preparation notebooks now prioritize measured text/reuse/feature widths, actual saved
+pilot sensitivity/cost and dated local runtime coverage. Missing local receipts mean unknown,
+not failed remote models. The sixth notebook reads checksummed CV results without fitting
+models; paired decision/embedding effects and training-only PCA views remain pending until
+real results exist. No synthetic layout fixture is written as a research result. Figures,
+captions and complete printed reports remain local generated output under output_JEVPFN.
+
+Final checking found two implementation issues: the new PCA reader initially assumed legacy
+JSON instead of compact SQLite record references, and Windows resolve() intermittently kept
+an extended drive prefix during concurrent directory creation. Added read-only store coverage
+and canonicalized drive/UNC aliases before storage-boundary checks, retaining DATA/sibling
+rejection. Named DataFrame index identities are preserved in complete printed reports.
+
+Regression comparison plots normalize each dataset's mean-fold RMSE difference by its own
+positive reference RMSE. They do not average raw salary, currency and review-score units;
+zero/undefined references stay in tables and are excluded from relative-effect plots.
+This is a descriptive view, not a new headline-metric or inferential-test decision.
+
+Final validation: 825 passed, 20 skipped in 152.89 seconds. Fifteen skips require separately
+staged optional tokenizer fixtures, four require local PyTorch, and one requires POSIX links.
+All six notebooks ran with zero error cells and complete final stdout; 25 PDFs were rendered
+and visually inspected. Seven future-results layouts used temporary, clearly identified
+synthetic fixtures only. Checked A4 dimensions, embedded CIDFontType2/no Type3 fonts, captions,
+all section reports, secret-pattern absence in changed files, Ruff, pip check, whitespace,
+24 Bash syntax/LF files, unchanged submodule pins and byte-identical frozen tokenizers.
+
 ### Eleven-extractor implementation after the library review
 
 Owner approved five additions, all open weights: h2oai/h2o-lightning-4b,

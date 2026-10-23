@@ -107,7 +107,7 @@ def overview_figures(table, characters_per_token=4.0):
         values = np.column_stack([part[col].fillna(0).to_numpy(dtype=float) /
                                   max(table[col].max(), 1) for col, _ in specs])
         fig, ax = plt.subplots(figsize=style.figsize(ratio=style.AUDIT_RATIO))
-        ax.imshow(values, cmap=style.OVERVIEW_CMAP, vmin=0, vmax=2, aspect="auto")
+        ax.imshow(values, cmap=style.OVERVIEW_CMAP, vmin=0, vmax=1.8, aspect="auto")
         for i, row in enumerate(part.itertuples()):
             texts = [f"{row.rows:,}", f"{row.text_columns} / {row.non_text_columns}",
                      f"{row.per_column_missing_or_empty_pct:.1f}",
@@ -121,6 +121,10 @@ def overview_figures(table, characters_per_token=4.0):
                   (" · removed" if r.experiment_status == "REMOVED" else "")
                   for r in part.itertuples()]
         ax.set_yticks(range(len(part)), labels, fontsize=7)
+        for label, removed in zip(ax.get_yticklabels(), part.experiment_status.eq("REMOVED")):
+            if removed:
+                label.set_color(style.REMOVED_COLOR)
+                label.set_fontstyle("italic")
         ax.set_xticks(range(len(specs)), [label for _, label in specs], fontsize=7)
         ax.xaxis.tick_top()
         ax.tick_params(which="both", length=0)
@@ -183,7 +187,7 @@ def text_column_figures(audit):
     ax.set_ylim(-3, 103)
     ax.set_xlabel("Mean characters per nonempty text cell (log scale)")
     ax.set_ylabel("Unique inputs / nonempty cells (%)")
-    ax.set_title("Long text is not always unique")
+    ax.set_title("Field length and exact-input uniqueness")
     ax.legend()
     yield (
         fig,
@@ -212,7 +216,9 @@ def reuse_figure(summary):
     axes[1].set_xlabel("Nonempty request slots avoided (absolute count)")
     axes[1].xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))
     axes[1].tick_params(axis="x", labelrotation=25)
-    axes[0].legend(loc="lower right")
+    fig.legend(*axes[0].get_legend_handles_labels(), loc="outside upper center", ncols=2)
+    axes[1].xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x / 1000:g}k"))
+    axes[1].tick_params(axis="x", labelrotation=0)
     return (
         fig,
         "exact_text_reuse",

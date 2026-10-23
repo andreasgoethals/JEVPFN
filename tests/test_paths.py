@@ -225,6 +225,23 @@ def test_large_writes_reject_a_project_root_inside_personal_data(tmp_path, monke
         paths.require_project_output(paths.token_audit_dir())
 
 
+def test_windows_extended_alias_preserves_storage_boundaries(isolated_output):
+    import os
+
+    import pytest
+
+    if os.name != "nt":
+        pytest.skip("Windows extended path aliases require the Windows filesystem")
+    target = paths.results_dir("evaluation", "dataset.sqlite3", phase="experiment_1")
+    extended = Path("\\\\?\\" + str(target))
+    assert paths.require_project_output(extended) == target.resolve()
+    # Alias normalization must not allow personal DATA or a sibling of PROJECT.
+    for forbidden in [paths.outputs_dir() / "large.sqlite3",
+                      paths.staging_root().with_name("staging_sibling") / "large.sqlite3"]:
+        with pytest.raises(ValueError, match="Large outputs"):
+            paths.require_project_output(Path("\\\\?\\" + str(forbidden)))
+
+
 def test_non_experiment_outputs_never_create_output_phase_folders(isolated_output):
     assert paths.results_dir(phase="exploration").is_relative_to(paths.notebook_cache_dir())
     assert paths.results_dir(phase="feature_creation").is_relative_to(paths.notebook_cache_dir())

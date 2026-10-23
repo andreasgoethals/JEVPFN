@@ -281,14 +281,31 @@ def output_component(value: str) -> str:
     return value
 
 
+def _resolved_storage_path(value: Path) -> Path:
+    r"""Resolve links, then normalize Windows extended drive/UNC aliases.
+
+    Windows resolve() can retain its internal \\?\ prefix when another writer
+    creates a missing parent concurrently. Compare the same canonical spelling
+    for the target and both storage roots; no path component or boundary is dropped.
+    """
+    resolved = Path(value).resolve()
+    if os.name == "nt":
+        spelling = str(resolved)
+        if spelling.startswith("\\\\?\\UNC\\"):
+            return Path("\\\\" + spelling[8:])
+        if spelling.startswith("\\\\?\\") and len(spelling) > 5 and spelling[5] == ":":
+            return Path(spelling[4:])
+    return resolved
+
+
 def require_project_output(folder: Path) -> Path:
     """Prevent explicit large-output overrides from filling DATA on VSC."""
-    folder = Path(folder).resolve()
-    if on_vsc() and folder.is_relative_to(data_root().resolve()):
+    folder = _resolved_storage_path(folder)
+    if on_vsc() and folder.is_relative_to(_resolved_storage_path(data_root())):
         raise ValueError(
             "Large outputs must use project storage outside personal DATA, including when the PROJECT root is misconfigured"
         )
-    if _use_staging() and not folder.is_relative_to(_under(staging_root()).resolve()):
+    if _use_staging() and not folder.is_relative_to(_resolved_storage_path(_under(staging_root()))):
         raise ValueError("Large outputs must remain on configured project storage")
     return folder
 

@@ -2,6 +2,25 @@
 
 ## 23-10-2026
 
+- Reworked the preparation notebooks around text burden/reuse, typed features, measured
+  pilot behavior and the approved study grid. Added a read-only paired-results notebook
+  with decision/embedding contrasts and training-only PCA diagnostics; absent results
+  stay pending. Regression plots use relative RMSE reductions across different target units.
+  Compact previews preserve complete printed reports and named row identities.
+- Split dense length/width panels, fixed legends/perturbation-row alignment and distinguished
+  approximate costs, stored Jev charges and historical runtime evidence. All figures use
+  the template's shared A4 style; rendered PDFs and future-result layouts were inspected.
+- Reviewed MulTaBench v2, STRABLE, TILE and VSC sources; clarified frozen task conditioning
+  versus supervised LoRA and the novelty boundary. B200 preference is documented, but no
+  GPFS allocation or Blackwell runtime is assumed and no active H100 job is rerouted.
+- Fixed Windows extended-path alias normalization after a concurrent prediction-store test
+  exposed a false storage-boundary rejection. Kept DATA/sibling-path rejection intact.
+  Analysis reads both compact SQLite records and legacy JSON without changing predictions.
+- Validation: 825 tests passed, 20 optional-runtime/platform skips; all six notebooks
+  executed with no error cells and 25 saved, visually reviewed A4 PDFs. Complete reports,
+  inline outputs and captions passed artifact checks. Ruff, dependencies, 24 Bash syntax/LF
+  checks and unchanged library/tokenizer identities passed; no new VSC inference is claimed.
+
 - Added the owner-approved eleven-extractor setup: H2O Lightning 4B, SII-Decision-27B-Full,
   Kev-27B, Decision3 d3-turbo and Apache Bespoke-Nimble-9B join the existing six.
   Pinned weights, base models and required publisher source; preserved question v3 and

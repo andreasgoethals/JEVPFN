@@ -120,6 +120,24 @@ GRID_COLOR = "#D9E2E8"
 TEXT_COLOR = "black"
 BACKGROUND_COLOR = "white"
 MISSING_COLOR = "#846C9C"
+REMOVED_COLOR = "#707070"
+FAINT_COLOR = "#F1F4F6"
+EVIDENCE_COLORS = {
+    "observed": "#D9EBE3",
+    "review": "#F6E4BE",
+    "failed": "#F2D6D6",
+    "unknown": "#F1F4F6",
+    "not_applicable": "white",
+}
+METHOD_COLORS = (MEDIAN_COLOR, P95_COLOR, TOTAL_COLOR)
+EMBEDDING_COLORS = {"e5_small_v2": MEDIAN_COLOR, "e5_large_v2": P95_COLOR,
+                    "qwen3_embedding_0_6b": TOTAL_COLOR}
+STUDY_MAP_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+METHOD_MAP_SIZE = (WIDTH_FULL, 3.7)
+PROMPT_SENSITIVITY_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+REGRESSION_CASE_SIZE = (WIDTH_FULL, 3.6)
+EVIDENCE_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
+COMPACT_TABLE_SIZE = (WIDTH_FULL, 3.3)
 TASK_COLORS = {
     "binary_classification": MEDIAN_COLOR,
     "multiclass_classification": P95_COLOR,

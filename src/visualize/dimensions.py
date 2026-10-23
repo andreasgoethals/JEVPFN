@@ -10,32 +10,34 @@ def multiclass_dimensions_figure(dimensions):
     table = dimensions.loc[dimensions.task.eq("multiclass_classification")].sort_values(
         "combined_features", ascending=False
     )
-    fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_FULL, style.AUDIT_RATIO))
-    y = np.arange(len(table))
-    for column, offset, color, label in (
-        ("per_column_features", -0.25, style.MEDIAN_COLOR, "Separate: T × K"),
-        ("joint_features", 0, style.P95_COLOR, "Joint: K"),
-        ("combined_features", 0.25, style.TOTAL_COLOR, "Combined"),
-    ):
-        bars = ax.barh(y + offset, table[column], height=0.23, color=color, label=label)
-        ax.bar_label(bars, padding=2)
-    labels = [
-        f"{r.dataset}\nT={r.text_columns}, K={int(r.classes)}"
-        + (" · REMOVED" if r.status == "REMOVED" else "")
-        for r in table.itertuples()
-    ]
-    ax.set_yticks(y, labels)
-    ax.invert_yaxis()
-    ax.set_xlim(0, table.combined_features.max() * 1.18)
-    ax.set_xlabel("Added numeric probability features per row")
-    ax.set_title("Multiclass text conversion: input groups × classes")
-    ax.legend(loc="lower right")
-    ax.grid(axis="x", color=style.GRID_COLOR, alpha=0.5)
-    ax.set_axisbelow(True)
+    fig, axes = plt.subplots(2, 1, figsize=style.DASHBOARD_SIZE,
+                              gridspec_kw={"height_ratios": [1, 4]})
+    for ax, part in zip(axes, [table[table.status.eq("REMOVED")], table[table.status.ne("REMOVED")]]):
+        y = np.arange(len(part))
+        for column, offset, color, label in (
+            ("per_column_features", -0.25, style.MEDIAN_COLOR, "Per-column: T × K"),
+            ("joint_features", 0, style.P95_COLOR, "Joint: K"),
+            ("combined_features", 0.25, style.TOTAL_COLOR, "Both"),
+        ):
+            bars = ax.barh(y + offset, part[column], height=0.23, color=color, label=label)
+            ax.bar_label(bars, padding=2, fontsize=7)
+        labels = [f"{r.dataset}\nT={r.text_columns}, K={int(r.classes)}" +
+                  (" · removed" if r.status == "REMOVED" else "") for r in part.itertuples()]
+        ax.set_yticks(y, labels, fontsize=7)
+        ax.invert_yaxis()
+        if not part.empty:
+            ax.set_xlim(0, part.combined_features.max() * 1.18)
+        ax.grid(axis="x", color=style.GRID_COLOR, alpha=0.5)
+        ax.set_axisbelow(True)
+    axes[0].set_title("Removed high-class-count task", fontsize=8)
+    axes[1].set_title("Six included multiclass datasets · separate horizontal scale", fontsize=8)
+    axes[1].set_xlabel("Added numeric probability columns per row")
+    fig.legend(*axes[1].get_legend_handles_labels(), loc="outside upper center", ncols=3, fontsize=7)
     return (
         fig,
         "multiclass_numeric_feature_counts",
-        "Number of added class-probability columns for every core multiclass dataset. "
+        "Number of added class-probability columns for every core multiclass dataset, using "
+        "separate horizontal scales for the removed Spotify task and the six included datasets. "
         "T is the number of official text columns and K the number of classes. Separate "
         "extraction yields T × K columns and joint extraction K columns; combined concatenates "
         "them, removing the identical joint block when T=1. Spotify is retained for exploration "

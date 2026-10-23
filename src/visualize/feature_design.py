@@ -71,7 +71,7 @@ def benchmark_configurations_figure(table):
 
     columns = ["Non-text", "Embedding / PCA", "Joint", "Per-column"]
     values = table[columns].to_numpy(dtype=int)
-    fig, ax = plt.subplots(figsize=style.figsize(ratio=style.AUDIT_RATIO))
+    fig, ax = plt.subplots(figsize=style.COMPACT_TABLE_SIZE)
     ax.imshow(
         values,
         cmap=ListedColormap([style.BACKGROUND_COLOR, style.MEDIAN_COLOR]),
@@ -105,8 +105,9 @@ def benchmark_configurations_figure(table):
             "Experiment 1; the last row belongs to Experiment 2, repeated for each encoder and "
             "per-column PCA32 or joint PCA256/128/64/32/16/8. PCA is fitted on CPU using only training partitions. Non-text includes "
             "numerical and categorical columns. Joint and per-column decision features use one "
-            "extractor at a time; all eleven extractors are included. Each baseline is fitted once "
-            "per applicable dataset/predictor/encoder/PCA setting. Experiment 3 uses original text. "
+            "extractor at a time; all eleven extractors are included. The Experiment 1 non-text "
+            "baseline is shared across extractors (108 configurations); it is not refitted for "
+            "every encoder or PCA setting. Experiment 3 uses original text. "
             "Winner-selected combinations belong only to exploratory Experiment 5."
         ),
     )
@@ -243,7 +244,7 @@ def feature_dimensions_figure(plan):
 
 def workload_figure(totals):
     """One axis for token sensitivity; costs label the same bars, not a duplicate panel."""
-    fig, ax = plt.subplots(figsize=style.figsize())
+    fig, ax = plt.subplots(figsize=style.COMPACT_TABLE_SIZE)
     tokens = totals.wire_tokens_combined_approx / 1e6
     bars = ax.barh(
         [f"{n:g} chars/token" for n in totals.characters_per_token],
@@ -251,13 +252,13 @@ def workload_figure(totals):
         color=style.MEDIAN_COLOR,
     )
     labels = [
-        f"{v:,.1f}M tokens" + (f" Â· ${cost:,.2f}" if np.isfinite(cost) else "")
+        f"{v:,.1f}M tokens" + (f" · ${cost:,.2f}" if np.isfinite(cost) else "")
         for v, cost in zip(tokens, totals.cost_usd.fillna(np.nan))
     ]
     ax.bar_label(bars, labels=labels, padding=4)
     ax.set_xlim(0, tokens.max() * 1.55)
     ax.set_xlabel("Approximate input tokens (millions)")
-    ax.set_title("Jev cost sensitivity after exact reuse Â· both input modes")
+    ax.set_title("Jev cost scenarios · separate and joint text")
     return (
         fig,
         "deduplicated_budget",

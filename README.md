@@ -5,37 +5,23 @@ This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18
 extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
 are excluded from experiments for text burden and 114-class feature size.
 
-**Stage: Experiment 0A setup, not full extraction.** The VSC output checked on 23 October
-confirms successful H100 contracts for Clef and Intern across all three task types and
-18 real datasets, plus successful E5-small/E5-large GPU tests, CPU/data checks and two-node
-storage checks. Liquid, Strands and Perplexity failed before model loading because of a
-partially cleared host Conda activation stack. Qwen loaded but failed converting bfloat16
-embeddings to NumPy. Both failures are corrected locally and need new VSC tests. GPU
-telemetry also failed; sampling now runs outside the container and retains actual error
-details, requiring live verification. The images/weights remain reusable without rebuilding.
-The five original decision checkpoints and three embedding checkpoints are staged. Exact token
-counts cover those five open-weight providers with zero overflows. Five additional
-open-weight extractors are now implemented but still require checkpoint staging, complete
-CPU token counts and real H100 contracts/pilots. No GPU success is inferred from local tests.
-The tokenizer correction
-is now verified by the E5 GPU tests. The owner excludes all A100 allocations: GPU jobs
-default to wICE H100, with guards against A100 overrides. Publish local fixes and update
-an idle checkout before resubmission. Queue submission is not successful inference.
-The exhaustive question-v3 audit passed all 18 datasets, 1,698,127 unique inputs and
-3,294,340 row/input links. Clef/Intern sensitivity probes show real prompt/option-order
-effects that require review; an interface pass is not a claim of robustness.
-Jev passed three live task probes and 15 synthetic probes. Account limits are now owner
-confirmed (80 RPS, 100,000 TPS). The 13 real-text probes completed with sensitivity
-to wording/injected instructions; the dataset pilot exposed rounded probability sums.
-The decoder now permits only bounded two-decimal normalization, preserving raw responses.
-The resumed local dataset pilot completed 288 requests across all 18 datasets, with
-238,111 reported input tokens and USD 0.010000662 recorded cost. This is a small diagnostic
-sample, not full feature extraction or final acceptance. Predictor runtime tests remain pending. Historical evidence is in
-[AGENTS_MEMORY](docs/AGENTS_MEMORY.md); a final frozen 0A run will supersede setup evidence.
-The owner handles Git commits/pushes. Full extraction and benchmark switches stay disabled.
-Compact prediction stores, source/input/runtime-bound acceptance, prompt diagnostics and
-checked batching passed local tests. Remaining VSC runtimes, reviewed diagnostics and a
-fresh frozen 0A campaign are required before full extraction.
+**Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
+The VSC archive inspected on 23 October confirms CPU/data/question checks, two-node storage
+contracts, Clef/Intern H100 contracts and E5-small/E5-large GPU contracts. The other runtimes,
+recent activation/export/telemetry fixes and predictor feasibility still require live
+verification. Eleven extractors are implemented; the five newest open models need staging,
+complete token audits and GPU tests. Existing question-v3 evidence covers 18 datasets,
+1,698,127 distinct inputs and 3,294,340 row/input links. No local test or submission proves
+that a pending VSC workload works. Dated evidence and known failures are in
+[AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
+
+The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
+Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
+bounded setup tests, not production features or final acceptance. A100 routes are excluded;
+the current setup graph uses wICE H100. Mindwell B200 is preferred for subsequent work once
+native GPFS staging and a Blackwell-compatible runtime are verified; the owner's allocation
+currently exists only on Lustre. See [VSC](docs/VSC.md) before changing active jobs or paths.
+The owner normally handles Git publication; an explicit request is required to publish.
 
 ## Research contract
 
@@ -196,10 +182,20 @@ before full feature creation despite its higher folder number.
 | [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Frozen wording, source meanings, grouped inputs and original-row links. |
 | [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Token counts, workload, cost/throughput scenarios and feature combinations. |
 | [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Coverage, distributions, agreement and disagreements once real features exist. |
+| [01_paired_representation_effects](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>) | Complete-fold paired effects, training-only PCA diagnostics and original-text references; pending until real benchmark records exist. |
 
 Notebooks contain orchestration/display only; reusable logic is in `src/`. They perform
 no inference or model training. Each ends with the complete printed report. The comparison
 notebook shows coverage gaps until matching complete artifacts exist; it does not invent results.
+Input-design figures include dated, hash-bound saved prompt diagnostics; they are small case
+studies rather than population robustness rates. Extraction costs distinguish approximate
+full-run scenarios from cumulative recorded diagnostic charges. The study map counts the
+actual main grid; optional controls and winner-selected follow-ups remain separate.
+
+Decision features are **frozen, task-conditioned representations**: target names and class
+meanings enter the question, but dataset labels do not train the extractor. MulTaBench's
+LoRA target-aware representation learning is a distinct supervised method. See the
+[literature review](docs/LITERATURE_REVIEW.md) for that distinction and scope limits.
 
 ## Local setup
 

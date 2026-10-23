@@ -1,4 +1,6 @@
-"""Readable boxplots with p99 whiskers and separately marked observed maxima."""
+"""Length tails at dataset level, plus the columns with the largest p99 lengths."""
+
+from textwrap import fill
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -51,33 +53,41 @@ def _draw(ax, rows, prefix, labels):
     ax.tick_params(axis="y", labelsize=style.LONG_TEXT_LABEL_FONT)
 
 
-def long_text_figures(datasets, columns):
-    fig, axes = plt.subplots(1, 2, figsize=style.LONG_TEXT_SIZE, sharey=True)
-    _draw(axes[0], datasets, "cell_tokens", datasets.dataset)
-    _draw(axes[1], datasets, "joint_tokens", datasets.dataset)
-    axes[0].set_title("Individual nonempty text cells")
-    axes[1].set_title("All available text in each nonempty row")
-    for ax in axes:
-        ax.set_xlabel("Approximate text tokens (log scale)")
-    axes[1].legend(loc="lower right")
-    fig.suptitle("Long-text overview: distributions and extreme inputs")
-    yield (
-        fig,
-        "long_text_datasets",
-        (
-            "Nonempty text lengths across all 20 core datasets, for pooled individual cells (left) "
-            "and joint row text (right). Boxes span p25–p75 with median lines; whiskers are p01 and p99, "
-            "not Tukey whiskers. Diamonds mark observed maxima. Tokens use ceil(characters/4). "
-            "These are text-length distributions, not provider context checks; exact complete-request counts are reviewed separately."
-        ),
-    )
-    ordered = columns.reset_index(drop=True)
-    # At most 14 labelled fields per half-page; keep the same axis across pages.
-    pages = [ordered.iloc[i:i + 14] for i in range(0, len(ordered), 14)]
-    xmax = float(ordered.tokens_max.max()) * 1.3
+def long_text_figures(datasets, columns, *, all_columns=False):
+    """The full column table is retained; the main view prioritizes the 12 longest p99s.
+
+    all_columns=True is an explicit appendix view, with the same selection-independent
+    axis and no new measurements. Neither view filters extraction or benchmark rows.
+    """
+    xmax = float(max(datasets.cell_tokens_max.max(), datasets.joint_tokens_max.max())) * 1.5
+    for page, start in enumerate(range(0, len(datasets), 10), 1):
+        part = datasets.iloc[start:start + 10]
+        fig, axes = plt.subplots(1, 2, figsize=style.LONG_TEXT_SIZE, sharey=True)
+        _draw(axes[0], part, "cell_tokens", part.dataset)
+        _draw(axes[1], part, "joint_tokens", part.dataset)
+        axes[0].set_title("Individual text cells")
+        axes[1].set_title("All text in each row")
+        for ax in axes:
+            ax.set(xlabel="Approximate text tokens (log scale)", xlim=(0.7, xmax))
+        fig.legend(*axes[1].get_legend_handles_labels(), loc="outside lower center")
+        fig.suptitle(f"Text-length tails · catalog panel {page}")
+        yield (
+            fig,
+            f"long_text_datasets_{page}",
+            f"Nonempty text lengths for datasets {start + 1}–{min(start + 10, len(datasets))} "
+            f"of {len(datasets)} in catalog order: pooled individual cells (left), joint row text "
+            "(right). Boxes span p25–p75, with median lines and p01–p99 whiskers; diamonds mark "
+            "maxima. Both catalog panels share the same logarithmic axis. Tokens use "
+            "ceil(characters/4); these are text screens, not complete-request context checks.",
+        )
+    ordered = columns.sort_values(["tokens_p99", "dataset", "text_column"], ascending=[False, True, True])
+    if not all_columns:
+        ordered = ordered.head(12)
+    pages = [ordered.iloc[i:i + 12] for i in range(0, len(ordered), 12)]
+    xmax = float(columns.tokens_max.max()) * 1.5
     for page, part in enumerate(pages, start=1):
         fig, ax = plt.subplots(figsize=style.LONG_TEXT_PAGE_SIZE)
-        labels = part.dataset.str.replace(" ", "\n", n=1) + " · " + part.text_column
+        labels = [f"{row.dataset}\n{fill(row.text_column, 29)}" for row in part.itertuples()]
         _draw(ax, part, "tokens", labels)
         ax.tick_params(axis="y", labelsize=style.LONG_TEXT_PAGE_FONT)
         ax.set_xlim(0.7, xmax)
@@ -86,13 +96,16 @@ def long_text_figures(datasets, columns):
             if active.dataset.iloc[position] != active.dataset.iloc[position - 1]:
                 ax.axhline(position + 0.5, color=style.GRID_COLOR, linewidth=0.6)
         ax.set_xlabel("Approximate nonempty text tokens (log scale)")
-        ax.set_title(f"All text columns — page {page} of {len(pages)}")
+        ax.set_title(f"Official text columns · page {page}" if all_columns else
+                     "The 12 text columns with the largest p99 lengths")
         fig.legend(*ax.get_legend_handles_labels(), loc="outside lower center", ncols=2)
         yield (
             fig,
-            f"long_text_columns_page_{page}",
-            "Nonempty text lengths for the official text columns, in catalog order, paginated for print. "
+            f"long_text_columns_page_{page}" if all_columns else "longest_column_tails",
+            ("All official text columns, ordered by descending p99 length. " if all_columns else
+             "Twelve official text columns selected by descending nonempty p99 length, independent of targets. ") +
             "Dataset and column names label each row. Boxes show p25–p75 and medians; whiskers "
             "span p01–p99; diamonds mark maxima. All pages share the same logarithmic axis. "
-            "Exact p99/max values remain in the tables. No provider context limit is inferred from character counts.",
+            "The tables retain all columns and exact p99/max values. No provider context limit "
+            "is inferred from character counts; no input is removed or shortened.",
         )

@@ -20,19 +20,27 @@ def burden_figures(summary, characters_per_token=4.0):
     axes[0].set_xscale("log")
     axes[0].set_xlabel("Combined text tokens per row (log scale)")
     axes[0].legend(loc="lower right")
-    bars = axes[1].barh(y, ordered.total_text_tokens / 1e6, color=style.TOTAL_COLOR)
-    axes[1].bar_label(bars, labels=[f"{v / 1e6:.2f}" for v in ordered.total_text_tokens], padding=3)
-    axes[1].set_xlim(0, ordered.total_text_tokens.max() / 1e6 * 1.15)
-    axes[1].set_xlabel("Full-dataset text tokens (millions)")
-    axes[0].set_yticks(y, ordered.dataset)
-    fig.suptitle("Typical row length and total text volume before exact reuse")
+    axes[1].scatter(ordered.total_text_tokens / 1e6, y, color=style.TOTAL_COLOR,
+                    s=style.AUDIT_MARKER_SIZE)
+    axes[1].set_xscale("log")
+    axes[1].set_xlabel("Full-dataset text tokens (millions; log scale)")
+    from src.utils.config import load_config
+
+    excluded = load_config("feature_creation")["dataset_selection"]["exclude"]
+    labels = ordered.dataset + np.where(ordered.dataset_id.isin(excluded), " · removed", "")
+    axes[0].set_yticks(y, labels)
+    for index in np.flatnonzero(ordered.dataset_id.isin(excluded).to_numpy()):
+        for ax in axes:
+            ax.axhspan(index - 0.45, index + 0.45, color=style.FAINT_COLOR, zorder=-1)
+    fig.suptitle("Typical text length and full-dataset burden")
     yield (
         fig,
         "text_burden",
         (
-            "Combined-text median and 95th percentile per row (left), and total text volume (right) "
+            "Combined-text median and 95th percentile per row (left), and total text volume (right; log scale) "
             f"for all 20 core datasets. Tokens use ceil(combined characters/{characters_per_token:g}); "
             "empty text contributes zero. Questions and task metadata are excluded. "
-            "These are raw text volumes before reuse, not API billing counts."
+            "Shaded rows identify the two datasets removed from experiments. These are raw text "
+            "volumes before reuse, not API billing counts."
         ),
     )

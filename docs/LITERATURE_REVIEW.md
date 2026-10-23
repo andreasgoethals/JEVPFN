@@ -10,7 +10,8 @@ workspace; installing one library never installs another automatically.
 Primary-source findings checked through 16 October 2026, with E5/PCA, native-text baseline
 selection/licences and TypeSafe context/rate documentation rechecked on 21 October, and
 the closest tabular decision-model work and dataset scope rechecked on 22 October,
-and the five added open-weight releases checked on 23 October. This reference records prior art,
+and the five added open-weight releases, MulTaBench v2 full methodology, STRABLE and TILE
+checked on 23 October. This reference records prior art,
 published evidence and limits of interpretation; it is not a run plan or acceptance report.
 Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
 execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
@@ -82,6 +83,46 @@ only text and allowed task metadata. The latter can be reused across folds; supe
 encoder adaptation and fitted dimension reduction belong inside each training partition.
 The curated collection is deliberately enriched for multimodal benefit, so conclusions should
 be scoped to these tasks rather than all tabular prediction. [MulTaBench paper v2, §§3 and A](https://arxiv.org/html/2605.10616v2)
+
+In Appendix A.1, supervised TAR adapts the encoder's last three layers with LoRA
+(rank 16, alpha 32, dropout 0.1), using training data and a stratified 90/10 internal
+split for checkpoint selection. One E5 model is shared across text columns: each
+column-name/value pair has its row's training target. Regression uses 20 equal-frequency
+target bins for the adaptation loss. This is a legitimate supervised comparison **if all
+adaptation, bin boundaries, checkpoint selection and PCA stay inside the appropriate
+training partition**. The paper describes outer-test isolation; this reading does not
+independently certify every upstream implementation line or eliminate curation selection
+bias. A replication with our nested threshold selection would require adaptation again
+inside each inner training partition, not one adapted encoder shared across CV folds.
+
+JEVPFN instead conditions a frozen model on documentary target semantics. Call this
+**task-conditioned representation extraction**, or label-free target-aware extraction,
+not supervised representation learning. The downstream predictor learns from labels;
+the extractor does not. Comparing it with unconditional embeddings estimates complete
+representation-recipe utility, not the isolated causal effect of target conditioning.
+A matched task-agnostic decision prompt or supervised TAR replication would be separate
+experiments. Neither is silently added by the notebook revision. Appendix G.3 reports a
+substantial adaptation cost; its fixed-recipe gains are observed results, not a formal
+lower bound on every possible tuned pipeline. [MulTaBench v2, Appendices A.1 and G.3](https://arxiv.org/html/2605.10616v2)
+
+[STRABLE: Benchmarking Tabular Machine Learning with Strings](https://arxiv.org/abs/2605.12292)
+distinguishes free text from names, codes and repetitive categories and compares modular
+and original-string systems across 108 tables. Its findings motivate retaining the
+length/cardinality/missingness audit and reporting heterogeneous dataset effects. Its
+decoder-embedding PCA findings do not prove a problem with our specific Qwen embedding
+checkpoint. Actual training-only explained variance is now inspected separately from
+predictive effects; no scaling or slicing method is selected from test scores.
+
+[TILE: Bridging LLMs and Table Foundation Models for Tabular Learning with Strings](https://arxiv.org/html/2610.17065v1)
+(12 October 2026 preprint) is important adjacent work found in the live primary-source
+screen beyond the pinned library summary. It studies contextual row serialization,
+intermediate-layer features, column-wise pooling/PCA and numerical/categorical bypasses,
+with matched learners. It already establishes a broad representation-interface study;
+we cannot claim that comparing text pipelines in fixed predictors is new by itself.
+Our narrower potential contribution is the empirical utility, compression loss and
+sensitivity of task-conditioned **typed probability features**, across target types and
+text grouping modes. TILE is not a typed decision-model study. Its reported gains remain
+authors' evidence, not a JEVPFN reproduction or grounds to add a new method automatically.
 
 The paper's **40 core datasets comprise 20 text-tabular and 20 image-tabular tasks**;
 JEVPFN explores the complete core text subset and evaluates 18 after the two documented

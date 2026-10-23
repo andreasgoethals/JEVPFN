@@ -64,6 +64,55 @@ HPC support. Do not move CUDA environments to DATA or delete checkpoints to hide
 Do not delete package caches while Conda or jobs are using them. The pinned guide's storage sections explain that
 PROJECT can be single-copy; transferring results to the laptop is part of the recovery plan.
 
+## GPU routing and the native-storage prerequisite
+
+For subsequent GPU testing and extraction, prefer Mindwell `gpu_b200` once its storage
+and runtime checks pass. The owner reports markedly shorter B200 queues than H100 queues;
+that is an operational observation, not a guaranteed future start time or measured speedup.
+B200 supplies 192 GiB VRAM versus H100's 80 GiB, allowing larger batches where the native
+model implementation supports them. Use one GPU per independent model/dataset task first;
+do not request several GPUs for a serial inference loop. Keep CPU token preparation,
+downloads, PCA preparation and image builds outside GPU allocations, and use the existing
+telemetry/timing records to choose batches after probability-parity checks.
+
+The 23 October owner diagnostic established `VSC_PROJECT_GPFS1=/gpfs1/project` and
+`VSC_SCRATCH_GPFS1=/gpfs1/scratch/383/vsc38338`. **The former is the general root, not an
+allocation.** `/gpfs1/project/stg_00211` does not exist. `myquota` lists only the Lustre
+project allocation, plus personal GPFS scratch. Therefore the B200 profile's allocation
+remains unset; the current setup graph is still wICE-only. Do not simply override its
+GPU partition to Mindwell while retaining Lustre paths or cross-cluster dependencies.
+
+The durable solution is to request a native GPFS project allocation through KU Leuven
+HPC support (Open OnDemand Help), stating the existing Lustre allocation, B200 use,
+required checkpoint/active-result capacity and file quota. Alternatively, a separately
+reviewed workflow can stage a bounded working set on GPFS scratch, keep authoritative
+assets on Lustre, and checkpoint/transfer durable results back. Scratch has a 30-day
+cleanup policy and is not a backup or an interchangeable permanent PROJECT allocation.
+That two-root scratch/mirror workflow is **not** implemented by the current project-root
+override. Avoid copying whole environments or all other projects into scratch.
+
+Containers currently install CUDA 12.6 PyTorch wheels. Do not assume these work on B200:
+Blackwell needs a compatible CUDA build and actual application kernels, not merely an
+updated host driver. The official PyTorch Blackwell release documents CUDA 12.8 builds.
+Stage/build an isolated compatible runtime at the native destination, record its hash,
+then run the exact model contracts and bounded pilot there before selecting B200 for
+production. Preserve the already tested H100 images; CUDA/runtime changes alter cache
+identities. No running H100 job or active checkout is changed by this recommendation.
+
+Use these read-only commands to compare current scheduling conditions:
+
+```bash
+sinfo --clusters=mindwell -p gpu_b200 -o "%P %a %l %D %t %G"
+squeue --clusters=mindwell --me -o "%.18i %.12P %.10T %.10l %.35R"
+squeue --clusters=wice --me -p gpu_h100 -o "%.18i %.12P %.10T %.10l %.35R"
+```
+
+References: VSC Library `guides/{CLUSTERS,STORAGE,SOFTWARE,SLURM}.md`, pinned
+`3bcdf55e576d10161d6189b40ac39380bbba9eca`, upstream `1a0cf04a5aab107021d98c563351f912a3caf062`;
+[Mindwell](https://docs.vscentrum.be/leuven/mindwell_quick_start.html),
+[native filesystems](https://docs.vscentrum.be/leuven/tier2_hardware/parallel_filesystems.html),
+[PyTorch Blackwell support](https://pytorch.org/blog/pytorch-2-7/).
+
 ## CPU environment and input transfer
 
 ### Set up the eleven-extractor roster
@@ -874,8 +923,8 @@ not a replacement for an active budget or extraction queue.
 
 ## Parallel execution and resource measurement
 
-Reviewed VSC Library pin: `9e376b5ee9106e82d37eca86ca6acb861f580c93`, upstream
-`9475d631a15849b70d84642b17c226b1b89fd28d` (20 October). The reviewed Leuven
+Reviewed VSC Library pin: `3bcdf55e576d10161d6189b40ac39380bbba9eca`, upstream
+`1a0cf04a5aab107021d98c563351f912a3caf062` (22 October; read on 23 October). The reviewed Leuven
 Slurm, hardware and parallel-filesystem guides require explicit cluster selection,
 native filesystems and actual application compatibility checks. They do not promise
 current queue availability or unlimited concurrent jobs.
