@@ -23,6 +23,81 @@ from src.utils.locking import file_lock
 from src.utils.serialization import file_sha256, write_json
 
 
+def test_parallel_preparation_keeps_exact_cache_bytes_and_commits_with_counts(inputs, monkeypatch):
+    from src.cluster import token_preparation as tp
+    from src.utils.serialization import digest
+
+    class Counter:
+        identity = {"counter_id": "parallel-fixture"}
+        limit = 100
+
+        def attach_cache(self, db, *, writable):
+            self.cache_db = db
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS prepared_tokens (payload_sha256 TEXT PRIMARY KEY, prepared_sha256 TEXT, content BLOB)"
+            )
+            db.commit()
+
+        def prepare(self, payload):
+            return {
+                "ids": list(range(len(payload["state"]["text"]["text"]))),
+                "keys": ["false", "true"],
+            }
+
+        def count_many(self, payloads):
+            return [len(self.prepare(p)["ids"]) for p in payloads]
+
+    counter = Counter()
+    fail = {"enabled": True}
+
+    class Executor:
+        calls = 0
+
+        def __init__(self, **kwargs):
+            assert kwargs["max_workers"] == 2
+            monkeypatch.setattr(tp, "_counter", counter)
+
+        def map(self, fn, batches):
+            self.calls += 1
+            if fail["enabled"] and self.calls == 2:
+                raise RuntimeError("worker interrupted")
+            return map(fn, batches)
+
+        def shutdown(self, **kwargs):
+            pass
+
+    pool_type = tp.PreparedTokenPool
+    monkeypatch.setattr(
+        tp, "PreparedTokenPool", lambda p, c, n: pool_type(p, c, n, executor_factory=Executor)
+    )
+    with pytest.raises(RuntimeError, match="worker interrupted"):
+        token_audit.audit_provider(
+            "h2o", inputs, counter=counter, batch_size=2, preparation_workers=2
+        )
+    database = next(paths.token_audit_dir().glob("h2o_*.sqlite3"))
+    with sqlite3.connect(database) as db:
+        assert db.execute("SELECT COUNT(*) FROM counts").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM prepared_tokens").fetchone()[0] == 2
+    fail["enabled"] = False
+    report = token_audit.audit_provider(
+        "h2o", inputs, counter=counter, batch_size=2, preparation_workers=2
+    )
+    assert report["unique_inputs"] == 3 and report["total_input_tokens"] == 15
+    import zlib
+
+    with sqlite3.connect(database) as db:
+        for record in iter_prepared_inputs(inputs[0]["path"]):
+            sha, content = db.execute(
+                "SELECT prepared_sha256,content FROM prepared_tokens WHERE payload_sha256=?",
+                (record["payload_sha256"],),
+            ).fetchone()
+            expected = counter.prepare(record["payload"])
+            assert json.loads(zlib.decompress(content)) == expected
+            assert sha == digest(expected)
+    again = token_audit.audit_provider("h2o", inputs, counter=counter, preparation_workers=2)
+    assert again["audit_id"] == report["audit_id"]
+
+
 @pytest.fixture
 def inputs(isolated_output):
     frame = pd.DataFrame(

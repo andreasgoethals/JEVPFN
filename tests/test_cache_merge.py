@@ -115,14 +115,93 @@ def test_union_providers_origins_artifacts_and_repeated_import(tmp_path, monkeyp
     assert backup.values.equals(load_block(local.path, local_id).values)
 
 
-def test_conflict_rolls_back_new_responses_too(tmp_path):
+@pytest.mark.parametrize("backup_destination", [True, False])
+def test_conflict_rolls_back_new_responses_too(tmp_path, backup_destination):
     local = cache(tmp_path / "local.sqlite3")
     remote = cache(tmp_path / "remote.sqlite3", request(text="new"))
     remote.put(request(), response(0.2), kind="verified_response")
     with pytest.raises(ValueError, match="Conflicting"):
-        merge_cache(remote.path, local.path)
+        merge_cache(remote.path, local.path, backup_destination=backup_destination)
     assert local.get(request(text="new"), kind="verified_response") is None
     assert local.get(request(), kind="verified_response") == response()
+    assert (tmp_path / "merge_backups").exists() == backup_destination
+
+
+def test_mirror_union_can_preserve_both_stores_without_extra_backups(tmp_path):
+    local = cache(tmp_path / "local.sqlite3")
+    remote = cache(tmp_path / "remote.sqlite3", request("intern"))
+    before = file_sha256(remote.path)
+    result = merge_cache(remote.path, local.path, backup_destination=False)
+    assert result["responses_added"] == 1
+    assert result["backup"] is None
+    assert local.get(request(), kind="verified_response") == response()
+    assert local.get(request("intern"), kind="verified_response") == response()
+    assert file_sha256(remote.path) == before
+    assert not (tmp_path / "merge_backups").exists()
+
+
+def test_mirror_ledger_reuses_unchanged_versions_across_snapshots_and_feedback(tmp_path):
+    local = cache(tmp_path / "local.sqlite3")
+    remote = cache(tmp_path / "remote.sqlite3", request("intern"))
+    with remote._connect() as db:
+        db.execute(
+            "CREATE TABLE extraction_jobs (request_key TEXT PRIMARY KEY,status TEXT,cost REAL)"
+        )
+        db.execute("INSERT INTO extraction_jobs VALUES ('job','attempting',0.1)")
+    first_hash = file_sha256(remote.path)
+    options = {"backup_destination": False, "deduplicate_ledger": True}
+    assert merge_cache(remote.path, local.path, **options)["ledger_records_added"] == 1
+    remote.put(request("intern", text="new result"), response(), kind="verified_response")
+    assert file_sha256(remote.path) != first_hash
+    assert merge_cache(remote.path, local.path, **options)["ledger_records_added"] == 0
+    with remote._connect() as db:
+        db.execute("UPDATE extraction_jobs SET status='completed',cost=0.2")
+    assert merge_cache(remote.path, local.path, **options)["ledger_records_added"] == 1
+    with local._connect() as db:
+        versions = db.execute(
+            "SELECT snapshot_sha256,record_json FROM imported_extraction_records"
+        ).fetchall()
+        assert len(versions) == 2
+        assert (
+            first_hash,
+            canonical_json({"request_key": "job", "status": "attempting", "cost": 0.1}),
+        ) in versions
+        assert {json.loads(v[1])["cost"] for v in versions} == {0.1, 0.2}
+        assert (
+            db.execute("SELECT name FROM sqlite_master WHERE name='mirror_ledger_seen'").fetchone()
+            is None
+        )
+    # Returning the durable union to a working set must not multiply its history.
+    merge_cache(local.path, remote.path, **options)
+    assert merge_cache(remote.path, local.path, **options)["ledger_records_added"] == 0
+    with local._connect() as db:
+        assert db.execute("SELECT COUNT(*) FROM imported_extraction_records").fetchone() == (2,)
+
+
+@pytest.mark.parametrize("deduplicate_ledger", [False, True])
+def test_conflicting_ledger_identity_rolls_back_other_imported_changes(
+    tmp_path, deduplicate_ledger
+):
+    from src.jev.merge import LEDGER_SQL
+
+    local = cache(tmp_path / "local.sqlite3")
+    remote = cache(tmp_path / "remote.sqlite3", request(text="must roll back"))
+    for store, status in ((local, "completed"), (remote, "failed")):
+        with store._connect() as db:
+            db.execute(LEDGER_SQL)
+            db.execute(
+                "INSERT INTO imported_extraction_records VALUES ('snapshot','extraction_jobs','job',?)",
+                (canonical_json({"status": status}),),
+            )
+    with pytest.raises(ValueError, match="Conflicting imported extraction record"):
+        merge_cache(
+            remote.path, local.path, backup_destination=False, deduplicate_ledger=deduplicate_ledger
+        )
+    assert local.get(request(text="must roll back"), kind="verified_response") is None
+    with local._connect() as db:
+        assert json.loads(
+            db.execute("SELECT record_json FROM imported_extraction_records").fetchone()[0]
+        ) == {"status": "completed"}
 
 
 @pytest.mark.parametrize("damage", ["identity", "request", "origin", "trigger"])

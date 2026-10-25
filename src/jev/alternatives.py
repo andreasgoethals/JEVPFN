@@ -44,7 +44,7 @@ def preview(request, provider):
             "runtime_requirements": [
                 "Reuse the exact publisher renderer and complete answer descriptions.",
                 "Reject overflow; retain every class probability and publisher calibration.",
-                "Use offline staged weights on an allocated H100; pass Experiment 0A before extraction.",
+                "Use offline staged weights on an allocated B200; pass Experiment 0A before extraction.",
             ],
             "live_verified": False,
         }

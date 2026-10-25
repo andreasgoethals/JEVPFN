@@ -1,8 +1,8 @@
 #!/bin/bash -l
 #SBATCH --job-name=jevpfn-exp0-gpu
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=gpu_h100
+#SBATCH --clusters=mindwell
+#SBATCH --partition=gpu_b200
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -17,5 +17,5 @@ export JEVPFN_CONDA_ENV="${1:?Usage: sbatch script.slurm ENV_PREFIX [PROJECT_ROO
 export JEVPFN_STAGING_ROOT="${2:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.preflight --gpu
+jevpfn_run python -m src.cluster.preflight --gpu
 echo 'GPU/import preflight finished; no model weights loaded and no modelling experiment run.'

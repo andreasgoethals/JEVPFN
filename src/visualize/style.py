@@ -100,9 +100,14 @@ _PROJECT_RC: dict = {}
 
 # Audit plots: the same quantity always has the same visual meaning.
 AUDIT_RATIO = 0.76
-MEDIAN_COLOR = "#276A87"
-P95_COLOR = "#C37929"
-TOTAL_COLOR = "#54765A"
+# Neutral ink for quantitative summaries. Category palettes below are deliberately
+# separate: a task, encoder or extractor never borrows a quantile's color.
+MEDIAN_COLOR = "#3D4248"
+P95_COLOR = "#7C858E"
+TOTAL_COLOR = "#59636F"
+QUANTITY_COLOR = "#59636F"
+MODE_COLORS = {"per_column": "#2166AC", "joint": "#B35806", "both": "#1B7837"}
+DIRECTION_COLORS = {"lower": "#3274A1", "higher": "#AC5353"}
 AUDIT_MARKER_SIZE = 18
 
 # Named final-print canvases; paginate dense diagnostics instead of shrinking text.
@@ -119,7 +124,7 @@ OVERVIEW_CMAP = "Blues"
 GRID_COLOR = "#D9E2E8"
 TEXT_COLOR = "black"
 BACKGROUND_COLOR = "white"
-MISSING_COLOR = "#846C9C"
+MISSING_COLOR = "#B9BDC5"
 REMOVED_COLOR = "#707070"
 FAINT_COLOR = "#F1F4F6"
 EVIDENCE_COLORS = {
@@ -129,9 +134,9 @@ EVIDENCE_COLORS = {
     "unknown": "#F1F4F6",
     "not_applicable": "white",
 }
-METHOD_COLORS = (MEDIAN_COLOR, P95_COLOR, TOTAL_COLOR)
-EMBEDDING_COLORS = {"e5_small_v2": MEDIAN_COLOR, "e5_large_v2": P95_COLOR,
-                    "qwen3_embedding_0_6b": TOTAL_COLOR}
+METHOD_COLORS = ("#5A6E8C", "#987448", "#4F8075")
+EMBEDDING_COLORS = {"e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
+                    "qwen3_embedding_0_6b": "#558B2F"}
 STUDY_MAP_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 METHOD_MAP_SIZE = (WIDTH_FULL, 3.7)
 PROMPT_SENSITIVITY_SIZE = (WIDTH_FULL, MAX_HEIGHT)
@@ -139,9 +144,9 @@ REGRESSION_CASE_SIZE = (WIDTH_FULL, 3.6)
 EVIDENCE_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPACT_TABLE_SIZE = (WIDTH_FULL, 3.3)
 TASK_COLORS = {
-    "binary_classification": MEDIAN_COLOR,
-    "multiclass_classification": P95_COLOR,
-    "regression": TOTAL_COLOR,
+    "binary_classification": "#6A51A3",
+    "multiclass_classification": "#008B8B",
+    "regression": "#B8860B",
 }
 
 # Saved decision-feature comparisons: consistent provider colors across all diagnostics.
@@ -167,6 +172,12 @@ COMPARISON_SCATTER_SIZE = 6
 COMPARISON_MATRIX_FONT = 7
 AGREEMENT_CMAP = "Blues"
 DISTANCE_CMAP = "YlOrRd"
+
+
+def comparison_size(rows: int, *, rotated_labels: bool = False) -> tuple[float, float]:
+    """Keep sparse last pages compact without changing final-print label sizes."""
+    margin = 1.95 if rotated_labels else 1.35
+    return WIDTH_FULL, min(MAX_HEIGHT, margin + 0.23 * rows)
 
 
 def apply() -> None:

@@ -186,24 +186,37 @@ def validate_cache(source: Path) -> str:
     return dataset_id
 
 
-def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = None) -> dict:
+def merge_cache(
+    source: Path,
+    destination: Path,
+    *,
+    backup_dir: Path | None = None,
+    backup_destination: bool = True,
+    deduplicate_ledger: bool = False,
+) -> dict:
     """One dataset transaction, bounded-memory inserts and idempotent exact reuse.
 
     The incoming snapshot must be quiescent (e.g. exported transfer bundle). Existing
-    local extraction budgets are never reset. Backups are made before any write.
+    local extraction budgets are never reset. Ordinary imports back up the destination.
+    A scratch mirror may disable that additional copy because both source stores remain
+    intact and the validated union commits in one SQLite transaction. It may also retain
+    each distinct ledger record version once, keeping its first actual snapshot attribution.
+    Ordinary imports keep their historical per-snapshot accounting behavior by default.
     """
     source, destination = Path(source).resolve(), paths.require_project_output(Path(destination))
     destination = destination.resolve()
     if source == destination:
         raise ValueError("Cannot merge a cache into itself")
+    if not backup_destination and backup_dir is not None:
+        raise ValueError("backup_dir requires backup_destination")
     dataset_id = validate_cache(source)
     source_hash = file_sha256(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(destination.with_suffix(".extraction.lock"), timeout=1):
         backup = None
-        if destination.exists():
-            if validate_cache(destination) != dataset_id:
-                raise ValueError("Caches belong to different datasets")
+        if destination.exists() and validate_cache(destination) != dataset_id:
+            raise ValueError("Caches belong to different datasets")
+        if destination.exists() and backup_destination:
             backup_root = paths.require_project_output(
                 backup_dir or destination.parent / "merge_backups"
             )
@@ -234,6 +247,47 @@ def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = No
             db.execute("BEGIN IMMEDIATE")
             db.execute(ARTIFACT_SQL)
             db.execute(LEDGER_SQL)
+            if deduplicate_ledger:
+                # A disk-backed temporary index bounds Python memory and leaves
+                # the persistent cache schema unchanged. Never delete old history.
+                db.execute("PRAGMA temp_store=FILE")
+                db.execute("PRAGMA temp.cache_size=-2048")
+                db.execute(
+                    "CREATE TEMP TABLE mirror_ledger_seen ("
+                    "table_name TEXT, record_key TEXT, record_hash TEXT, "
+                    "PRIMARY KEY(table_name,record_key,record_hash)) WITHOUT ROWID"
+                )
+                for table, key, encoded in db.execute(
+                    "SELECT table_name,record_key,record_json FROM imported_extraction_records"
+                ):
+                    db.execute(
+                        "INSERT OR IGNORE INTO temp.mirror_ledger_seen VALUES (?,?,?)",
+                        (table, key, digest(json.loads(encoded))),
+                    )
+
+            def append_ledger(row):
+                prior = db.execute(
+                    "SELECT record_json FROM imported_extraction_records "
+                    "WHERE snapshot_sha256=? AND table_name=? AND record_key=?",
+                    row[:3],
+                ).fetchone()
+                record = json.loads(row[3])
+                if prior is not None:
+                    if json.loads(prior[0]) != record:
+                        raise ValueError("Conflicting imported extraction record; no rows merged")
+                    return 0
+                if (
+                    deduplicate_ledger
+                    and not db.execute(
+                        "INSERT OR IGNORE INTO temp.mirror_ledger_seen VALUES (?,?,?)",
+                        (row[1], row[2], digest(record)),
+                    ).rowcount
+                ):
+                    return 0
+                return db.execute(
+                    "INSERT INTO imported_extraction_records VALUES (?,?,?,?)", row
+                ).rowcount
+
             for row in incoming.execute("SELECT * FROM responses"):
                 key, kind, payload, settings, response, _ = row
                 prior = db.execute(
@@ -301,21 +355,17 @@ def merge_cache(source: Path, destination: Path, *, backup_dir: Path | None = No
                 cursor = incoming.execute(f"SELECT * FROM {table}")
                 columns = [item[0] for item in cursor.description]
                 for row in cursor:
-                    counts["ledger_records_added"] += db.execute(
-                        "INSERT OR IGNORE INTO imported_extraction_records VALUES (?,?,?,?)",
+                    counts["ledger_records_added"] += append_ledger(
                         (
                             source_hash,
                             table,
                             str(row[0]),
                             canonical_json(dict(zip(columns, row))),
                         ),
-                    ).rowcount
+                    )
             if "imported_extraction_records" in tables:
                 for row in incoming.execute("SELECT * FROM imported_extraction_records"):
-                    counts["ledger_records_added"] += db.execute(
-                        "INSERT OR IGNORE INTO imported_extraction_records VALUES (?,?,?,?)",
-                        row,
-                    ).rowcount
+                    counts["ledger_records_added"] += append_ledger(row)
         return {
             "dataset_id": dataset_id,
             "source_sha256": source_hash,

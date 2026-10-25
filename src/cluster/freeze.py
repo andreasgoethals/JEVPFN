@@ -8,8 +8,10 @@ No Git operation modifies the checkout. A mismatch stops jobs, never edits files
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 
 from src.utils import paths
 from src.utils.locking import file_lock
@@ -21,9 +23,15 @@ def receipt_path():
 
 
 def runtime_pins():
-    root = paths.checkpoints_dir().parent
+    # The frozen campaign pins durable assets, independent of each staged subset.
+    root = (
+        Path(os.environ["JEVPFN_DURABLE_ROOT"]) / "JEVPFN"
+        if os.environ.get("JEVPFN_STORAGE_MODE") == "scratch_mirror"
+        else paths.checkpoints_dir().parent
+    )
     patterns = (
         "containers/*/_JEVPFN_CONTAINER.json",
+        "containers/*/*/_JEVPFN_CONTAINER.json",
         "environments/*/JEVPFN_RUNTIME.json",
         "checkpoints/decision_models/*/_JEVPFN_CHECKPOINT.json",
         "checkpoints/text_embeddings/*/_JEVPFN_EMBEDDING.json",
@@ -113,7 +121,8 @@ def record(*, expected_file=None):
             or expected.get("schema") != current["schema"]
         ):
             differences = sorted(
-                k for k in expected.get("files", {}).keys() | current["files"].keys()
+                k
+                for k in expected.get("files", {}).keys() | current["files"].keys()
                 if expected.get("files", {}).get(k) != current["files"].get(k)
             )
             raise ValueError(

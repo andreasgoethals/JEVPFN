@@ -1,681 +1,384 @@
 # Literature review
 
-Shared references: [DM Library](../dm-library/README.md) for decision
-models and [TFM Library](../tfm-library/README.md) for tabular foundation models.
-Both are independent read-only submodules; run `git submodule status` to record
-the exact references used. This document keeps JEVPFN-specific interpretation.
-Maintenance and published-pin propagation run from the canonical `0. Literature`
-workspace; installing one library never installs another automatically.
+This document records JEVPFN-specific evidence and limits of interpretation, checked on
+**24 October 2026**. It is not an execution report or a list of future experiments.
+The selected methods are defined in [README](../README.md) and configuration;
+dataset meanings in [DATA_SOURCES](DATA_SOURCES.md); operating instructions in [VSC](VSC.md).
+A source review or passing interface test does not establish real GPU compatibility.
 
-Primary-source findings checked through 16 October 2026, with E5/PCA, native-text baseline
-selection/licences and TypeSafe context/rate documentation rechecked on 21 October, and
-the closest tabular decision-model work and dataset scope rechecked on 22 October,
-and the five added open-weight releases, MulTaBench v2 full methodology, STRABLE and TILE
-checked on 23 October. This reference records prior art,
-published evidence and limits of interpretation; it is not a run plan or acceptance report.
-Current choices are in [README](../README.md), provenance in [DATA_SOURCES](DATA_SOURCES.md),
-execution instructions in [VSC](VSC.md), and run evidence in [AGENTS_MEMORY](AGENTS_MEMORY.md).
-Read each library's own refresh/scope notes and record its checkout SHA; cite implementation
-snapshots by symbol rather than drifting line numbers. Linked live sources need rechecking
-when pins change. The local corpus is not an exhaustive inventory of global literature.
+## 1. Evidence, scope and provenance
 
-## 1. Why text-derived features are a meaningful comparison
+The independent libraries remain read-only at these pins:
 
-### Closest existing work and the novelty boundary
+| Library | SHA used for this review | Relevant coverage |
+|---|---|---|
+| [DM Library](../dm-library/README.md) | `5f1b3f8f1611681579aba052a86c2626a6a17b96` | Sixteen selected arXiv papers, fifteen web-source records and official implementation snapshots; refreshed 23 October. |
+| [TFM Library](../tfm-library/README.md) | `702d9ab0b66f6639ba8d443ff9c4a91231964465` | Tabular predictors, text representations, benchmarks and source snapshots. |
+| [VSC Library](../vsc-library/README.md) | `3bcdf55e576d10161d6189b40ac39380bbba9eca` | Infrastructure documentation and execution examples; operational evidence is separate from scientific evidence. |
 
-The public **tab-jev** project already converts Jev option probabilities into numeric features
-for tabular predictors, including a TabPFN-3.5 API backend. Its Kickstarter demonstration
-compares table-only prediction, text-only Jev, lexical text encodings and several combined
-pipelines at fixed label budgets; it also provides optional manually specified rubrics,
-few-shot examples and supervised calibration. This is direct prior art, not merely a generic
-decision-model release. Its demonstration is a binary task, not a verified three-task,
-multi-dataset replication. JEVPFN must not claim to introduce the Jev-plus-TabPFN combination.
-[Project and results](https://github.com/edamame-labs/tab-jev),
-[evaluation procedure](https://github.com/edamame-labs/tab-jev/blob/main/demo/README.md)
+On this review date the canonical DM Library and mounted submodule had the same clean
+HEAD. There were no newer canonical papers missing from this pin. The DM overview's
+introductory “seven web-only” count is stale: its actual web-source table contains fifteen.
+This upstream documentation discrepancy does not change the project roster.
 
-[Typed Decision Models on Tabular Data](https://arxiv.org/html/2610.19536v1)
-(Zhang, Ye and Zha, 14 October 2026 preprint) compares four decision models with three
-generative LLMs on ten TabLLM/FeatLLM classification datasets, TabFact and ReTabAD. It studies
-direct decisions, in-context examples and 21 request rewrites, including candidate and table
-ordering. This is close prior art for decision-model benchmarking and prompt robustness;
-those are not standalone novelty claims for JEVPFN. Its task design does not evaluate
-our reusable text-only numeric representations inside fixed trained tabular predictors,
-three target types and separate/joint text-column settings on MulTaBench. That distinction
-is a potential contribution to test, not proof that no other paper implements it.
+All sixteen filed DM research papers are **preprints**; no peer-reviewed venue is confirmed
+in the curated records. A publisher model card, benchmark claim and independent evaluation
+are different evidence types. The libraries contain a curated, dated collection, not an
+exhaustive global search. Filed paper versions and released checkpoints can differ; neither
+a release date nor a repository snapshot establishes a model's training cutoff.
 
-[Estimating Uncoded Crash Factors with Tabular Foundation and System One Models:
-Kumo Tabular and Jev](https://arxiv.org/html/2610.10321v1)
-(Rafe and Das, 7 October 2026 preprint) combines a coded-record Kumo reader with a Jev
-narrative reader and human recalibration in a sampled population-estimation design.
-It establishes prior combined use of a tabular foundation model and Jev on complementary
-data, but does not establish an eleven-extractor, fixed-predictor text-feature comparison.
-Its supervised human recalibration is outside our label-free extraction method.
+Detailed summaries and source maps belong in [DM summaries](../dm-library/SUMMARIES.md),
+[DM synthesis](../dm-library/SYNTHESIS.md) and [DM implementations](../dm-library/REPOSITORIES.md).
+The sections below retain the findings that affect this project's claims and implementation.
 
-TypeSafe's feature-discovery cookbook also converts Jev answers into features for a CatBoost
-wine-score regressor. An LLM proposes questions; subsequent proposals use training labels
-and model errors. That procedure differs from JEVPFN's fixed, mechanical, label-free
-construction, but establishes that Jev-based tabular feature engineering is already public.
-The cookbook's results are provider-produced evidence on its specified split, not an
-independent reproduction. [Official cookbook](https://docs.typesafe.ai/cookbooks/autoresearch_feature_discovery)
+## 2. Closest prior art and the contribution boundary
 
-A defensible research contribution therefore concerns independently measured utility and
-limits of task-conditioned probabilistic text representations: coverage of three task types,
-multiple text columns, deterministic templates, conventional text-representation controls,
-and reuse/cost under a frozen protocol. No claim of firstness or publishability follows from
-this literature search alone. Evidence about a decision model's isolated accuracy is distinct
-from evidence that its features improve a tabular learner.
+**Jev-derived features plus TabPFN already exist.** The public
+[tab-jev project](https://github.com/edamame-labs/tab-jev) converts option probabilities into
+numeric features and includes a TabPFN-3.5 API backend. Its Kickstarter demonstration
+compares table-only prediction, text-only Jev, lexical encodings and combined pipelines at
+fixed label budgets; it also offers manual rubrics, few-shot examples, supervised
+calibration and a local Kev-to-TabICL backend. This is direct feature-engineering prior art,
+although not a verified
+three-task, multi-dataset replication of JEVPFN.
+[Evaluation procedure](https://github.com/edamame-labs/tab-jev/blob/main/demo/README.md)
 
-A useful fourth representation family is **lexical word/character n-grams with TF-IDF**.
-These retain exact vocabulary and partial string matches, unlike task-conditioned answer
-probabilities or dense pretrained embeddings. Existing character/word-length controls do
-not provide this comparison. It is a recommendation, not part of the approved executable
-grid: raw sparse features suit linear/logistic models; TruncatedSVD can supply compact
-features to predictors with column limits. Vocabulary, IDF and SVD must fit separately on
-each inner/outer training partition, never validation/test rows. See the official
-[text-feature guide](https://scikit-learn.org/stable/modules/feature_extraction.html#text-feature-extraction)
-and [sparse dimensionality reduction](https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.TruncatedSVD.html).
+Other particularly close sources are:
 
-MulTaBench selects tasks where non-text and text/image inputs contribute jointly, and where
-target-aware encoder adaptation improves on frozen embeddings for several curation learners.
-Its text pipeline uses E5-small-v2; target-aware representations fine-tune with labels and
-reduce representations with PCA. This differs fundamentally from a Jev feature that uses
-only text and allowed task metadata. The latter can be reused across folds; supervised
-encoder adaptation and fitted dimension reduction belong inside each training partition.
-The curated collection is deliberately enriched for multimodal benefit, so conclusions should
-be scoped to these tasks rather than all tabular prediction. [MulTaBench paper v2, §§3 and A](https://arxiv.org/html/2605.10616v2)
+| Source | Evidence and distinction |
+|---|---|
+| [Typed Decision Models on Tabular Data](https://arxiv.org/abs/2610.19536), Zhang, Ye and Zha, v1 | Four decision models and three generative LLMs make direct decisions on row classification, fact verification and anomaly detection, with 21 applicable request rewrites. This precedes our comparison of decision models on tabular tasks. It does not evaluate cached text-only representations inside fixed trained predictors across binary, multiclass and regression tasks. |
+| [Estimating Uncoded Crash Factors with Tabular Foundation and System One Models: Kumo Tabular and Jev](https://arxiv.org/abs/2610.10321), Rafe and Das | Combines a coded-record Kumo reader, a narrative Jev reader and human recalibration for population estimation. It is prior complementary use of a TFM and Jev; supervised recalibration differs from label-free extraction. |
+| [TypeSafe feature-discovery cookbook](https://docs.typesafe.ai/cookbooks/autoresearch_feature_discovery) | Generates Jev-derived features for CatBoost wine-score regression. An LLM proposes questions using training labels and errors. It establishes public feature engineering, while differing from the fixed mechanical questions here. Its results are provider evidence. |
+| [TILE: Bridging LLMs and Table Foundation Models for Tabular Learning with Strings](https://arxiv.org/abs/2610.17065), v1 | Studies contextualized representations of serialized strings with intermediate-layer pooling, compression and tabular predictors. A representation interface between language and table models is already an active research direction. |
+| [TabPFN beyond Tabular Data](https://arxiv.org/abs/2607.11007) | Uses TabPFN on frozen image, text and audio representations. Frozen semantic embeddings plus a TFM are established prior art; effectiveness depends on representation dimension and label budget. |
 
-In Appendix A.1, supervised TAR adapts the encoder's last three layers with LoRA
-(rank 16, alpha 32, dropout 0.1), using training data and a stratified 90/10 internal
-split for checkpoint selection. One E5 model is shared across text columns: each
-column-name/value pair has its row's training target. Regression uses 20 equal-frequency
-target bins for the adaptation loss. This is a legitimate supervised comparison **if all
-adaptation, bin boundaries, checkpoint selection and PCA stay inside the appropriate
-training partition**. The paper describes outer-test isolation; this reading does not
-independently certify every upstream implementation line or eliminate curation selection
-bias. A replication with our nested threshold selection would require adaptation again
-inside each inner training partition, not one adapted encoder shared across CV folds.
+The potential contribution is **measuring the utility, compression, robustness and cost of
+task-conditioned probabilistic text representations within fixed predictors**, against
+frozen embeddings and native-text reference systems. Separate-column and joint-column
+representations, three task types and cache reuse make this a specific controlled study.
+It is not the invention of Jev-plus-TabPFN, the first decision-model benchmark, proof of a
+new decision architecture, or a demonstrated performance advance before results exist.
 
-JEVPFN instead conditions a frozen model on documentary target semantics. Call this
-**task-conditioned representation extraction**, or label-free target-aware extraction,
-not supervised representation learning. The downstream predictor learns from labels;
-the extractor does not. Comparing it with unconditional embeddings estimates complete
-representation-recipe utility, not the isolated causal effect of target conditioning.
-A matched task-agnostic decision prompt or supervised TAR replication would be separate
-experiments. Neither is silently added by the notebook revision. Appendix G.3 reports a
-substantial adaptation cost; its fixed-recipe gains are observed results, not a formal
-lower bound on every possible tuned pipeline. [MulTaBench v2, Appendices A.1 and G.3](https://arxiv.org/html/2605.10616v2)
+The current eighteen tasks are a deliberate subset of MulTaBench's twenty core text tasks.
+Spotify and Zomato remain visible in exploration with documented exclusions. Results should
+be attributed to this selected collection, not all text-containing tables. A literature
+review cannot prove that no related work exists or guarantee publishability.
+
+## 3. What recent decision-model research establishes
+
+The following studies motivate checks already represented in the code or interpretation.
+Reported results are the authors' measurements, not results reproduced by JEVPFN.
+
+| Research evidence | Finding relevant to this project | Consequence |
+|---|---|---|
+| [System1-Arena: Which Decisions Can Be Left to System 1?](https://arxiv.org/abs/2610.21244), v1 | Common probability-scoring requests across 30 systems, 105 tasks and 92,125 questions; static accuracy/calibration and closed-loop success give different rankings. Its headline control table uses 127 of the 138 supplied environments. | The broader decision-model benchmark category already exists. Our downstream representation question is different. One request per example and possible pretraining exposure limit conclusions about stability and independence. |
+| [Typed Decision Models on Tabular Data](https://arxiv.org/abs/2610.19536), v1 | Aggregate accuracy can hide large changes in individual predictions under table rewrites. Confidence tracks stability more reliably than correctness. | Preserve per-row predictions and probabilities; assess option and context interventions separately. Re-querying changes compute and is a separate policy, not free robustness. |
+| [Intern-Decision: Efficient Multimodal Decision Making with Autoregressive Masked Language Modeling](https://arxiv.org/abs/2610.22131), v1 | Predicts answer placeholders in one causal pass without feeding one answer into other fields. A known-distribution pilot improves after temperature scaling; its 96 cases are paired variants of 48 settings. | Preserve the checkpoint's temperature. Better author-reported accuracy does not imply better probabilities on our tasks; a fixed short-request GPU latency does not predict full extraction throughput. |
+| [Releasing the Inner Jev: A Simple Recipe for Open Decision Models](https://arxiv.org/abs/2610.17205), v1 | Frozen answer-letter readout is competitive; backbone LoRA provides more improvement than head-only training. Validation resembles public decision benchmarks and selects calibration/checkpoints. | “Decision model” is not one architecture. Do not attribute downstream gains solely to a specialized head. This paper's **Jeff** release is distinct from TypeSafe Jev and SII-Decision. |
+| [LLM-as-Jev: LLMs Are Already Jev-Style Decision Models — When and How to Fine-Tune Them](https://arxiv.org/abs/2610.02076), v3 | Joint, prefix-free candidate-suffix scoring can work without adaptation; adaptation gains concentrate in represented domains. Full suffix scoring and optional thinking require additional computation. | An ordinary LLM probability readout is a relevant architecture control if making architecture claims, but is not automatically equivalent to a one-pass decision head or an approved roster addition. |
+| [AnyJev Technical Report](../dm-library/SUMMARIES.md#anyjev-technical-report) | Separates frozen-backbone capability, label-prior correction, option rotations and adaptive inference cost. | Option-order averaging can change both quality and latency. Fixed one-pass extraction and averaged extraction must not be pooled as the same method. |
+| [TypedBench: A Benchmark for Calibration, Framing Sensitivity, and Cost in System One Decision Models](https://arxiv.org/abs/2610.11392), v2 | Rule-generated tasks separate calibration, framing and asymmetric decision costs; finite-sample calibration errors have a nonzero noise floor. | Top-class agreement alone misses probability shifts that change our numeric features. Calibration metrics require appropriate ground truth and sample-size interpretation. |
+| [Are AI Decision Models Biased? A Case Study of Jev](https://arxiv.org/abs/2610.19619), v1 | Framing and irrelevant context can alter probabilities without changing the selected class. Its 41,500-response main study and separate 15,000-response conjunction probe are different samples. | Report probability distance, class flips and expected-score change separately. Many repeated calls to few scenarios do not supply independent scenarios. |
+| [General Decision Models: Benchmarking and Insights Beyond Jev](https://arxiv.org/abs/2610.03935), v2 | JEVal covers 11,257 bilingual instances and 36 datasets, with analytic probability and interactive tests. Correct argmax decisions can coexist with poor uncertainty or system outcomes. | Decision Index, JEVal and downstream tabular prediction answer different questions. SII-Decision author results do not establish MulTaBench gains. |
+| [JevOut: Natural Context Can Flip Decision Models](https://arxiv.org/abs/2609.30243), v2 | Answer-preserving additions can redirect predictions under an explicit attack-search budget. | Treat supplied text as untrusted data. Adaptive adversarial success is a robustness stress test, not the ordinary-cell error rate. |
+| [Beyond Calibration: Do a Typed-Decision Model's Probabilities Obey the Probability Axioms?](https://arxiv.org/abs/2609.33209), v1 | Logical negation/complement and categorical formulations can disagree even when each response is normalized. | Separate binary queries renormalized afterward do not reproduce a native multiclass Choice distribution. Freeze the requested answer space. |
+| [Evaluating and Benchmarking the System One Model Jev](https://arxiv.org/abs/2609.37647), v1 | Broad short-text evidence is positive in some domains and weaker for specialist, low-resource and fine-label tasks. It uses one request per item and cannot resolve closed pretraining exposure. | Measure heterogeneous effects and failure coverage rather than assuming Jev works uniformly across tables. |
+| [JEV-as-a-Judge: Accept When Confident, Escalate When Unsure](https://arxiv.org/abs/2609.26550) and [SearchJev](https://arxiv.org/abs/2610.05107) | Study confidence routing and specialized search decisions, including task-specific calibration/training. | Their quality/efficiency claims concern specific workloads. They do not certify general-purpose regression features or universal confidence thresholds. |
+| [Benchmarking System One decision models against trained classifiers and language models for automated decision gates](https://arxiv.org/abs/2610.00376) | Matched gates include trained classifiers, calibrated decisions and cascade costs. | Ordinary trained predictors remain necessary comparators. A fast decision API need not outperform a learner with labels. |
+| [StartLux-Decision: AutoThink Decision Models with Reinforcement Learning for Calibrated Deliberative Decisions](https://arxiv.org/abs/2610.17309), filed v1 | Combines instant typed readout with selective reasoning and learned probability objectives. | Reasoning and option-grouping introduce extra passes; public benchmarks guiding development are not independent validation. |
+
+The papers generally support the usefulness of compact typed interfaces, while giving
+mixed evidence for calibration, framing invariance, causal understanding and robustness.
+They do not establish that the eleven selected extractors produce interchangeable beliefs.
+The comparison must preserve their differences rather than normalize them away.
+
+Public tools already apply these interfaces to individual text columns. The
+[vd-jev VisiData plugin](https://github.com/ondata/vd-jev) returns typed columns and its
+procurement demonstration shows that documentary class descriptions change mappings of
+organization names. This is a developer demonstration, not an independent benchmark;
+it also illustrates that a short name may lack the information needed for the true label.
+
+## 4. Why these eleven extractors and how their interfaces differ
+
+The selected roster combines one funded hosted reference and ten open-weight releases
+that can express the complete answer spaces in the retained tasks. The largest target
+vocabulary has thirty classes; regression uses nine options. Revisions, licences, configured
+context bounds and base-model dependencies belong in
+[extractor configuration](../config/2.%20feature_creation/extractors.yaml), not duplicated
+mutable tables. Open-weight availability does not mean zero compute cost or unrestricted licensing.
+
+| Selected extractor | Source behavior that must survive the adapter |
+|---|---|
+| [Jev 1.13](https://docs.typesafe.ai/api) | Hosted Noul, Choice and Score. Pin the model; preserve usage/version and raw response. Organization throughput and context/billing bounds are separate concepts. |
+| [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Custom decision runtime, not ordinary generated chat. LFM Open License is a conditional open-weight licence, not a blanket permissive open-source claim; qualifying research permissions and redistribution conditions must be respected. |
+| [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Native decision head, noncausal full attention and saved calibration temperature. Generic causal-LM next-token inference is not equivalent. |
+| [Clef-flash](https://huggingface.co/Cloudflare/clef-flash) | `joint_schema_model.encode_record` and its joint head render/score the schema. The convenience encoder slices overlong state; JEVPFN rejects overflow and retains full-precision softmax. Hosted and open-weight context limits are not interchangeable. |
+| [Intern-Decision-4B](https://huggingface.co/internlm/Intern-Decision-4B) | Shifted answer-slot logits over legal candidates, then checkpoint-bound temperature. Keep the published calibration; do not refit it on benchmark labels. |
+| [Strands Decider 2B](https://github.com/strands-labs/strands-decider) | Pointer readout over supplied options and native ordered-scale handling. Mutable option offsets require serialized access to a shared engine. The original release and selected Qwen3.5 checkpoint are different versions. |
+| [H2O Lightning 4B](https://huggingface.co/h2oai/h2o-lightning-4b) | `pooled_readout.label_logits` and `h2o_lightning_shim.format_answer` use mixed attention/readout and type-specific processing. Its binary formatter imposes a 0.801 winning-probability floor. Preserve and disclose it; require publisher-anchor parity rather than claiming calibrated binary probabilities. |
+| [SII-Decision-27B-Full](https://huggingface.co/jylin001206/SII-Decision-27B-Full) | `sii_decision.prompts.prompt` and `Readout.forward` score ordered single-token labels at temperature one. Use the full checkpoint and complete descriptions. |
+| [Kev-27B](https://huggingface.co/jaredpalmer/kev-27b) | `kev.model.encode`, `DecisionModel.forward` and `PointerHead.forward` implement branch-aware readout with checkpoint temperature. Native state/branch bounds differ from the project-wide complete-request check. |
+| [Decision3 d3-turbo](https://huggingface.co/vllm-sr/d3-turbo) | `d3_format.render`/`encode_split` and native probability readout use prefix-bidirectional attention. An ordinary vLLM chat server is not a substitute. |
+| [Bespoke-Nimble-9B](https://huggingface.co/bespokelabs/Bespoke-Nimble-9B) | `serving_schema.prepare_prompts`, candidate logits and extended candidate-code schema. Pin the adapter and Qwen base separately; binary enum fields retain both class descriptions and the extended schema must retain all thirty Wine classes together. |
+
+Implementation comparison points are `src/jev/registry.py:ExtendedCounter`,
+`src/jev/open_runtimes.py`, `src/jev/extended_runtimes.py:ExtendedRuntime` and
+`src/jev/provider.py:response_features`; source maps are in the DM Library.
+Matching a schema is not sufficient: attention, calibration, token rendering, option order,
+numeric mapping, rounding and complete-input handling also need real runtime contracts.
+
+The common **semantic** inputs are the same task definition, question, named text and answer
+descriptions/order. Native requests are not byte-identical: each checkpoint requires its
+own tokenizer, serialization and answer representation. The common feature schema is one
+positive-class probability, one probability per multiclass label, or a probability-weighted
+direction on −4…+4; complete response distributions remain stored.
+
+Jev's observed two-decimal and Strands' four-decimal outputs can require bounded simplex
+reconstruction. The decoder permits only provider-specific rounding envelopes, retains raw
+values and rejects larger inconsistencies. Provider “confidence” fields are not a shared
+uncertainty scale. Derived entropy, maximum probability and directional variance have a
+common definition but still inherit different calibration and temperature policies.
+
+Other public releases are not automatically suitable replacements. Microsoft, OpenAI
+Decisions and hosted GLiDE are excluded by the owner's access/cost/scope choices, not
+evidence that they are worse. Jeff's checked serving release supports only sixteen options;
+StartLux/Torchcast grouping beyond twenty-six would change the thirty-class task's
+computation and probability meaning. Fastino's checked schema and full ordered-distribution
+mapping were not established for this common protocol. Reasoning, multi-round grouping or
+domain-specific extractors belong to separate methodological choices. Adding every release
+would not by itself improve an interpretable, reproducible comparison.
+
+## 5. MulTaBench, embeddings and native-text predictors
+
+### Dataset scope and target-aware adaptation
+
+[MulTaBench v2](https://arxiv.org/html/2605.10616v2) has forty core datasets:
+twenty text and twenty image tasks. The extended collection adds twenty of each; it is not
+forty core text tasks. Its curation requires joint multimodal signal and evidence that
+target-aware encoder adaptation helps several curation learners. This selects tasks
+enriched for multimodal/adaptation benefit, which limits population-wide generalization.
+
+The paper's five random-seed holdouts use a training cap and bounded test subsets, rather
+than five disjoint outer CV folds over all rows. JEVPFN's approved all-row shuffled five-fold
+protocol is intentionally different; published scores are context, not directly paired
+baselines. [Pinned split source](https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/preprocessing/splits.py)
+
+Appendix A.1's target-aware representation (TAR) shares E5-small across columns and adapts its
+last three layers with LoRA (rank 16, alpha 32, dropout 0.1). Column-name/value examples use
+training-row targets; an internal 90/10 split selects the checkpoint. Regression adaptation
+uses twenty equal-frequency target bins. This is valid supervised representation learning
+if bins, adaptation, selection and compression use only the relevant training partition.
+The paper describes outer-test isolation; this review does not certify every upstream line.
+
+JEVPFN's decision features use documentary target semantics without dataset-label fitting.
+Call this **task-conditioned feature extraction**, not supervised representation learning.
+Adding TAR would require training inside every applicable inner/outer partition, substantial
+additional compute and a separate experiment. Frozen controls therefore answer a narrower
+question than “better than every possible fine-tuned language pipeline.”
 
 [STRABLE: Benchmarking Tabular Machine Learning with Strings](https://arxiv.org/abs/2605.12292)
-distinguishes free text from names, codes and repetitive categories and compares modular
-and original-string systems across 108 tables. Its findings motivate retaining the
-length/cardinality/missingness audit and reporting heterogeneous dataset effects. Its
-decoder-embedding PCA findings do not prove a problem with our specific Qwen embedding
-checkpoint. Actual training-only explained variance is now inspected separately from
-predictive effects; no scaling or slicing method is selected from test scores.
+emphasizes that strings include names, codes, numbers, categories and prose. A compact
+decision feature can encode a category or familiar entity rather than natural-language
+reasoning. Text burden, missingness, exact reuse, named columns and seen/unseen-text cohorts
+should accompany performance, without claiming that these diagnostics identify causal mechanisms.
 
-[TILE: Bridging LLMs and Table Foundation Models for Tabular Learning with Strings](https://arxiv.org/html/2610.17065v1)
-(12 October 2026 preprint) is important adjacent work found in the live primary-source
-screen beyond the pinned library summary. It studies contextual row serialization,
-intermediate-layer features, column-wise pooling/PCA and numerical/categorical bypasses,
-with matched learners. It already establishes a broad representation-interface study;
-we cannot claim that comparing text pipelines in fixed predictors is new by itself.
-Our narrower potential contribution is the empirical utility, compression loss and
-sensitivity of task-conditioned **typed probability features**, across target types and
-text grouping modes. TILE is not a typed decision-model study. Its reported gains remain
-authors' evidence, not a JEVPFN reproduction or grounds to add a new method automatically.
+### Frozen encoder controls and PCA
 
-The paper's **40 core datasets comprise 20 text-tabular and 20 image-tabular tasks**;
-JEVPFN explores the complete core text subset and evaluates 18 after the two documented
-exclusions. The additional release contains another 20 text and 20 image datasets, not
-another 40 core text tasks. Those candidates meet Joint Signal but not necessarily
-Task-awareness; a separate extension could test sensitivity to this curation rule.
-Consumer Complaints includes complaint narratives; OSHA Injury includes accident abstracts
-and event descriptions. These are plausible narrative-rich additions requiring their own
-local audit and target/leakage review. News Channel contains article titles rather than
-article bodies, so its name alone does not establish long-text coverage. No datasets are
-added by this review. [Paper v2, §4 and Appendix F](https://arxiv.org/html/2605.10616v2#A6)
-
-The paper-era protocol uses classification AUC and regression R², five random seeds and a
-10,000-example training cap. The pinned `split_to_test` / `do_split` code uses repeated random
-train/test holdouts (`SEED + fold`), not five disjoint test partitions. Its default test size
-is min(10% of rows, 2,000); a supplied training cap overrides this by reserving the remaining
-rows for testing. Classification uses stratification, with special binary/rare-class handling.
-`split_to_val` requests min(10% of training rows, 1,000) for validation; the classification
-helpers additionally enforce their class-coverage rules. These constants alone
-must not be described as an unconditional 80/10/10 split or standard five-fold KFold.
-[Pinned split implementation](https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/preprocessing/splits.py),
-[paper setup, Appendix A.2](https://arxiv.org/html/2605.10616v1#A2)
-
-The project's shared shuffled CV/all-row protocol differs from those published holdouts;
-compare feature combinations on our fixed folds rather than treating paper scores as directly
-replicated. Pinned library defaults also differ from the paper's 2,000-iteration/early-stopped
-CatBoost. [Paper release](https://github.com/alanarazi7/MulTaBench/tree/paper_version)
-
-The pinned paper result tables distinguish frozen joint representations (`all`) from
-fine-tuned representations (`ft`). A read-only inspection of the core TEXT tables and
-`more_baselines/` identifies strong TabICLv2, TabM, AutoGluon-MM and TabSTAR results.
-TabM remains excluded. On 21 October the owner added AG-MM as the third standard
-original-text reference, alongside TabSTAR and ConTextTab. Published ranks do not isolate the benefit of decision-derived features.
-Older TabPFN-v2/v2.5 results cover only 18 of the 20 text datasets in the frozen comparison;
-coverage must accompany any rank. Rank within each dataset before averaging; never average
-raw AUC and R² together or pool text and image leaderboards. Published CSVs contain run
-metadata; retain only relevant aggregate evidence in research notes.
-[Pinned result tables](https://github.com/alanarazi7/MulTaBench/tree/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/leaderboard/results)
-
-The TabPFN-3.5 report separately evaluates the 20 text datasets. Its local 3.5 and Fast models
-use frozen E5-small-v2 representations, as do the non-native baselines; hosted Plus/Thinking
-use their own raw-text pipeline. That text subset is more relevant here than a general
-TabArena ranking. Authors' results are evidence, not an independent JEVPFN replication.
-[TabPFN-3.5 report, §2.4 and Appendix C.4](https://arxiv.org/html/2609.17895v1)
-
-E5-small-v2's model card specifies English input and a 512-token maximum. Frozen embeddings
-are a reproducible semantic baseline, but their prefix, pooling, truncation and checkpoint
-revision must be declared. Comparing Jev's longer inputs with truncated embeddings also
-changes text coverage; it is not solely a comparison of representation quality.
-[E5-small-v2 model card](https://huggingface.co/intfloat/e5-small-v2)
-
-The E5 family is introduced in Wang et al., [Text Embeddings by Weakly-Supervised Contrastive
-Pre-training](https://arxiv.org/abs/2212.03533). Contrastive training brings related texts
-closer in vector space; a frozen encoder makes no task-specific probability prediction.
-E5-small-v2's card declares MIT weights. Alternatives include
-[all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) and
-[BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5); these are background
-references, not additions to the selected encoder roster. E5-small is a reproducible and inexpensive
-control used in MulTaBench, not a claim about today's best encoder. MulTaBench v2 reports
-improved downstream performance from E5-large and studies PCA15/30/60 and an unreduced
-subset. Qwen3 Embedding (Zhang et al., 2025) reports strong MTEB results; these measure
-embedding tasks and do not establish superiority on our 18 tables. The owner selected
-E5-large-v2 and Qwen3-Embedding-0.6B as additional encoders. Both supply downloadable
-weights: E5-large's card declares MIT and Qwen's Apache-2.0. Immutable pins live in the
-encoder configuration, rather than duplicated here.
-[Qwen3 Embedding paper](https://arxiv.org/abs/2506.05176),
+[E5](https://arxiv.org/abs/2212.03533) learns text similarity through contrastive pretraining;
+it returns a vector, not task-class probabilities. E5-small-v2 is an inexpensive reproducible
+MulTaBench control, not a claim about the best current encoder. The selected E5-large-v2 and
+[Qwen3 Embedding](https://arxiv.org/abs/2506.05176) add scale/family comparisons. Strong MTEB
+results do not establish which encoder will best support these tabular predictions.
+[E5-small card](https://huggingface.co/intfloat/e5-small-v2),
 [E5-large card](https://huggingface.co/intfloat/e5-large-v2),
-[Qwen 0.6B card](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+[Qwen3-Embedding-0.6B card](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
 
-JEVPFN uses the E5 `query: ` feature prefix, masked mean pooling and L2 normalization.
-Qwen uses its documented last-token pooling without a query instruction for these
-unconditional text vectors. Long text uses nonoverlapping chunks, content-token-weighted
-vector aggregation and normalization. This project policy covers all source tokens but
-is not guaranteed equivalent to full-window encoding or the MulTaBench implementation.
-The Qwen chunk size is a computational setting below its native context window.
+The approved dimensions are 384 for E5-small and 1,024 for E5-large/Qwen. E5 uses its
+`query: ` feature prefix, masked mean pooling and L2 normalization; Qwen uses documented
+last-token pooling without a query instruction for these unconditional vectors.
+Nonoverlapping chunks, content-token-weighted aggregation and normalization cover long
+text. This is a declared project policy, not equivalence to full-window contextualization
+or MulTaBench's original preprocessing. Qwen's chunk length is below its native window.
 
-Per-column PCA32 and joint PCA256/128/64/32/16/8 are prespecified comparisons, not
-assumed optima. Per-column PCA keeps each column's representation separate but multiplies
-width by the number of text columns. Joint PCA limits total width and can capture
-cross-column covariance, but high-variance columns may dominate. Using the same K for
-both scopes changes total width (text-column count times K versus K); interpret it as
-a compression/grouping tradeoff, not an isolated grouping effect. Both are unsupervised;
-explained variance is not predictive relevance. Only training rows fit PCA or imputation,
-including each inner threshold-selection fold. Experiment 2 compares encoders without
-decision features; Experiment 3 compares native-text models. Combining selected winners
-belongs only to descriptive/exploratory Experiment 5 because the same test outcomes
-influence selection. More configurations do not provide independent evidence.
+Per-column PCA32 preserves separate column blocks; joint PCA256/128/64/32/16/8 compresses
+the concatenated text vectors. Non-text features bypass PCA. Joint PCA can capture
+cross-column covariance but high-variance columns can dominate. Per-column versus joint
+at the same component count also changes total width; it is a grouping/compression
+comparison, not an isolated grouping effect. Explained variance does not establish
+predictive relevance, and none of these dimensions is assumed optimal.
 
-The pinned Kumo default recipe adds count encodings for categorical columns with more
-than 50 categories, then selects the first 500 features. JEVPFN refuses such feature
-loss instead of treating it as a fair all-feature comparison. This is the selected
-recipe's limitation, not proof of an architectural maximum.
-[Pinned recipe](https://github.com/NVIDIA/structured-data-models/blob/bd2d55db104679393fcd6afe13305f37e40b5467/sdm/models/kumo/tabular/recipe.py),
-[count encoding](https://github.com/NVIDIA/structured-data-models/blob/bd2d55db104679393fcd6afe13305f37e40b5467/sdm/processing/categorical/count.py)
+Imputation and PCA fit on training rows only, including each inner threshold fold.
+Validation/test rows are transformed by that fitted map and receive exactly the same
+output columns. Frozen embeddings can be cached across folds; fitted PCA cannot.
+See `src/data/text_embeddings.py` and
+`src/evaluation/embedding_control.py`, `prepare_pca.py`, `pca_cache.py`.
 
-Non-text-versus-text-augmented gains include text availability as well as content.
-The additional presence-only reference for every main predictor separates these effects.
-Synthetic known-answer tests establish interface behavior only. A deterministic,
-label-blind real-input sensitivity sample measures wording/context/option-order drift;
-it cannot certify robustness over all datasets or establish a paraphrase's semantic
-equivalence. TypeSafe itself documents irrelevant-context, instruction and option-order
-sensitivity in [Jev 1.13's limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
+A useful fourth representation family is word/character **TF-IDF**, optionally followed by
+TruncatedSVD. Length/count controls do not replace lexical representations. This remains a
+recommendation, not an approved executable arm. Vocabulary, IDF and SVD would need fold-local
+fitting. [Official text-feature guide](https://scikit-learn.org/stable/modules/feature_extraction.html#text-feature-extraction)
 
-### Paired inference and pretraining-overlap review
+### What the prediction systems mean by text support
 
-The scientific comparison is within a fixed predictor, using identical splits. TabSTAR and
-ConTextTab are descriptive reference systems; their different predictors cannot isolate the
-effect of replacing a text representation. A frozen encoder in the same predictor supplies
-that missing conventional comparison. Observed paired gains can be reported descriptively
-without a significance test, but fold SD is not uncertainty for an independent-sample mean:
-training sets overlap. [Bengio and Grandvalet (2004)](https://jmlr.org/papers/v5/grandvalet04a.html)
-establish the general cross-validation variance difficulty. [Demšar (2006)](https://jmlr.org/papers/v7/demsar06a.html)
-supports using datasets as comparison units. The implemented optional Wilcoxon/Holm procedure
-requires a complete predeclared family, separate task metrics and one five-fold mean delta
-per dataset. It cannot turn this curated set into a random sample of all tabular tasks;
-few classification datasets and multiple comparisons limit power. Do not choose the metric,
-model or best feature arm after seeing test results and call that choice confirmatory.
+The six fixed predictors compare representations while retaining original non-text columns.
+Raw categorical strings are not automatically semantic language encoding.
 
-There are only three binary, six multiclass and nine regression datasets in the selected
-subset. The ideal minimum two-sided exact signed-rank p-values with no ties/zeros are
-0.25, 0.03125 and 0.00390625 respectively, before multiplicity correction. Thus binary
-effects cannot establish p < .05 with that test on three datasets, even with identical
-signs. Report descriptive paired effects and coverage; do not claim power that this design
-does not have. The result summaries expose this bound without approving a headline metric.
+| System | Interpretation and important limitation |
+|---|---|
+| TabPFN-3.5 local | Its selected interface uses our numeric/categorical features. TabPFN v9's optional `TextTransformer` uses skrub character TF-IDF/SVD; this is not the hosted Plus/Thinking semantic workflow, and is not exclusive to 3.5. |
+| TabICL v2 | Classification/regression checkpoints with numeric/categorical inputs; no native general-language encoder in the selected recipe. Many-class handling must retain every class. |
+| LimiX-2 | V2 numeric/categorical predictor, distinct from the older LimiX-2M. `RebalanceFeatureDistribution.fit_transform` already fits on training rows despite the confusing `quantile_norm_all_data` name. Other upstream filtering/category/polynomial steps inspect query rows; our declared training-only adaptation is documented in [README](../README.md#models-and-comparisons) and still requires real 0B validation. |
+| Kumo Tabular | NVIDIA SDM single-table model, not relational KumoRFM. The pinned recipe count-encodes some categories and selects at most 500 columns. JEVPFN rejects feature loss; 500 is a recipe bound, not a proven architectural maximum. |
+| CatBoost | Has separate native text tokenizers/dictionaries/calculators, but the selected main comparison uses numeric/categorical input plus the explicit representations. |
+| Linear/logistic regression | Requires fold-local imputation, categorical encoding and scaling; has no implicit language encoder. |
 
-Task-conditioned decision features and task-agnostic E5 embeddings do not isolate only
-model architecture: they also differ in allowed task information. Interpret their comparison
-as practical representation utility. Common missing-text indicators remove an avoidable
-information imbalance. Provider-defined confidence fields are not a shared uncertainty scale;
-the optional uncertainty view derives entropy, peak probability and directional variance from
-each full distribution, without fitting calibration to benchmark labels. The robustness
-probes measure prompt sensitivity; they cannot prove semantic invariance or contamination absence.
+Sources: [TabPFN text source](https://github.com/PriorLabs/TabPFN/blob/v9.0.0/src/tabpfn/preprocessing/text.py),
+[TabICL](https://github.com/soda-inria/tabicl),
+[LimiX pin](https://github.com/limix-ldm-ai/LimiX/tree/516bf396333feb3198cf7aff8a6c10421f218e24),
+[Kumo recipe](https://github.com/NVIDIA/structured-data-models/blob/bd2d55db104679393fcd6afe13305f37e40b5467/sdm/models/kumo/tabular/recipe.py),
+[CatBoost calculators](https://catboost.ai/docs/en/references/text-processing__feature_calcers).
+Kumo point regression averages its 999 predicted quantiles; probability columns are reordered
+to the dataset vocabulary. Source compatibility does not prove full-fold GPU capacity.
 
-Pretraining review applies to every pretrained extractor, E5 and downstream/native-text
-model. Before interpreting results: (1) inspect the pinned model card and released training
-source lists, (2) cross-reference dataset aliases and original sources in DATA_SOURCES,
-(3) record documented overlap, plausible overlap or unknown, with source/version/date,
-and (4) report any documented-overlap subset separately without silently removing datasets.
-For open models with available corpora, exact text-hash matching is useful; absence of an
-exact match cannot exclude paraphrases or undisclosed base-model data. Closed training sets
-must remain unknown. A publication-after-training-cutoff subset is defensible only when both
-dates are verified. No cutoff or absence of overlap should be inferred from a release date.
+The three native-text references have different learning procedures:
 
-Masking names/numbers or paraphrasing can test robustness but also removes legitimate signal
-and cannot prove absence of contamination. Oren et al.'s
-[black-box contamination test](https://arxiv.org/abs/2310.17623) relies on likelihood access
-and exchangeability assumptions; a decision-probability API does not expose those likelihoods.
-Here "label-free extraction" means no row targets/statistics enter the representation pipeline;
-it does not establish that pretrained weights never saw public labels. Seen/unseen-text CV
-cohorts address observed repetition, not all pretraining contamination or semantic confounds.
+- **[TabSTAR](https://github.com/alanarazi7/TabSTAR)** uses text representations and supervised
+  task adaptation. Its internal validation and verbalizer fit use the supplied training fold.
+  Required adaptation is part of this model, not a new HPO campaign.
+- **[ConTextTab / SAP RPT-1 OSS](https://github.com/SAP-samples/sap-rpt-1-oss)** embeds column
+  names/values and uses labeled training rows as semantic in-context examples. The publisher
+  encoder truncates individual strings to 512 tokens. Our all-training-row, one-bag recipe
+  must pass resource tests; the default 8,192-row context is not evidence that arbitrary
+  full folds fit. Code and research-restricted checkpoint licences differ.
+- **[AG-MM](https://auto.gluon.ai/stable/api/autogluon.multimodal.MultiModalPredictor.fit.html)**
+  is AutoGluon MultiModalPredictor with a fixed `medium_quality`/ELECTRA-base recipe,
+  numerical/categorical encoders and fusion. It is not a TabularPredictor search. HPO and
+  model ensembling are disabled; internal validation remains training-only.
 
-An earlier multimodal-embedding study evaluates TabPFN as a head on frozen image, text and
-audio encoders, with gains varying by label budget and representation dimension. Thus both
-semantic embeddings plus TabPFN and downstream calibration assessment precede this project;
-compactness is a hypothesis to measure, not a novel property of attaching features to TabPFN.
-[TabPFN beyond Tabular Data](https://arxiv.org/abs/2607.11007)
+“E2E” in MulTaBench denotes systems accepting original text through their prediction
+pipeline; it does not mean all of them fine-tune in the same way. MulTaBench does not
+identify TabSTAR and ConTextTab as its two strongest methods: AG-MM and other methods are
+competitive, while ConTextTab is weaker in its text analysis. All three are now descriptive
+reference systems, not exhaustive SOTA coverage. Their different predictors cannot isolate
+the benefit of replacing a text representation within a fixed predictor.
+[MulTaBench results and ablations](https://arxiv.org/html/2605.10616v2)
 
-## 2. What “handles text” actually means
+## 6. Leakage protection, uncertainty and valid interpretation
 
-Three capabilities should be distinguished: accepting strings as categorical identifiers,
-converting text into numerical representations before tabular inference, and using a learned
-language encoder as part of the predictor. Accepting a string is not evidence that a model
-uses its semantic meaning. Every tabular engine can in principle consume appropriately shaped
-numeric Jev outputs; raw-text support is a separate comparison.
+### What label-free extraction does and does not guarantee
 
-### TabPFN-3 and TabPFN-3.5
+Allowed context consists of sourced observation units, target definitions/units, original
+class vocabulary/meanings, text-column names and row text. Row targets, frequencies,
+target summaries, correlations and model feedback are excluded. Documentary descriptions
+still require human provenance review: schema validation cannot certify that prose contains
+no answer leakage. The exhaustive question audit checks file hashes, schema, row mappings,
+fixed questions and empty-input behavior; it cannot prove perfect linguistic interpretation.
+See `src/jev/question_audit.py:audit_dataset`.
 
-In package 9.0.0, `TextTransformer` is shared by the classification/regression estimator
-pipeline, rather than restricted to the V3.5 checkpoint. `TRANSFORM_TEXT` is **false by
-default**. Enabling it applies `skrub.StringEncoder`: character n-gram TF-IDF followed by
-truncated SVD, at most 30 components by default. Eligibility depends on pandas string dtype,
-cardinality and categorical declarations; ordinary object columns are not expanded. Missing
-text becomes an empty string and hence an all-zero encoded row. Inspect which official text
-columns were actually expanded; otherwise the experiment can silently compare categories.
-[Versioned text implementation](https://github.com/PriorLabs/TabPFN/blob/v9.0.0/src/tabpfn/preprocessing/text.py),
-[inference configuration](https://github.com/PriorLabs/TabPFN/blob/v9.0.0/src/tabpfn/inference_config.py)
+The main comparison uses the same outer splits across representations, with stratification
+for classification and shuffled KFold for regression. Binary thresholds maximize F1 using
+three-fold out-of-fold predictions from the outer training partition, followed by a refit
+on all outer training rows. PCA, preprocessing and any internal model validation remain
+inside their training partitions. Multiclass uses the full probability vector/argmax;
+regression retains point predictions and applicable continuous-target metrics.
+[Threshold selection guidance](https://scikit-learn.org/stable/modules/classification_threshold.html),
+[Cawley and Talbot, 2010](https://jmlr.org/papers/v11/cawley10a.html)
 
-Select `ModelVersion.V3` versus `ModelVersion.V3_5` explicitly. Local checkpoints both need
-text encoding; the statement “3 cannot use text, 3.5 natively understands it” conflates model
-and software/service versions. Hosted **3.5-Plus** and Thinking are separate systems. Both
-3 and 3.5 have hosted Thinking selectors, which spend additional inference compute and are
-not interchangeable with local defaults. Their access, costs and encoder details would need
-separate experimental accounting. [Official model source](https://github.com/PriorLabs/TabPFN),
-[Thinking documentation](https://docs.priorlabs.ai/capabilities/thinking-mode)
+Shuffled row CV estimates performance for held-out rows under this distribution. It does
+not estimate generalization to new times, entities or disjoint text identities. Repeated
+text is not automatically leakage under this approved estimand, but can permit memorization
+and make apparent semantic benefit less general. Text-only seen/unseen/empty cohorts are
+defined from shared folds, so within-cohort paired arm comparisons remain valid.
+They do not prove a causal mechanism. See `src/evaluation/text_overlap.py`.
 
-### Other numeric and categorical predictors
+Pretraining overlap remains a separate limitation for every pretrained extractor, encoder
+and predictor. Review model cards/training lists against dataset aliases and original
+sources; record documented, plausible or unknown overlap with evidence and dates.
+Exact matches help when corpora are available, but absence of a match does not exclude
+paraphrases or undisclosed base-model data. Release dates are not training cutoffs.
+Paraphrases or entity masking also remove useful signal and cannot prove clean pretraining.
+[Oren et al.'s contamination test](https://arxiv.org/abs/2310.17623) requires likelihood
+access/assumptions not supplied by a typed-probability API. “Label-free” therefore describes
+our pipeline, not a guarantee that pretrained weights never saw public labels.
 
-The selected numeric predictors require explicit handling of categorical inputs and missing
-values. Their raw-text capabilities are separate from receiving numeric decision features.
+### Comparisons and probability meaning
 
-| Engine | Tasks and text treatment | Relevant interface limitation |
-|---|---|---|
-| TabICL v2 | Classification and regression; no built-in semantic text encoder. Strings/categories need the wrapper's encoding or explicit text embeddings. | Separate classifier/regressor checkpoints; `support_many_classes=True` enables the many-class wrapper. |
-| LimiX-2 | Classification, regression and missing-value imputation. Numeric/categorical array interface; no documented raw-language encoder. | 400M model, distinct from the older 2M-parameter LimiX-2M; `LimiXPredictor` and V2 configs. |
-| NVIDIA Kumo Tabular | Classification/regression over numeric and categorical tables through SDM; no native language encoder. | Task-specific checkpoints, many-class decomposition; regression point prediction is the mean of 999 predicted quantiles. Default preprocessing selects at most 500 columns. |
-| CatBoost | Classification and regression; built-in text tokenizers, dictionaries and feature calculators, separate from categorical features. | BoW, NaiveBayes and BM25 are different encodings; validate regression-compatible calculators and empty vocabularies. |
-| Logistic / linear regression | Classification / regression respectively; no raw-language input. | Training-only imputation, category encoding, scaling and optional TF-IDF/embeddings. |
+Decision features receive target semantics; frozen E5/Qwen vectors do not. Comparing them
+estimates practical representation utility, not solely architecture superiority.
+The common presence-only reference separates text availability from content; cheap text
+statistics measure length/string cues. Neither establishes a complete lexical baseline.
 
-Primary implementation references: [TabICL](https://github.com/soda-inria/tabicl),
-[LimiX-2](https://github.com/limix-ldm-ai/LimiX), [Causilo](https://github.com/nums-ai/causilo),
-[Mitra-v2 classifier](https://huggingface.co/autogluon/mitra-classifier-2),
-[Mitra-v2 regressor](https://huggingface.co/autogluon/mitra-regressor-2),
-[EXAONE](https://github.com/LGAI-Research/EXAONE-Tabular),
-[TabDPT](https://github.com/layer6ai-labs/TabDPT-inference),
-[CatBoost text calculators](https://catboost.ai/docs/en/references/text-processing__feature_calcers),
-[scikit-learn linear models](https://scikit-learn.org/stable/modules/linear_model.html).
+A binary value is evidence for a supplied class, not an empirically calibrated
+`P(dataset target | all original features)`. Multiclass probabilities concern the whole
+provided option set, not independent binary answers. A regression expectation on −4…+4
+is an analyst-defined summary of ordered evidence levels, **not target units**. Equal
+numeric spacing is a rubric assumption, and opposite strong evidence can average to zero.
+Retaining nine probabilities makes entropy/variance or full-distribution sensitivity possible.
+Calibration claims require suitable labels, definitions and task-specific evidence;
+[Guo et al., 2017](https://proceedings.mlr.press/v70/guo17a.html) does not imply that a
+provider's temperature automatically calibrates these new tasks.
 
-These sources establish task families, not successful coverage of our exact 20 datasets.
-Spotify's 114 classes motivated its exclusion from extraction and all experiments on
-12 October; raw data remains available in the 20-dataset exploration. A many-class decomposition can
-increase inference cost considerably. Declare context subsampling and failure coverage,
-and keep missing values distinct from failed responses.
+The primary representation families in Experiments 1–3 are prespecified. Any combination
+selected using their outer-test results belongs only to descriptive/exploratory Experiment 5.
+Reusing the same test rows after selecting a winner cannot establish an independent
+confirmatory gain. Recording many metrics is useful, but a headline claim chosen afterward
+must be identified as exploratory. Full out-of-fold predictions, probabilities, row/split
+identities and fit/predict timings support later transparent reanalysis.
 
-Mitra-v2's reviewed runtime imports AutoGluon despite marking it optional; no supported
-independent route was verified. Causilo, Mitra-v2, EXAONE and TabDPT remain literature
-references, outside the executable catalog. Weight licences and runtime constraints need
-independent review when any model is selected.
+Fold standard deviation is descriptive, not an independent-sample confidence interval:
+outer training sets overlap. The optional paired Wilcoxon/Holm analysis uses per-dataset
+mean deltas, a complete predeclared comparison family and separate task metrics.
+With only three binary, six multiclass and nine regression datasets, ideal minimum
+two-sided exact p-values are 0.25, 0.03125 and 0.00390625 before correction. Binary
+significance at .05 is impossible with three independent dataset units under that test.
+Report paired effects, coverage and limitations rather than manufacturing power from folds.
+[Bengio and Grandvalet, 2004](https://jmlr.org/papers/v5/grandvalet04a.html),
+[Demšar, 2006](https://jmlr.org/papers/v7/demsar06a.html)
 
-### Predictors with language encoders
+## 7. Question clarity, context and useful diagnostics
 
-**TabSTAR** jointly uses text and other table features with a pretrained text representation
-and task adaptation, exposing classifier and regressor interfaces. Its real-data pretraining
-and task-specific training budget need to be distinguished from a label-free cached feature.
-[Official implementation](https://github.com/alanarazi7/TabSTAR),
-[NeurIPS paper](https://proceedings.neurips.cc/paper_files/paper/2025/file/faf6e23e198314c7728eaa6ac44ae079-Paper-Conference.pdf)
+Clarity means explicit referents, relevant definitions and distinct alternatives; it does
+not establish an optimal prompt. Grice's [Logic and Conversation](https://danielwharris.com/teaching/spring16/readings/Grice_1975_LogicConv.pdf)
+concerns human discourse, not a validated decision-model recipe.
+[Learning from Task Descriptions](https://aclanthology.org/2020.emnlp-main.105/) and
+[Gen-Z](https://proceedings.iclr.cc/paper_files/paper/2024/hash/af7cc9e2366b8f8837a6ef339810277a-Abstract-Conference.html)
+motivate explicit task/class definitions, but do not establish gains for all selected models.
 
-**ConTextTab / SAP RPT-1 OSS** embeds column names and values before semantic in-context
-learning. Both task families and missing values are supported. Its reference setup uses
-Python 3.11; the recommended 8,192-row context and bagging can require 80GB GPUs. Weights
-derive from real-table data with research restrictions.
-[ConTextTab implementation](https://github.com/SAP-samples/sap-rpt-1-oss)
+“Higher/lower” requires a comparison class. Documentary descriptions specify the kind of
+observation, while the model supplies background expectations without dataset target
+statistics. The weak/moderate/clear/strong nine-level rubric makes levels distinguishable;
+it does not establish a common numerical reference across models or datasets.
+[Kennedy, Vagueness and Grammar](https://semantics.uchicago.edu/kennedy/classes/s06/readings/kennedy05.pdf)
 
-Repository review on 21 October: TabSTAR code uses MIT; SAP's repository uses Apache-2.0
-for code but explicitly limits checkpoint use to research under inherited data conditions.
-These are locally runnable academic baselines, not interchangeable licence promises.
-MulTaBench v2 does not identify them as its two strongest methods: it reports ConTextTab
-below TabSTAR and AutoGluon-MM on its text analysis. All three are now selected, comparing
-supervised adaptation with semantic in-context prediction. This is not exhaustive SOTA
-coverage. [MulTaBench v2, text results and PCA ablations](https://arxiv.org/html/2605.10616v2)
-
-**AG-MM** uses AutoGluon's MultiModalPredictor, not a TabularPredictor model search.
-The fixed JEVPFN recipe is `medium_quality`, ELECTRA-base text encoding, numerical and
-categorical encoders and a fusion network, with HPO and model ensembling disabled.
-Official MulTaBench text annotations override automatic type detection. Internal validation
-is drawn only from the current training partition. Pinned 1.6.1 requires Transformers
-below 5.15, so it must not share E5's 5.17 runtime. Offline checkpoint assets and actual
-GPU compatibility remain 0B requirements. E2E in MulTaBench means native raw-text input
-to the prediction system; it does not mean every such model fine-tunes on each task.
-[Publisher fit API](https://auto.gluon.ai/stable/api/autogluon.multimodal.MultiModalPredictor.fit.html)
-
-TabSTAR, ConTextTab and AG-MM provide original-text controls with language encoders; their supervised
-adaptation and training-context policies must be distinguished from cached label-free features.
-
-Source audit on 13 October: TabSTAR `BaseTabSTAR.fit` performs supervised adaptation and
-creates internal validation from the supplied training fold when none is passed; its verbalizer
-is fitted on that internal training subset. This required adaptation is part of TabSTAR, not
-an added HPO campaign. ConTextTab `RPT` wrappers default to 8,192-row contexts and bagging;
-our adapter explicitly uses one bag and the complete outer/inner training partition. That
-removes silent row sampling but does not prove that large contexts fit memory. `SentenceEmbedder.embed`
-truncates each embedded string to 512 tokens, which must be reported as baseline preprocessing.
-Column names and values are embedded, then labeled training rows provide prediction context.
-[Pinned TabSTAR source](https://github.com/alanarazi7/TabSTAR/tree/32b232243e06018f3d3f86f006d9337de68ac15b),
-[pinned ConTextTab source](https://github.com/SAP-samples/sap-rpt-1-oss/tree/a0067b3c9db56bc35a6dcab09a9223a3ff0821e0)
-
-NVIDIA Kumo Tabular is the single-table model in `structured-data-models`, not the relational
-KumoRFM API. The adapter follows the publisher's SDM prediction path, keeps every training
-row, batches queries, reorders class probabilities and averages predicted quantiles for point
-regression. Its default 500-column selection is rejected on overflow. LimiX uses the publisher's
-V2 no-retrieval recipes. Their `quantile_norm_all_data` name should not be treated as evidence
-of test-set fitting: inspection of `RebalanceFeatureDistribution.fit_transform` shows the
-train/test split and fitting on training rows. These interfaces are source-checked; real
-checkpoint loading, full-fold resources and pretraining overlap remain pilot requirements.
-[Pinned SDM implementation](https://github.com/NVIDIA/structured-data-models/tree/bd2d55db104679393fcd6afe13305f37e40b5467),
-[Kumo weights](https://huggingface.co/nvidia/Kumo-Tabular),
-[pinned LimiX implementation](https://github.com/limix-ldm-ai/LimiX/tree/516bf396333feb3198cf7aff8a6c10421f218e24)
-
-A related 8 October preprint, [Estimating Uncoded Crash Factors with Tabular Foundation and
-System One Models](https://arxiv.org/abs/2610.10321), uses Kumo on coded crash records and Jev
-on narratives, with human recalibration and population-estimation methods. This was checked
-at abstract level. It is relevant prior art for combining tabular and decision systems, not
-evidence that this project's eleven-extractor, separate/joint MulTaBench comparison has
-already been evaluated. Novelty must rest on the controlled representation comparison,
-coverage and reproducible extraction evidence rather than merely mentioning Jev plus a TFM.
-
-## 3. Jev as a probabilistic feature extractor
-
-Jev exposes typed decisions rather than generated explanations. Noul returns one yes/no
-probability; Choice returns the full option distribution; Score returns probabilities on an
-ordered rubric and their expectation. Choice/Score also return confidence. Current limits
-allow 255 Choice options and ten Score levels, sufficient for 114 classes and our nine-level
-rubric. Returned probability meaning and calibration still require empirical inspection;
-typed output prevents a format error, not an incorrect decision.
-[API contract](https://docs.typesafe.ai/api), [primitives](https://docs.typesafe.ai/introduction)
-
-Score descriptions need semantic distinctions. Numeric markers and degree adjectives alone
-do not explain what separates adjacent levels. The provider recommends independently
-meaningful descriptions of observable situations. Distinguish explicit comparisons, direct
-relevant information, qualified evidence and indirect hints, without counting clues or using
-label-derived quantiles/target means. This defines evidence strength, not a calibrated target
-value. Jev explicitly warns against using interpolated Score outputs as
-exact numeric magnitudes. Retaining the full distribution also distinguishes neutral evidence
-from opposing evidence that happens to average to zero.
-[Score guidance](https://docs.typesafe.ai/primitives/score),
-[numeric calibration limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
-
-Generic directional evidence remains an experimental representation: its reference is not a
-dataset mean, quantile or target unit. Explicit wording is not automatically stronger evidence
-than accurate indirect information. A nine-level rubric therefore needs label-blind semantic
-checks, including negation, unsupported assertions, conflicting cues and irrelevant text.
-Whether nine distinctions work reliably is an empirical question, not guaranteed by Score's
-ability to return nine probabilities. Acceptance of wording is not validation of model behavior; the concrete rubric is centralized
-in the source rather than maintained in this literature review.
-
-The documented weaknesses include numeric/date reasoning, multi-step indirection and long
-states with irrelevant details. Officially designated text fields can contain identifiers,
-dates and measurements, so the text-column audit is essential. Joint input is not guaranteed
-to outperform separate columns; more context can introduce distraction. Do not combine
-separate-column questions against an all-text state and call that the same ablation: each
-question would then see other columns.
+Prompt-based studies find that apparently instructive wording can perform for unexpected
+reasons and that meaning-preserving formatting changes can alter performance.
+Freeze common semantics and predeclare small label-blind sensitivity probes instead of
+choosing wording from final CV scores. Distinguish probability shifts, class flips and
+request failures. These probes diagnose sensitivity, not prove semantic equivalence or
+absence of all prompt injection.
+[Webson and Pavlick, 2022](https://aclanthology.org/2022.naacl-main.167/),
+[Sclar et al., 2024](https://proceedings.iclr.cc/paper_files/paper/2024/hash/6c0e99d736da621403018ca7b32b1a4d-Abstract-Conference.html),
 [Jev 1.13 limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13)
 
-Identical request construction and identical API execution are different claims. We guarantee
-the former and reuse the first validated cached response for every matching input. Reproducible
-features therefore do not depend on an unverified promise of bit-identical repeated inference.
-Pin model IDs, not moving aliases; retain the actual response model and usage. This makes
-the experiment reproduce the saved representation even if provider execution changes later.
+Count each fully rendered request with the actual provider tokenizer. Input strings,
+token counts and context windows are different quantities. Current policy rejects overflow;
+it does not silently truncate, drop rows or adopt an intersection subset. Any later common
+shortening, chunking or coverage restriction changes the estimand and needs an explicit
+decision before outcomes. Decision chunking also needs a defined aggregation rule and may
+lose cross-column interactions. Supported length is not proof of equally effective use of
+every position. [Lost in the Middle](https://aclanthology.org/2024.tacl-1.9/)
 
-### Deployment evidence
+The most informative figures consequently show text-column counts, nonempty cells, lengths
+and tails, exact per-column/joint reuse, request and affected-row coverage, feature width,
+probability/expected-score disagreement and paired predictive gains. Accuracy alone hides
+calibration and individual disagreement; provider-average distances need shared row coverage
+and aligned option identities. Missing inputs, failures and excluded datasets should remain
+distinct. Plot declared no-data states until real features/results exist.
 
-The publisher's [model reference](https://docs.typesafe.ai/models) documents Jev's version,
-price and dynamic limits. Those references do not establish our account's allowance or bill.
-Calibration against returned usage, explicit version identity and ambiguous-response handling
-are empirical requirements. Current configuration and connection steps live in VSC/config;
-character-based estimates must never be treated as exact counts or safe context bounds.
-
-## 4. Evaluation implications
-
-Feature reuse across CV folds is valid only while construction remains independent of row
-targets and fitted label statistics. Class names are part of the declared task; their
-frequencies are not. Manual rubric changes selected from evaluation scores would violate this
-separation even without gradient training. Freeze the feature definition before evaluation.
-
-Threshold optimization changes binary decisions without changing probability estimates.
-Choose thresholds from held-out or inner out-of-fold predictions within each outer training
-set, never outer test predictions or the estimator's in-sample predictions. Refitting after
-threshold selection can change calibration and must follow an explicit rule. Multiclass
-argmax and macro-F1 are distinct from binary threshold optimization; regression requires a
-continuous-target metric. [Threshold guidance](https://scikit-learn.org/stable/modules/classification_threshold.html)
-
-Nested evaluation separates selection from assessment: choices optimized on noisy validation
-scores can overfit that validation procedure, so the final outer test fold must remain untouched.
-Scikit-learn's threshold wrapper supports both internal CV and a single validation fraction;
-the former permits a final refit, whereas `refit=False` requires a single split. Its default
-objective is balanced accuracy, not F1. Positive-class semantics and the F1 scorer must be
-supplied explicitly. The library interface does not establish which validation budget is
-best for these datasets. [Cawley and Talbot (2010)](https://www.jmlr.org/beta/papers/v11/cawley10a.html),
-[TunedThresholdClassifierCV](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TunedThresholdClassifierCV.html)
-
-Exact text repetition lowers extraction cost but does not prove independent rows. The owner
-chose shuffled row CV, so the benchmark does not estimate unseen-entity or future-time
-generalization. Target-proxy/input-availability review remains relevant. Frozen
-language embeddings may be computed once if truly independent of these labels, but PCA,
-TF-IDF vocabulary fitting, category encoding and imputation belong within training folds.
-Real-table-pretrained models additionally require overlap review; synthetic-only pretraining
-does not eliminate every risk of overlap in auxiliary language models.
-
-Group splits estimate generalization to unseen entities; forward splits estimate prediction
-of later observations. They address different questions and are outside the agreed initial
-scope. Stratification applies to both binary and multiclass targets; check rare-class fold
-feasibility without silently merging or dropping classes.
-[Cross-validation guidance](https://scikit-learn.org/stable/modules/cross_validation.html)
-
-Probability quality, ranking and hard decisions answer different questions. Log loss and
-Brier evaluate probabilities; AUC evaluates rankings; F1 depends on a decision rule. Average
-precision and trapezoidal PR-AUC use different interpolation conventions. Binary positive-class
-Brier is in [0,1], whereas a sum over all class coordinates is in [0,2]. State the convention
-rather than comparing incompatible values. ECE depends on binning and is not a proper scoring
-rule; retain bin counts and use it diagnostically. Calibration fitted with labels belongs
-inside training partitions, not on the test fold.
-[Scikit-learn metrics](https://scikit-learn.org/stable/modules/model_evaluation.html),
-[Guo et al. (2017)](https://proceedings.mlr.press/v70/guo17a.html)
-
-For regression, percentage/log errors require meaningful target units; positive numbers alone
-do not justify MAPE or RMSLE on an already transformed target such as `log_price`. Distributional
-scores require actual quantiles or predictive distributions, not fabricated uncertainty from a
-point estimate. Report unavailable metrics explicitly. Separate fit, prediction, encoding,
-model loading and selection costs: some in-context learners do most computation at prediction
-time. CUDA timings require synchronization; one-time Jev extraction is not a per-fold fitting cost.
-
-Compare improvements within the same dataset, split, model and compute budget. Aggregate
-across datasets with equal dataset weights and report coverage; large datasets should not
-dominate solely by row count. Do not treat five correlated folds as five independent datasets
-for significance testing. Distinguish default inference, tuned inference, supervised
-fine-tuning and ensembles. These distinctions explain why a leaderboard's “best model” is
-not automatically the best controlled baseline for this study.
-
-If formal multi-dataset testing is later justified, Demšar discusses paired Wilcoxon comparisons
-for two methods and Friedman/post-hoc comparisons for several methods, using datasets as
-comparison units. This is background, not a required model-ranking campaign for JEVPFN.
-Raw RMSE differences across unrelated target units should not be pooled; neither should raw
-F1 and RMSE. Small task families (here only three binary datasets) have weak inferential power.
-[Demšar (2006)](https://www.jmlr.org/papers/v7/demsar06a.html)
-
-TabArena highlights standardized evaluation and explicit treatment of tuning/ensembling budgets.
-Its methodology is relevant even though JEVPFN does not run a broad AutoML search. A checkpoint,
-an estimator preset, a fine-tuned model and a large ensemble are different comparison units.
-Training rows exposed to the wrapper and effective in-context rows must both be recorded;
-silently lowering only a failing model's context changes the comparison.
-[TabArena](https://arxiv.org/abs/2506.16791)
-
-
-## 5. Decision-model releases and probability evidence — checked 14 October 2026
-
-These are text-to-probability extractors, distinct from downstream tabular predictors. No new
-extractor is enabled by this review. Comparable extraction must use the same label-free states,
-class vocabulary, regression rubric and dataset selection. Vendor decision leaderboards do not
-establish improvement on MulTaBench or equivalence of calibration across providers.
-
-| Extractor | Verified primary evidence | Relevance and limitation |
-|---|---|---|
-| Jev 1.13 | [TypeSafe model reference](https://docs.typesafe.ai/models), checked 12 October: $0.042/M input tokens, output free; published 80 RPS/100k TPS, dynamic. | Main extractor stays pinned; confirm organization-specific limits with TypeSafe. The owner's direct correspondence confirms the price but offers no research exemption. |
-| Microsoft-Decision-1 | [9 October release](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/): hosted Qwen3.5-9B decision head, Noul/Choice/Score. | Excluded by owner decision for practical access/throughput constraints before comparative outcomes; no inference adapter or evaluation arm. This is not evidence of inferior quality. |
-| Liquid d1-3B | [7 October open-weight release](https://www.liquid.ai/blog/d1-open); [publisher model card](https://huggingface.co/LiquidAI/d1-3B). Approximately 3B parameters, not 13B. Noul/Choice/Score, full probabilities, 32,768 context. | Close schema match and small self-hosted comparator. The [LFM Open License](https://huggingface.co/LiquidAI/d1-3B/blob/main/LICENSE) explicitly exempts qualifying nonprofits' noncommercial/research use from its commercial revenue threshold; attribution/redistribution conditions remain. Use its custom decision interface, not generated chat examples. No model downloaded. |
-| Cloudflare Clef-flash | [Hosted reference](https://developers.cloudflare.com/workers-ai/models/clef-flash/): $0.038/M input, 24,576 tokens. The [public Apache-2.0 checkpoint](https://huggingface.co/Cloudflare/clef-flash) is publicly available, including the Qwen3.5-9B backbone, joint schema head and complete encoding/inference source. Hub revision observed 14 October: `8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3` (public, ungated). | Selected for self-hosting only. `joint_schema_model.encode_record` renders state/questions; the joint head supplies logits for every option, normalized per question. The official runtime was tested on H200; JEVPFN requires a fresh H100 pilot under its current hardware policy. The pinned local encoder defaults to 16,384 tokens and silently slices the state. Our precheck rejects overflow and retains full-precision softmax instead of the convenience API's four-decimal rounding. Do not infer parity between the hosted and local context limits. |
-| AWS Strands Decider | [1 October launch](https://strandsagents.com/blog/introducing-strands-decider/); [official repository](https://github.com/strands-labs/strands-decider). Apache-2.0, Noul/Choice/Score, full probability vectors; pointer readout over supplied options. | Small self-hosted comparator. The newer [Qwen3.5 2B checkpoint](https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610) was created 9 October and saves a 4,096-token window. Original launch and updated checkpoint are different revisions. Verify complete input and the remaining class vocabularies; published latency is hardware-specific. |
-| Perplexity Decider v1.1-27B | Original [v1 model](https://huggingface.co/perplexity-ai/pplx-decider-v1-27b) repository created 1 October; [v1.1 announcement](https://community.perplexity.ai/t/pplx-decider-v1-1-27b-our-updated-open-weights-multimodal-decision-model-is-now-available/6286), 6 October. Apache-2.0, native decision head, noncausal full attention, saved calibration temperature; Noul/Choice/Score supported by supplied inference code. | [Publisher card](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) reports stronger Decision Index results, not MulTaBench gains. Local weights require about 49 GiB plus working memory; preparation rejects over 8,192 tokens. Public Hub metadata is currently private=false/gated=false, despite stale private-access wording in the card; Check tasksource training overlap. Publisher announced hosted pricing of $0.02/M for v1.1; hosted access and version pin still require verification. |
-| Fastino GLiNER2.5-Decide | [Publisher release](https://fastino.ai/blog/gliner-2-5-decide-open-weight-decision-model): 340M encoder, Apache-2.0. However, current [deployment capabilities](https://docs.fastino.ai/concepts/gliner-2-5-decide-capabilities) describe unordered classification labels without label-description objects and direct ordered scoring to GLiDE. | Do not equate release claims with the current hosted schema. Complete probability mapping and long-input behavior of the selected local runtime need verification. `max_position_embeddings=512` in its DeBERTa config alone does not prove a 512-token hard cutoff for this relative-position architecture. Not admitted to the uniform extraction protocol yet. |
-| Fastino GLiDE | [Publisher release](https://fastino.ai/blog/introducing-glide-the-first-thinking-decision-model), dated 30 September; adaptive reasoning and full probabilities. [Capabilities](https://docs.fastino.ai/concepts/glide-capabilities): 40,000 tokens per rendered state/question, 2–255 choice options, up to 255 score levels; overlong input is rejected. [Pricing](https://docs.fastino.ai/pricing): $0.15/M input, output free. | Excluded by owner choice; retained here only as related work. Hosted only in the checked evidence. Reported input usage can sum multiple internal passes, so externally counted text tokens cannot establish the bill. Freeze the version and measure account throughput, latency and billed usage in a pilot. Publisher benchmark claims are not downstream tabular evidence. |
-| OpenAI Decisions / GPT-6 Luna | [Official guide](https://developers.openai.com/api/docs/guides/decisions): public beta, `POST /v1/decisions`; predicate, choice and ordered score with full distributions. $0.10/M input, no output/cache fees on this endpoint; regional/long-context adjustments can apply. | Excluded by owner choice and cost; related work only, with no adapter or campaign entry. Map nine ordered indices 0–8 back to −4…+4 (expected score minus four); preserve all probabilities and treat refusals as failures requiring review, not empty text. The model's general context specification does not replace testing this endpoint's actual limits/usage. Snapshot pin and account throughput remain to verify. |
-| Intern-Decision-4B | [Publisher card/source](https://huggingface.co/internlm/Intern-Decision-4B): Apache-2.0, Qwen3.5-4B, one forward pass over candidate-symbol logits followed by checkpoint calibration; Noul/Choice/Score. Default complete-input limit 8,192, 62 options, strict rejection. | Selected open-weight candidate, pinned at `0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd`. All retained tasks have at most 30 classes or nine ordered levels; option capacity fits. Exact rendering and real hardware compatibility require independent verification. Preserve published calibration; do not fit it with benchmark targets. Author-run accuracy/latency do not establish our task performance. |
-| Torchcast Decision 27B | [Publisher card/source](https://huggingface.co/torchcast-ai/torchcast-decision-27b): all three typed outputs, full probabilities, published context up to 262,144; weights CC BY-NC 4.0 and code Apache-2.0. Choices above 26 options take additional rounds. | Excluded by owner choice; no adapter or exact token audit here. Adds another large GPU runtime; the 30-class Wine Review task must exercise its multi-round path. Published Decision Index results are author-run and guided model development; inspect training overlap and actual GPU throughput rather than using the headline to select it. |
-
-The eleven selected interfaces can represent binary probabilities, complete class vectors and
-ordered regression probabilities. This does not establish coverage or calibrated target-unit
-prediction. Runtime-specific rendering and calibration must be preserved for fair comparison.
-
-### Approved open-weight additions — checked 23 October 2026
-
-The DM library at `5f1b3f8f1611681579aba052a86c2626a6a17b96` supplies the
-H2OLightning, SIIDecision, Kev, Decision3 and Nimble source snapshots. Live publisher
-checkpoint/source revisions were checked separately and are pinned in extractor configuration.
-The TFM and VSC reviews used `702d9ab0b66f6639ba8d443ff9c4a91231964465` and
-`3bcdf55e576d10161d6189b40ac39380bbba9eca`. No library pins were updated.
-
-| Added extractor | Relevant published implementation | Project handling |
-|---|---|---|
-| [H2O Lightning 4B](https://huggingface.co/h2oai/h2o-lightning-4b) | `h2o_lightning_shim.format_answer` and `pooled_readout.label_logits`: bidirectional full attention, causal recurrent layers, grouped label readout and type-specific calibration. Its released binary formatter imposes a 0.801 winning-probability floor. | Preserve that policy and disclose the distortion of uncertainty. Require all six publisher probability anchors to pass before any dataset inference. A native Transformers implementation is subject to that live parity gate. |
-| [SII-Decision-27B-Full](https://huggingface.co/jylin001206/SII-Decision-27B-Full) | `sii_decision.prompts.prompt` and `Readout.forward`: final answer-slot logits over ordered single-token labels, softmax at temperature one. General Decision Models/JEVal is related research; release-card performance is author evidence. | Use the full checkpoint, complete option descriptions and the publisher's 6,000-token default request cap. |
-| [Kev-27B](https://huggingface.co/jaredpalmer/kev-27b) | `kev.model.encode`, `DecisionModel.forward` and `PointerHead.forward`: branch-aware pointer readout and checkpoint temperature; not ordinary causal next-token classification. | Use its Torch runtime and saved head. Native state/branch limits are distinct; the project conservatively caps the entire request at 65,536 tokens. |
-| [Decision3 d3-turbo](https://huggingface.co/vllm-sr/d3-turbo) | `d3_format.render`/`encode_split` and native runtime `probabilities`: prefix-bidirectional attention and separate readout, with complete code probabilities. | Use the selected current checkpoint and its native runtime, not an ordinary vLLM chat server; cap complete requests at 32,768 tokens. |
-| [Bespoke-Nimble-9B](https://huggingface.co/bespokelabs/Bespoke-Nimble-9B) | `serving_schema.prepare_prompts`, `candidate_logits` and `decision_result`: candidate-code classification; the extended schema handles more than 26 options. | Pin adapter and Qwen3.5-9B base separately. Use enum fields for binary questions so both class descriptions survive; use all 30 Wine Review classes together. |
-
-All five selected releases declare Apache-2.0. This includes Nimble's original Apache
-release, not its separately licensed noncommercial variant. They add no vendor API fee;
-hardware, storage and runtime compatibility still need measurement. Their decision-index
-results are not evidence that they improve downstream MulTaBench prediction. Differences
-in temperatures, attention and probability floors limit claims about cross-model confidence;
-preserving released behavior is preferable to silently harmonizing it with benchmark labels.
-
-Native rendering, attention, option encoding and calibration differ despite shared typed
-semantics. Strands' reviewed engine has mutable option offsets, so concurrency is not assumed.
-Clef's convenience response rounds probabilities and its local renderer truncates state;
-retain precise probabilities and enforce complete-input counts before inference. Connection
-recipes and acceptance evidence live in VSC/run reports rather than this literature record.
-
-### Public decision benchmarks
-
-Public comparisons already exist. [Decision Index](https://github.com/apolinario/decision-index)
-has a reproducible 37-benchmark public component; its full score also uses private tests.
-[JevBench by Benchmark Heaven](https://huggingface.co/datasets/benchmarkheaven/jevbench)
-reports decision quality/calibration/latency/cost, but its released snapshot is aggregate-only
-and cost fields may be estimates. The similarly named metamorphic coherence benchmark is a
-separate project. JEVal and the 37-dataset Jev paper below provide academic evidence with
-different coverage and sometimes different calibration conclusions. The rapid release wave
-is observable; its size does not establish model quality, independent architectures or
-useful tabular features. This project's contribution is a controlled, label-free comparison
-of reusable text representations on 18 mixed-feature datasets, measuring incremental
-prediction benefit, coverage, probability behavior and extraction cost. It must not be
-framed as the first general decision-model benchmark.
-
-### Research evidence and its limits
-
-The following are arXiv preprints as checked on 12 October, not verified peer-reviewed
-acceptances. Main methods, results and limitations were inspected for the ten core papers
-below; the specialized SecJev paper was checked at abstract/release level. Positive vendor
-scores and independent research evidence must remain distinguishable. None of these decision
-benchmarks by itself establishes downstream gains on the selected MulTaBench datasets.
-
-| Paper and initial date | What was studied and what the evidence supports | Implication for interpreting JEVPFN |
-|---|---|---|
-| [JEV-as-a-Judge](https://arxiv.org/abs/2609.26550), 22 September; v5 updated 9 October | Compares Jev with generative/reward judges and evaluates confidence-based escalation. Stronger on evidence-grounded judgments than on judgments requiring derivation; confidence routing has workload-specific failures. | Cheap readout can be useful, but confidence is not an automatic correctness guarantee. Judging and tabular augmentation are distinct tasks. |
-| [JevOut](https://arxiv.org/html/2609.30243v2), 24 September; v2 updated 8 October | Tests natural-context redirection across four systems/seven datasets. Probability-guided additions can change initially correct choices without changing the appropriate answer. | Joint context can distract. These adaptive, answer-preserving attacks are not an estimate of error on ordinary untouched table cells. |
-| [Early Evidence Audit](https://arxiv.org/html/2609.32160v1), 26 September | Reviews 28 early papers and derives an evaluation checklist. No independent accuracy advantage of typed readout over comparable label-probability readouts was established by that early corpus. | Distinguish representation utility from architectural superiority; include suitable low-cost text baselines and measured usage/timing. The survey covers an early snapshot. |
-| [Beyond Calibration](https://arxiv.org/html/2609.33209v1), 27 September | Tests logically related Noul/Choice questions on 160 items. Jev is more coherent than the tested Qwen readouts but still violates negation/complement identities; separate single-label probabilities sum to 1.14 on average. | A normalized Choice vector is not interchangeable with separately queried and renormalized Noul answers. Fixed wording and complete probability retention matter. |
-| [Evaluating and Benchmarking Jev](https://arxiv.org/html/2609.37647v1), 29 September | 37 datasets, 346,009 requests; same-prompt non-thinking open-model comparisons. Strong zero-shot results on several short text tasks; weaker low-resource, fine-label, legal and rubric tasks. One request per item; closed-model pretraining remains unknown. | Direct positive evidence, with prompt/serving/split limitations. Application-specific probability calibration and threshold handling need evaluation. This suite is distinct from Decision Index and JEVal. |
-| [Beyond Answer Confidence](https://arxiv.org/html/2610.01006v1), 1 October | Familiar-task and missing-information contrasts. Confidence can remain high when the answer is undecidable; follow-up familiarity questions largely track surface cues under controls. | Probability features are predictive inputs, not certified measures of sufficient evidence or model knowledge. Neutral/irrelevant-input checks need not use row labels. |
-| [General Decision Models / JEVal](https://arxiv.org/html/2610.03935v2), 2 October; v2 12 October | 11,257 bilingual instances, 36 datasets, ten domains, 25 configurations; also agent/social simulations and SII-Decision distillation (renamed from InnerJev in v1). Explicit-evidence tasks fare better than exact computation, specialist knowledge and faithful uncertainty estimation. | Broad evidence for the model class, including limitations. Local decision quality does not automatically transfer to reliable system-level outcomes or downstream tabular benefit. |
-| [SearchJev](https://arxiv.org/html/2610.05107v1), 4 October | Six search-decision types; soft-label learning combines cross-entropy/Brier losses and held-out temperature calibration. Faster decisions and better reported search-agent outcomes than its specified baselines. | An example of specialized probability-focused training, not validation of general-purpose text-to-tabular regression. |
-| [Political Science Replications](https://arxiv.org/html/2610.06625v2), 5 October; v2 updated 6 October | Seven published annotation/scaling tasks; human labels and commercial/open LLM comparisons. Jev often approaches comparator capability, but has no cost advantage over the study's commercial batch-price baseline and does not consistently beat the open model's calibration. | Independent evidence is mixed. Report actual task-specific cost and calibration; do not extrapolate universal superiority from low listed input pricing. |
-| [Readout Stability](https://arxiv.org/html/2610.07716v1), 6 October | Seven model families and ten datasets; studies candidate-menu interventions and inference-time compute. Ranking stability is stronger than probability stability; extra order-permuted passes mainly improve calibration in the tested setting. | Candidate vocabulary/order and repeated execution are different from cache reuse. Do not transfer the paper's menu-selection results to this project's fixed full-class vocabulary without testing. |
-
-[SecJev, 2 October](https://arxiv.org/abs/2610.03073) is a security-specialized decision-model
-family, with reported gains from domain-specific training. Its scope does not justify replacing
-a general extractor on heterogeneous table datasets. Likewise, the [network-traffic study,
-30 September](https://arxiv.org/abs/2610.00376), finds trained tree ensembles stronger than its
-Jev configurations on numerical packet data; supervision budgets differ, so this does not
-isolate architecture as the cause or test our text-augmentation method.
-
-Family release dates and checkpoint update dates differ; these are vendor releases, not
-independent demonstrations of tabular benefit. Uniform typed schemas establish representation
-feasibility, while actual GPU coverage/quality must be tested. The reviewed papers support
-measuring incremental predictive utility, probability behavior and cost under a fixed protocol;
-they do not guarantee publishability or justify claiming the first decision-model benchmark.
-
-## 6. Question wording, task definitions and context comparability
-
-Linguistic clarity is a design criterion, not evidence of optimal model performance.
-Grice's account of cooperative communication motivates relevant information, clear referents,
-unambiguous expressions and avoiding unnecessary verbosity; it concerns human discourse, not
-a validated recipe for decision models. [Logic and Conversation, original scan](https://danielwharris.com/teaching/spring16/readings/Grice_1975_LogicConv.pdf).
-For task questions, explicitly identify the case, target, evidence and answer alternatives;
-place definitions in a fixed context object rather than repeatedly embedding them in a long sentence.
-
-Kennedy's analysis of gradable language shows why words such as higher/lower need a comparison
-standard. Saying 'typical cases of the documented kind' identifies a comparison class but still
-leaves the numerical reference to the model's background knowledge. Without target statistics,
-directional regression features cannot claim a common dataset-relative reference or calibrated
-target units. The fixed nine levels remain an ordinal evidence rubric, with distinct meanings;
-pilot checks and distribution ablations should address this limitation. [Vagueness and Grammar,
-author manuscript](https://semantics.uchicago.edu/kennedy/classes/s06/readings/kennedy05.pdf).
-
-[Weller et al., Learning from Task Descriptions (EMNLP 2020)](https://aclanthology.org/2020.emnlp-main.105/)
-formalizes task definitions supplied separately from example inputs. [Gen-Z (ICLR 2024)](https://proceedings.iclr.cc/paper_files/paper/2024/hash/af7cc9e2366b8f8837a6ef339810277a-Abstract-Conference.html)
-studies contextualized class descriptions for generative zero-shot classification. Both support
-examining documentary definitions, not importing their training procedure or assuming gains for Jev.
-Safe task context consists of sourced observation units, target definitions/units, text-column
-meanings and official class-code meanings. It excludes row targets, label frequencies, target
-averages/quantiles, feature-target relationships and model feedback. Free-form documentation still
-requires human provenance/leakage review; field validation cannot certify its contents.
-
-[Webson and Pavlick (NAACL 2022)](https://aclanthology.org/2022.naacl-main.167/)
-find that instructive-looking prompts need not be the cause of good NLI performance.
-[Sclar et al. (ICLR 2024)](https://proceedings.iclr.cc/paper_files/paper/2024/hash/6c0e99d736da621403018ca7b32b1a4d-Abstract-Conference.html)
-find substantial sensitivity to meaning-preserving prompt formatting and weak cross-model
-correlation of formats. Those experiments study generative/prompt-based models, not all eleven
-extractors here. Their relevance is methodological: freeze common semantics and inspect several
-predeclared paraphrases/orderings on a small shared pilot, without selecting prompts from final
-CV performance. Distinguish probability changes, class flips and extraction failures.
-
-Context windows differ and tokenizers count differently. Compare complete identical inputs on
-the intersection of inputs supported by every selected extractor, declaring exclusions and
-coverage; a common deterministic text-shortening policy is a separate representation experiment.
-Never silently accept provider-specific truncation. Chunking requires an aggregation rule and
-can destroy cross-column interactions; it is not an interchangeable drop-in fix. [Lost in the
-Middle (TACL 2024)](https://aclanthology.org/2024.tacl-1.9/) also shows that supported length does
-not imply equally effective use of evidence at every position, for the models/tasks it studied.
+For efficiency, distinguish initialization, tokenization, GPU inference, API round trip,
+cache hits and downstream fit/predict time. Count unique paid requests separately from row
+mappings; reuse across folds is an amortization advantage, not repeated free inference.
+A GPU or provider latency from a paper is not a throughput guarantee for this workload.
+Cached artifacts provide reproducible reuse even when repeated uncached inference is not
+deterministic. Operational timing and hardware evidence belong with the actual run.

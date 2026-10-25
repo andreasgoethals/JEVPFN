@@ -3,7 +3,17 @@
 JEVPFN_REQUESTED_ENV="${JEVPFN_CONDA_ENV:-JEVPFN}"
 JEVPFN_RUNTIME_NAME="${JEVPFN_REQUESTED_ENV##*/}"
 JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}/JEVPFN"
-JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/$JEVPFN_RUNTIME_NAME"
+if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
+    export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-blackwell-cu130}"
+    [[ "$JEVPFN_RUNTIME_PROFILE" == blackwell-cu130 ]] || { echo 'Mindwell requires blackwell-cu130.' >&2; return 2; }
+else
+    export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-legacy-cu126}"
+fi
+case "$JEVPFN_RUNTIME_PROFILE" in
+    legacy-cu126) JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/$JEVPFN_RUNTIME_NAME" ;;
+    blackwell-cu130) JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/blackwell-cu130/$JEVPFN_RUNTIME_NAME" ;;
+    *) echo 'Unknown runtime profile.' >&2; return 2 ;;
+esac
 unset JEVPFN_CONTAINER_PROVIDER JEVPFN_CONTAINER_ID JEVPFN_MONITOR_PYTHON JEVPFN_NVIDIA_SMI
 case "$JEVPFN_RUNTIME_NAME" in
     cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble|catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
@@ -34,7 +44,14 @@ case "$JEVPFN_RUNTIME_NAME" in
             fi
             hash -r
             "$JEVPFN_PYTHON" -I -c 'import sys; assert sys.version_info[:2] == (3,12); print("JEVPFN packed Python:", sys.executable)' || return
+            if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && "${SLURM_JOB_PARTITION:-}" == gpu* ]]; then
+                "$JEVPFN_PYTHON" -m src.cluster.runtime_profiles --check-gpu || return
+            fi
             return
+        fi
+        if [[ "$JEVPFN_RUNTIME_PROFILE" == blackwell-cu130 ]]; then
+            echo "No sealed Blackwell runtime: $JEVPFN_PACKED_ENV. Build/stage it before GPU submission." >&2
+            return 2
         fi
         ;;
 esac

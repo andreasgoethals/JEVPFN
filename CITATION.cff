@@ -11,12 +11,16 @@ repository-code: https://github.com/andreasgoethals/JEVPFN
 url: https://github.com/andreasgoethals/JEVPFN
 license: MIT
 abstract: >-
-  Research software for comparing deterministic, label-free probabilistic text
-  features from decision models on 18 selected MulTaBench text datasets.
-  Exploration retains all 20 core datasets. Cached per-column and joint text
-  representations support controlled comparisons with tabular predictors.
+  Research software comparing frozen task-conditioned decision-model features,
+  frozen text embeddings with training-fold PCA, and native-text predictors on
+  18 selected MulTaBench text datasets. Decision-feature construction excludes
+  row labels and non-text row values. Cached per-column and joint representations
+  support paired comparisons within fixed predictors and cross-validation splits.
+  Exploration retains all 20 core datasets.
 keywords:
   - tabular prediction
   - decision models
   - text features
+  - text embeddings
+  - reproducible evaluation
   - MulTaBench

@@ -134,11 +134,13 @@ def saved_exact_token_tables():
     }, pd.DataFrame(rows)
 
 
-def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
+def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, preparation_workers=1):
     """Transactional batches and immutable input/counter identities allow safe restart."""
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
+    if preparation_workers < 1:
+        raise ValueError("preparation_workers must be positive")
     if counter is None:
         counter = ExactCounter(provider)
         if counter.limit != load_yaml("extractors")["candidates"][provider]["context_tokens"]:
@@ -174,6 +176,7 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
     with (
         _exclusive_audit(destination.with_suffix(".lock")),
         closing(sqlite3.connect(destination, timeout=60)) as db,
+        ExitStack() as workers,
     ):
         db.executescript("""
             CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1), recipe_json TEXT NOT NULL);
@@ -189,6 +192,15 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
         db.commit()
         if hasattr(counter, "attach_cache"):
             counter.attach_cache(db, writable=True)
+        count_many = counter.count_many
+        if preparation_workers > 1:
+            from src.cluster.token_preparation import PreparedTokenPool
+            from src.jev.registry import ADDED
+
+            if provider not in ADDED or not hasattr(counter, "cache_db"):
+                raise ValueError("Parallel preparation requires a publisher prepared-token cache")
+            pool = workers.enter_context(PreparedTokenPool(provider, counter, preparation_workers))
+            count_many = pool.count_many
         for item in inputs:
             dataset_id = item["dataset_id"]
             n, last = db.execute(
@@ -205,14 +217,14 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
                 item["path"], input_set_id=item["input_set_id"], after_input_no=last if n else -1
             )
             while batch := list(islice(records, batch_size)):
-                lengths = counter.count_many([r["payload"] for r in batch])
-                if len(lengths) != len(batch) or any(
-                    isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in lengths
-                ):
-                    raise ValueError(
-                        "Tokenizer must return one positive integer per nonempty input"
-                    )
                 with db:
+                    lengths = count_many([r["payload"] for r in batch])
+                    if len(lengths) != len(batch) or any(
+                        isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in lengths
+                    ):
+                        raise ValueError(
+                            "Tokenizer must return one positive integer per nonempty input"
+                        )
                     db.executemany(
                         "INSERT INTO counts VALUES (?,?,?,?)",
                         [
@@ -279,6 +291,7 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
             )
         if provider in {"h2o", "sii", "kev", "decision3", "nimble"}:
             from src.jev.registry import require_prepared_coverage
+
             require_prepared_coverage(db)
     report = {
         "schema": recipe["schema"],
@@ -294,6 +307,7 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256):
         "context_limit": counter.limit,
         "created_utc": datetime.now(UTC).isoformat(),
         "seconds_this_run": time.perf_counter() - started,
+        "preparation_workers": preparation_workers,
         "counts_database": str(destination),
         "datasets": summaries,
         "unique_inputs": sum(s["unique_inputs"] for s in summaries),
@@ -401,7 +415,11 @@ def main():
         action="append",
         help="Default: all ten self-hosted tokenizers",
     )
-    parser.add_argument("--independent", action="store_true", help="One provider per CPU job; provider database and report locks still apply")
+    parser.add_argument(
+        "--independent",
+        action="store_true",
+        help="One provider per CPU job; provider database and report locks still apply",
+    )
     args = parser.parse_args()
     from src.cluster.preflight import storage_policy_failures
 
@@ -437,6 +455,28 @@ def _count_selected(providers):
     check_tokenizers(providers)
     inputs = selected_inputs()
     reports, failures = [], []
+    if len(providers) == 1:
+        from src.jev.registry import ADDED
+
+        provider = providers[0]
+        workers = (
+            min(8, int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))) if provider in ADDED else 1
+        )
+        report = audit_provider(provider, inputs, preparation_workers=workers)
+        save_reports([report])
+        print(
+            json.dumps(
+                {
+                    "provider": provider,
+                    "status": report["status"],
+                    "unique_inputs": report["unique_inputs"],
+                    "preparation_workers": workers,
+                    "overflow_unique_inputs": report["overflow_unique_inputs"],
+                }
+            ),
+            flush=True,
+        )
+        return 0
     with ProcessPoolExecutor(
         max_workers=min(
             len(providers), int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))

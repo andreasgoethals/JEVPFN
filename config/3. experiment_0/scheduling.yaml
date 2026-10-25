@@ -1,8 +1,9 @@
-# Owner excluded A100 queues. H100 uses the existing native Lustre allocation.
+# GPU default: B200 with a native GPFS working set and durable Lustre publication.
+# CPU preparation remains on wICE. No GPU job reads its large working set from Lustre.
 max_active_jobs: 8
 account: lp_verbekelab
-default_gpu_profile: wice_h100
-routes: {}  # e.g. liquid_contracts: wice_h100; route its pilot to the same profile
+default_gpu_profile: mindwell_b200
+routes: {}
 profiles:
   wice_h100:
     cluster: wice
@@ -11,5 +12,8 @@ profiles:
   mindwell_b200:
     cluster: mindwell
     partition: gpu_b200
-    staging_root: null  # supply actual GPFS group allocation; never use cross-mounted Lustre
+    storage_mode: scratch_mirror
+    scratch_root: /gpfs1/scratch/383/vsc38338  # VSC_SCRATCH_GPFS1 takes precedence
+    durable_root: /lustre1/project/stg_00211
+    runtime_profile: blackwell-cu130
 monitor_interval_seconds: 10

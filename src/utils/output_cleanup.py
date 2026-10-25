@@ -35,7 +35,17 @@ def selected_roots(tier="auto"):
     if not local and tier == "local":
         raise ValueError("Run --tier local on the laptop, not on VSC")
     roots = output_roots(local=local)
-    return {k: v for k, v in roots.items() if tier in {"auto", "both", "local"} or k.lower() == tier}
+    selected = {k: v for k, v in roots.items() if tier in {"auto", "both", "local"} or k.lower() == tier}
+    if not local and tier in {"auto", "both", "project"}:
+        scratch = os.environ.get("VSC_SCRATCH_GPFS1")
+        if scratch:
+            from src.cluster.scratch_stage import MARKER
+
+            base = reject_links(Path(scratch) / "jevpfn-work")
+            for marker in sorted(base.glob(f"*/JEVPFN/{MARKER}")):
+                root = reject_links(marker.parent)
+                selected["GPFS_" + root.parent.name] = root / paths.OUTPUT_DIR_NAME
+    return selected
 
 
 def classify(relative):

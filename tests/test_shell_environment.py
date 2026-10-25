@@ -73,7 +73,7 @@ def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selec
     host.chmod(0o755)
     wrapper = packed / "bin/python"
     wrapper.write_text(
-        '#!/bin/bash\n'
+        "#!/bin/bash\n"
         'for v in ${!CONDA_@} ${!_CONDA_@}; do echo "Stale host Conda stack: $v" >&2; exit 8; done\n'
         '[[ -z "${_CE_M+x}${_CE_CONDA+x}" ]] || exit 8\n'
         '[[ "$CUDA_VISIBLE_DEVICES" == 3 && "$SLURM_JOB_GPUS" == 3 ]] || exit 8\n'
@@ -92,9 +92,9 @@ def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selec
         '  JEVPFN_STAGING_ROOT="$(cygpath -u "$JEVPFN_STAGING_ROOT")"\nfi\n'
         'export TEST_HOST JEVPFN_STAGING_ROOT\ncd "$TEST_REPO"\n'
         'export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/cloudflare"\n'
-        'export CONDA_SHLVL=2 CONDA_PREFIX=/host/env CONDA_PREFIX_1=/host/base\n'
-        'export CONDA_DEFAULT_ENV=JEVPFN CONDA_EXE=/host/conda _CONDA_ROOT=/host/base\n'
-        'export _CE_M=m _CE_CONDA=conda CUDA_VISIBLE_DEVICES=3 SLURM_JOB_GPUS=3\n'
+        "export CONDA_SHLVL=2 CONDA_PREFIX=/host/env CONDA_PREFIX_1=/host/base\n"
+        "export CONDA_DEFAULT_ENV=JEVPFN CONDA_EXE=/host/conda _CONDA_ROOT=/host/base\n"
+        "export _CE_M=m _CE_CONDA=conda CUDA_VISIBLE_DEVICES=3 SLURM_JOB_GPUS=3\n"
         '[[ "$TEST_CASE" != native ]] || export JEVPFN_CONDA_ENV=JEVPFN\n'
         'source "$TEST_ACTIVATION"\n'
         '[[ "$JEVPFN_MONITOR_PYTHON" == "$TEST_HOST" ]]\n'
@@ -235,19 +235,21 @@ def test_job_arguments_survive_clean_submission_environment(tmp_path, script, ar
     assert all(value in result.stdout.splitlines() for value in expected)
 
 
-def test_gpu_memory_profiles_fit_h100_and_token_job_matches_four_cores():
+def test_gpu_memory_profiles_fit_b200_and_token_job_matches_four_cores():
     gpu_jobs = 0
     for script in (ROOT / "scripts/slurm").glob("*.slurm"):
         text = script.read_text()
         assert "#SBATCH --partition=gpu_a100" not in text
-        if "#SBATCH --partition=gpu_h100" in text:
+        assert "#SBATCH --partition=gpu_h100" not in text
+        if "#SBATCH --partition=gpu_b200" in text:
             gpu_jobs += 1
+            assert "#SBATCH --clusters=mindwell" in text
             memory = next(
                 line.split("=")[1]
                 for line in text.splitlines()
                 if line.startswith("#SBATCH --mem=")
             )
-            assert memory.endswith("M") and int(memory[:-1]) <= 187200
+            assert memory.endswith("M") and int(memory[:-1]) <= 194400
     assert gpu_jobs == 7
     assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
 
@@ -256,9 +258,12 @@ def test_a100_override_stops_before_environment_activation(tmp_path):
     driver = tmp_path / "reject.sh"
     driver.write_text((ROOT / "scripts/slurm/_activate_env.sh").read_text(), encoding="utf-8")
     result = subprocess.run(
-        [bash_executable(), str(driver)], cwd=tmp_path,
+        [bash_executable(), str(driver)],
+        cwd=tmp_path,
         env={**os.environ, "SLURM_JOB_PARTITION": "gpu_a100_debug"},
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert result.returncode == 2
     assert "A100 allocations are disabled" in result.stderr
@@ -268,9 +273,13 @@ def test_a100_override_stops_before_environment_activation(tmp_path):
 def test_all_monitored_jobs_separate_host_monitor_from_workload_interpreter():
     monitored = []
     for script in (ROOT / "scripts/slurm").glob("*.slurm"):
-        calls = [line for line in script.read_text().splitlines() if "-m src.cluster.monitor" in line]
+        calls = [
+            line for line in script.read_text().splitlines() if "-m src.cluster.monitor" in line
+        ]
         for call in calls:
-            assert call.startswith('"${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- ')
+            assert call.startswith(
+                'jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- '
+            )
             assert '-- "${JEVPFN_PYTHON:?}" -m ' in call
             monitored.append(script.name)
     assert len(monitored) == 8
@@ -591,3 +600,57 @@ conda activate $CW_ENV_NAME
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == ["created image prefix", "activated image prefix"]
+
+
+def test_native_gpfs_storage_probe_uses_two_cpu_nodes_and_publication_wrapper():
+    script = (ROOT / "scripts/slurm/experiment_0_storage_gpfs.slurm").read_text()
+    for required in (
+        "--clusters=mindwell",
+        "--partition=batch_graniterapids",
+        "--nodes=2",
+        "--ntasks-per-node=1",
+        "--mem=2G",
+        "--time=00:05:00",
+        "source scripts/activate_conda.sh",
+        "export SLURM_EXPORT_ENV=ALL",
+        "src.cluster.scratch_stage run",
+        "src.cluster.storage_contracts --execute",
+    ):
+        assert required in script
+    assert "--gpus" not in script and "--gres" not in script
+    assert "activate_runtime.sh" not in script and "_activate_env.sh" not in script
+
+
+@pytest.mark.parametrize("failure", ["activation", "workspace_path"])
+def test_b200_bootstrap_propagates_failure_before_exporting_a_bad_root(tmp_path, failure):
+    repo = tmp_path / "bootstrap"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts/activate_conda.sh").write_text(
+        '[[ "$TEST_FAILURE" != activation ]] || return 37\n'
+        "test_python() { return 42; }\n"
+        "export JEVPFN_PYTHON=test_python\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    driver = repo / "driver.sh"
+    driver.write_text(
+        'set -euo pipefail\nsource "$TEST_B200_SCRIPT"\nprintf "MUST_NOT_CONTINUE\\n"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    result = subprocess.run(
+        [bash_executable(), str(driver)],
+        cwd=repo,
+        env=dict(
+            os.environ,
+            TEST_FAILURE=failure,
+            TEST_B200_SCRIPT=(ROOT / "scripts/activate_b200_storage.sh").as_posix(),
+            SLURM_CLUSTER_NAME="mindwell",
+            JEVPFN_CONDA_ENV="cloudflare",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == {"activation": 37, "workspace_path": 42}[failure], result.stderr
+    assert "MUST_NOT_CONTINUE" not in result.stdout

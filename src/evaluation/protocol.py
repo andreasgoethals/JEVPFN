@@ -66,6 +66,8 @@ def shared_splits(dataset, *, seed: int = 20260929, folds: int = 5) -> dict:
     if y.isna().any() or len(y) < folds or folds < 2:
         raise ValueError("Missing targets or insufficient rows for CV")
     classification = dataset.metadata.task_type != "regression"
+    if not classification and not np.isfinite(pd.to_numeric(y).to_numpy(dtype=float)).all():
+        raise ValueError("Regression targets must be finite before constructing CV folds")
     encoded = np.array([canonical_json(scalar(v)) for v in y]) if classification else None
     if classification and set(encoded) != {canonical_json(c) for c in dataset.metadata.classes}:
         raise ValueError("Every class in the declared vocabulary must be observed")

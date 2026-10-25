@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.utils.serialization import text_value
+
 MISSINGNESS_VERSION = "shared_text_missing_v1"
 
 
@@ -16,7 +18,7 @@ def add_text_presence(matrix, dataset):
     """Identical label-free text-availability information for every representation arm."""
     result = matrix.copy()
     for i, column in enumerate(dataset.metadata.text_columns):
-        values = dataset.frame[column].map(lambda x: pd.isna(x) or not str(x).strip())
+        values = dataset.frame[column].map(lambda x: text_value(x) is None)
         name = missing_column(i)
         if name in result:
             raise ValueError("Text-presence name collides with existing features")
@@ -35,7 +37,7 @@ def text_statistics(dataset) -> pd.DataFrame:
     result = pd.DataFrame(index=[f"csv:{i}" for i in range(len(dataset.frame))])
     for i, column in enumerate(dataset.metadata.text_columns):
         cells = dataset.frame[column].reset_index(drop=True)
-        text = cells.map(lambda x: "" if pd.isna(x) else str(x))
+        text = cells.map(lambda x: "" if (value := text_value(x)) is None else str(value))
         present = text.str.strip().ne("")
         prefix = f"text_stats__text_{i:03d}"
         result[f"{prefix}__characters"] = text.str.len().where(present, 0).to_numpy()

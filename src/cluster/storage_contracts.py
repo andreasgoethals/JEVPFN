@@ -1,12 +1,13 @@
 """Opt-in two-node PROJECT lock and SQLite snapshot/restore check; no research data.
 
-The local test suite cannot establish cross-node flock behavior on a Lustre mount.
+The local test suite cannot establish cross-node flock behavior on Lustre or GPFS.
 This probe therefore runs in its own tiny two-node CPU allocation before extraction.
 """
 
 import argparse
 import json
 import os
+import re
 import socket
 import sqlite3
 import subprocess
@@ -24,6 +25,14 @@ from src.utils.serialization import write_json
 
 def node_name():
     return os.environ.get("SLURMD_NODENAME", socket.gethostname()).split(".")[0]
+
+
+def storage_backend(folder):
+    """Identify the native root already checked by the cluster storage policy."""
+    match = re.match(r"^/(gpfs|lustre)\d+(?:/|$)", str(folder).replace("\\", "/"))
+    if not match:
+        raise ValueError(f"Storage probe needs a recognized native GPFS or Lustre path: {folder}")
+    return match.group(1)
 
 
 def worker(folder, *, expect_busy):
@@ -133,6 +142,7 @@ def run(*, execute=False):
     folder = paths.require_project_output(
         paths.results_dir("storage_contracts", run_id, phase="experiment_0")
     )
+    backend = storage_backend(folder)
     folder.mkdir(parents=True, exist_ok=False)
     manifest = (
         paths.manifests_dir("experiment_0")
@@ -143,6 +153,8 @@ def run(*, execute=False):
     report = {
         "status": "running",
         "job_id": os.environ["SLURM_JOB_ID"],
+        "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
+        "storage_backend": backend,
         "nodes": [local, others[0]],
         "results": str(folder),
         "worker_receipts": {

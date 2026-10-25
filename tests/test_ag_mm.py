@@ -13,7 +13,10 @@ from src.utils.serialization import file_sha256
 @pytest.mark.parametrize(
     "task", ["binary_classification", "multiclass_classification", "regression"]
 )
-def test_agmm_fixed_recipe_official_text_and_class_alignment(monkeypatch, tmp_path, task):
+@pytest.mark.parametrize("native_site", [False, True])
+def test_agmm_fixed_recipe_official_text_and_class_alignment(
+    monkeypatch, tmp_path, task, native_site
+):
     import sys
 
     calls = {}
@@ -37,8 +40,8 @@ def test_agmm_fixed_recipe_official_text_and_class_alignment(monkeypatch, tmp_pa
     monkeypatch.setitem(
         sys.modules, "autogluon.multimodal", SimpleNamespace(MultiModalPredictor=Predictor)
     )
-    encoder_dir = tmp_path / "weights"
-    encoder_dir.mkdir()
+    encoder_dir = tmp_path / "native" / "encoder"
+    encoder_dir.mkdir(parents=True)
     asset = encoder_dir / "config.json"
     asset.write_text("{}")
     settings = dict(
@@ -49,6 +52,16 @@ def test_agmm_fixed_recipe_official_text_and_class_alignment(monkeypatch, tmp_pa
         text_checkpoint_path=str(encoder_dir),
         assets=[dict(path=str(asset), sha256=file_sha256(asset))],
     )
+    if native_site:
+        from src.utils import paths
+
+        durable = tmp_path / "lustre"
+        monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+        monkeypatch.setenv("JEVPFN_DURABLE_ROOT", str(durable))
+        monkeypatch.setattr(paths, "checkpoints_dir", lambda: tmp_path / "native")
+        pin = durable / "JEVPFN/checkpoints/encoder"
+        settings["text_checkpoint_path"] = str(pin)
+        settings["assets"][0]["path"] = str(pin / "config.json")
     x = pd.DataFrame(
         {
             "text": [None, "genuine text", "other"],

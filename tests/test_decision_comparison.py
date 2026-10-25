@@ -326,3 +326,48 @@ def test_every_plot_path_accepts_realistic_synthetic_results(task):
             plt.close(fig)
             count += 1
     assert count >= 15
+
+
+def test_eleven_models_paginate_all_55_duplicate_sensitivity_pairs():
+    from itertools import combinations
+
+    result = Comparison()
+    providers = list(plots.LABELS)
+    for a, b in combinations(providers, 2):
+        for weighting in ("rows", "unique_inputs"):
+            result.add("pairs", {**CONTEXT, "task": "multiclass_classification",
+                                "weighting": weighting, "model_a": a, "model_b": b,
+                                "agreement": 0.8, "total_variation": 0.1,
+                                "js_divergence": 0.05, "scalar_mae": 0.2,
+                                "pearson": 0.9, "spearman": 0.9})
+    shown = []
+    pages = 0
+    for fig, name, _ in plots.pair_figures(result, {"providers": providers}):
+        if name.startswith("reuse_"):
+            labels = [tick.get_text() for tick in fig.axes[0].get_yticklabels()]
+            assert len(labels) <= 12
+            shown.extend(labels)
+            pages += 1
+        plt.close(fig)
+    assert pages == 5
+    assert len(set(shown)) == 55
+
+
+def test_thirty_class_example_keeps_all_probabilities_legible_across_pages():
+    import json
+
+    result = Comparison()
+    labels = [f"class-{i}" for i in range(30)]
+    probabilities = {p: [1 / 30] * 30 for p in plots.LABELS}
+    result.add("examples", {**CONTEXT, "task": "multiclass_classification",
+                            "disagreement": 0.2, "row_id": "csv:0",
+                            "labels": json.dumps(labels), "probabilities": json.dumps(probabilities)})
+    shown = []
+    for fig, _, caption in plots.example_figures(result, {"providers": list(plots.LABELS)}):
+        ax = fig.axes[0]
+        assert len(ax.get_yticks()) <= 12
+        assert ax.images[0].get_clim() == (0, 1)
+        assert "label-blind" in caption
+        shown.extend(tick.get_text() for tick in ax.get_yticklabels())
+        plt.close(fig)
+    assert shown == labels

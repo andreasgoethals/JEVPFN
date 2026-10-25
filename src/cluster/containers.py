@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import yaml
 
+from src.cluster import runtime_profiles
 from src.cluster.maintenance import reject_links, require_idle_vsc
 from src.jev.registry import SELF_HOSTED
 from src.utils import paths
@@ -36,10 +37,12 @@ PREDICTORS = (
 RUNTIMES = (*SELF_HOSTED, *PREDICTORS)
 
 
-def container_dir(provider):
+def container_dir(provider, *, profile=None):
     if provider not in RUNTIMES:
         raise ValueError("Unknown decision provider")
-    return paths.checkpoints_dir().parent / "containers" / provider
+    base = paths.checkpoints_dir().parent / "containers"
+    profile = runtime_profiles.selected(profile)
+    return base / provider if profile == runtime_profiles.LEGACY else base / profile / provider
 
 
 def native_dir(provider):
@@ -91,9 +94,11 @@ def files(folder):
 def probe(python, sentinel=None):
     code = (
         "import json,sys,os,platform,importlib.metadata as m; from pathlib import Path; "
-        "import src; "
+        "import src; import importlib.util; "
+        "torch=__import__('torch') if importlib.util.find_spec('torch') else None; "
         "print('JEVPFN_RUNTIME='+json.dumps(dict(python=platform.python_version(),"
         "prefix=sys.prefix, source=str(Path(src.__file__).resolve()), "
+        "torch_cuda=torch.version.cuda if torch else None, "
         "project_visible=(Path(os.environ['JEVPFN_STAGING_ROOT'])/'JEVPFN/checkpoints').is_dir(), "
         "sentinel_visible=Path(sys.argv[1]).exists() if sys.argv[1] else False, "
         "packages={d.metadata['Name']:d.version for d in m.distributions() if d.metadata['Name']})))"
@@ -116,10 +121,11 @@ def probe(python, sentinel=None):
     return runtime
 
 
-def seal(provider, *, wrapped_existing=False):
+def seal(provider, *, wrapped_existing=False, profile=None):
     if not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Seal a container in its VSC build allocation")
-    folder = reject_links(container_dir(provider))
+    profile = runtime_profiles.selected(profile)
+    folder = reject_links(container_dir(provider, profile=profile))
     paths.require_project_output(folder)
     if (folder / MARKER).exists():
         raise ValueError("A sealed container already exists; do not replace it")
@@ -134,6 +140,7 @@ def seal(provider, *, wrapped_existing=False):
                 "Must not be visible inside the already-built image", encoding="utf-8"
             )
         runtime = probe(folder / "bin/python", sentinel)
+        runtime_profiles.validate_build(runtime, profile)
         if runtime["sentinel_visible"]:
             raise ValueError(
                 "Wrapper reads the unpacked source instead of hiding it with the image"
@@ -143,6 +150,7 @@ def seal(provider, *, wrapped_existing=False):
         manifest = {
             "schema": "jevpfn.container.v1",
             "provider": provider,
+            "runtime_profile": profile,
             "created_utc": datetime.now(UTC).isoformat(),
             "wrapper_module": "hpc-container-wrapper/0.4.2",
             "wrapped_existing": wrapped_existing,
@@ -157,18 +165,120 @@ def seal(provider, *, wrapped_existing=False):
             sentinel.unlink(missing_ok=True)
 
 
-def verify(provider):
-    folder = reject_links(container_dir(provider))
+def verify(provider, *, profile=None):
+    profile = runtime_profiles.selected(profile)
+    folder = reject_links(container_dir(provider, profile=profile))
     manifest = json.loads((folder / MARKER).read_text(encoding="utf-8"))
     if (
         manifest.get("provider") != provider
+        or manifest.get("runtime_profile", runtime_profiles.LEGACY) != profile
         or manifest.get("schema") != "jevpfn.container.v1"
         or manifest.get("container_id")
         != digest({k: v for k, v in manifest.items() if k != "container_id"})
         or manifest.get("files") != files(folder)
     ):
         raise ValueError("Container fingerprint differs from its sealed receipt")
+    runtime_profiles.validate_build(manifest.get("runtime", {}), profile)
     return manifest
+
+
+def relocate(source, destination):
+    """Reseal an already copied wrapper tree for native-filesystem execution.
+
+    The caller copies a complete sealed tree first. Images are never modified; only
+    host paths in small wrapper/config files and host-relative links can change.
+    Conda's image-internal absolute prefix remains fixed and is mounted from the
+    native image. A different prefix inside the SquashFS image would break Conda.
+    """
+    source, destination = reject_links(Path(source)), reject_links(Path(destination))
+    if source.resolve() == destination.resolve():
+        raise ValueError("Relocation requires a distinct copied destination")
+    manifest = json.loads((source / MARKER).read_text(encoding="utf-8"))
+    if manifest.get("container_id") != digest(
+        {k: v for k, v in manifest.items() if k != "container_id"}
+    ) or manifest.get("files") != files(source):
+        raise ValueError("Source container fingerprint differs from its seal")
+    copied = json.loads((destination / MARKER).read_text(encoding="utf-8"))
+    previous = copied.get("relocation", {})
+    if previous.get("source_container_id") == manifest["container_id"]:
+        if (
+            copied.get("container_id")
+            == digest({k: v for k, v in copied.items() if k != "container_id"})
+            and copied.get("files") == files(destination)
+            and previous.get("destination") == str(destination)
+        ):
+            return copied
+        raise ValueError("Previously relocated container has changed")
+    if copied != manifest:
+        raise ValueError("Destination is not the unmodified copied source seal")
+    # Check copied bytes before rewriting links that still point inside source.
+    expected = manifest["files"]
+    actual = {}
+    for path in sorted(destination.rglob("*")):
+        if path.name in {MARKER, "retired_source.json"}:
+            continue
+        if path.is_symlink():
+            target = os.readlink(path)
+            if os.name == "nt" and target.startswith("\\\\?\\"):
+                target = target[4:]
+            actual[path.relative_to(destination).as_posix()] = digest({"symlink": target})
+        elif path.is_file():
+            actual[path.relative_to(destination).as_posix()] = file_sha256(path)
+    if actual != expected:
+        raise ValueError("Destination bytes differ from the sealed source")
+    config = source / "share/conf.yaml"
+    image_root = (
+        ((yaml.safe_load(config.read_text(encoding="utf-8")) or {}).get("installation_path"))
+        if config.exists()
+        else None
+    )
+    old, new = str(source), str(destination)
+    rewritten = []
+    for path in sorted(destination.rglob("*")):
+        if path.name in {MARKER, "retired_source.json"}:
+            continue
+        if path.is_symlink():
+            link_text = os.readlink(path)
+            if os.name == "nt" and link_text.startswith("\\\\?\\"):
+                link_text = link_text[4:]
+            target = Path(link_text)
+            if image_root and target.is_absolute() and target.is_relative_to(Path(image_root)):
+                continue
+            if target.is_absolute() and target.is_relative_to(source):
+                path.unlink()
+                path.symlink_to(destination / target.relative_to(source))
+                rewritten.append(path.relative_to(destination).as_posix())
+        elif path.is_file() and path.suffix not in {".sif", ".sqfs"}:
+            if path.stat().st_size > 4 * 1024 * 1024:
+                raise ValueError("Unrecognized large nonimage file in container wrapper")
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("Unrecognized binary nonimage file in container wrapper") from None
+            protected = "__JEVPFN_IMAGE_INTERNAL_PREFIX__"
+            if protected in text:
+                raise ValueError("Reserved relocation placeholder in wrapper")
+            edited = text.replace(str(image_root), protected) if image_root else text
+            edited = edited.replace(old, new)
+            if image_root:
+                edited = edited.replace(protected, str(image_root))
+            if edited != text:
+                path.write_text(edited, encoding="utf-8", newline="\n")
+                rewritten.append(path.relative_to(destination).as_posix())
+    result = {
+        **manifest,
+        "files": files(destination),
+        "relocation": {
+            "source_container_id": manifest["container_id"],
+            "source": str(source),
+            "destination": str(destination),
+            "rewritten_host_files": rewritten,
+            "image_internal_prefix_preserved": image_root,
+        },
+    }
+    result["container_id"] = digest({k: v for k, v in result.items() if k != "container_id"})
+    write_json(destination / MARKER, result)
+    return result
 
 
 def active_identity():
@@ -177,16 +287,78 @@ def active_identity():
     if not provider:
         return None
     manifest = json.loads((container_dir(provider) / MARKER).read_text(encoding="utf-8"))
+    profile = runtime_profiles.selected()
+    if manifest.get("runtime_profile", runtime_profiles.LEGACY) != profile:
+        raise ValueError("Active container has the wrong hardware profile")
+    runtime_profiles.validate_build(manifest.get("runtime", {}), profile)
     if manifest.get("container_id") != os.environ.get("JEVPFN_CONTAINER_ID") or manifest[
         "container_id"
     ] != digest({k: v for k, v in manifest.items() if k != "container_id"}):
         raise ValueError("Active container does not match its verified launch identity")
-    return {
+    identity = {
         "provider": provider,
+        "runtime_profile": manifest.get("runtime_profile", runtime_profiles.LEGACY),
         "container_id": manifest["container_id"],
         "files": manifest["files"],
         "wrapper_module": manifest["wrapper_module"],
     }
+    if "relocation" in manifest:
+        identity["relocation"] = manifest["relocation"]
+    return identity
+
+
+def _retirement_image_matches(provider, image, manifest):
+    """Bind native-GPFS GPU evidence to its exact, still-verified durable image.
+
+    Relocation changes wrapper paths and therefore the container ID. It never
+    changes image bytes. A claimed source ID alone is insufficient: verify the
+    current native seal, recorded identity, approved workspace and both images.
+    """
+    if image.get("container_id") == manifest["container_id"]:
+        return True
+    relocation = image.get("relocation")
+    if not isinstance(relocation, dict) or (
+        relocation.get("source_container_id") != manifest["container_id"]
+        or manifest.get("runtime_profile") != runtime_profiles.BLACKWELL
+    ):
+        return False
+    from src.cluster.scratch_stage import roots
+
+    durable, work = roots(provider)
+    source = container_dir(provider)
+    destination = work / "containers" / runtime_profiles.BLACKWELL / provider
+    if (
+        durable != paths.checkpoints_dir().parent
+        or relocation.get("source") != str(source)
+        or relocation.get("destination") != str(destination)
+    ):
+        return False
+    destination = reject_links(destination)
+    copied = json.loads((destination / MARKER).read_text(encoding="utf-8"))
+    if (
+        copied.get("schema") != "jevpfn.container.v1"
+        or copied.get("provider") != provider
+        or copied.get("runtime_profile") != runtime_profiles.BLACKWELL
+        or copied.get("container_id")
+        != digest({k: v for k, v in copied.items() if k != "container_id"})
+        or copied.get("files") != files(destination)
+        or any(
+            image.get(k) != copied.get(k)
+            for k in (
+                "container_id",
+                "provider",
+                "runtime_profile",
+                "files",
+                "wrapper_module",
+                "relocation",
+            )
+        )
+    ):
+        return False
+    runtime_profiles.validate_build(copied.get("runtime", {}), runtime_profiles.BLACKWELL)
+    source_images = {k: v for k, v in manifest["files"].items() if k.endswith((".sif", ".sqfs"))}
+    native_images = {k: v for k, v in copied["files"].items() if k.endswith((".sif", ".sqfs"))}
+    return source_images == native_images
 
 
 def inventory():
@@ -230,7 +402,7 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
             report.get("provider") == provider
             and report.get("status") == "gpu_contracts_passed_requires_review"
             and report.get("runtime_token_count_parity") is True
-            and image.get("container_id") == manifest["container_id"]
+            and _retirement_image_matches(provider, image, manifest)
             and report.get("settings_sha256") == digest(report.get("settings", {}))
             and report.get("semantic_diagnostics", {}).get("passed") is True
         ):
@@ -242,8 +414,9 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
             if (
                 report.get("model") == provider
                 and report.get("status") == "predictor_contracts_passed_requires_full_fold_profile"
-                and report.get("execution_container", {}).get("container_id")
-                == manifest["container_id"]
+                and _retirement_image_matches(
+                    provider, report.get("execution_container", {}), manifest
+                )
                 and report.get("settings_sha256") == digest(report.get("settings", {}))
             ):
                 evidence.append(str(p))
@@ -263,7 +436,7 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
             "Stop writers and first obtain passing GPU evidence for this exact container"
         )
     require_idle_vsc()
-    expected = container_dir(provider).parent.parent / "environments" / provider
+    expected = paths.checkpoints_dir().parent / "environments" / provider
     if target.resolve() != expected.resolve() or not target.resolve().is_relative_to(
         expected.parent.resolve()
     ):
@@ -321,7 +494,10 @@ def main():
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--writers-stopped", action="store_true")
     parser.add_argument("--allow-replacement", action="store_true")
+    parser.add_argument("--profile", choices=runtime_profiles.PROFILES)
     args = parser.parse_args()
+    if args.profile:
+        os.environ["JEVPFN_RUNTIME_PROFILE"] = runtime_profiles.selected(args.profile)
     if args.action == "inventory":
         print(json.dumps(inventory(), indent=2))
         return

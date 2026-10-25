@@ -31,11 +31,14 @@ def test_vsc_jobs_resume_after_disconnect_and_submit_independent_ready_jobs(
             job = command[command.index("-j") + 1]
             return SimpleNamespace(stdout=f"{job}|{states.get(job, 'RUNNING')}|0:0\n")
         commands.append(command)
-        return SimpleNamespace(stdout=f"{100 + len(commands)};wice\n")
+        cluster = next(
+            (value.split("=", 1)[1] for value in command if value.startswith("--clusters=")), "wice"
+        )
+        return SimpleNamespace(stdout=f"{100 + len(commands)};{cluster}\n")
 
     monkeypatch.setattr(exp0.subprocess, "run", submit)
     report = exp0.run("vsc", execute=True)
-    assert len(commands) == 3  # CPU, storage and exact tokens are independent.
+    assert len(commands) == 8  # Independent CPU/storage/provider counts fill the bounded queue.
     while report["status"] == "waiting_for_job":
         previous = len(commands)
         exp0.run("vsc", execute=True)
@@ -49,7 +52,9 @@ def test_vsc_jobs_resume_after_disconnect_and_submit_independent_ready_jobs(
     report = exp0.run("vsc", execute=True)
     assert report["status"] == "vsc_checks_completed_requires_review"
     assert all("--wait" not in c for c in commands)
-    assert all("--mem=112000M" in c for c in commands if "perplexity" in c)
+    assert all(
+        "--mem=112000M" in c for c in commands if "perplexity" in c and "--partition=gpu_b200" in c
+    )
     exp0.run("vsc", execute=True)
     assert len(commands) == len(exp0.steps("vsc"))
 

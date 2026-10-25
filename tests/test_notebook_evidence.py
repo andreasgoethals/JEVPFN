@@ -161,7 +161,7 @@ def test_embedding_plot_preserves_metric_direction_and_complete_paired_folds(tas
     from src.visualize.paired import embedding_effect_figures
 
     rows = []
-    for scope, width in [("joint", 8), ("joint", 32), ("per_column", 32)]:
+    for scope, width in [("joint", w) for w in (8, 16, 32, 64, 128, 256)] + [("per_column", 32)]:
         for dataset in ["complete", "incomplete"]:
             for fold in range(5 if dataset == "complete" else 4):
                 rows.append({"task_type": task, "metric": metric, "phase": "experiment_2",
@@ -172,9 +172,32 @@ def test_embedding_plot_preserves_metric_direction_and_complete_paired_folds(tas
                              "difference": difference if dataset == "complete" else 100})
     fig, _, caption = next(embedding_effect_figures(pd.DataFrame(rows)))
     expected = 10 if task == "regression" else 0.1
-    assert np.allclose(fig.axes[0].lines[0].get_ydata(), [expected, expected])
+    assert np.allclose(fig.axes[0].lines[0].get_ydata(), [expected] * 6)
     assert fig.axes[0].get_ylim() == fig.axes[1].get_ylim()
     assert "not equal-budget" in caption and "missing/unsupported arms are not imputed" in caption
+    plt.close(fig)
+
+
+def test_embedding_curves_cannot_turn_changing_dataset_coverage_into_a_width_effect():
+    import matplotlib.pyplot as plt
+
+    from src.visualize.paired import embedding_effect_figures
+
+    rows = []
+    for dataset, widths, effect in [("matched", (8, 16, 32, 64, 128, 256), 0.1),
+                                    ("partial_easy", (8,), 0.9)]:
+        for width in widths:
+            for fold in range(5):
+                rows.append({"task_type": "binary_classification", "metric": "roc_auc",
+                             "phase": "experiment_2", "model_id": "catboost",
+                             "reference": "non_text", "dataset_id": dataset,
+                             "split_id": "shared", "encoder": "e5_small_v2", "pca_scope": "joint",
+                             "pca_components": width, "arm_id": f"{dataset}_{width}",
+                             "outer_fold": fold, "difference": effect})
+    fig, _, caption = next(embedding_effect_figures(pd.DataFrame(rows)))
+    assert np.allclose(fig.axes[0].lines[0].get_ydata(), [0.1] * 6)
+    assert "n=1" in fig.axes[0].lines[0].get_label()
+    assert "fixed cohort" in caption
     plt.close(fig)
 
 

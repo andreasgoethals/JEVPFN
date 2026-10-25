@@ -22,19 +22,38 @@ def gpu_sample():
     devices = os.environ.get("SLURM_STEP_GPUS") or os.environ.get("SLURM_JOB_GPUS")
     if not devices:
         return []  # Never attribute another user's GPU to a CPU-only job.
-    result = subprocess.run(
-        [
-            os.environ.get("JEVPFN_NVIDIA_SMI") or "nvidia-smi",
-            "-i",
-            devices,
-            "--query-gpu=uuid,name,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw",
-            "--format=csv,noheader,nounits",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=8,
-        check=True,
-    )
+    executable = os.environ.get("JEVPFN_NVIDIA_SMI") or "nvidia-smi"
+    query = [
+        executable, "-i", devices,
+        "--query-gpu=uuid,name,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw",
+        "--format=csv,noheader,nounits",
+    ]
+    arguments = dict(capture_output=True, text=True, timeout=8, check=True)
+    try:
+        result = subprocess.run(query, **arguments)
+    except subprocess.CalledProcessError as exc:
+        # wICE's cgroup may expose allocation-global GPU 3 as its sole local GPU 0.
+        # Never fall back to querying every GPU: resolve a UUID only if precisely
+        # one GPU was allocated AND nvidia-smi can see precisely that one device.
+        if (
+            exc.returncode != 6
+            or "No devices were found" not in str(exc.stdout or "")
+            or not devices.isdecimal()
+            or os.environ.get("CUDA_VISIBLE_DEVICES") != "0"
+        ):
+            raise
+        inventory = subprocess.run(
+            [executable, "--query-gpu=index,uuid", "--format=csv,noheader,nounits"],
+            **arguments,
+        )
+        visible = list(csv.reader(io.StringIO(inventory.stdout), skipinitialspace=True))
+        if len(visible) != 1 or len(visible[0]) != 2 or visible[0][0].strip() != "0":
+            raise exc
+        uuid = visible[0][1].strip()
+        if not uuid.startswith("GPU-") or any(c.isspace() or c == "," for c in uuid):
+            raise exc
+        query[2] = uuid
+        result = subprocess.run(query, **arguments)
     return list(csv.reader(io.StringIO(result.stdout), skipinitialspace=True))
 
 
@@ -135,6 +154,7 @@ def run(command, *, interval=10):
                         "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "CUDA_VISIBLE_DEVICES"
                     )
                 },
+                "device_resolution": "allocation_ids_or_verified_single_visible_gpu_uuid",
                 "sampling_status": "sampled" if samples else "failed" if errors else "no_samples",
                 "mean_gpu_util_percent": sum(samples) / len(samples) if samples else None,
                 "peak_gpu_util_percent": max(samples) if samples else None,

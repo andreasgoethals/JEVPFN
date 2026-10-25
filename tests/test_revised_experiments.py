@@ -116,12 +116,11 @@ def test_training_partitions_exclude_outer_test_rows():
                 assert not set(train) & set(fold["test"])
 
 
-def test_gpu_routes_reject_unknown_native_project_and_cpu_plan_has_no_gpu():
+def test_gpu_routes_use_native_scratch_and_cpu_plan_has_no_gpu():
     from src.cluster.benchmark_jobs import plan
     from src.cluster.scheduling import gpu_profile
 
-    with pytest.raises(ValueError, match="GPFS"):
-        gpu_profile("mindwell_b200")
+    assert gpu_profile("mindwell_b200")["storage_mode"] == "scratch_mirror"
     assert gpu_profile("wice_h100")["partition"] == "gpu_h100"
     assert plan("experiment_1", "catboost")["gpu"] is False
     assert plan("experiment_1", "tabpfn_3_5")["gpu"] is True
@@ -166,7 +165,9 @@ def test_gpu_sampling_uses_the_captured_host_binary_and_allocated_device(monkeyp
     assert monitor.gpu_sample()[0][0] == "allocated-uuid"
 
 
-def test_telemetry_failure_preserves_diagnostics_without_changing_model_result(monkeypatch, tmp_path):
+def test_telemetry_failure_preserves_diagnostics_without_changing_model_result(
+    monkeypatch, tmp_path
+):
     import json
     import subprocess
     import sys
@@ -189,10 +190,15 @@ def test_telemetry_failure_preserves_diagnostics_without_changing_model_result(m
     report = json.loads(next((tmp_path / "manifests").rglob("*.json")).read_text())
     assert report["sampling_status"] == "failed"
     assert report["gpu_samples"] == 0 and report["mean_gpu_util_percent"] is None
-    assert report["sampling_error_details"] == [{
-        "type": "CalledProcessError", "returncode": 6, "command": ["nvidia-smi", "-i", "3"],
-        "stdout": "fixture stdout", "stderr": "fixture NVML error",
-    }]
+    assert report["sampling_error_details"] == [
+        {
+            "type": "CalledProcessError",
+            "returncode": 6,
+            "command": ["nvidia-smi", "-i", "3"],
+            "stdout": "fixture stdout",
+            "stderr": "fixture NVML error",
+        }
+    ]
     assert report["gpu_allocation"]["SLURM_JOB_GPUS"] == "3"
 
 

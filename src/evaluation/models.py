@@ -18,6 +18,7 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 
+from src.evaluation.checkpoint_paths import checkpoint_path, model_checkpoint_argument
 from src.utils import paths
 from src.utils.serialization import canonical_json, digest, file_sha256, scalar
 
@@ -110,9 +111,7 @@ def _checkpoint(settings, task):
     pin = settings.get("checkpoints", {}).get(task, {})
     if not pin.get("path") or not pin.get("sha256"):
         raise ValueError(f"A staged checkpoint path and SHA256 are required for {task}")
-    path = Path(pin["path"])
-    if not path.is_absolute():
-        path = paths.checkpoints_dir() / path
+    path = checkpoint_path(pin["path"])
     if not path.is_file() or file_sha256(path) != pin["sha256"]:
         raise ValueError("Checkpoint missing or SHA256 differs from the reviewed pin")
     return str(path)
@@ -144,9 +143,7 @@ def _verify_assets(settings):
     for pin in assets:
         if not pin.get("path") or not pin.get("sha256"):
             raise ValueError("Incomplete native-text asset pin")
-        path = Path(pin["path"])
-        if not path.is_absolute():
-            path = paths.checkpoints_dir() / path
+        path = checkpoint_path(pin["path"])
         if not path.is_file() or file_sha256(path) != pin["sha256"]:
             raise ValueError("Native-text asset is missing or differs from its reviewed hash")
 
@@ -160,6 +157,12 @@ def _limix_config(path):
     for pipeline in pipelines:
         if pipeline.get("retrieval_config", {}).get("use_retrieval", False):
             raise ValueError("LimiX retrieval would violate the all-training-rows protocol")
+    if not isinstance(value, dict) or value.get("feature_encoder_mode") != "train_unknown_nan":
+        raise ValueError("LimiX V2 requires training-only train_unknown_nan category encoding")
+    if value.get("feature_view_strategy", "disabled") != "disabled":
+        raise ValueError(
+            "LimiX internal feature-view selection is outside the fixed-feature protocol"
+        )
     return value
 
 
@@ -231,23 +234,28 @@ def _backend(model_id, task, settings, encoder, n_train):
             **params,
         )
     if model_id == "limix_2":
+        from src.evaluation.limix_preprocessing import TrainOnlyLimiX
+
         predictor = importlib.import_module("inference.predictor").LimiXPredictor
         pin = settings.get("inference_configs", {}).get(task)
         if not isinstance(pin, dict) or not pin.get("path") or not pin.get("sha256"):
             raise ValueError("Select and hash the publisher's V2 no-retrieval inference config")
-        config_path = Path(pin["path"])
-        if not config_path.is_absolute():
-            config_path = paths.checkpoints_dir() / config_path
+        config_path = checkpoint_path(pin["path"])
         if not config_path.is_file() or file_sha256(config_path) != pin["sha256"]:
             raise ValueError("LimiX inference config differs from its reviewed SHA256")
-        return predictor(
-            device=device,
-            model_path=_checkpoint(settings, task),
-            inference_config=_limix_config(config_path),
-            seed=seed,
-            categorical_features_indices=[encoder.columns_.index(c) for c in encoder.categorical_],
-            use_data_cache=False,
-            **params,
+        params.setdefault("preprocess_num_jobs", settings["threads"])
+        return TrainOnlyLimiX(
+            predictor(
+                device=importlib.import_module("torch").device(device),
+                model_path=_checkpoint(settings, task),
+                inference_config=_limix_config(config_path),
+                seed=seed,
+                categorical_features_indices=[
+                    encoder.columns_.index(c) for c in encoder.categorical_
+                ],
+                use_data_cache=False,
+                **params,
+            )
         )
     if model_id == "kumo_tabular":
         return KumoBackend(task, settings, encoder.categorical_)
@@ -259,7 +267,9 @@ def _backend(model_id, task, settings, encoder, n_train):
         return cls(
             device=device,
             random_state=seed,
-            pretrain_dataset_or_path=settings["pretrain_dataset_or_path"],
+            pretrain_dataset_or_path=model_checkpoint_argument(
+                settings["pretrain_dataset_or_path"]
+            ),
             output_dir=str(
                 paths.results_dir(
                     "tabstar_training",
@@ -277,7 +287,7 @@ def _backend(model_id, task, settings, encoder, n_train):
         # The default bagging=8/max_context_size=8192 silently samples. Override both.
         # Large full contexts are an unvalidated resource requirement, never a row cap.
         model = cls(
-            checkpoint=settings["checkpoint_filename"],
+            checkpoint=model_checkpoint_argument(settings["checkpoint_filename"]),
             bagging=1,
             max_context_size=n_train,
             **params,

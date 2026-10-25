@@ -3,10 +3,11 @@
 set -euo pipefail
 case "${SLURM_JOB_PARTITION:-}" in
     gpu|gpu_a100*)
-        echo 'A100 allocations are disabled for JEVPFN. Use gpu_h100.' >&2
+        echo 'A100 allocations are disabled for JEVPFN. Use Mindwell gpu_b200.' >&2
         exit 2
         ;;
 esac
+source scripts/activate_b200_storage.sh
 source scripts/activate_runtime.sh
 python -c 'from src.cluster.scheduling import reject_a100_allocation; reject_a100_allocation()'
 python -m src.cluster.freeze

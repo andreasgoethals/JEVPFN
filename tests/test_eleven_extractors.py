@@ -49,18 +49,34 @@ def test_cpu_graph_before_gpu_with_bounded_builds():
         by_name = {s["name"]: s for s in steps}
         assert provider + "_stage" in by_name[provider + "_tokens"]["dependencies"]
         contracts = by_name[provider + "_contracts"]
-        assert {"cpu", "storage", provider + "_tokens", provider + "_build"} <= set(
+        assert {"cpu", "storage", "gpfs_storage", provider + "_scratch"} <= set(
             contracts["dependencies"]
         )
-        assert "--partition=gpu_h100" in contracts["flags"]
+        assert {provider + "_tokens", provider + "_build"} <= set(
+            by_name[provider + "_scratch"]["dependencies"]
+        )
+        assert "--partition=gpu_b200" in contracts["flags"]
+        assert contracts["cluster"] == "mindwell"
+        assert contracts["args"][2].endswith("/jevpfn-work/" + provider)
+        assert by_name[provider + "_build"]["args"][3] == "blackwell-cu130"
+        assert all(
+            by_name[provider + suffix]["cluster"] == "wice"
+            for suffix in ("_stage", "_tokens", "_build", "_scratch")
+        )
         if provider in setup_extractors.LARGE:
             assert "--mem=112000M" in contracts["flags"]
-            assert "--cpus-per-task=8" in contracts["flags"]
+            assert "--cpus-per-task=14" in contracts["flags"]
         assert by_name[provider + "_pilot"]["dependencies"] == [provider + "_contracts"]
+    assert by_name["gpfs_storage"]["cluster"] == "mindwell"
+    assert by_name["gpfs_storage"]["dependencies"] == [registry.SELF_HOSTED[0] + "_scratch"]
+    assert "embedding_stage" in by_name["cloudflare_scratch"]["dependencies"]
+    encoders = [s for s in steps if s["name"].startswith("embeddings_")]
+    assert len(encoders) == 3
+    assert all({"cloudflare_scratch", "gpfs_storage"} <= set(s["dependencies"]) for s in encoders)
     reused = setup_extractors.plan(["intern", "h2o"], reuse=["intern"])
     assert "intern_build" not in {s["name"] for s in reused}
     assert (
-        "intern_stage" in next(s for s in reused if s["name"] == "intern_contracts")["dependencies"]
+        "intern_stage" in next(s for s in reused if s["name"] == "intern_scratch")["dependencies"]
     )
 
 
@@ -73,9 +89,9 @@ def _submission_fixture(monkeypatch, tmp_path):
     monkeypatch.setattr(setup_extractors, "source_snapshot", lambda: {"sha": "unchanged"})
     monkeypatch.setattr(setup_extractors, "check_if_present", lambda: {"frozen": False})
     monkeypatch.setattr(setup_extractors, "require_idle_vsc", lambda: None)
-    monkeypatch.setattr(containers, "container_dir", lambda p: tmp_path / "containers" / p)
-    monkeypatch.setattr(containers, "verify", lambda p: None)
-    return tmp_path / "manifests/container_setup/open_models.json"
+    monkeypatch.setattr(containers, "container_dir", lambda p, **k: tmp_path / "containers" / p)
+    monkeypatch.setattr(containers, "verify", lambda p, **k: {"runtime_profile": "blackwell-cu130"})
+    return tmp_path / "manifests/container_setup/open_models_mindwell_b200.json"
 
 
 def test_submission_resume_never_duplicates_and_preserves_original_plan(monkeypatch, tmp_path):
@@ -83,12 +99,14 @@ def test_submission_resume_never_duplicates_and_preserves_original_plan(monkeypa
     commands = []
 
     def submit(command, **kwargs):
+        if command[0] == "sacct":
+            return SimpleNamespace(stdout="")
         commands.append(command)
         return SimpleNamespace(stdout=f"{100 + len(commands)};wice\n")
 
     monkeypatch.setattr(setup_extractors.subprocess, "run", submit)
     report = setup_extractors.run(["h2o"], execute=True)
-    assert report["status"] == "submitted_requires_live_results"
+    assert report["status"] == "waiting_for_job"
     n = len(commands)
     # The image now exists, but resume must use the original submitted graph.
     marker = tmp_path / "containers/h2o/_JEVPFN_CONTAINER.json"
@@ -98,7 +116,64 @@ def test_submission_resume_never_duplicates_and_preserves_original_plan(monkeypa
     assert len(commands) == n
     assert json.loads(receipt.read_text())["status"] == report["status"]
     assert all("--clusters=wice" in c for c in commands)
-    assert any("--dependency=afterok:" in arg for c in commands for arg in c)
+    assert not any(arg.startswith("--dependency=") for c in commands for arg in c)
+    assert {s["name"] for s in report["steps"] if s.get("job_id")} == {
+        "cpu",
+        "storage",
+        "h2o_stage",
+    }
+
+
+def test_cross_cluster_steps_wait_for_successful_cpu_stage_and_do_not_duplicate(
+    monkeypatch, tmp_path
+):
+    _submission_fixture(monkeypatch, tmp_path)
+    submitted, completed = [], set()
+
+    def scheduler(command, **kwargs):
+        if command[0] == "sacct":
+            job = command[command.index("-j") + 1]
+            return SimpleNamespace(stdout=f"{job}|COMPLETED|0:0\n" if job in completed else "")
+        job = str(100 + len(submitted))
+        cluster = next(a.split("=", 1)[1] for a in command if a.startswith("--clusters="))
+        submitted.append((job, command))
+        return SimpleNamespace(stdout=f"{job};{cluster}\n")
+
+    monkeypatch.setattr(setup_extractors.subprocess, "run", scheduler)
+    for _ in range(8):
+        report = setup_extractors.run(["h2o"], execute=True)
+        by_name = {s["name"]: s for s in report["steps"]}
+        for step in report["steps"]:
+            if step.get("job_id"):
+                assert all(by_name[d]["job_id"] in completed for d in step["dependencies"])
+        completed.update(j for j, _ in submitted)
+        if report["status"] == "setup_completed_requires_review":
+            break
+    assert report["status"] == "setup_completed_requires_review"
+    assert len(submitted) == len(report["steps"])
+    assert sum("--clusters=mindwell" in command for _, command in submitted) == 3
+    assert sum("--partition=gpu_b200" in command for _, command in submitted) == 2
+    assert all(not any(a.startswith("--dependency=") for a in command) for _, command in submitted)
+
+
+def test_failed_prerequisite_never_dispatches_gpu(monkeypatch, tmp_path):
+    receipt = _submission_fixture(monkeypatch, tmp_path)
+    submissions = []
+
+    def scheduler(command, **kwargs):
+        if command[0] == "sacct":
+            job = command[command.index("-j") + 1]
+            return SimpleNamespace(stdout=f"{job}|FAILED|1:0\n")
+        submissions.append(command)
+        return SimpleNamespace(stdout=f"{100 + len(submissions)};wice\n")
+
+    monkeypatch.setattr(setup_extractors.subprocess, "run", scheduler)
+    setup_extractors.run(["h2o"], execute=True)
+    before = len(submissions)
+    with pytest.raises(RuntimeError, match="ended"):
+        setup_extractors.run(["h2o"], execute=True)
+    assert len(submissions) == before
+    assert json.loads(receipt.read_text())["status"] == "stopped_requires_review"
 
 
 def test_ambiguous_submission_requires_review_not_automatic_retry(monkeypatch, tmp_path):
@@ -113,7 +188,7 @@ def test_ambiguous_submission_requires_review_not_automatic_retry(monkeypatch, t
     with pytest.raises(ValueError, match="Ambiguous"):
         setup_extractors.run(["h2o"], execute=True)
     assert json.loads(receipt.read_text())["steps"][0]["status"] == "starting"
-    with pytest.raises(ValueError, match="interrupted"):
+    with pytest.raises(ValueError, match="Earlier setup stopped"):
         setup_extractors.run(["h2o"], execute=True)
     assert len(commands) == 1
 

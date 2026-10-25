@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import numpy as np
@@ -98,7 +100,15 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder, encoder_id="e5_s
         "config": cfg,
         "fixture_cache": str(destination),
         "full_feature_creation_enabled": False,
+        "job_id": os.environ.get("SLURM_JOB_ID"),
+        "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
+        "created_utc": datetime.now(UTC).isoformat(),
     }
+    from src.cluster.evidence import current_identity
+    from src.cluster.freeze import source_snapshot
+
+    report["validation_identity"] = current_identity()
+    report["git_head"] = source_snapshot()["git_head"]
     log = paths.logs_dir("experiment_0") / "embeddings.log"
     write_json(manifest, report)
     append_event(log, "embedding_contract_started", run_id=run_id)
@@ -111,6 +121,7 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder, encoder_id="e5_s
         report.update(status="failed", error_type=type(exc).__name__)
         raise
     finally:
+        report["finished_utc"] = datetime.now(UTC).isoformat()
         if getattr(encoder, "timings", None):
             report["timing"] = encoder.timings.write_summary()
         write_json(manifest, report)

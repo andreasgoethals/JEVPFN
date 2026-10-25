@@ -42,11 +42,15 @@ def encoder_config(encoder_id="e5_small_v2"):
     catalog = load_yaml("feature_creation/embedding_models")["models"]
     if encoder_id not in catalog:
         raise ValueError("Unknown embedding encoder")
-    return (
+    cfg = (
         load_yaml("feature_creation/text_embeddings")
         | catalog[encoder_id]
         | {"encoder_id": encoder_id}
     )
+    # The shared defaults describe small E5; provenance must identify the actual
+    # selected checkpoint rather than inheriting its model-card URL.
+    cfg["source"] = catalog[encoder_id].get("source", f"https://huggingface.co/{cfg['model']}")
+    return cfg
 
 
 def encoder_id_for_model(model):

@@ -114,14 +114,25 @@ def evidence_for(provider, *, campaign=None):
             and {d["dataset_id"] for d in r["datasets"]} == set(current)
         ),
     )
-    storage_file, _ = choose(
-        (before / "storage_contracts").glob("*.json"),
-        lambda r: (
-            r.get("status") == "storage_contracts_passed_requires_quota_and_backup_review"
-            and matching(r, "storage")
-            and r.get("snapshot_restore") is True
-        ),
-    )
+    # Both filesystems participate in B200 extraction: native GPFS for active
+    # writes and Lustre for durable publication. A pass on one cannot certify the other.
+    from src.cluster.scheduling import gpu_profile
+
+    storage_files = []
+    backends = [("lustre", "storage")]
+    if gpu_profile().get("storage_mode") == "scratch_mirror":
+        backends.append(("gpfs", "gpfs_storage"))
+    for backend, step in backends:
+        storage_file, _ = choose(
+            (before / "storage_contracts").glob("*.json"),
+            lambda r, backend=backend, step=step: (
+                r.get("status") == "storage_contracts_passed_requires_quota_and_backup_review"
+                and matching(r, step)
+                and r.get("storage_backend") == backend
+                and r.get("snapshot_restore") is True
+            ),
+        )
+        storage_files.append(storage_file)
     question_file = root / "question_audit.json"
     question = json.loads(question_file.read_text(encoding="utf-8"))
     if (
@@ -141,7 +152,7 @@ def evidence_for(provider, *, campaign=None):
             {"path": str(p.resolve()), "sha256": file_sha256(p)}
             for p in (
                 cpu_file,
-                storage_file,
+                *storage_files,
                 question_file,
                 token_file,
                 gpu_file,

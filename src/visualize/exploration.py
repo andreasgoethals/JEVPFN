@@ -205,8 +205,8 @@ def reuse_figure(summary):
     fig, axes = plt.subplots(1, 2, figsize=style.DASHBOARD_SIZE, sharey=True)
     y = np.arange(len(ordered))
     for mode, offset, color, label in [
-        ("per_column", -0.17, style.MEDIAN_COLOR, "Per-column"),
-        ("joint", 0.17, style.P95_COLOR, "Joint"),
+        ("per_column", -0.17, style.MODE_COLORS["per_column"], "Per-column"),
+        ("joint", 0.17, style.MODE_COLORS["joint"], "Joint"),
     ]:
         for ax, suffix in zip(axes, ["reuse_savings_pct", "repeated_inputs"]):
             ax.barh(y + offset, ordered[f"{mode}_{suffix}"], height=0.32, color=color, label=label)

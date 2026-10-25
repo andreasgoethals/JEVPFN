@@ -40,9 +40,9 @@ def regression_scale_figure(labels):
             0.02,
             0.94 - index * 0.1,
             f"{int(level):+d}",
-            color=style.MEDIAN_COLOR
+            color=style.DIRECTION_COLORS["lower"]
             if int(level) < 0
-            else style.P95_COLOR
+            else style.DIRECTION_COLORS["higher"]
             if int(level) > 0
             else style.TEXT_COLOR,
             transform=ax.transAxes,

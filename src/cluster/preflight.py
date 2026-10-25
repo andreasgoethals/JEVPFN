@@ -81,11 +81,26 @@ def storage_policy_failures(cluster: str | None = None) -> list[str]:
         failures.append("Mindwell requires native GPFS project storage, not cross-mounted Lustre.")
     if cluster == "wice" and "gpfs" in location:
         failures.append("wICE requires native Lustre project storage, not cross-mounted GPFS.")
-    native_variable = {"wice": "VSC_PROJECT_LUSTRE1", "mindwell": "VSC_PROJECT_GPFS1"}.get(cluster)
+    scratch_mode = (
+        cluster == "mindwell" and os.environ.get("JEVPFN_STORAGE_MODE") == "scratch_mirror"
+    )
+    native_variable = (
+        "VSC_SCRATCH_GPFS1"
+        if scratch_mode
+        else {"wice": "VSC_PROJECT_LUSTRE1", "mindwell": "VSC_PROJECT_GPFS1"}.get(cluster)
+    )
     if native_variable and os.environ.get(native_variable):
         native = Path(os.environ[native_variable]).resolve()
         if not project.is_relative_to(native):
             failures.append(f"Project storage is outside the site's {native_variable} root.")
+    if scratch_mode:
+        from src.cluster.scratch_stage import MARKER
+
+        durable = os.environ.get("JEVPFN_DURABLE_ROOT", "")
+        if not durable or "lustre" not in durable or not Path(durable).is_dir():
+            failures.append("B200 scratch needs the existing durable Lustre allocation.")
+        if not (project / "JEVPFN" / MARKER).is_file():
+            failures.append("B200 working set has not been CPU-staged and fingerprinted.")
     return failures
 
 

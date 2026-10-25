@@ -15,6 +15,7 @@ METRIC_VIEWS = {
 }
 MODES = {"non_text_plus_joint": "Joint", "non_text_plus_per_column": "Per-column",
          "non_text_plus_both": "Both"}
+JOINT_WIDTHS = (8, 16, 32, 64, 128, 256)
 
 
 def _dataset_effects(group, keys, task, direction):
@@ -101,10 +102,19 @@ def embedding_effect_figures(paired):
                                       gridspec_kw={"width_ratios": [2, 1]})
             for encoder, part in datasets.groupby("encoder", sort=False):
                 color = style.EMBEDDING_COLORS[encoder]
-                joint = part[part.pca_scope.eq("joint")].groupby("pca_components").effect.mean()
+                joint_rows = part[part.pca_scope.eq("joint")
+                                  & part.pca_components.isin(JOINT_WIDTHS)]
+                # A curve must compare the same dataset/split at every width.
+                # Otherwise a newly completed easy dataset can look like a PCA benefit.
+                complete = joint_rows.groupby(["dataset_id", "split_id"]).filter(
+                    lambda frame: len(frame) == len(JOINT_WIDTHS)
+                    and set(frame.pca_components) == set(JOINT_WIDTHS)
+                )
+                joint = complete.groupby("pca_components").effect.mean()
                 if not joint.empty:
                     axes[0].plot(joint.index, joint, color=color, marker="o",
-                                 label=ENCODER_LABELS[encoder], markersize=4)
+                                 label=f"{ENCODER_LABELS[encoder]} (n={complete.dataset_id.nunique()})",
+                                 markersize=4)
                 separate = part[part.pca_scope.eq("per_column")].effect
                 if not separate.empty:
                     position = list(ENCODER_LABELS).index(encoder)
@@ -117,13 +127,20 @@ def embedding_effect_figures(paired):
             axes[0].set_xscale("log", base=2)
             axes[0].set_xticks([8, 16, 32, 64, 128, 256], [8, 16, 32, 64, 128, 256])
             axes[0].set_xlabel("Joint PCA: total dimensions")
-            axes[0].legend(fontsize=7)
+            handles, _ = axes[0].get_legend_handles_labels()
+            if handles:
+                axes[0].legend(fontsize=7)
+            else:
+                axes[0].text(0.5, 0.5, "Awaiting datasets with all six widths",
+                             transform=axes[0].transAxes, ha="center", fontsize=8)
             axes[1].set_xticks(range(3), ["Small\nE5", "Large\nE5", "Qwen"], fontsize=7)
             axes[1].set_title("Per-column PCA32", fontsize=8)
             fig.suptitle(f"{model} · {task.split('_')[0]} · embedding effects\nReference: {reference}", fontsize=9)
             yield fig, f"embedding_effect_{model}_{task}_{reference}", (
                 "Paired frozen-embedding effects within a fixed predictor. Each joint curve "
-                "averages dataset-level five-fold differences at each requested width; per-column "
+                "uses only dataset/split pairs with five defined paired folds at all six joint "
+                "widths, then averages their dataset-level effects. Legend n is this fixed "
+                "cohort size; cohorts may differ between encoders. Per-column "
                 "points are individual dataset differences and diamonds their means. Exact counts "
                 "and identities remain in the tables; missing/unsupported arms are not imputed. "
                 "Positive values indicate improvement. Regression is percentage reduction in mean "

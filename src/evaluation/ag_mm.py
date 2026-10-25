@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.utils import paths
+from src.evaluation.checkpoint_paths import checkpoint_path
 
 
 class AutoMMBackend:
@@ -25,16 +25,13 @@ class AutoMMBackend:
         checkpoint = settings.get("text_checkpoint_path")
         if not checkpoint:
             raise ValueError("AG-MM needs a staged text_checkpoint_path and hashed encoder assets")
-        checkpoint = Path(checkpoint)
-        if not checkpoint.is_absolute():
-            checkpoint = paths.checkpoints_dir() / checkpoint
+        checkpoint = checkpoint_path(checkpoint)
         if not checkpoint.is_dir():
             raise ValueError("AG-MM text checkpoint directory is missing")
         # Refuse a supplied path outside the hash-reviewed asset tree.
         assets = []
         for pin in settings["assets"]:
-            path = Path(pin["path"])
-            assets.append(path if path.is_absolute() else paths.checkpoints_dir() / path)
+            assets.append(checkpoint_path(pin["path"]))
         files = {p.resolve() for p in checkpoint.rglob("*") if p.is_file()}
         if not files or not files.issubset({p.resolve() for p in assets}):
             raise ValueError("Every AG-MM encoder file needs an explicit reviewed hash")

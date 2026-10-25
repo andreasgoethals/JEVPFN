@@ -54,6 +54,8 @@ def storage_run(isolated_output, monkeypatch, receipt_clock):
     monkeypatch.setenv("SLURM_JOB_ID", "synthetic-test")
     monkeypatch.setenv("SLURM_JOB_NODELIST", "node[1-2]")
     monkeypatch.setenv("SLURMD_NODENAME", "node1")
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "wice")
+    monkeypatch.setattr(probe, "storage_backend", lambda _: "lustre")
     monkeypatch.setattr(probe.paths, "on_vsc", lambda: True)
     monkeypatch.setattr(probe.paths, "require_project_output", Path)
     monkeypatch.setattr(
@@ -105,6 +107,8 @@ def test_storage_probe_saves_evidence_and_restores_snapshot(
     storage_run["stdout"] = launcher_output
     report = probe.run(execute=True)
     assert report["snapshot_restore"]
+    assert report["cluster"] == "wice"
+    assert report["storage_backend"] == "lustre"
     assert report["cross_node_exclusion"]["node"] == "node2"
     assert report["quota_verified"] is report["independent_backup_verified"] is False
     manifests = list(
@@ -219,3 +223,28 @@ def test_storage_probe_refuses_login_node(monkeypatch):
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     with pytest.raises(RuntimeError, match="allocation"):
         probe.run(execute=True)
+
+
+@pytest.mark.parametrize(
+    "folder,expected",
+    [
+        ("/gpfs1/scratch/user/JEVPFN/results", "gpfs"),
+        ("/lustre1/project/stg_00211/JEVPFN/results", "lustre"),
+    ],
+)
+def test_storage_backend_uses_actual_native_results_root(folder, expected):
+    assert probe.storage_backend(folder) == expected
+
+
+@pytest.mark.parametrize("folder", ["/data/user/gpfs1/results", "/tmp/lustre1", "/gpfsfake/data"])
+def test_storage_backend_rejects_unknown_or_nested_root(folder):
+    with pytest.raises(ValueError, match="recognized native"):
+        probe.storage_backend(folder)
+
+
+def test_storage_probe_reports_native_gpfs(storage_run, monkeypatch):
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    monkeypatch.setattr(probe, "storage_backend", lambda _: "gpfs")
+    report = probe.run(execute=True)
+    assert report["cluster"] == "mindwell"
+    assert report["storage_backend"] == "gpfs"

@@ -17,35 +17,46 @@ MAPPING_VERSION = "typesafe-systemone-v1"
 QUESTION_ID = "semantic"
 SCORE_VALIDATION_VERSION = "jev-two-decimal-envelope-v1"
 PROBABILITY_VALIDATION_VERSION = "jev-two-decimal-simplex-v1"
+# Strands' pinned infer._to_answer rounds probabilities AND weighted scores to
+# four decimals. Jev's two-decimal precision is observed wire behaviour. Neither
+# policy applies to another runtime, and neither reconstructs lost precision.
+ROUNDING_DECIMALS = {"jev": 2, "strands": 4}
+
+
+def _rounding_half_step(values, provider):
+    digits = ROUNDING_DECIMALS.get(provider)
+    if digits is None:
+        return None
+    scale = 10**digits
+    if not all(math.isclose(v * scale, round(v * scale), rel_tol=0, abs_tol=1e-8) for v in values):
+        return None
+    return 0.5 / scale
 
 
 def probability_distribution(values, provider):
-    """Normalize only Jev's observed two-decimal rounding, retaining the raw response.
+    """Normalize only documented/observed provider rounding, retaining raw responses.
 
     Find the closest sum-one vector in squared distance, with every entry within
-    half a hundredth of its reported value. This is a bounded compatibility policy,
+    half its provider's rounding step from its reported value. This is a bounded policy,
     not a provider precision guarantee or recovery of the unknown unrounded values.
-    Full-precision open-weight outputs keep the original strict sum check.
+    Jev uses two decimals; pinned Strands infer._to_answer uses four. Other
+    open-weight outputs keep the original strict sum check.
     """
     values = [_number(v, 0, 1) for v in values]
     total = math.fsum(values)
     normalized = values
     adjusted = not math.isclose(total, 1, rel_tol=0, abs_tol=1e-5)
     if adjusted:
-        if (
-            provider != "jev"
-            or total <= 0
-            or not all(
-                math.isclose(v * 100, round(v * 100), rel_tol=0, abs_tol=1e-8) for v in values
-            )
-        ):
+        half_step = _rounding_half_step(values, provider)
+        if half_step is None or total <= 0:
             raise ValueError("Response probabilities do not sum to one.")
-        lows, highs = [max(0, v - 0.005) for v in values], [min(1, v + 0.005) for v in values]
+        lows = [max(0, v - half_step) for v in values]
+        highs = [min(1, v + half_step) for v in values]
         if math.fsum(lows) > 1 + 1e-12 or math.fsum(highs) < 1 - 1e-12:
             raise ValueError("Rounded probabilities cannot represent a distribution.")
         # Projection onto the bounded probability simplex has form clip(p + shift).
         # Bisection is permutation-equivariant; class order cannot affect the repair.
-        left, right = -0.005, 0.005
+        left, right = -half_step, half_step
         for _ in range(60):
             shift = (left + right) / 2
             normalized = [min(hi, max(lo, v + shift)) for v, lo, hi in zip(values, lows, highs)]
@@ -56,7 +67,10 @@ def probability_distribution(values, provider):
         if not math.isclose(math.fsum(normalized), 1, abs_tol=1e-10, rel_tol=0):
             raise ValueError("Probability rounding reconstruction failed.")
     return normalized, {
-        "policy": PROBABILITY_VALIDATION_VERSION,
+        "policy": (
+            "strands-four-decimal-simplex-v1" if provider == "strands"
+            else PROBABILITY_VALIDATION_VERSION
+        ),
         "reported_sum": total,
         "normalization_applied": adjusted,
         "maximum_absolute_adjustment": max(
@@ -66,24 +80,23 @@ def probability_distribution(values, provider):
 
 
 def score_consistency(score, values, provider):
-    """Keep full-precision runtimes strict; accommodate observed Jev wire rounding.
+    """Keep full-precision runtimes strict; allow bounded provider score rounding.
 
     Jev 1.13 returned score=7.99 beside p(8)=1.00 on 20 October. Its documentation
     defines a weighted mean but does not promise a decimal precision. We therefore
     accept a discrepancy only if a normalized latent distribution and score could
-    both round to the *observed two-decimal* fields. This is an explicit compatibility
+    both round to the observed two-decimal fields. Strands' pinned infer._to_answer
+    explicitly rounds both fields to four decimals, so its envelope is 100x narrower.
+    This is an explicit compatibility
     policy, not a claim that the provider guarantees this rounding.
     """
     expected = sum(i * p for i, p in enumerate(values))
     lower = upper = expected
     exact = math.isclose(score, expected, abs_tol=1e-4)
-    if (
-        not exact
-        and provider == "jev"
-        and all(math.isclose(v * 100, round(v * 100), abs_tol=1e-8) for v in [score, *values])
-    ):
-        lows = [max(0, p - 0.005) for p in values]
-        highs = [min(1, p + 0.005) for p in values]
+    half_step = _rounding_half_step([score, *values], provider)
+    if not exact and half_step is not None:
+        lows = [max(0, p - half_step) for p in values]
+        highs = [min(1, p + half_step) for p in values]
 
         def extreme(order):
             candidate = lows.copy()
@@ -96,12 +109,15 @@ def score_consistency(score, values, provider):
                 raise ValueError("Rounded probabilities cannot represent a distribution.")
             return sum(i * p for i, p in enumerate(candidate))
 
-        lower = extreme(range(len(values))) - 0.005
-        upper = extreme(reversed(range(len(values)))) + 0.005
+        lower = extreme(range(len(values))) - half_step
+        upper = extreme(reversed(range(len(values)))) + half_step
     if not exact and not lower - 1e-8 <= score <= upper + 1e-8:
         raise ValueError("Regression score is inconsistent with its probabilities.")
     return {
-        "policy": SCORE_VALIDATION_VERSION,
+        "policy": (
+            "strands-four-decimal-envelope-v1" if provider == "strands"
+            else SCORE_VALIDATION_VERSION
+        ),
         "reported_score": score,
         "probability_weighted_score": expected,
         "absolute_difference": abs(score - expected),
@@ -171,7 +187,7 @@ def _number(value, low: float, high: float) -> float:
 
 
 def response_features(request: IntendedRequest, response: dict) -> dict[str, float]:
-    """Decode a response; only bounded Jev wire-rounding normalization is permitted."""
+    """Decode responses with only provider-specific bounded rounding correction."""
     settings = json.loads(request.settings_json)
     provider = settings.get("provider", "jev")
     if provider == "jev":

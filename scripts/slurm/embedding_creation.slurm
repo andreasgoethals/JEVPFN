@@ -3,8 +3,8 @@
 # Weights must already be staged; reuse the compatible Clef container.
 #SBATCH --job-name=jevpfn-embeddings
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=gpu_h100
+#SBATCH --clusters=mindwell
+#SBATCH --partition=gpu_b200
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -22,4 +22,4 @@ cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 JEVPFN_EMBEDDING_ARGS=(--encoder "$JEVPFN_ENCODER" --execute)
 if [[ -n "${4:-}" ]]; then JEVPFN_EMBEDDING_ARGS+=(--dataset "$4"); fi
-"${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.data.text_embeddings "${JEVPFN_EMBEDDING_ARGS[@]}"
+jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.data.text_embeddings "${JEVPFN_EMBEDDING_ARGS[@]}"

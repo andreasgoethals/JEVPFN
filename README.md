@@ -6,21 +6,27 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The VSC archive inspected on 23 October confirms CPU/data/question checks, two-node storage
-contracts, Clef/Intern H100 contracts and E5-small/E5-large GPU contracts. The other runtimes,
-recent activation/export/telemetry fixes and predictor feasibility still require live
-verification. Eleven extractors are implemented; the five newest open models need staging,
-complete token audits and GPU tests. Existing question-v3 evidence covers 18 datasets,
-1,698,127 distinct inputs and 3,294,340 row/input links. No local test or submission proves
-that a pending VSC workload works. Dated evidence and known failures are in
+The 24 October VSC archive confirms historical CPU/data/question checks, two-node storage
+contracts, Liquid/Perplexity/Clef/Intern H100 contracts and dataset pilots, and all three
+encoder tests. Five added-provider CPU token jobs hit their four-hour limit; their saved
+batches can resume. Strands' rounding and two images' installer-discovery failures were
+corrected locally but still need new execution. These outcomes do not certify the current
+working tree or B200 execution.
+Eleven extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
+distinct inputs and 3,294,340 row/input links. Dated evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
+
+GPU execution now defaults to **Mindwell B200**. CPU jobs build separate CUDA 13.0
+containers, count tokens and copy each required working set to native GPFS scratch.
+Authoritative inputs, weights and durable results remain on Lustre PROJECT; logs and
+small manifests remain on DATA. Committed feature/prediction databases publish periodically
+and at job exit; scratch survives failed jobs for recovery but is not a backup. No new
+GPFS project allocation is required. Existing H100 images remain preserved; all A100
+routes are excluded. Actual B200 kernel/provider/encoder tests remain required. See [VSC](docs/VSC.md).
 
 The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
 Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
-bounded setup tests, not production features or final acceptance. A100 routes are excluded;
-the current setup graph uses wICE H100. Mindwell B200 is preferred for subsequent work once
-native GPFS staging and a Blackwell-compatible runtime are verified; the owner's allocation
-currently exists only on Lustre. See [VSC](docs/VSC.md) before changing active jobs or paths.
+bounded setup tests, not production features or final acceptance.
 The owner normally handles Git publication; an explicit request is required to publish.
 
 ## Research contract
@@ -38,10 +44,10 @@ are documented from dataset sources; questions do not require a generative LLM.
 
 Binary evidence probabilities are not assumed to be calibrated target probabilities.
 Regression scores express directional evidence, not target units. Full responses and
-probability vectors are retained. Jev sometimes reports rounded vectors whose sum is 0.99
-or 1.01. Only complete two-decimal vectors with a feasible rounding correction are
-projected to the nearest sum-one vector (each entry changes by at most 0.005). Raw
-responses remain unchanged; this is a recorded decoding policy, not recovered precision. The rubric distinguishes indirect hints, qualified
+probability vectors are retained. Jev serializes two-decimal probabilities and Strands
+four-decimal probabilities. Only complete vectors with a feasible rounding correction
+are projected to sum one, with maximum per-entry changes of 0.005 and 0.00005 respectively.
+Raw responses remain unchanged; this policy does not recover discarded precision. The rubric distinguishes indirect hints, qualified
 support, clear direct evidence and explicit supported comparisons; zero favors neither direction.
 
 Empty text produces missing numeric features without an inference call. Exact request
@@ -72,8 +78,10 @@ The five additions use Apache-2.0 releases, not additional hosted APIs. Decision
 the current selected d3-turbo checkpoint; Nimble uses the Apache release, not a later
 noncommercial variant. H2O's released binary formatter floors the winning probability
 at 0.801. Preserve and disclose that policy; it is not evidence of target calibration.
-Provider-specific renderers preserve the same question, text, class meanings and option
-order, while their framing/token IDs differ. Conservative complete-request caps also
+All eleven adapters preserve the same canonical task metadata, question, named text, class
+meanings and option order. Native framing, token IDs, probability calibration and wire
+formats differ. Adapters expose the same downstream feature schema; numeric answers are
+expected to differ. Raw provider confidence is not an interchangeable calibrated quantity. Conservative complete-request caps also
 respect H2O's and Kev's separate state caps. Overflow stops execution without truncation.
 
 The six main predictors are **CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo Tabular,
@@ -145,6 +153,12 @@ KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, f
 by refitting on the full outer-training fold. The outer test fold never selects thresholds
 or fits preprocessing. Use all rows and fixed model settings, with no HPO or silent row/
 feature sampling. Full-fold feasibility must be tested before enabling the benchmark.
+
+The LimiX-2 adapter restricts feature filtering, category inference/encoding and polynomial
+scaling to training rows; its publisher implementation otherwise uses query rows in some
+of these steps. This declared preprocessing adaptation preserves the weights and requires
+real 0B validation. Unsupported publisher interfaces or multi-GPU reconstruction stop
+explicitly rather than silently reverting to combined train/test preprocessing.
 
 Save individual predictions, binary inner-OOF predictions, metrics, undefined-metric reasons,
 timings, resource use and artifact identities. Analyze paired feature effects within each
@@ -249,12 +263,15 @@ not all together in the notebook environment. Full setup/transfer commands are i
 On VSC, PROJECT holds large inputs, weights/containers, caches, exact-token databases,
 predictions and large results. DATA holds the checkout, small CPU environment, compact
 manifests and logs. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
-Large VSC writes fail rather than falling back to DATA. Free filesystem capacity is not quota.
+On B200, large active writes use the staged GPFS working set and publish to durable
+Lustre; small logs/manifests still use DATA. Large VSC writes fail rather than falling back to DATA. Free filesystem capacity is not quota.
 Evaluation creates one PROJECT database and one small DATA locator per dataset/phase.
 Fold locks use a bounded pool (at most 4,096 files per phase), not a new directory and
 several files for every fit. Transfer imports merge databases transactionally and reject
 conflicting records; legacy per-fold files remain readable. Failed-fit diagnostics stay visible.
 
+On VSC, full output cleanup includes numbered output under registered GPFS working sets,
+as well as DATA and durable PROJECT. It preserves the staged inputs and containers.
 The cleanup utility previews by default and never deletes data, weights, environments,
 containers or secrets. Run it on the machine being cleaned:
 

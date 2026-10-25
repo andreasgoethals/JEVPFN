@@ -221,3 +221,55 @@ def test_limix_rejects_context_retrieval_and_runtime_requires_pins(tmp_path):
         _limix_config(config)
     with pytest.raises(ValueError, match="pins"):
         verify_runtime({})
+
+
+def test_limix_backend_uses_torch_device_and_training_only_adapter(monkeypatch, tmp_path):
+    from src.evaluation import models
+    from src.evaluation.limix_preprocessing import TrainOnlyLimiX
+    from src.utils.serialization import file_sha256
+
+    checkpoint = tmp_path / "weights.pt"
+    checkpoint.write_bytes(b"never loaded")
+    config = tmp_path / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "pipelines": [{"retrieval_config": {"use_retrieval": False}}],
+                "feature_encoder_mode": "train_unknown_nan",
+                "feature_view_strategy": "disabled",
+            }
+        )
+    )
+    captured = {}
+
+    class Predictor:
+        __module__ = "inference.v2_0.predictor"
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.get_categorical_features_indices = lambda x: []
+
+    device = SimpleNamespace(type="cuda")
+    modules = {
+        "inference.predictor": SimpleNamespace(LimiXPredictor=Predictor),
+        "torch": SimpleNamespace(device=lambda name: device),
+    }
+    monkeypatch.setattr(models.importlib, "import_module", modules.__getitem__)
+    def pin(path):
+        return {"path": str(path), "sha256": file_sha256(path)}
+
+    settings = {
+        "seed": 7,
+        "device": "cuda",
+        "threads": 4,
+        "parameters": {},
+        "checkpoints": {"regression": pin(checkpoint)},
+        "inference_configs": {"regression": pin(config)},
+    }
+    backend = _backend(
+        "limix_2", "regression", settings, FoldInput().fit(pd.DataFrame({"a": [1, 2]})), 2
+    )
+    assert isinstance(backend, TrainOnlyLimiX)
+    assert captured["device"] is device
+    assert captured["preprocess_num_jobs"] == 4
+    assert captured["use_data_cache"] is False

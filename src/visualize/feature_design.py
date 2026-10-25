@@ -119,15 +119,15 @@ def input_design_figure():
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     boxes = [
-        (0.14, 0.80, "Text column A", style.MEDIAN_COLOR),
-        (0.14, 0.55, "Text column B", style.MEDIAN_COLOR),
-        (0.14, 0.30, "A + B text", style.P95_COLOR),
-        (0.50, 0.80, "Model reads\nquestion + text A", style.MEDIAN_COLOR),
-        (0.50, 0.55, "Model reads\nquestion + text B", style.MEDIAN_COLOR),
-        (0.50, 0.30, "Model reads\nquestion + A + B", style.P95_COLOR),
-        (0.86, 0.80, "A features", style.MEDIAN_COLOR),
-        (0.86, 0.55, "B features", style.MEDIAN_COLOR),
-        (0.86, 0.30, "Joint features", style.P95_COLOR),
+        (0.14, 0.80, "Text column A", style.MODE_COLORS["per_column"]),
+        (0.14, 0.55, "Text column B", style.MODE_COLORS["per_column"]),
+        (0.14, 0.30, "A + B text", style.MODE_COLORS["joint"]),
+        (0.50, 0.80, "Model reads\nquestion + text A", style.MODE_COLORS["per_column"]),
+        (0.50, 0.55, "Model reads\nquestion + text B", style.MODE_COLORS["per_column"]),
+        (0.50, 0.30, "Model reads\nquestion + A + B", style.MODE_COLORS["joint"]),
+        (0.86, 0.80, "A features", style.MODE_COLORS["per_column"]),
+        (0.86, 0.55, "B features", style.MODE_COLORS["per_column"]),
+        (0.86, 0.30, "Joint features", style.MODE_COLORS["joint"]),
     ]
     for x, y, text, color in boxes:
         ax.text(
@@ -213,8 +213,8 @@ def feature_dimensions_figure(plan):
     fig, axes = plt.subplots(1, 2, figsize=style.DASHBOARD_SIZE, sharey=True)
     datasets = plan.dataset.drop_duplicates().tolist()
     for mode, offset, color in [
-        ("per_column", -0.17, style.MEDIAN_COLOR),
-        ("joint", 0.17, style.P95_COLOR),
+        ("per_column", -0.17, style.MODE_COLORS["per_column"]),
+        ("joint", 0.17, style.MODE_COLORS["joint"]),
     ]:
         table = plan[plan["mode"] == mode].set_index("dataset").loc[datasets]
         for ax, col in zip(axes, ["main_numeric_columns", "retained_numeric_columns"]):

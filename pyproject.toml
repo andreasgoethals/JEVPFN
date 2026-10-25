@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jevpfn"
 version = "0.1.0"
-description = "Label-free probabilistic decision-model text features for tabular prediction"
+description = "Controlled comparisons of decision-model, embedding and native-text representations for tabular prediction"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Andreas Goethals", email = "andreas.goethals@kuleuven.be" }]
@@ -13,12 +13,10 @@ authors = [{ name = "Andreas Goethals", email = "andreas.goethals@kuleuven.be" }
 # ---------------------------------------------------------------------------
 # WHY 3.11-3.12 and not open-ended.
 #
-# The local dev environment and the VSC environment must run the SAME minor
-# version, because numerics that differ between two interpreters are a
-# reproducibility hazard nobody notices until a result will not replicate.
-#
-# Preserve the template's support boundary; JEVPFN's verified local runtime
-# and proposed VSC Conda environment both use 3.12. Widen this only after
+# Preserve the template's support boundary. The verified local and VSC CPU
+# environments both use Python 3.12; record interpreter/package identities in
+# each runtime rather than assuming equal package names prove equal numerics.
+# Widen the support boundary only after
 # checking the notebook and model dependency stack on both platforms.
 # ---------------------------------------------------------------------------
 requires-python = ">=3.11,<3.13"
@@ -50,7 +48,7 @@ notebooks = [
     "nbformat>=5.10,<6",
 ]
 jev = ["typesafe-sdk==0.7.2"]  # Guarded local transport; live execution is disabled by default.
-models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the hardware-specific Torch wheel first on VSC.
+models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the reviewed CUDA 13.0 wheel first for B200.
 evaluation = ["scikit-learn==1.9.1"]  # Score saved predictions without model packages.
 staging = ["huggingface-hub>=1.5,<2"]  # Explicit, separately authorized checkpoint staging.
 embeddings = ["transformers==5.17.0", "torch==2.12.1", "scikit-learn==1.9.1"]

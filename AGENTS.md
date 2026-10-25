@@ -41,7 +41,10 @@ predictions and large results. DATA holds the checkout, compact manifests and op
 logs. Both use JEVPFN/output_JEVPFN/<number>. phase/. Use the validated transfer export/import,
 never wholesale replacement of populated caches. See docs/VSC.md for commands/site details.
 The owner excludes all A100 allocations, including debug/MIG routes. GPU jobs default to
-wICE H100. Mindwell B200 requires a verified native GPFS allocation and tested runtime.
+Mindwell B200. CPU staging prepares per-runtime native GPFS scratch working sets; durable
+Lustre remains authoritative. Separate blackwell-cu130 containers, staged-input receipts,
+periodic/final durable cache publication and real GPU contracts are required. Never stream
+bulk model data from cross-mounted Lustre during B200 inference.
 
 PowerShell commands must remain compatible with Windows PowerShell 5.1: no &&, ternary or ??.
 Slurm files are Linux Bash and must use LF endings. New/editable text files are UTF-8.

@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.cluster.maintenance import require_idle_vsc
+from src.cluster.token_preparation import resources as token_resources
 from src.jev.registry import SELF_HOSTED
 from src.utils import paths
 from src.utils.logging_setup import get_logger
@@ -54,10 +55,17 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     items = [
         ("cpu", "experiment_0_cpu.slurm", []),
         ("storage", "experiment_0_storage.slurm", []),
-        ("tokens", "experiment_0_tokens.slurm", []),
     ]
+    items.extend(
+        (p + "_tokens", "experiment_0_tokens.slurm", ["/lustre1/project/stg_00211", p])
+        for p in PROVIDERS
+    )
     from src.utils.config import load_yaml
 
+    # Fresh CPU evidence must be staged to each native B200 working set.
+    for runtime in PROVIDERS:
+        items.append((runtime + "_scratch", "experiment_0_scratch_stage.slurm", [runtime]))
+    items.append(("gpfs_storage", "experiment_0_storage_gpfs.slurm", ["cloudflare"]))
     for encoder_id in load_yaml("feature_creation/embedding_models")["models"]:
         items.append(
             (
@@ -75,24 +83,37 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     scheduling = load_yaml("experiment_0/scheduling")
     result = []
     for name, script, args in items:
-        dependencies = [] if name in {"cpu", "storage", "tokens"} else ["cpu"]
+        independent = name in {"cpu", "storage"} or name.endswith("_tokens")
+        dependencies = [] if independent else ["cpu"]
         cluster, flags = "wice", []
-        if name not in {"cpu", "storage", "tokens"}:
+        if name.endswith("_tokens"):
+            flags = token_resources(name.removesuffix("_tokens"))
+        elif name.endswith("_scratch"):
+            dependencies = ["cpu", "storage", name.removesuffix("_scratch") + "_tokens"]
+        elif name == "gpfs_storage":
+            cluster = "mindwell"
+            flags = ["--clusters=mindwell", "--partition=batch_graniterapids"]
+            dependencies = ["cloudflare_scratch"]
+        elif not independent:
             from src.cluster.scheduling import gpu_profile
 
-            profile = gpu_profile(scheduling["routes"].get(name, scheduling["default_gpu_profile"]))
+            runtime = "cloudflare" if name.startswith("embeddings_") else args[0]
+            profile = gpu_profile(
+                scheduling["routes"].get(name, scheduling["default_gpu_profile"]), runtime=runtime
+            )
             cluster, root = profile["cluster"], profile["staging_root"]
             flags = [f"--clusters={cluster}", f"--partition={profile['partition']}"]
             if name.startswith("embeddings_"):
                 args = ["cloudflare", root, name.removeprefix("embeddings_")]
+                dependencies = ["cloudflare_scratch", "gpfs_storage"]
             else:
                 provider = args[0]
                 args = [provider, provider, root]
-                dependencies = ["cpu", "storage", "tokens"]
+                dependencies = [provider + "_scratch", "gpfs_storage"]
                 if name.endswith("_pilot"):
                     dependencies.append(provider + "_contracts")
                 if provider in {"perplexity", "sii", "kev", "decision3"}:
-                    flags.extend(["--mem=112000M", "--cpus-per-task=8"])
+                    flags.extend(["--mem=112000M", "--cpus-per-task=14"])
         result.append(
             {
                 "name": name,

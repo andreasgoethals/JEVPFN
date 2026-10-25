@@ -37,7 +37,7 @@ MODES = {"per_column": "Separate text columns", "joint": "Joint text"}
 
 
 def _matrix(data, *, title, label, vmin=0, vmax=1, cmap=None, percent=False):
-    size = style.COMPARISON_COVERAGE_SIZE if len(data) > 9 else style.COMPARISON_MATRIX_SIZE
+    size = style.comparison_size(len(data), rotated_labels=True)
     fig, ax = plt.subplots(figsize=size)
     im = ax.imshow(
         data.to_numpy(dtype=float),
@@ -63,7 +63,7 @@ def _matrix(data, *, title, label, vmin=0, vmax=1, cmap=None, percent=False):
                 va="center",
                 fontsize=style.COMPARISON_MATRIX_FONT,
                 color=style.BACKGROUND_COLOR
-                if np.isfinite(v) and v > (vmin + vmax) * 0.65
+                if np.isfinite(v) and (v - vmin) / (vmax - vmin) > 0.65
                 else style.TEXT_COLOR,
             )
     ax.set_title(title)
@@ -202,38 +202,36 @@ def pair_figures(result, options):
         # Show how much duplicates change the measured agreement, without substituting one estimate.
         row = subset[subset.weighting.eq("rows")].set_index(["model_a", "model_b"])
         unique = subset[subset.weighting.eq("unique_inputs")].set_index(["model_a", "model_b"])
-        fig, ax = plt.subplots(figsize=style.figsize(ratio=style.AUDIT_RATIO))
-        labels = []
-        for i, key in enumerate(unique.index):
-            a, b = 100 * unique.loc[key, "agreement"], 100 * row.loc[key, "agreement"]
-            ax.plot([a, b], [i, i], color=style.GRID_COLOR)
-            ax.scatter(
-                a,
-                i,
-                facecolors="none",
-                edgecolors=style.MEDIAN_COLOR,
-                s=style.AUDIT_MARKER_SIZE,
-                label="Unique inputs" if i == 0 else None,
+        matched = unique.index.intersection(row.index, sort=False)
+        for page, start in enumerate(range(0, len(matched), 12), 1):
+            fig, ax = plt.subplots(figsize=style.comparison_size(len(matched[start : start + 12])))
+            labels = []
+            for i, key in enumerate(matched[start : start + 12]):
+                a, b = 100 * unique.loc[key, "agreement"], 100 * row.loc[key, "agreement"]
+                ax.plot([a, b], [i, i], color=style.GRID_COLOR)
+                ax.scatter(
+                    a, i, facecolors="none", edgecolors=style.QUANTITY_COLOR,
+                    s=style.AUDIT_MARKER_SIZE, label="Unique inputs" if i == 0 else None,
+                )
+                ax.scatter(
+                    b, i, color=style.QUANTITY_COLOR, marker="x",
+                    s=style.AUDIT_MARKER_SIZE, label="Source rows" if i == 0 else None,
+                )
+                labels.append(f"{LABELS[key[0]]} / {LABELS[key[1]]}")
+            ax.set_yticks(range(len(labels)), labels)
+            ax.invert_yaxis()
+            ax.set_xlim(0, 100)
+            ax.set_xlabel("Agreement (%) · equal weight per dataset")
+            ax.set_title(f"Duplicate sensitivity · {TASKS[task]} · {MODES[mode]} · page {page}",
+                         pad=30)
+            ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2, fontsize=7)
+            yield (
+                fig,
+                f"reuse_{task}_{mode}_{page}",
+                "Agreement with each source row counted versus exact inputs counted once per text group. "
+                "Pairs are paginated at twelve per page; only pairs with both weightings are plotted. "
+                "All metric calculations use the complete matched data.",
             )
-            ax.scatter(
-                b,
-                i,
-                color=style.P95_COLOR,
-                marker="x",
-                s=style.AUDIT_MARKER_SIZE,
-                label="Source rows" if i == 0 else None,
-            )
-            labels.append(f"{LABELS[key[0]]} / {LABELS[key[1]]}")
-        ax.set_yticks(range(len(labels)), labels)
-        ax.set_xlim(0, 100)
-        ax.set_xlabel("Agreement (%) · equal weight per dataset")
-        ax.set_title(f"Duplicate sensitivity · {TASKS[task]} · {MODES[mode]}")
-        ax.legend()
-        yield (
-            fig,
-            f"reuse_{task}_{mode}",
-            "Agreement with each source row counted versus exact inputs counted once per text group. All metric calculations use the complete matched data.",
-        )
 
 
 def consensus_figures(result, options):
@@ -417,20 +415,27 @@ def example_figures(result, options):
         if len(table.columns) > 9:
             # Thirty classes need rows, not thirty overlapping annotations across A4 width.
             table = table.T
-        fig = _matrix(
-            table,
-            title=f"{TASKS[task]} disagreement example\n{row.dataset} · {row.row_id} · {row.text_column}",
-            label="Reported probability",
-        )
-        yield (
-            fig,
-            f"disagreement_example_{task}",
-            (
-                "Complete option-probability vectors for a highly disagreeing input. The report retains its original CSV row ID, text group and payload hash. "
-                "This is a label-blind descriptive example, not a selected prediction error. Other high-disagreement examples are retained in the table."
-            ),
-        )
+        for page, start in enumerate(range(0, len(table), 12), 1):
+            fig = _matrix(
+                table.iloc[start : start + 12],
+                title=f"{TASKS[task]} disagreement example · page {page}\n"
+                      f"{row.dataset} · {row.row_id} · {row.text_column}",
+                label="Reported probability",
+            )
+            yield (
+                fig,
+                f"disagreement_example_{task}_{page}",
+                (
+                    "Complete option-probability vectors for a highly disagreeing input, "
+                    "paginated at twelve rows with the same 0–1 color scale. "
+                    "The report retains its original CSV row ID, text group and payload hash. "
+                    "This is a label-blind descriptive example, not a selected prediction error. "
+                    "Other high-disagreement examples are retained in the table."
+                ),
+            )
     scatter = result.table("scatter")
+    if scatter.empty:
+        return
     for (task, mode), group in scatter.groupby(["task", "representation"], sort=False):
         names = [p for p in options["providers"] if p in set(group.model_a) | set(group.model_b)]
         pairs = list(combinations(names, 2))

@@ -72,6 +72,16 @@ def evidence(isolated_output, monkeypatch):
             "status": "storage_contracts_passed_requires_quota_and_backup_review",
             "snapshot_restore": True,
             "validation_identity": validation,
+            "storage_backend": "lustre",
+        },
+    )
+    write_json(
+        before / "storage_contracts/gpfs.json",
+        {
+            "status": "storage_contracts_passed_requires_quota_and_backup_review",
+            "snapshot_restore": True,
+            "validation_identity": validation,
+            "storage_backend": "gpfs",
         },
     )
     write_json(
@@ -172,6 +182,7 @@ def test_explicit_completed_campaign_disambiguates_successful_reruns(evidence, m
     for name, file in (
         ("cpu", root / "preflight_cpu.json"),
         ("storage", before / "storage_contracts/fixed.json"),
+        ("gpfs_storage", before / "storage_contracts/gpfs.json"),
         ("liquid_contracts", before / "gpu_contracts/liquid_fixed.json"),
         ("liquid_pilot", before / "liquid_fixed.json"),
     ):
@@ -193,3 +204,10 @@ def test_explicit_completed_campaign_disambiguates_successful_reruns(evidence, m
     result = acceptance.evidence_for("liquid", campaign=receipt)
     assert not any("older" in item["path"] for item in result["evidence"])
     assert result["evidence"][-1]["path"] == str(receipt.resolve())
+
+
+def test_b200_requires_both_active_and_durable_storage_checks(evidence):
+    _, before, _ = evidence
+    (before / "storage_contracts/gpfs.json").unlink()
+    with pytest.raises(ValueError, match="found 0"):
+        acceptance.evidence_for("liquid")

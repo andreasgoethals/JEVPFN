@@ -1,6 +1,53 @@
 # Changelog
 
+## 25-10-2026
+
+- Finished the 24 October evidence/method audit: all 18 prepared question files passed
+  exhaustive checks of 1,698,127 distinct inputs and 3,294,340 row/slot links, unchanged.
+  Distinguished historical H100 pilots/encoder passes from the unvalidated B200 route;
+  five added-provider token jobs hit their four-hour limit, retaining committed batches.
+- Added bounded parallel CPU token preparation, one transactional SQLite writer and
+  per-provider resumable jobs. Preserved tokenizer/rendering/cache identities. Encoder
+  reports now record source/runtime/input identities, job/cluster and start/end times.
+- Restricted LimiX V2 filtering, category inference/encoding and polynomial scaling to
+  training rows; corrected its device/CPU arguments. Unified missing-text controls and
+  rejected nonfinite regression targets before CV. Real predictor 0B remains required.
+- Bound relocated-container retirement to its verified durable source and unchanged
+  image bytes, including predictor runtimes; forged or changed evidence fails closed.
+- Standardized semantic figure palettes, paginated dense provider/class comparisons and
+  required matched dataset/split coverage across PCA-width curves. All six notebooks were
+  executed; all 25 current PDF figures and 12 isolated future-layout fixtures were visually
+  inspected. Refreshed captions, inline outputs and complete final printed reports.
+- Consolidated literature against the current 16-paper DM corpus and fixed prior-art/
+  task-conditioning claims. Updated README, VSC guidance, package/citation metadata and
+  dated evidence without changing library pins, protected data or execution gates.
+- Final local validation: 963 tests passed, 20 optional-runtime/platform skips; Ruff,
+  dependency checks, 28 Bash/Slurm syntax/LF checks and notebook/report checks passed.
+  Both frozen tokenizer modules and registry remain byte-identical to HEAD. No real
+  B200 test, remote operation, paid call, installation or Git publication was performed.
+
+## 24-10-2026
+
+- Completed native checkpoint rebasing for downstream predictors, two-filesystem
+  acceptance, GPFS cleanup boundaries and storage race/link checks. Restaging retains
+  operational queues; periodic cache unions exclude backup databases and avoid creating
+  another full backup per interval. Ordinary user imports retain their recovery backups.
+- Deduplicated identical accounting-history versions during scratch mirroring while
+  retaining every changed record and its original snapshot attribution.
+- Re-executed all six notebooks with no error cells and complete printed summaries;
+  visually inspected all 25 generated PDF figures. No benchmark outcomes were fabricated.
+
 ## 23-10-2026
+
+- Implemented default Mindwell B200 with per-runtime native GPFS scratch working sets,
+  conflict-checked periodic/final publication to durable Lustre, separate CUDA 13.0
+  images, CPU preparation, workspace leases, exact prepared-input copies, native storage
+  checks, safe H100 cancellation and scratch-output cleanup. Real B200 tests remain pending.
+- Fixed Strands four-decimal output validation, single-device GPU telemetry remapping
+  and empty Miniforge installer-version discovery. Preserved raw outputs, publisher
+  pins, existing images and question/tokenizer identities.
+- Consolidated VSC operations and operational memory around current evidence and the
+  setup-before-reset sequence. No remote jobs, paid calls or Git publication performed.
 
 - Reworked the preparation notebooks around text burden/reuse, typed features, measured
   pilot behavior and the approved study grid. Added a read-only paired-results notebook

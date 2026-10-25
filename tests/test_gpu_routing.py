@@ -5,29 +5,56 @@ import pytest
 from src.cluster import scheduling
 
 
-def test_default_gpu_plans_use_h100_and_cpu_jobs_stay_on_cpu():
+def test_default_gpu_plans_use_b200_and_cpu_jobs_stay_on_cpu():
     from src.cluster.benchmark_jobs import plan
     from src.cluster.experiment_zero import steps
 
     for step in steps("vsc"):
         command = step["command"]
-        if step["name"] in {"cpu", "storage", "tokens"}:
+        if step["cluster"] == "wice" or step["name"] == "gpfs_storage":
             assert not any(flag.startswith("--partition=gpu") for flag in command)
         else:
-            assert "--partition=gpu_h100" in command
-    assert plan("experiment_1", "tabpfn_3_5")["route"]["partition"] == "gpu_h100"
+            assert "--partition=gpu_b200" in command
+    by_name = {step["name"]: step for step in steps("vsc")}
+    assert by_name["gpfs_storage"]["cluster"] == "mindwell"
+    assert "--partition=batch_graniterapids" in by_name["gpfs_storage"]["command"]
+    assert by_name["gpfs_storage"]["depends_on"] == ["cloudflare_scratch"]
+    for step in by_name.values():
+        if "--partition=gpu_b200" in step["command"]:
+            assert "gpfs_storage" in step["depends_on"]
+    assert plan("experiment_1", "tabpfn_3_5")["route"]["partition"] == "gpu_b200"
     assert plan("experiment_1", "catboost")["gpu"] is False
     with pytest.raises(ValueError, match="Unknown GPU"):
         scheduling.gpu_profile("wice_a100")
 
 
+def test_b200_runtime_workspaces_use_native_scratch_and_durable_lustre(monkeypatch):
+    monkeypatch.setenv("VSC_SCRATCH_GPFS1", "/gpfs1/scratch/example/user")
+    profile = scheduling.gpu_profile(runtime="intern")
+    assert profile["staging_root"] == "/gpfs1/scratch/example/user/jevpfn-work/intern"
+    assert profile["durable_root"] == "/lustre1/project/stg_00211"
+    assert profile["runtime_profile"] == "blackwell-cu130"
+    with pytest.raises(ValueError, match="Invalid runtime"):
+        scheduling.gpu_profile(runtime="../../another_project")
+    monkeypatch.setenv("VSC_SCRATCH_GPFS1", "/lustre1/scratch/example")
+    with pytest.raises(ValueError, match="native GPFS"):
+        scheduling.gpu_profile(runtime="intern")
+
+
 @pytest.mark.parametrize("partition", ["gpu_a100", "gpu_a100_debug", "gpu", "interactive"])
 def test_old_profiles_cannot_reintroduce_a100(monkeypatch, partition):
     monkeypatch.setattr(
-        scheduling, "load_yaml", lambda _: {"profiles": {"legacy": {
-            "cluster": "wice", "partition": partition,
-            "staging_root": "/lustre1/project/stg_00211",
-        }}}
+        scheduling,
+        "load_yaml",
+        lambda _: {
+            "profiles": {
+                "legacy": {
+                    "cluster": "wice",
+                    "partition": partition,
+                    "staging_root": "/lustre1/project/stg_00211",
+                }
+            }
+        },
     )
     with pytest.raises(ValueError, match="Unsupported cluster/partition"):
         scheduling.gpu_profile("legacy")
@@ -42,10 +69,16 @@ def test_a100_allocation_override_is_rejected(monkeypatch, partition):
         scheduling.reject_a100_allocation()
 
 
-@pytest.mark.parametrize("cluster,partition,gpus", [
-    ("wice", "gpu_h100", "0"), ("mindwell", "gpu_b200", "0"),
-    ("wice", "interactive", ""), ("wice", "batch", ""), ("", "", ""),
-])
+@pytest.mark.parametrize(
+    "cluster,partition,gpus",
+    [
+        ("wice", "gpu_h100", "0"),
+        ("mindwell", "gpu_b200", "0"),
+        ("wice", "interactive", ""),
+        ("wice", "batch", ""),
+        ("", "", ""),
+    ],
+)
 def test_allowed_hardware_and_local_cpu_are_not_blocked(monkeypatch, cluster, partition, gpus):
     monkeypatch.setenv("SLURM_CLUSTER_NAME", cluster)
     monkeypatch.setenv("SLURM_JOB_PARTITION", partition)

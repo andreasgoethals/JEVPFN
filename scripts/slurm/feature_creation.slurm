@@ -2,8 +2,8 @@
 # Full extraction requires explicit reviewed acceptance in self_hosted.yaml.
 #SBATCH --job-name=jevpfn-features
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=gpu_h100
+#SBATCH --clusters=mindwell
+#SBATCH --partition=gpu_b200
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -24,4 +24,4 @@ if [[ "$JEVPFN_PROVIDER" == perplexity && "${SLURM_MEM_PER_NODE:-0}" -lt 112000 
 fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-"${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute --full
+jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute --full

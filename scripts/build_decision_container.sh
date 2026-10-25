@@ -3,6 +3,14 @@
 set -euo pipefail
 JEVPFN_BUILD_PROVIDER="${1:?Pass cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble}"
 JEVPFN_BUILD_MODE="${2:-wrap}"
+export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-legacy-cu126}"
+case "$JEVPFN_RUNTIME_PROFILE" in
+    legacy-cu126) JEVPFN_TORCH_INDEX=https://download.pytorch.org/whl/cu126 ;;
+    blackwell-cu130)
+        JEVPFN_TORCH_INDEX=https://download.pytorch.org/whl/cu130
+        ;;
+    *) echo 'Unknown runtime profile.' >&2; exit 2 ;;
+esac
 case "$JEVPFN_BUILD_PROVIDER" in
     cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble) JEVPFN_BUILD_DECISION=1 ;;
     catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
@@ -23,13 +31,26 @@ source scripts/check_container_tools.sh
 if [[ "$JEVPFN_BUILD_DECISION" == 1 ]]; then
     "$JEVPFN_BUILD_PYTHON" -c 'import sys; from src.jev.checkpoints import verify_checkpoint; verify_checkpoint(sys.argv[1]); print("Pinned checkpoint verified")' "$JEVPFN_BUILD_PROVIDER"
 fi
-JEVPFN_BUILD_DEST="$JEVPFN_STAGING_ROOT/JEVPFN/containers/$JEVPFN_BUILD_PROVIDER"
+if [[ "$JEVPFN_BUILD_MODE" == wrap && "$JEVPFN_RUNTIME_PROFILE" == blackwell-cu130 ]]; then
+    "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_BUILD_PROVIDER" <<'PY'
+import sys
+from src.cluster.containers import native_dir, probe
+from src.cluster.runtime_profiles import validate_build
+validate_build(probe(native_dir(sys.argv[1])/'bin/python'))
+print('Reviewed native source has a CUDA 13.0 build; legacy cu126 cannot be wrapped as Blackwell')
+PY
+fi
+JEVPFN_BUILD_DEST="$("$JEVPFN_BUILD_PYTHON" -c 'import sys; from src.cluster.containers import container_dir; print(container_dir(sys.argv[1]))' "$JEVPFN_BUILD_PROVIDER")"
 if [[ -d "$JEVPFN_BUILD_DEST" && ! -L "$JEVPFN_BUILD_DEST" ]]; then
     rmdir -- "$JEVPFN_BUILD_DEST" 2>/dev/null || true  # Only an empty failed-build directory.
 fi
 [[ ! -e "$JEVPFN_BUILD_DEST" && ! -L "$JEVPFN_BUILD_DEST" ]] || { echo "Nonempty or linked destination exists; inspect it before rebuilding: $JEVPFN_BUILD_DEST" >&2; exit 2; }
-# The wICE shared Lustre scratch survives a failed allocation for diagnosis.
-JEVPFN_BUILD_SCRATCH="${VSC_SCRATCH_LUSTRE1:-${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-}}}"
+# The wICE CPU build uses native Lustre scratch; Mindwell builds use native GPFS.
+if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
+    JEVPFN_BUILD_SCRATCH="${VSC_SCRATCH_GPFS1:-${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-}}}"
+else
+    JEVPFN_BUILD_SCRATCH="${VSC_SCRATCH_LUSTRE1:-${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-}}}"
+fi
 [[ -n "$JEVPFN_BUILD_SCRATCH" && -d "$JEVPFN_BUILD_SCRATCH" ]] || { echo 'No existing scratch allocation is available.' >&2; exit 2; }
 JEVPFN_BUILD_WORK="$(mktemp -d "$JEVPFN_BUILD_SCRATCH/jevpfn-container-$JEVPFN_BUILD_PROVIDER-XXXXXX")"
 echo "Build scratch: $JEVPFN_BUILD_WORK"
@@ -82,24 +103,28 @@ PY
 else
     # Fail before building/copying an environment if the allocation has no index access.
     "$JEVPFN_BUILD_PYTHON" -m src.cluster.build_network
-    "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_BUILD_WORK" "$JEVPFN_BUILD_REPO" "$JEVPFN_BUILD_PROVIDER" "$JEVPFN_STAGING_ROOT" <<'PY'
+    "$JEVPFN_BUILD_PYTHON" -m src.cluster.runtime_profiles --check-wheels --provider "$JEVPFN_BUILD_PROVIDER"
+    "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_BUILD_WORK" "$JEVPFN_BUILD_REPO" "$JEVPFN_BUILD_PROVIDER" "$JEVPFN_STAGING_ROOT" "$JEVPFN_TORCH_INDEX" "$JEVPFN_RUNTIME_PROFILE" <<'PY'
 import sys,shlex
 from pathlib import Path
-work,repo,provider,root=sys.argv[1:]
+work,repo,provider,root,index,profile=sys.argv[1:]
 q=shlex.quote
 Path(work,'environment.yaml').write_text('channels: [conda-forge]\ndependencies: [python=3.12, pip]\n',encoding='utf-8')
 extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open'}[provider]
 prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); actual=Path(sys.prefix).resolve(); print(f"Image interpreter: {actual}; expected: {expected}"); assert actual==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
 lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'python -I -c {q(prefix_check)}', f'cd {q(repo)}',
-       f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}']
+       f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}',
+       f'export JEVPFN_RUNTIME_PROFILE={q(profile)}']
 if provider=='perplexity':
     requirements=Path(root,'JEVPFN/checkpoints/decision_models/perplexity/requirements.txt')
-    lines+=['python -m pip install torch==2.14.0 torchvision==0.29.0 --index-url https://download.pytorch.org/whl/cu126',
+    lines+=[f'python -m pip install torch==2.14.0 torchvision==0.29.0 --index-url {q(index)}',
             f'python -m pip install -r {q(str(requirements))} -e {q(".[dev,token-audit]")}']
 else:
-    lines+=['python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url https://download.pytorch.org/whl/cu126',
+    lines+=[f'python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url {q(index)}',
             f'python -m pip install -e {q(f".[dev,token-audit,{extra}]")}']
-lines+=['python -m pip check',f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
+lines+=['python -m pip check',
+        "python -c 'import torch; from src.cluster.runtime_profiles import validate_build; validate_build(dict(torch_cuda=torch.version.cuda))'",
+        f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
 Path(work,'post_install.sh').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 PY
     # Name-based creation/activation can resolve an existing host env1 despite envs_dirs.
@@ -110,10 +135,10 @@ PY
     "$JEVPFN_BUILD_PYTHON" - "$JEVPFN_PRIVATE_WRAPPER" <<'PY'
 import sys
 from pathlib import Path
-from src.cluster.container_templates import explicit_conda_prefix
+from src.cluster.container_templates import explicit_conda_prefix, pinned_miniforge
 root=Path(sys.argv[1])
 template=root/'templates/conda.sh'
-template.write_text(explicit_conda_prefix(template.read_text()),encoding='utf-8')
+template.write_text(pinned_miniforge(explicit_conda_prefix(template.read_text())),encoding='utf-8')
 alias=root/'frontends/conda-containerize'
 alias.unlink(missing_ok=True)
 alias.symlink_to('containerize')

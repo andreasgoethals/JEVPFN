@@ -15,9 +15,9 @@ def multiclass_dimensions_figure(dimensions):
     for ax, part in zip(axes, [table[table.status.eq("REMOVED")], table[table.status.ne("REMOVED")]]):
         y = np.arange(len(part))
         for column, offset, color, label in (
-            ("per_column_features", -0.25, style.MEDIAN_COLOR, "Per-column: T × K"),
-            ("joint_features", 0, style.P95_COLOR, "Joint: K"),
-            ("combined_features", 0.25, style.TOTAL_COLOR, "Both"),
+            ("per_column_features", -0.25, style.MODE_COLORS["per_column"], "Per-column: T × K"),
+            ("joint_features", 0, style.MODE_COLORS["joint"], "Joint: K"),
+            ("combined_features", 0.25, style.MODE_COLORS["both"], "Both"),
         ):
             bars = ax.barh(y + offset, part[column], height=0.23, color=color, label=label)
             ax.bar_label(bars, padding=2, fontsize=7)
