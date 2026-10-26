@@ -17,7 +17,13 @@ export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STAGING_ROOT="${1:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-if [[ -n "${2:-}" ]]; then
+if [[ "${3:-}" == prepare ]]; then
+    python -m src.cluster.token_shards --provider "${2:?}" --prepare
+elif [[ "${3:-}" == merge ]]; then
+    python -m src.cluster.token_shards --provider "${2:?}" --shards "${4:?}" --merge
+elif [[ -n "${3:-}" ]]; then
+    python -m src.cluster.token_shards --provider "${2:?}" --index "$3" --shards "${4:?}"
+elif [[ -n "${2:-}" ]]; then
     python -m src.cluster.token_audit --provider "$2" --independent
 else
     python -m src.cluster.token_audit

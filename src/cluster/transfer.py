@@ -103,6 +103,8 @@ def export_bundle() -> Path:
                     relative = source.relative_to(output_root)
                     if not source.is_file() or source.is_symlink():
                         continue
+                    if "token_audit" in relative.parts and "shards" in relative.parts:
+                        continue  # Rebuildable CPU restart files; merged counts are exported.
                     # Only numbered research phases; generated local notebook reports stay local.
                     if not relative.parts or relative.parts[0] not in {
                         paths.phase_folder(p)
@@ -141,6 +143,7 @@ def export_bundle() -> Path:
                     "environments",
                     "raw datasets",
                     "prepared inputs",
+                    "token audit restart partitions",
                     "credentials",
                 ],
             }

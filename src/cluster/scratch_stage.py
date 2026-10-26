@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 import tempfile
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from src.cluster.maintenance import reject_links
@@ -63,26 +63,15 @@ def workspace_lease(root, *, shared=False):
     """GPU jobs share a lease; restaging requires exclusivity. Kernel releases on crash."""
     root.mkdir(parents=True, exist_ok=True)
     lock = root / ".workspace.lock"
-    if os.name == "nt":
-        with file_lock(lock, timeout=1):
-            yield
-        return
-    import fcntl
-
-    with lock.open("a+b") as handle:
+    with ExitStack() as stack:
         try:
-            fcntl.flock(handle, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError(
-                "B200 working set is in use; do not restage an active runtime"
-            ) from exc
-        try:
-            yield
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            stack.enter_context(file_lock(lock, timeout=1, shared=shared))
+        except TimeoutError as exc:
+            raise RuntimeError("B200 working set is in use; do not restage an active runtime") from exc
+        yield
 
 
-def _regular_files(folder, *, link_boundary=None):
+def _regular_files(folder, *, link_boundary=None, immutable_assets=False):
     reject_links(folder)
     if not folder.exists():
         return
@@ -94,9 +83,9 @@ def _regular_files(folder, *, link_boundary=None):
             link_boundary is None or not source.resolve().is_relative_to(link_boundary.resolve())
         ):
             raise ValueError(f"Linked input escapes the approved checkpoint tree: {source}")
-        if source.is_file() and not source.name.endswith(
+        if source.is_file() and (immutable_assets or not source.name.endswith(
             (".lock", "-wal", "-shm", "-journal", ".partial")
-        ):
+        )):
             yield source
 
 
@@ -316,11 +305,14 @@ def stage(runtime):
                 else (
                     [location]
                     if location.is_file()
-                    else _regular_files(location, link_boundary=durable / "checkpoints")
+                    else _regular_files(location, link_boundary=durable / "checkpoints",
+                                        immutable_assets=folder.startswith("checkpoints/"))
                 )
             )
             for source in sources:
                 relative = source.relative_to(durable)
+                if "token_audit" in relative.parts and "shards" in relative.parts:
+                    continue  # CPU restart partitions are not GPU inputs.
                 if (
                     "token_audit" in relative.parts
                     and runtime in containers.SELF_HOSTED

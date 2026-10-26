@@ -140,12 +140,12 @@ B200 contracts, bounded dataset pilots and all three encoder tests. Both filesys
 must pass two-node locking and SQLite snapshot tests: durable Lustre on wICE and
 native GPFS scratch on Mindwell's `batch_graniterapids` CPU partition. Every GPU
 job waits for those checks. It does not enable full extraction or certify acceptance.
-The complete setup contains 76 jobs with no reusable containers, or 66 when all ten
+The complete setup contains 186 jobs with no reusable containers, or 176 when all ten
 sealed images exist. Containers are verified in their own CPU staging jobs, not hashed
 serially on the login node. Each runtime has its own two-node GPFS storage check; a
 failed model cannot block every other model through a shared staging prerequisite.
-Configuration permits 32 queued/running jobs: at most 14 CPU checks, 12 GPU tests,
-two downloads, two builds and two transfers. These are resource pools, not artificial
+Configuration permits 64 queued/running jobs: at most 40 token partitions, six other CPU
+checks/merges, 12 GPU tests, two downloads, two builds and two transfers. These are resource pools, not artificial
 dependencies between different models. Token audits cannot fill the GPU/build pools.
 Slurm still decides placement and start times; this does not promise simultaneous starts.
 Cross-cluster dependencies are checked through accounting, not assumed to work
@@ -211,15 +211,33 @@ inputs, context rejection, cache/row mappings and prompt sensitivity. Semantic
 failures must be reviewed rather than hidden by relaxing tests. Larger pilots are
 capped at 1,000 requests/provider; their timings guide throughput estimates.
 
-Each provider has an independent resumable CPU token job. The five added publisher
-renderers use eight CPUs, 27,200 MiB and a 24-hour limit; the original five use two CPUs,
-6,800 MiB and four hours. The added renderers prepare bounded batches in worker processes;
-one coordinator commits exact counts and compressed prepared tokens together. Neither the
-renderer nor its cache identity changes, so earlier completed batches remain reusable.
-The 24-hour limit is a resumable segment, not a completion-time promise. No GPU waits
-inside token preparation. Frozen 0A contains 55 VSC jobs: CPU checks, one Lustre check,
-ten token audits, ten scratch stages, ten native GPFS checks, ten GPU contract jobs,
-ten bounded dataset pilots and three encoder jobs. Setup additionally downloads and builds.
+Each provider's audit uses ten independent jobs, each counting a disjoint ~10% of every
+dataset's unique inputs. A short recovery job first rolls back any hot SQLite journal
+left by cancellation and checks the existing database before parallel readers start.
+Each partition writes one PROJECT SQLite file; no parallel worker writes
+the final database. Existing matching monolithic counts are reused, including committed
+batches from cancelled jobs. A separate CPU merge checks identities, file hashes, exact input
+coverage and prepared-token contents, and rolls back all merge inserts on any conflict.
+The final counts retain their original schema/identity for GPU consumers. Restart partitions
+stay on PROJECT for recovery; they are excluded from GPFS copies and downloaded result bundles.
+The five added renderers use eight CPUs/27,200 MiB per partition and a 12-hour limit; the
+original five use two CPUs/6,800 MiB and four hours. Progress logs report throughput at least
+once per minute between batches. Shorter partitions improve parallelism, but queueing, text
+length and I/O prevent a guaranteed tenfold speedup. Frozen 0A contains 165 VSC jobs: ten recovery checks, 100 token
+partitions, ten merges, CPU checks, one Lustre check, ten scratch stages, ten native GPFS checks,
+ten GPU contracts, ten bounded pilots and three encoder tests. Setup also downloads/builds.
+
+To migrate an active monolithic audit, first stop its watching coordinator with Ctrl+C.
+Cancel only its explicitly verified token job IDs, leave container builds running, and wait
+for those builds to finish before pulling new source. Do not clean output during migration.
+Then run `bash scripts/test_all.sh --restart --execute --watch`; it preserves assets and
+committed token batches. After a disconnect, omit `--restart` to resume the new graph.
+
+Mindwell's observed BSD `flock` did not exclude a second node. Linux locks and workspace
+leases now use POSIX `lockf`, with thread serialization to respect process-owned lock semantics.
+The two-node exclusion/release/snapshot test remains mandatory on both filesystems. Never mix
+old and new lock implementations in simultaneous writers. Checkpoint staging no longer treats
+publisher `.lock` assets as transient files; real hash mismatches still stop and list filenames.
 
 After a kill or failed publication, preserve scratch and recover committed results
 in the CPU environment before restaging that runtime:

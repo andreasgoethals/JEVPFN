@@ -15,6 +15,8 @@ def dependencies(step):
 
 
 def pool(step):
+    if "pool" in step:
+        return step["pool"]
     name = step["name"]
     if name.endswith("_contracts") or name.endswith("_pilot") or name.startswith("embeddings_"):
         return "gpu"

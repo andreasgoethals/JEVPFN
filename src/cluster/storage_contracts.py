@@ -1,6 +1,6 @@
 """Opt-in two-node PROJECT lock and SQLite snapshot/restore check; no research data.
 
-The local test suite cannot establish cross-node flock behavior on Lustre or GPFS.
+The local test suite cannot establish cross-node POSIX locking on Lustre or GPFS.
 This probe therefore runs in its own tiny two-node CPU allocation before extraction.
 """
 
@@ -155,6 +155,7 @@ def run(*, execute=False):
         "job_id": os.environ["SLURM_JOB_ID"],
         "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
         "storage_backend": backend,
+        "lock_implementation": "posix_lockf",
         "runtime": os.environ.get("JEVPFN_STORAGE_RUNTIME"),
         "nodes": [local, others[0]],
         "results": str(folder),

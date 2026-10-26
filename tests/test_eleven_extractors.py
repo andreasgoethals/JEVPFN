@@ -47,7 +47,10 @@ def test_cpu_graph_before_gpu_with_bounded_builds():
         assert "a100" not in str(step).lower()
     for provider in registry.SELF_HOSTED:
         by_name = {s["name"]: s for s in steps}
-        assert provider + "_stage" in by_name[provider + "_tokens"]["dependencies"]
+        assert provider + "_stage" in by_name[provider + "_tokens_prepare"]["dependencies"]
+        assert len(by_name[provider + "_tokens"]["dependencies"]) == 10
+        for name in by_name[provider + "_tokens"]["dependencies"]:
+            assert by_name[name]["dependencies"] == [provider + "_tokens_prepare"]
         contracts = by_name[provider + "_contracts"]
         assert {"cpu", "storage", "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage", provider + "_scratch"} <= set(
             contracts["dependencies"]
@@ -140,7 +143,7 @@ def test_cross_cluster_steps_wait_for_successful_cpu_stage_and_do_not_duplicate(
         return SimpleNamespace(stdout=f"{job};{cluster}\n")
 
     monkeypatch.setattr(setup_extractors.subprocess, "run", scheduler)
-    for _ in range(8):
+    for _ in range(len(setup_extractors.plan(["h2o"])) + 1):
         report = setup_extractors.run(["h2o"], execute=True)
         by_name = {s["name"]: s for s in report["steps"]}
         for step in report["steps"]:

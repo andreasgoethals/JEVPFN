@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from src.cluster.job_graph import advance
 from src.cluster.maintenance import require_idle_vsc
-from src.cluster.token_preparation import resources as token_resources
+from src.cluster.token_shards import plan as token_plan
 from src.jev.registry import SELF_HOSTED
 from src.utils import paths
 from src.utils.logging_setup import get_logger
@@ -56,10 +56,6 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         ("cpu", "experiment_0_cpu.slurm", []),
         ("storage", "experiment_0_storage.slurm", []),
     ]
-    items.extend(
-        (p + "_tokens", "experiment_0_tokens.slurm", ["/lustre1/project/stg_00211", p])
-        for p in PROVIDERS
-    )
     from src.utils.config import load_yaml
 
     # Fresh CPU evidence must be staged to each native B200 working set.
@@ -83,14 +79,16 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         ):
             items.append((f"{provider}_{task}", script, [provider]))
     scheduling = load_yaml("experiment_0/scheduling")
+    token_steps = [dict(name=s["name"], cluster=s["cluster"], depends_on=s["dependencies"],
+                   **({"pool": s["pool"]} if "pool" in s else {}),
+                   command=["sbatch", "--parsable", *s["flags"], f"scripts/slurm/{s['script']}", *s["args"]])
+              for provider in PROVIDERS for s in token_plan(provider, "/lustre1/project/stg_00211")]
     result = []
     for name, script, args in items:
         independent = name in {"cpu", "storage"} or name.endswith("_tokens")
         dependencies = [] if independent else ["cpu"]
         cluster, flags = "wice", []
-        if name.endswith("_tokens"):
-            flags = token_resources(name.removesuffix("_tokens"))
-        elif name.endswith("_scratch"):
+        if name.endswith("_scratch"):
             dependencies = ["cpu", "storage", name.removesuffix("_scratch") + "_tokens"]
         elif name.endswith("gpfs_storage"):
             cluster = "mindwell"
@@ -124,7 +122,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 "command": ["sbatch", "--parsable", *flags, f"scripts/slurm/{script}", *args],
             }
         )
-    return result
+    return result[:2] + token_steps + result[2:]
 
 
 def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/jev.local"):

@@ -27,12 +27,15 @@ def checkpoint_files(folder):
 def verify_checkpoint(provider):
     folder = checkpoint_path(provider)
     manifest = json.loads((folder / "_JEVPFN_CHECKPOINT.json").read_text(encoding="utf-8"))
+    actual = checkpoint_files(folder)
     if (
         manifest["provider"] != provider
         or manifest["revision"] != PINS[provider]
-        or checkpoint_files(folder) != manifest["files"]
+        or actual != manifest["files"]
     ):
-        raise ValueError("Checkpoint files differ from their staged immutable identity")
+        mismatches = [{"file": k, "missing": k not in actual, "extra": k not in manifest["files"]}
+                      for k in sorted(set(actual) | set(manifest["files"])) if actual.get(k) != manifest["files"].get(k)]
+        raise ValueError("Checkpoint files differ from their staged immutable identity: " + json.dumps(mismatches))
     for name in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja"):
         if file_sha256(folder / name) != file_sha256(paths.tokenizer_dir(provider) / name):
             raise ValueError("Inference checkpoint and audited tokenizer differ")

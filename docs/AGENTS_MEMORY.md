@@ -38,52 +38,50 @@ Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 10:58:09,
-1,404,271 bytes, 474 members with valid ZIP CRCs. It contains DATA logs/manifests,
-not all PROJECT data/caches. The archive was read without importing over local evidence.
-Do not infer current scheduler state or full-cache validation from this archive.
+Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 14:15:36,
+282,635 bytes, 106 members. It contains DATA logs/manifests, not complete PROJECT
+caches. Coordinator snapshot at 13:15 UTC: 73 steps, 26 completed, five failed,
+14 blocked, seven submitted and 21 not yet ready. No B200 inference pass is present.
 
 | Job | Check | Observed result |
 |---|---|---|
-| 62427444 | CPU/data/questions | Passed; 959 tests, 33 skips, four deselections; exhaustive 18-file question audit. |
-| 62427445 | Two-node Lustre lock/snapshot | Passed; quota/independent backup remain unverified. |
-| 62427446 | All three encoder checkpoints | Staged/fingerprinted; previous CPU-allocation guard failure resolved. |
-| 62427447/48/55/56/60/61/64/65/68/69 | Ten decision checkpoints | Completed in the coordinator receipt. |
-| 62427451/53/77 | Liquid/Strands/Perplexity Blackwell images | Logs end with successful seals; Perplexity not yet reconciled in the coordinator. |
-| 62427452/54/57/58/62 | Original five exact-token jobs | Completed/reused counts; no GPU inference. |
-| 62427476/92 | Liquid/Strands GPFS staging | Failed: copied-link checksum normalization mismatch, fixed locally. |
-| 62427463/66/67/70/71 | H2O/SII/Kev/Decision3/Nimble exact tokens | Still progressing in this partial archive; completion unverified. |
+| 62429150 | CPU/data/questions | Passed; 986 tests, 33 skips, four deselections; all 18 question files audited. |
+| 62429151 | Two-node Lustre lock/snapshot | Passed under the old lock implementation; quota/backup unverified. |
+| 62429152 and ten provider stage jobs | Encoder/decision checkpoints | Staged; this alone does not verify inference. |
+| 62429157/65/66/72/74 | Liquid/Strands/Perplexity/Clef/Intern exact counts | Completed; 1,698,127 inputs each, no context overflow. |
+| 11739508/16/45/53 | Liquid/Strands/Clef/Intern GPFS locks | Failed: both nodes acquired the same BSD flock lock. |
+| 62429841 | Perplexity scratch checkpoint | Failed: missing source/uv.lock, confirmed by owner diagnostic; staging filter corrected. |
+| 62429190/91/95/96, 62429209 | H2O/SII/Kev/Decision3/Nimble token audits | Owner confirmed RUNNING at 14:21, about 2h33 elapsed, 24h limits. |
+| 62430552/53 | Kev/Decision3 containers | Owner confirmed RUNNING at 14:21, about 21m elapsed, 2h limits. |
 
-The coordinator stopped at 62427476 before any native-GPFS storage or B200 job.
-Independent already submitted CPU jobs continue. Do not cancel advancing token jobs
-or pull code into their checkout. The owner supplied a read-only diagnostic showing
-the mismatches are Tykky `_bin/*` links with duplicate separators (`bin//python`):
-sealing used Path normalization but relocation compared raw readlink text. Both now
-share the original seal normalization; changed images/links still fail. Do not rebuild
-or delete sealed containers. CPU/storage receipts identify source
-ab7453fb8590c70734df77ea11c5ddfd3826be0e1cbeb23e65003a49c1a8a2e9,
-runtime pins 086f1143adaa6b8811ff01a751db11db70164b293af6670f76c60ad6ffabe232,
-and prepared inputs 9ea10eed02750810c48765e692eabb1afef70ed841b253d517ca92bd63b17bf8.
-They do not certify the later local fixes. Tokenizer files and registry identity are
-unchanged. Explicit `setup_extractors --restart`
-requires idle jobs and accounted submissions, keeps previous attempts in the same
-receipt, reuses verified sealed images and resumes existing token databases.
-The owner subsequently requested a clean parallel debugging rerun. Cleanup is permitted
-only after current jobs/manual writers stop; it deliberately discards rebuildable token
-output but preserves questions, paid caches, checkpoints and containers. The final frozen
-campaign still follows successful setup. No live cluster operation was performed here.
+Tykky link normalization is corrected; four scratch stages now passed that check.
+Linux file locks/workspace leases now use POSIX record locking instead of flock.
+Thread serialization prevents one same-process lock user closing another's lock.
+Real two-node GPFS and Lustre checks must validate the new implementation; local
+Windows tests do not establish distributed locking. Staging now preserves publisher
+lockfiles and reports checkpoint mismatch filenames. The owner confirmed the sole
+Perplexity mismatch was missing source/uv.lock. Restaging must still verify the fix on VSC.
 
-The new coordinator collects independent failures rather than stopping at the first failed
-job. Ten separate GPFS probes avoid a global first-model dependency; separate CPU/GPU/
-download/build/transfer pools allow 32 queued/running jobs. Setup has 66–76 jobs depending
-on reusable images, final 0A has 55. These are implemented plans, not observed VSC passes.
-The owner explicitly authorized Git publication for this update; future publication again
-requires explicit authorization.
-Local validation of this update: 1,003 tests passed, 20 optional-runtime/platform skips;
-Ruff, dependency consistency, pinned libraries and changed Bash syntax/LF checks passed.
-All six notebooks ran with 25 saved figures, captions and complete summaries. New direct
-comparison/control/overlap panels were rendered using isolated synthetic fixtures because
-benchmark predictions do not yet exist. These checks do not certify real B200 execution.
+Token audits now split into ten disjoint ranges per provider. Up to 40 CPU token
+jobs coexist with six other CPU checks/merges, 12 GPU tests, and two jobs in each
+of the build, download and transfer pools (64 active total). Setup has 176-186
+steps depending on reused images; frozen 0A has 165. These are plans, not passes.
+The reviewed tokenization files and registry remain byte-identical, so completed
+monolithic counts can seed the partitions. Strict merges preserve identities,
+complete coverage and compressed prepared tokens; conflicts roll back all inserts.
+Partition restart databases are not copied to GPFS or result exports.
+
+Migration: stop the old watcher, cancel only the five identified token jobs if
+still active, and let the container builds finish. Do not update the checkout
+until its jobs stop. Publish source separately, then use the setup --restart path;
+retain output to reuse committed work. No remote cancellation/submission, paid
+call or Git publication was performed for the partition implementation.
+Final cleanup/regeneration/freeze happens only after setup/diagnostics work.
+
+Local validation of the partition/locking update: 1,024 passed, 22 skipped (Linux or
+optional staged model dependencies). Ruff, pip check, library-pin verification, changed
+Bash syntax/LF and diff whitespace checks passed. No notebook/figure code changed.
+These checks do not certify GPFS record locking or B200 inference.
 
 Claude's missing durable evaluation-store staging finding was confirmed: recreated
 predictor workspaces could refit completed folds and conflict at publication. Staging
@@ -120,9 +118,9 @@ but lacked explicit source/job fields; new reports record validation identity, j
 cluster and start/end timestamps. Do not infer their exact source from download time.
 The five original tokenizers each completed 1,698,127 unique inputs with no overflow.
 The five added tokenizers remain partial; do not extrapolate that result to them.
-New CPU preparation uses eight workers with a single transactional SQLite writer
-and 24-hour segments for the added renderers. Tokenizer source and cache identity
-are unchanged, allowing exact continuation of earlier batches.
+That earlier CPU implementation used eight workers and one SQLite writer with 24-hour
+segments. It is superseded by the ten-partition plan above, preserving tokenizer identity
+and committed batches.
 Relocated B200 container evidence now retains its durable source identity; environment
 retirement verifies that identity, the approved GPFS path and unchanged image bytes.
 This fixes a false mismatch between original and relocated container IDs without

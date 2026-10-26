@@ -2,9 +2,11 @@
 # CPU preparation remains on wICE. No GPU job reads its large working set from Lustre.
 # Independent pools: long token audits cannot prevent ready GPU jobs from submitting.
 # Queued jobs also count. Actual placement/priority remains Slurm's decision.
-max_active_jobs: 32
+max_active_jobs: 64
+token_audit_shards: 10
 test_pool_limits:
-  cpu: 14
+  cpu: 6
+  tokens: 40
   gpu: 12
   download: 2
   build: 2

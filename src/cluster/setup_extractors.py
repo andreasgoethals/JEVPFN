@@ -18,7 +18,7 @@ from src.cluster.freeze import check_if_present, source_snapshot
 from src.cluster.job_graph import advance
 from src.cluster.maintenance import require_idle_vsc
 from src.cluster.scheduling import gpu_profile
-from src.cluster.token_preparation import resources as token_resources
+from src.cluster.token_shards import plan as token_plan
 from src.jev.registry import ADDED, SELF_HOSTED
 from src.utils import paths
 from src.utils.config import load_yaml
@@ -80,16 +80,7 @@ def plan(providers, *, reuse=()):
                 )
             )
             ready = provider + "_build"
-        steps.append(
-            dict(
-                name=provider + "_tokens",
-                dependencies=[provider + "_stage"],
-                script="experiment_0_tokens.slurm",
-                args=[root, provider],
-                flags=token_resources(provider),
-                cluster="wice",
-            )
-        )
+        steps.extend(token_plan(provider, root, dependencies=[provider + "_stage"]))
         steps.append(
             dict(
                 name=provider + "_scratch",

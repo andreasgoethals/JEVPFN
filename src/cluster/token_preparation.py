@@ -43,10 +43,10 @@ def prepare_batch(payloads):
     return result
 
 
-def resources(provider):
+def resources(provider, *, sharded=False):
     """Large publisher renderers need parallel CPU preparation, never a GPU."""
     if provider in ADDED:
-        return ["--cpus-per-task=8", "--mem=27200M", "--time=24:00:00"]
+        return ["--cpus-per-task=8", "--mem=27200M", "--time=12:00:00" if sharded else "--time=24:00:00"]
     return ["--cpus-per-task=2", "--mem=6800M", "--time=04:00:00"]
 
 

@@ -2,6 +2,15 @@
 
 ## 26-10-2026
 
+- Split token audits into ten disjoint CPU partitions per provider, with up to 40 active
+  partition jobs, a cancelled-journal recovery check and a transactional coverage/checksum merge. Reuse committed legacy batches,
+  preserve tokenizer identities, print periodic throughput, and keep restart partitions off GPFS
+  and out of result exports. Setup and frozen 0A use the same plan.
+- Replace Linux BSD flock with POSIX record locking, including workspace leases; serialize
+  same-process lock users and propagate non-contention I/O errors. Real GPFS validation remains
+  required. Preserve publisher lockfiles during staging and report checkpoint mismatch filenames.
+- Verified the update locally: 1,024 tests passed, 22 optional-runtime/platform skips;
+  lint, dependencies, pinned libraries and changed shell syntax passed. No live VSC/paid calls.
 - Added one `scripts/test_all.sh` entrypoint for complete parallel B200 setup/testing.
   Shared resumable scheduling isolates failures, records blocked descendants and reserves
   separate CPU/GPU/download/build/transfer pools; formal 0A uses the same coordinator.

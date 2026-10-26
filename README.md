@@ -6,15 +6,16 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The latest 26 October VSC archive confirms CPU/data/question and two-node Lustre storage
-passes, all encoder/checkpoint staging, and three sealed Blackwell containers. Setup then
-stopped while checking copied container links: sealing normalized duplicate path separators,
-but copy verification did not. This is corrected locally without changing images or token
-identities. Five added-provider token jobs were still progressing at download time.
-Restart setup only after all recorded jobs finish, preserving completed work.
-That attempt submitted no B200 jobs. Historical H100 contracts/pilots and encoder passes
-do not certify B200 execution or the current working tree. The five added-provider token
-audits, Strands rerun and rebuilt runtimes still need successful execution.
+The 26 October 14:15 downloaded VSC snapshot confirms CPU/data/questions, two-node Lustre,
+all checkpoint staging and the original five token audits. Four GPFS lock probes failed;
+Perplexity's copy omitted the publisher file source/uv.lock (confirmed by the owner). Five added-provider token jobs
+and two container builds were running. No B200 inference pass is established by this snapshot.
+Linux locks now use POSIX record locking; its GPFS behavior still requires the two-node test.
+Staging preserves publisher dependency lockfiles and reports checkpoint mismatch filenames.
+Token audits now use ten independent CPU partitions per provider and a strict merge, reusing
+matching committed counts. Stop the old coordinator, cancel only the chosen token jobs,
+and let container builds finish before updating the shared checkout. Preserve current output
+until setup passes. Historical H100 results do not certify B200 or current-source execution.
 Eleven extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
 distinct inputs and 3,294,340 row/input links. Dated evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
@@ -316,7 +317,8 @@ VSC 0A covers CPU/storage/tokens, all three encoders and ten real provider contr
 ready independent jobs concurrently and resumes by job ID. Failed prerequisites block only
 their descendants; the final report lists all failures and blocked tests. Before the final
 freeze, `bash scripts/test_all.sh --execute --watch` runs the complete setup/test graph,
-including downloads and containerization. CPU, build, transfer and GPU pools are separate;
+including downloads and containerization. Each provider's token audit has ten CPU partitions
+plus a recovery check and a coverage-checked merge; up to 40 token jobs run alongside other pools. CPU, build, transfer and GPU pools are separate;
 all GPU checks use B200 by default. See [VSC](docs/VSC.md) for commands.
 
 Before full extraction, review real task/robustness tests, measured throughput, quota,

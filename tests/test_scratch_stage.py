@@ -113,6 +113,17 @@ def test_immutable_prepared_inputs_preserve_exact_audited_bytes(tmp_path):
     assert file_sha256(source) == file_sha256(destination)
 
 
+def test_publisher_lockfiles_are_immutable_assets_not_runtime_locks(tmp_path):
+    folder = tmp_path / "model"
+    folder.mkdir()
+    (folder / "uv.lock").write_text("pinned dependency lock")
+    (folder / "model.safetensors").write_bytes(b"weights")
+    (folder / ".cache").mkdir()
+    (folder / ".cache/download.lock").write_text("transient")
+    assert {p.name for p in stage._regular_files(folder, immutable_assets=True)} == {"uv.lock", "model.safetensors"}
+    assert {p.name for p in stage._regular_files(folder)} == {"model.safetensors"}
+
+
 def test_runtime_paths_cannot_escape_or_select_other_projects(roots):
     with pytest.raises(ValueError, match="Unknown runtime"):
         stage.roots("../CreditPFN")

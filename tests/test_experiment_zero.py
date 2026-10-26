@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -38,7 +39,7 @@ def test_vsc_jobs_resume_after_disconnect_and_submit_independent_ready_jobs(
 
     monkeypatch.setattr(exp0.subprocess, "run", submit)
     report = exp0.run("vsc", execute=True)
-    assert len(commands) == 12  # Both CPU gates and all ten token audits can run together.
+    assert len(commands) == 6  # CPU/storage plus four short recovery jobs; partitions follow.
     while report["status"] == "waiting_for_job":
         previous = len(commands)
         exp0.run("vsc", execute=True)
@@ -79,6 +80,8 @@ def test_failed_vsc_job_never_starts_the_next_test(isolated_output, monkeypatch)
 
     monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": True})
     monkeypatch.setattr(exp0, "require_idle_vsc", lambda: None)
+    plan = [s for s in exp0.steps("vsc") if s["name"] in {"cpu", "storage"} or s["name"].startswith("liquid_")]
+    monkeypatch.setattr(exp0, "steps", lambda *a, **k: deepcopy(plan))
     monkeypatch.setattr(exp0.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="777;wice"))
     exp0.run("vsc", execute=True)
     monkeypatch.setattr(
@@ -92,7 +95,7 @@ def test_failed_vsc_job_never_starts_the_next_test(isolated_output, monkeypatch)
     )
     report = exp0.run("vsc", execute=True)
     assert report["status"] == "vsc_checks_completed_with_failures"
-    assert len(report["summary"]["failures"]) == 12
+    assert len(report["summary"]["failures"]) == 3  # CPU/storage/recovery; all descendants blocked.
     assert exp0.run("vsc", execute=True)["summary"] == report["summary"]
 
 

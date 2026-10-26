@@ -134,7 +134,8 @@ def saved_exact_token_tables():
     }, pd.DataFrame(rows)
 
 
-def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, preparation_workers=1):
+def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, preparation_workers=1,
+                   shard=None):
     """Transactional batches and immutable input/counter identities allow safe restart."""
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     if batch_size < 1:
@@ -156,11 +157,18 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
     destination = (
         paths.require_project_output(paths.token_audit_dir()) / f"{provider}_{audit_id}.sqlite3"
     )
+    original = destination
+    if shard is not None:
+        from src.cluster.token_shards import shard_path, validate_shard
+
+        validate_shard(*shard)
+        destination = shard_path(original, *shard)
     destination.parent.mkdir(parents=True, exist_ok=True)
     log = (
         paths.logs_dir("experiment_0")
         / "before_extraction"
-        / f"tokens_{provider}_{audit_id[:12]}.log"
+        / (f"tokens_{provider}_{audit_id[:12]}"
+           + (f"_part{shard[0]:02d}of{shard[1]:02d}" if shard else "") + ".log")
     )
     log.parent.mkdir(parents=True, exist_ok=True)
 
@@ -192,6 +200,10 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
         db.commit()
         if hasattr(counter, "attach_cache"):
             counter.attach_cache(db, writable=True)
+        if shard is not None:
+            from src.cluster.token_shards import seed_existing
+
+            seed_existing(db, original, recipe, inputs, *shard)
         count_many = counter.count_many
         if preparation_workers > 1:
             from src.cluster.token_preparation import PreparedTokenPool
@@ -203,19 +215,26 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
             count_many = pool.count_many
         for item in inputs:
             dataset_id = item["dataset_id"]
+            start, stop = (0, item["unique_inputs"]) if shard is None else (
+                item["unique_inputs"] * shard[0] // shard[1],
+                item["unique_inputs"] * (shard[0] + 1) // shard[1],
+            )
             n, last = db.execute(
                 "SELECT COUNT(*),MAX(input_no) FROM counts WHERE dataset_id=?", (dataset_id,)
             ).fetchone()
-            if n and n != last + 1 or n > item["unique_inputs"]:
+            if n and n != last - start + 1 or n > stop - start:
                 raise ValueError(
                     "Saved token audit is not a contiguous prefix of the prepared inputs"
                 )
             progress(
-                f"{provider} / {dataset_id}: {n:,}/{item['unique_inputs']:,} counted; resuming"
+                f"{provider} / {dataset_id}: {n:,}/{stop-start:,} counted; input range [{start},{stop})"
             )
-            records = iter_prepared_inputs(
-                item["path"], input_set_id=item["input_set_id"], after_input_no=last if n else -1
+            records = islice(iter_prepared_inputs(
+                item["path"], input_set_id=item["input_set_id"], after_input_no=last if n else start-1
+            ), stop-start-n
             )
+            resumed, dataset_started = n, time.perf_counter()
+            last_progress = dataset_started
             while batch := list(islice(records, batch_size)):
                 with db:
                     lengths = count_many([r["payload"] for r in batch])
@@ -233,12 +252,19 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
                         ],
                     )
                 old, n = n, n + len(batch)
-                if n // 25000 != old // 25000:
+                now = time.perf_counter()
+                if n // 25000 != old // 25000 or now-last_progress >= 60 or n == stop-start:
+                    rate = (n-resumed) / max(now-dataset_started, 0.000001)
                     progress(
-                        f"{provider} / {dataset_id}: {n:,}/{item['unique_inputs']:,} exact counts"
+                        f"{provider} / {dataset_id}: {n:,}/{stop-start:,} exact counts; "
+                        f"{rate:.1f} new inputs/s; {(stop-start-n)/max(rate,0.000001)/60:.1f} min remaining at current dataset rate"
                     )
-            if n != item["unique_inputs"]:
+                    last_progress = now
+            if n != stop-start:
                 raise ValueError("Prepared input count differs from the saved input-set summary")
+            if shard is not None:
+                progress(f"{provider} / {dataset_id}: shard complete; {n:,} inputs")
+                continue
             lengths = np.array(
                 [
                     r[0]
@@ -282,7 +308,8 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
             }
             with db:
                 db.execute(
-                    "INSERT OR REPLACE INTO dataset_summaries VALUES (?,?)",
+                    "INSERT INTO dataset_summaries VALUES (?,?) ON CONFLICT(dataset_id) DO UPDATE "
+                    "SET summary_json=excluded.summary_json WHERE summary_json<>excluded.summary_json",
                     (dataset_id, canonical_json({**summary, "overflows": overflows})),
                 )
             summaries.append(summary)
@@ -293,6 +320,11 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
             from src.jev.registry import require_prepared_coverage
 
             require_prepared_coverage(db)
+        if shard is not None:
+            from src.cluster.token_shards import finish_shard
+
+            db.commit()
+            return finish_shard(destination, recipe, shard, time.perf_counter() - started)
     report = {
         "schema": recipe["schema"],
         "audit_id": audit_id,
