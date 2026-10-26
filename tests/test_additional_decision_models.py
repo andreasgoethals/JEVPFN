@@ -30,6 +30,35 @@ def test_owner_selected_roster_and_delivery():
     assert all(not v["enabled"] for v in candidates.values())
 
 
+@pytest.mark.parametrize("case", ["valid30", "multitoken", "alias_id", "duplicate", "cue", "empty"])
+def test_sii_publisher_label_readout_checked_before_weights(case):
+    from types import SimpleNamespace
+
+    from src.jev.extended_runtimes import ExtendedRuntime, sii_label_ids
+
+    labels = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["AA", "AB", "AC", "AD"]
+    ids = {label: [i + 100] for i, label in enumerate(labels)}
+    if case == "multitoken":
+        ids["AA"] = [100, 100]
+    if case == "alias_id":
+        ids["AA"] = ids["A"]
+    if case == "duplicate":
+        labels[-1] = "A"
+    counter = SimpleNamespace(
+        labels=[] if case == "empty" else labels,
+        tokenizer=SimpleNamespace(encode=lambda label, **kw: ids[label]),
+        renderer=SimpleNamespace(
+            ANSWER_CUE="changed" if case == "cue" else "The correct answer is ("
+        ),
+    )
+    if case == "valid30":
+        assert sii_label_ids(counter) == tuple(range(100, 130))
+    else:
+        # Validation happens even without torch/transformers or a real model path.
+        with pytest.raises(ValueError, match="SII"):
+            ExtendedRuntime("sii", None, counter)
+
+
 @pytest.mark.parametrize("provider", ["cloudflare", "intern"])
 @pytest.mark.parametrize("kind", ["binary_probability", "choice", "ordered_choice"])
 def test_actual_publisher_renderer_parity_when_staged(provider, kind):

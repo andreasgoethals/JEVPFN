@@ -273,3 +273,77 @@ def test_restage_unions_active_dataset_db_on_native_root_and_preserves_its_queue
         ) == {"budget": 17}
     assert not (work / "data/jev_cache/merge_backups").exists()
     assert sorted(p.name for p in backup.parent.iterdir()) == ["historical.sqlite3"]
+
+
+@pytest.mark.parametrize(
+    "phase", ["experiment_0", "experiment_1", "experiment_2", "experiment_3", "experiment_5"]
+)
+def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results(
+    roots, monkeypatch, tmp_path, phase
+):
+    from types import SimpleNamespace
+
+    import numpy as np
+    import pandas as pd
+
+    from src.cluster import containers
+    from src.data.loaders import LoadedDataset
+    from src.data.metadata import extract_metadata
+    from src.evaluation.protocol import evaluate_cv, shared_splits
+    from src.evaluation.store import read_predictions, recipes
+
+    durable, _ = roots
+    # Real source/config paths, isolated DATA/PROJECT output paths.
+    monkeypatch.setattr(paths, "REPO_ROOT", Path(stage.__file__).resolve().parents[2])
+    monkeypatch.setenv("VSC_DATA", str(tmp_path / "data"))
+    source = durable / "data/decision_inputs/fixture.sqlite3"
+    source.parent.mkdir(parents=True)
+    with sqlite3.connect(source) as db:
+        db.execute("CREATE TABLE inputs (id)")
+    image = durable / "containers/blackwell-cu130/linear"
+    image.mkdir(parents=True)
+    (image / containers.MARKER).write_text("{}")
+    monkeypatch.setattr(containers, "relocate", lambda *args: None)
+
+    frame = pd.DataFrame({"text": ["sample"] * 20, "x": np.arange(20.0), "y": np.arange(20.0)})
+    official = {"target": "y", "task_type": "reg"}
+    metadata = extract_metadata(
+        frame, official, dataset_id="fixture", dataset_name="Fixture", text_columns=["text"]
+    )
+    dataset = LoadedDataset(frame, metadata, official, {"data_identity": "fixed"}, [])
+    matrix = frame[["x"]].set_axis([f"csv:{i}" for i in range(20)])
+    options = dict(
+        specification=shared_splits(dataset),
+        model_id="linear",
+        checkpoint_id="synthetic",
+        feature_set="non_text",
+        allow_model_runs=True,
+        estimator_settings={},
+        feature_artifact_ids=[],
+        phase=phase,
+    )
+
+    def factory():
+        return SimpleNamespace(fit=lambda x, y: None, predict=lambda x: x.x.to_numpy() + 0.1)
+
+    def no_refit():
+        pytest.fail("A durable completed fold must be reused, not fitted again")
+
+    with stage.staging_environment(durable):
+        original = evaluate_cv(dataset, matrix, factory, fold_numbers=[0], **options)
+    work = Path(stage.stage("linear")["working_root"])
+    with stage.staging_environment(work):
+        reused = evaluate_cv(dataset, matrix, no_refit, fold_numbers=[0], **options)
+        assert [r.key for r in reused] == [r.key for r in original]
+        pd.testing.assert_frame_equal(read_predictions(original[0]), read_predictions(reused[0]))
+        evaluate_cv(dataset, matrix, factory, fold_numbers=[1], **options)
+    # Another completed durable fold must be unioned, not replace scratch progress.
+    with stage.staging_environment(durable):
+        evaluate_cv(dataset, matrix, factory, fold_numbers=[2], **options)
+    stage.stage("linear")
+    with stage.staging_environment(work):
+        evaluate_cv(dataset, matrix, no_refit, fold_numbers=[0, 1, 2], **options)
+    stage.publish("linear")
+    with stage.staging_environment(durable):
+        assert len(list(recipes(phase))) == 3
+    assert len(list((work / "output_JEVPFN").glob("*/results/evaluation/*.sqlite3"))) == 1

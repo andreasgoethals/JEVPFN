@@ -137,6 +137,10 @@ EVIDENCE_COLORS = {
 METHOD_COLORS = ("#5A6E8C", "#987448", "#4F8075")
 EMBEDDING_COLORS = {"e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
                     "qwen3_embedding_0_6b": "#558B2F"}
+EFFECT_CMAP = "BrBG"  # Positive effect means improvement in the explicitly named contrast.
+COHORT_COLORS = {"seen_joint": "#72518A", "unseen_joint": "#27878E",
+                 "all_columns_unseen": "#BA7B28", "empty_text": "#777777"}
+COHORT_MARKERS = {"seen_joint": "o", "unseen_joint": "s", "all_columns_unseen": "^", "empty_text": "x"}
 STUDY_MAP_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 METHOD_MAP_SIZE = (WIDTH_FULL, 3.7)
 PROMPT_SENSITIVITY_SIZE = (WIDTH_FULL, MAX_HEIGHT)

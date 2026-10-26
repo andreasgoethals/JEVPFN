@@ -355,6 +355,9 @@ def evaluate_cv(
                 try:
                     with timer.measure("fit"):
                         model.fit(outer_train, target.iloc[train])
+                    representation_feature_count = getattr(
+                        model, "output_feature_count_", outer_train.shape[1]
+                    )
                     if hasattr(model, "pca_diagnostics_"):
                         pca_diagnostics.append(
                             {"partition": "outer_train", "columns": model.pca_diagnostics_}
@@ -374,6 +377,7 @@ def evaluate_cv(
                     "checkpoint_id": checkpoint_id,
                     "feature_set": feature_set,
                     "feature_columns": list(features.columns),
+                    "representation_feature_count": representation_feature_count,
                     "feature_input_identity": feature_identity,
                     "feature_artifact_ids": list(feature_artifact_ids),
                     "representation_recipe": representation_recipe,

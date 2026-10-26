@@ -25,7 +25,11 @@ Lustre every 600 seconds, and remaining output is published when the child comma
 exits, including ordinary failures. Database publication merges compatible records;
 it does not overwrite a complete durable cache with a partial copy. Conflicts stop
 publication. Repeated mirroring retains each distinct accounting-history version once;
-changed charges or job states remain traceable. Scratch is not a backup: VSC removes unused GPFS scratch files after
+changed charges or job states remain traceable. Before a predictor runs, staging restores
+durable evaluation SQLite databases (predictions and completed folds) for all existing
+experiment phases. Existing scratch results are unioned transactionally, not replaced;
+already completed folds are reused. Decision-runtime staging omits these predictor stores.
+Scratch is not a backup: VSC removes unused GPFS scratch files after
 30 days, and a killed node can lose work since the last publication. Preserve an
 independent downloaded copy of irreplaceable features. Disk free space is not quota;
 check `myquota` for both bytes and file counts before staging all large checkpoints.
@@ -119,16 +123,16 @@ modify another project's environment.
 
 ## Finish setup before the clean campaign
 
-Preview and start the resumable ten-provider setup graph:
+One command prepares and tests all ten open-weight extractors and three encoders. Preview first:
 
 ```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.setup_extractors --help
-"${JEVPFN_PYTHON:?}" -m src.cluster.setup_extractors --all
-"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all --execute --watch
+bash scripts/test_all.sh
+bash scripts/test_all.sh --execute --watch
 ```
 
-The help must list `--watch` and the preview must select Mindwell B200 before execution.
-An older checkout rejecting `--watch` has not started this setup graph.
+The preview must select Mindwell B200. The script activates the existing CPU environment,
+selects the durable root and starts the resumable coordinator. It never cleans output,
+regenerates questions or makes paid calls. The prepared questions remain the audited local files.
 
 The graph performs CPU/data checks, immutable decision-model and encoder checkpoint
 staging, missing Blackwell container builds, exact token counts, GPFS staging,
@@ -136,7 +140,14 @@ B200 contracts, bounded dataset pilots and all three encoder tests. Both filesys
 must pass two-node locking and SQLite snapshot tests: durable Lustre on wICE and
 native GPFS scratch on Mindwell's `batch_graniterapids` CPU partition. Every GPU
 job waits for those checks. It does not enable full extraction or certify acceptance.
-At most eight jobs are active; download/build chains are bounded separately.
+The complete setup contains 76 jobs with no reusable containers, or 66 when all ten
+sealed images exist. Containers are verified in their own CPU staging jobs, not hashed
+serially on the login node. Each runtime has its own two-node GPFS storage check; a
+failed model cannot block every other model through a shared staging prerequisite.
+Configuration permits 32 queued/running jobs: at most 14 CPU checks, 12 GPU tests,
+two downloads, two builds and two transfers. These are resource pools, not artificial
+dependencies between different models. Token audits cannot fill the GPU/build pools.
+Slurm still decides placement and start times; this does not promise simultaneous starts.
 Cross-cluster dependencies are checked through accounting, not assumed to work
 through Slurm federation. `--watch` polls once per minute and submits ready steps.
 If OnDemand disconnects, already submitted jobs continue; reconnect, activate the
@@ -153,8 +164,16 @@ squeue --clusters=mindwell --me -o "%.18i %.16P %.10T %.10l %.35R"
 ```
 
 Use the reported integer in place of `JOB_ID`. Successful submission or an empty
-queue is not a test result. A failed prerequisite stops new submissions; retain
-its logs and receipts. Do not erase a receipt to guess whether a job needs resubmitting.
+queue is not a test result. A failed job blocks only its descendants. Other branches
+continue; the same receipt's `summary` lists failed job IDs, commands/exit codes and
+blocked tests. The watcher exits nonzero after all runnable tests finish if any failed.
+Missing accounting stays pending. Ambiguous/interrupted submissions still stop the
+coordinator to prevent duplicate jobs. Keep its receipt; never erase it to guess retries.
+
+Within a provider, independent GPU diagnostic groups and real-dataset checks collect
+failures before returning a failing job. A poisoned CUDA context, memory exhaustion or
+request ceiling aborts that worker. CPU library, question and synthetic test commands
+also all run even if an earlier command fails. Neither behavior turns a failure into a pass.
 
 After fixing a stopped setup or changing its source, wait until all JEVPFN jobs
 finish, then explicitly restart the checks:
@@ -170,6 +189,12 @@ attempts inside the same receipt, verifies and reuses sealed Blackwell images,
 and retains weights, token batches, caches and logs. Cheap checks run again;
 the previous failure is never relabelled as a pass. After a disconnect, resume
 with `--all --execute --watch` without `--restart`.
+
+The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
+mismatch: Tykky writes image paths containing `bin//python`, while the seal used the
+equivalent `bin/python`. Sealing and relocation now share that normalization. Existing
+sealed images and copied trees can be reused; do not rebuild them or bypass verification.
+Actual changes to links, images or wrappers still fail, with mismatched filenames reported.
 
 The `--all` graph includes E5-small-v2, E5-large-v2 and Qwen3-Embedding-0.6B. Their
 CPU checkpoint-staging job finishes before the Clef runtime's GPFS working set is
@@ -192,8 +217,9 @@ renderers use eight CPUs, 27,200 MiB and a 24-hour limit; the original five use 
 one coordinator commits exact counts and compressed prepared tokens together. Neither the
 renderer nor its cache identity changes, so earlier completed batches remain reusable.
 The 24-hour limit is a resumable segment, not a completion-time promise. No GPU waits
-inside token preparation. Fresh 0A contains 46 checks/jobs, including ten provider token
-jobs and the two storage checks; the setup graph additionally builds/stages runtimes.
+inside token preparation. Frozen 0A contains 55 VSC jobs: CPU checks, one Lustre check,
+ten token audits, ten scratch stages, ten native GPFS checks, ten GPU contract jobs,
+ten bounded dataset pilots and three encoder jobs. Setup additionally downloads and builds.
 
 After a kill or failed publication, preserve scratch and recover committed results
 in the CPU environment before restaging that runtime:
@@ -255,6 +281,10 @@ Neither a larger balance nor successful smoke tests enables full extraction.
 Do this **after** the B200 setup/encoder tests and local Jev pilot work, with all
 JEVPFN jobs and manual/notebook writers stopped. Preserve their evidence until the
 cause of every failure is understood. Synchronize the same reviewed source first.
+For the owner's interim clean debugging rerun, use the cleanup commands below after
+jobs stop, then `bash scripts/test_all.sh --execute --watch`. Keep the existing
+audited question files and do not freeze yet. The full regeneration/upload/freeze
+sequence below is for the final campaign after setup works.
 
 VSC CPU environment, with the durable root and `VSC_SCRATCH_GPFS1` available:
 
@@ -265,7 +295,8 @@ VSC CPU environment, with the durable root and `VSC_SCRATCH_GPFS1` available:
 mkdir -p /lustre1/project/stg_00211/JEVPFN/uploads
 ```
 
-This deletes output on DATA, durable PROJECT and registered GPFS working sets,
+This deletes output on DATA, durable PROJECT and GPFS working sets (including
+known runtimes whose staging failed before its completion marker),
 including old token counts/logs/reports. It preserves raw/prepared data, permanent
 features/accounting, weights, containers, environments and secrets. There is no
 archive. Selective previews support `--phase`, `--kind`, `--match`,
@@ -331,7 +362,8 @@ three encoders on B200. Each decision pilot follows its own contract. Local 0A
 checks Jev interfaces/robustness and the configured real-dataset pilot. Omitting
 `--dataset-pilot` leaves local acceptance incomplete. Receipts are in DATA/local
 `3. experiment_0/{manifests,logs}/0A_vsc` or `0A_local`; normal Slurm logs remain.
-The VSC watcher resumes recorded IDs after a disconnect. Failure stops new work.
+The VSC watcher resumes recorded IDs after a disconnect and collects independent failures
+using the same resource pools as setup. It never accepts a partially successful campaign.
 
 Review outputs, throughput, probability/order sensitivity, quota and independent
 backup before accepting. Provider acceptance previews use:

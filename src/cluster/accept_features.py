@@ -121,7 +121,7 @@ def evidence_for(provider, *, campaign=None):
     storage_files = []
     backends = [("lustre", "storage")]
     if gpu_profile().get("storage_mode") == "scratch_mirror":
-        backends.append(("gpfs", "gpfs_storage"))
+        backends.append(("gpfs", "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"))
     for backend, step in backends:
         storage_file, _ = choose(
             (before / "storage_contracts").glob("*.json"),
@@ -129,6 +129,7 @@ def evidence_for(provider, *, campaign=None):
                 r.get("status") == "storage_contracts_passed_requires_quota_and_backup_review"
                 and matching(r, step)
                 and r.get("storage_backend") == backend
+                and (backend != "gpfs" or r.get("runtime") == provider)
                 and r.get("snapshot_restore") is True
             ),
         )

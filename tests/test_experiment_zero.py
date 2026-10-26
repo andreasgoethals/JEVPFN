@@ -38,7 +38,7 @@ def test_vsc_jobs_resume_after_disconnect_and_submit_independent_ready_jobs(
 
     monkeypatch.setattr(exp0.subprocess, "run", submit)
     report = exp0.run("vsc", execute=True)
-    assert len(commands) == 8  # Independent CPU/storage/provider counts fill the bounded queue.
+    assert len(commands) == 12  # Both CPU gates and all ten token audits can run together.
     while report["status"] == "waiting_for_job":
         previous = len(commands)
         exp0.run("vsc", execute=True)
@@ -90,10 +90,10 @@ def test_failed_vsc_job_never_starts_the_next_test(isolated_output, monkeypatch)
             else pytest.fail("Must not submit")
         ),
     )
-    with pytest.raises(RuntimeError, match="ended"):
-        exp0.run("vsc", execute=True)
-    with pytest.raises(ValueError, match="Earlier"):
-        exp0.run("vsc", execute=True)
+    report = exp0.run("vsc", execute=True)
+    assert report["status"] == "vsc_checks_completed_with_failures"
+    assert len(report["summary"]["failures"]) == 12
+    assert exp0.run("vsc", execute=True)["summary"] == report["summary"]
 
 
 def test_saved_sequence_cannot_be_reused_after_source_change(isolated_output, monkeypatch):

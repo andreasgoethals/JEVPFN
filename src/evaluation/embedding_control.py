@@ -100,7 +100,9 @@ class EmbeddingControl:
                 )
         if self.prepare:
             return self  # CPU preparation does not fit a predictor or transform the entire dataset.
-        self.estimator.fit(self.transform(x), y)
+        transformed = self.transform(x)
+        self.output_feature_count_ = transformed.shape[1]
+        self.estimator.fit(transformed, y)
         if hasattr(self.estimator, "classes_"):
             self.classes_ = self.estimator.classes_
         return self

@@ -155,6 +155,7 @@ def run(*, execute=False):
         "job_id": os.environ["SLURM_JOB_ID"],
         "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
         "storage_backend": backend,
+        "runtime": os.environ.get("JEVPFN_STORAGE_RUNTIME"),
         "nodes": [local, others[0]],
         "results": str(folder),
         "worker_receipts": {

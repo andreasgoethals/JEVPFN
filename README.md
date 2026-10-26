@@ -6,10 +6,12 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 26 October VSC archive confirms new CPU/data/question and two-node Lustre storage
-passes. Setup then stopped in the encoder download job: its guard incorrectly rejected
-a CPU Slurm allocation. This is corrected locally; the setup coordinator can explicitly
-restart after all recorded jobs finish, retaining evidence, weights and resumable work.
+The latest 26 October VSC archive confirms CPU/data/question and two-node Lustre storage
+passes, all encoder/checkpoint staging, and three sealed Blackwell containers. Setup then
+stopped while checking copied container links: sealing normalized duplicate path separators,
+but copy verification did not. This is corrected locally without changing images or token
+identities. Five added-provider token jobs were still progressing at download time.
+Restart setup only after all recorded jobs finish, preserving completed work.
 That attempt submitted no B200 jobs. Historical H100 contracts/pilots and encoder passes
 do not certify B200 execution or the current working tree. The five added-provider token
 audits, Strands rerun and rebuilt runtimes still need successful execution.
@@ -21,7 +23,8 @@ GPU execution now defaults to **Mindwell B200**. CPU jobs build separate CUDA 13
 containers, count tokens and copy each required working set to native GPFS scratch.
 Authoritative inputs, weights and durable results remain on Lustre PROJECT; logs and
 small manifests remain on DATA. Committed feature/prediction databases publish periodically
-and at job exit; scratch survives failed jobs for recovery but is not a backup. No new
+and at job exit; predictor staging also restores durable completed folds and predictions
+so a recreated scratch workspace resumes them. Scratch is not a backup. No new
 GPFS project allocation is required. Existing H100 images remain preserved; all A100
 routes are excluded. Actual B200 kernel/provider/encoder tests remain required. See [VSC](docs/VSC.md).
 
@@ -272,8 +275,9 @@ Fold locks use a bounded pool (at most 4,096 files per phase), not a new directo
 several files for every fit. Transfer imports merge databases transactionally and reject
 conflicting records; legacy per-fold files remain readable. Failed-fit diagnostics stay visible.
 
-On VSC, full output cleanup includes numbered output under registered GPFS working sets,
-as well as DATA and durable PROJECT. It preserves the staged inputs and containers.
+On VSC, full output cleanup includes numbered output under GPFS working sets,
+including known runtimes whose staging failed before registration, as well as DATA
+and durable PROJECT. It preserves the staged inputs and containers.
 The cleanup utility previews by default and never deletes data, weights, environments,
 containers or secrets. Run it on the machine being cleaned:
 
@@ -309,7 +313,11 @@ three task types, using the reviewed private context envelope. VSC contracts che
 same label-blind sample, including aligned multiclass option reversal. These measurements
 require human review; they do not select wording by predictive performance.
 VSC 0A covers CPU/storage/tokens, all three encoders and ten real provider contract/pilot pairs. It submits
-ready independent jobs concurrently, resumes by job ID and stops new submissions after failure. See [VSC](docs/VSC.md) for commands.
+ready independent jobs concurrently and resumes by job ID. Failed prerequisites block only
+their descendants; the final report lists all failures and blocked tests. Before the final
+freeze, `bash scripts/test_all.sh --execute --watch` runs the complete setup/test graph,
+including downloads and containerization. CPU, build, transfer and GPU pools are separate;
+all GPU checks use B200 by default. See [VSC](docs/VSC.md) for commands.
 
 Before full extraction, review real task/robustness tests, measured throughput, quota,
 independent backups and provider acceptance. Jev additionally needs verified organization
@@ -345,3 +353,10 @@ Project-specific deviations preserve the agreed numbered phases, `output_JEVPFN`
 report names, permanent paid-response stores and explicit local/VSC execution gates. Dense
 figures are paginated at final A4 width; notebook metadata/logs/results are kept outside the
 figure folders. Python entry points stay under `src/`; Slurm launchers stay under `scripts/`.
+
+The paired-results notebook also directly contrasts every decision recipe with each
+embedding recipe within matching predictors/folds, displays prespecified controls and
+seen/unseen-text effects, and reports measured timing and post-PCA representation width.
+It selects no winners and creates no predictive plots before saved complete arms exist.
+Extraction timing retains its run/hardware identity; partial runs are not presented as
+complete feature-generation costs or automatically joined to predictive performance.

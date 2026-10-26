@@ -68,6 +68,23 @@ def test_full_cleanup_removes_archives_preserves_inputs(output):
     assert len(list(output.rglob("paid.sqlite3"))) == 2
 
 
+def test_failed_gpfs_stage_output_cleaned_without_touching_assets(output, monkeypatch):
+    scratch = output / "gpfs_scratch"
+    monkeypatch.setenv("VSC_SCRATCH_GPFS1", str(scratch))
+    work = scratch / "jevpfn-work/liquid/JEVPFN"
+    token = work / "output_JEVPFN/3. experiment_0/results/token_audit/partial.sqlite3"
+    weight = work / "checkpoints/model.safetensors"
+    foreign = scratch / "jevpfn-work/another_project/JEVPFN/output_JEVPFN/log.txt"
+    for path in (token, weight, foreign):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("keep unless explicitly selected output")
+    # No stage receipt: this is precisely the partial-copy failure case.
+    preview = cleanup.run(tier="both")
+    assert str(token) in {f["path"] for f in preview["files"]}
+    cleanup.run(tier="both", apply=True, writers_stopped=True)
+    assert not token.exists() and weight.exists() and foreign.exists()
+
+
 def test_partial_figure_cleanup_invalidates_combined_reports(output):
     root = paths.outputs_dir()
     for name in ("figures/0. exploration/nb/01_plot.pdf", "figures/Captions.md", "All Results.md"):

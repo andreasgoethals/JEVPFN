@@ -385,32 +385,37 @@ def run(provider, *, execute=False):
             report["publisher_release_check"] = client.model.release_check
             report["publisher_startup_anchor_forwards"] = 6 if provider == "h2o" else 0
         write_json(manifest, report)
-        for dataset in synthetic_datasets():
-            report["synthetic"].append(exercise_feature_pipeline(metered, dataset, directory))
-            print(
-                f"{provider}: {dataset.metadata.task_type} GPU, cache and feature checks passed",
-                flush=True,
-            )
-            write_json(manifest, report)
-        report["boundaries"] = exercise_boundaries(metered, directory)
-        semantic_cache = ResponseCache(directory / "EXP0_SEMANTICS.sqlite3", "EXP0_SEMANTICS")
-        report["semantic_diagnostics"] = exercise_semantics(metered, semantic_cache)
-        write_json(manifest, report)
-        if not report["semantic_diagnostics"]["passed"]:
-            raise ValueError(
-                "Known-answer diagnostics need review; inspect saved raw answers before blaming the decoder"
-            )
-        report["prompt_robustness"] = exercise_robustness(metered)
+        from src.cluster.diagnostics import check
         from src.cluster.semantic_contracts import exercise_real_robustness
 
-        report["real_prompt_robustness"] = exercise_real_robustness(
-            metered, directory / "real_robustness"
-        )
-        report["batch_parity"] = exercise_batch_parity(
-            metered, tolerance=cfg["batch_probability_tolerance"]
-        )
-        write_json(manifest, report)
-        report["real_datasets"] = exercise_real_inputs(metered, sample, log)
+        def diagnose(name, function):
+            return check(report, name, function, save=lambda: write_json(manifest, report))
+
+        for dataset in synthetic_datasets():
+            value = diagnose("pipeline_" + dataset.metadata.task_type,
+                             lambda dataset=dataset: exercise_feature_pipeline(metered, dataset, directory))
+            if value is not None:
+                report["synthetic"].append(value)
+        report["boundaries"] = diagnose("boundaries", lambda: exercise_boundaries(metered, directory))
+        semantic_cache = ResponseCache(directory / "EXP0_SEMANTICS.sqlite3", "EXP0_SEMANTICS")
+        # Preserve semantic results even when their known-answer criterion is false.
+        def semantics():
+            report["semantic_diagnostics"] = exercise_semantics(metered, semantic_cache)
+            return report["semantic_diagnostics"]
+        diagnose("semantic_diagnostics", semantics)
+        report["prompt_robustness"] = diagnose("prompt_robustness", lambda: exercise_robustness(metered))
+        report["real_prompt_robustness"] = diagnose(
+            "real_prompt_robustness", lambda: exercise_real_robustness(metered, directory / "real_robustness"))
+        report["batch_parity"] = diagnose(
+            "batch_parity", lambda: exercise_batch_parity(metered, tolerance=cfg["batch_probability_tolerance"]))
+        for item in sample:
+            values = diagnose("real_inputs_" + item[0]["dataset_id"],
+                              lambda item=item: exercise_real_inputs(metered, [item], log))
+            if values is not None:
+                report["real_datasets"].extend(values)
+        failed = [c["name"] for c in report["checks"] if c["status"] != "passed"]
+        if failed:
+            raise ValueError("GPU diagnostic failures: " + ", ".join(failed))
         report["status"] = "gpu_contracts_passed_requires_review"
         report["runtime_token_count_parity"] = True  # SelfHostedClient rejects every mismatch.
     except BaseException as exc:

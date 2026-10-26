@@ -1,6 +1,14 @@
 # GPU default: B200 with a native GPFS working set and durable Lustre publication.
 # CPU preparation remains on wICE. No GPU job reads its large working set from Lustre.
-max_active_jobs: 8
+# Independent pools: long token audits cannot prevent ready GPU jobs from submitting.
+# Queued jobs also count. Actual placement/priority remains Slurm's decision.
+max_active_jobs: 32
+test_pool_limits:
+  cpu: 14
+  gpu: 12
+  download: 2
+  build: 2
+  transfer: 2
 account: lp_verbekelab
 default_gpu_profile: mindwell_b200
 routes: {}

@@ -15,6 +15,27 @@ from src.jev.provider import QUESTION_ID
 from src.jev.registry import pure_functions, source_module
 
 
+def sii_label_ids(counter):
+    """Validate the publisher's single-next-token readout before loading weights.
+
+    SIIDecision's option_labels already filters A..Z, AA..ZZ to single tokens.
+    Its training/inference prompt ends in this exact cue and scores standalone
+    label IDs: adding a leading space or retokenizing cue+label changes that rule.
+    """
+    if counter.renderer.ANSWER_CUE != "The correct answer is (":
+        raise ValueError("SII publisher answer cue differs from the reviewed readout")
+    labels = counter.labels
+    encoded = [counter.tokenizer.encode(label, add_special_tokens=False) for label in labels]
+    if (
+        not labels
+        or len(set(labels)) != len(labels)
+        or any(len(ids) != 1 for ids in encoded)
+        or len({ids[0] for ids in encoded}) != len(labels)
+    ):
+        raise ValueError("SII labels require distinct single-token IDs in publisher order")
+    return tuple(ids[0] for ids in encoded)
+
+
 def bidirectional_hidden(model, ids, torch):
     """H2O pooling semantics: full attention is bidirectional, DeltaNet remains causal.
 
@@ -49,11 +70,19 @@ def bidirectional_hidden(model, ids, torch):
 
 class ExtendedRuntime:
     def __init__(self, provider, folder, counter):
+        self.sii_label_ids = sii_label_ids(counter) if provider == "sii" else ()
         import torch
         from transformers import AutoConfig, AutoModel, AutoModelForCausalLM
 
         self.provider, self.counter, self.torch = provider, counter, torch
         self.release_check = {"status": "not_required", "provider": provider}
+        if provider == "sii":
+            self.release_check = {
+                "status": "publisher_label_contract_passed",
+                "provider": provider,
+                "distinct_single_token_labels": len(self.sii_label_ids),
+                "answer_cue": counter.renderer.ANSWER_CUE,
+            }
         if provider == "decision3":
             # Native prefix-bidirectional readout; ordinary vLLM serving is not interchangeable.
             self.model = AutoModel.from_pretrained(
@@ -133,6 +162,8 @@ class ExtendedRuntime:
         t = self.torch
         ids = t.tensor([prepared["ids"]], device="cuda", dtype=t.long)
         n = len(prepared["keys"])
+        if self.provider == "sii" and not 0 < n <= len(self.sii_label_ids):
+            raise ValueError("SII request exceeds the verified label vocabulary")
         if self.provider == "decision3":
             runtime = self.model.runtime
             return runtime.probabilities([prepared["ids"]], [n], [prepared["state_tokens"]])[0]
@@ -148,10 +179,7 @@ class ExtendedRuntime:
                 input_ids=ids, attention_mask=t.ones_like(ids), use_cache=False, return_dict=True
             ).last_hidden_state[:, -1, :]
             if self.provider == "sii":
-                labels = [
-                    self.counter.tokenizer.encode(s, add_special_tokens=False)[0]
-                    for s in self.counter.labels[:n]
-                ]
+                labels = list(self.sii_label_ids[:n])
             else:
                 labels = prepared["candidate_ids"]
             # Do not allocate [sequence_length,vocabulary] logits.

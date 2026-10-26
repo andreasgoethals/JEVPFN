@@ -80,6 +80,9 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
                     "record_path": str(path),
                 }
                 metrics = dict(record["scores"]["metrics"])
+                # Before predictor-specific category encoding; after embedding PCA.
+                # Older records lack this field: unknown is not zero/raw embedding width.
+                metrics["columns.representation"] = record["metadata"].get("representation_feature_count")
                 for name, values in record["scores"].get("decisions", {}).items():
                     metrics.update(
                         {f"{name}.{key}": value for key, value in values["metrics"].items()}

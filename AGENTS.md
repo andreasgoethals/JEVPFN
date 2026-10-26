@@ -5,7 +5,8 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
 
 ## Boundaries
 
-- Never stage, commit, push or change Git branches/remotes/history; the owner publishes.
+- Do not stage, commit or push unless the owner explicitly authorizes publication for the current task.
+  Never change branches/remotes/history without a separate explicit instruction.
 - Proposed plans and requested explanations belong in chat, not temporary documents.
 - `tfm-library/` is a pinned read-only submodule. Never edit, move, delete, lint or test it.
   The only allowed library write is its gitignored PROJECT_SPECIFIC.md. Report library errors

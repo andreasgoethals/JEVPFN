@@ -50,6 +50,18 @@ def native_dir(provider):
     return paths.checkpoints_dir().parent / "environments" / provider
 
 
+def _link_target(path):
+    """Use the same lexical identity when sealing and checking copied links.
+
+    Tykky emits image paths such as ``bin//python``. Path normalization removes
+    redundant separators without resolving an image-only path on the host.
+    """
+    target = os.readlink(path)
+    if os.name == "nt" and target.startswith("\\\\?\\"):
+        target = target[4:]
+    return Path(target)
+
+
 def files(folder):
     """Hash image bytes and wrapper links without following image-only executable paths."""
     result = {}
@@ -64,10 +76,7 @@ def files(folder):
         if path.name in {MARKER, "retired_source.json"}:
             continue
         if path.is_symlink():
-            link_text = os.readlink(path)
-            if os.name == "nt" and link_text.startswith("\\\\?\\"):
-                link_text = link_text[4:]
-            target = Path(link_text)
+            target = _link_target(path)
             internal = path.resolve().is_relative_to(root)
             # hpc-container-wrapper deliberately points _bin/* at paths mounted
             # INSIDE its image; after retirement they need not exist on the host.
@@ -218,14 +227,20 @@ def relocate(source, destination):
         if path.name in {MARKER, "retired_source.json"}:
             continue
         if path.is_symlink():
-            target = os.readlink(path)
-            if os.name == "nt" and target.startswith("\\\\?\\"):
-                target = target[4:]
-            actual[path.relative_to(destination).as_posix()] = digest({"symlink": target})
+            actual[path.relative_to(destination).as_posix()] = digest(
+                {"symlink": str(_link_target(path))}
+            )
         elif path.is_file():
             actual[path.relative_to(destination).as_posix()] = file_sha256(path)
     if actual != expected:
-        raise ValueError("Destination bytes differ from the sealed source")
+        changed = sorted(
+            k for k in actual.keys() | expected.keys() if actual.get(k) != expected.get(k)
+        )
+        raise ValueError(
+            "Destination bytes differ from the sealed source: "
+            + ", ".join(changed[:20])
+            + (f" (+{len(changed) - 20} more)" if len(changed) > 20 else "")
+        )
     config = source / "share/conf.yaml"
     image_root = (
         ((yaml.safe_load(config.read_text(encoding="utf-8")) or {}).get("installation_path"))
@@ -238,10 +253,7 @@ def relocate(source, destination):
         if path.name in {MARKER, "retired_source.json"}:
             continue
         if path.is_symlink():
-            link_text = os.readlink(path)
-            if os.name == "nt" and link_text.startswith("\\\\?\\"):
-                link_text = link_text[4:]
-            target = Path(link_text)
+            target = _link_target(path)
             if image_root and target.is_absolute() and target.is_relative_to(Path(image_root)):
                 continue
             if target.is_absolute() and target.is_relative_to(source):

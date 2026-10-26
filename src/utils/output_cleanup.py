@@ -39,12 +39,20 @@ def selected_roots(tier="auto"):
     if not local and tier in {"auto", "both", "project"}:
         scratch = os.environ.get("VSC_SCRATCH_GPFS1")
         if scratch:
+            from src.cluster.containers import RUNTIMES
             from src.cluster.scratch_stage import MARKER
 
             base = reject_links(Path(scratch) / "jevpfn-work")
             for marker in sorted(base.glob(f"*/JEVPFN/{MARKER}")):
                 root = reject_links(marker.parent)
                 selected["GPFS_" + root.parent.name] = root / paths.OUTPUT_DIR_NAME
+            # A failed initial stage can copy token output before writing its marker.
+            # Include only named project runtime workspaces, never arbitrary scratch.
+            for runtime in RUNTIMES:
+                root = base / runtime / paths.PROJECT_NAME
+                output = root / paths.OUTPUT_DIR_NAME
+                if output.exists():
+                    selected["GPFS_" + runtime] = reject_links(output)
     return selected
 
 

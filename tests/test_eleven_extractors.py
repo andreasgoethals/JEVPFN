@@ -49,7 +49,7 @@ def test_cpu_graph_before_gpu_with_bounded_builds():
         by_name = {s["name"]: s for s in steps}
         assert provider + "_stage" in by_name[provider + "_tokens"]["dependencies"]
         contracts = by_name[provider + "_contracts"]
-        assert {"cpu", "storage", "gpfs_storage", provider + "_scratch"} <= set(
+        assert {"cpu", "storage", "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage", provider + "_scratch"} <= set(
             contracts["dependencies"]
         )
         assert {provider + "_tokens", provider + "_build"} <= set(
@@ -68,7 +68,7 @@ def test_cpu_graph_before_gpu_with_bounded_builds():
             assert "--cpus-per-task=14" in contracts["flags"]
         assert by_name[provider + "_pilot"]["dependencies"] == [provider + "_contracts"]
     assert by_name["gpfs_storage"]["cluster"] == "mindwell"
-    assert by_name["gpfs_storage"]["dependencies"] == [registry.SELF_HOSTED[0] + "_scratch"]
+    assert by_name["gpfs_storage"]["dependencies"] == ["cloudflare_scratch"]
     assert "embedding_stage" in by_name["cloudflare_scratch"]["dependencies"]
     encoders = [s for s in steps if s["name"].startswith("embeddings_")]
     assert len(encoders) == 3
@@ -170,10 +170,11 @@ def test_failed_prerequisite_never_dispatches_gpu(monkeypatch, tmp_path):
     monkeypatch.setattr(setup_extractors.subprocess, "run", scheduler)
     setup_extractors.run(["h2o"], execute=True)
     before = len(submissions)
-    with pytest.raises(RuntimeError, match="ended"):
-        setup_extractors.run(["h2o"], execute=True)
+    report = setup_extractors.run(["h2o"], execute=True)
     assert len(submissions) == before
-    assert json.loads(receipt.read_text())["status"] == "stopped_requires_review"
+    assert report["status"] == "setup_completed_with_failures"
+    assert len(report["summary"]["failures"]) == 3
+    assert json.loads(receipt.read_text())["summary"] == report["summary"]
 
 
 def test_ambiguous_submission_requires_review_not_automatic_retry(monkeypatch, tmp_path):

@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -161,6 +162,44 @@ def test_relocation_keeps_image_links_but_rewrites_absolute_host_links(tmp_path)
     assert result["files"] == containers.files(target)
     assert (target / "host_alias").resolve() == target / "common.sh"
     assert (target / "_bin/python").is_symlink()
+
+
+def test_relocation_uses_sealed_normalization_for_tykky_double_separators(tmp_path):
+    source, target = tmp_path / "durable", tmp_path / "scratch"
+    manifest = _sealed(source)
+    (source / "_bin").mkdir()
+    prefix = tmp_path / "image_only"
+    write_json(source / "share/conf.yaml", {"installation_path": str(prefix)})
+    link = str(prefix) + "/bin//python"
+    try:
+        os.symlink(link, source / "_bin/python")
+    except OSError:
+        pytest.skip("Symlink creation unavailable")
+    manifest["files"] = containers.files(source)
+    manifest["container_id"] = digest({k: v for k, v in manifest.items() if k != "container_id"})
+    write_json(source / containers.MARKER, manifest)
+    shutil.copytree(source, target, symlinks=True)
+    result = containers.relocate(source, target)
+    assert result["files"] == containers.files(target)
+    assert (source / "install.sqfs").read_bytes() == (target / "install.sqfs").read_bytes()
+    assert containers.relocate(source, target) == result
+
+
+def test_relocation_still_rejects_a_changed_link(tmp_path):
+    source, target = tmp_path / "durable", tmp_path / "scratch"
+    manifest = _sealed(source)
+    try:
+        os.symlink("./common.sh", source / "alias")
+    except OSError:
+        pytest.skip("Symlink creation unavailable")
+    manifest["files"] = containers.files(source)
+    manifest["container_id"] = digest({k: v for k, v in manifest.items() if k != "container_id"})
+    write_json(source / containers.MARKER, manifest)
+    shutil.copytree(source, target, symlinks=True)
+    (target / "alias").unlink()
+    os.symlink("./install.sqfs", target / "alias")
+    with pytest.raises(ValueError, match="Destination bytes.*alias"):
+        containers.relocate(source, target)
 
 
 @pytest.mark.parametrize("missing", [False, True])

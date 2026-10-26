@@ -186,3 +186,42 @@ def test_test_selected_combinations_never_enter_confirmatory_analysis():
     }
     with pytest.raises(ValueError, match="exploratory"):
         confirmatory_tests(datasets, plan)
+
+
+@pytest.mark.parametrize("n, floor", [(3, 0.25), (6, 0.03125), (9, 0.00390625)])
+def test_exact_resolution_reports_all_task_sizes_and_drops_zeros(n, floor):
+    from src.evaluation.inference import exact_resolution
+
+    assert exact_resolution([1] * n + [0, 0]) == {
+        "nonzero_datasets": n,
+        "ideal_exact_two_sided_p_floor_nonzero": floor,
+    }
+    assert exact_resolution([0, 0])["ideal_exact_two_sided_p_floor_nonzero"] == 1
+
+
+def test_holm_diagnostics_use_step_down_ranks_not_a_blanket_family_threshold():
+    base, _ = example()
+    small = {**base, "task_type": "multiclass_classification"}
+    larger = {**base, "task_type": "regression"}
+    datasets = pd.DataFrame(
+        [
+            {**keys, "dataset_id": f"d{i}", "mean_difference": i + 1.0, "complete": True}
+            for keys, n in ((small, 6), (larger, 9))
+            for i in range(n)
+        ]
+    )
+    plan = {
+        "approved_before_results": True,
+        "reviewed_by": "synthetic",
+        "contrasts": [
+            {"match": keys, "datasets": [f"d{i}" for i in range(n)], "direction": 1}
+            for keys, n in ((small, 6), (larger, 9))
+        ],
+    }
+    result = confirmatory_tests(datasets, plan).set_index("task_type")
+    assert result.wilcoxon_method.tolist() == ["auto", "auto"]
+    assert (result.holm_family_size == 2).all()
+    assert result.loc["multiclass_classification", "holm_rank"] == 2
+    assert result.loc["multiclass_classification", "holm_step_threshold_at_0_05"] == 0.05
+    assert result.loc["regression", "holm_step_threshold_at_0_05"] == 0.025
+    assert (result.p_holm < 0.05).all()  # Six datasets can pass in a mixed two-contrast family.

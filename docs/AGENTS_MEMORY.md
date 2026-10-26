@@ -30,35 +30,70 @@ live ownership, H100 partition and checkout paths; CPU and other projects stay.
 Do not update source used by active jobs. No remote cancellation/submission was
 performed during this implementation.
 
-Owner quota report, 24 October: shared Lustre PROJECT 469.5 GB/1 TB and
-38,963/150,000 files; DATA 54,400/76,800 MB and 526k/10M files; GPFS scratch
-59.38/500 GB. These are dated observations, not current capacity. Compact
+Owner quota report, 26 October 08:44: shared Lustre PROJECT 473.3 GB/1 TB and
+40,313/150,000 files; DATA 55,045/76,800 MB and 528k/10M files; GPFS scratch
+9.537/500 GB. These are dated observations, not current capacity. Compact
 containers addressed the previous ~111k-file native-environment problem.
 Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 08:12:22,
-1,267,611 bytes, 435 members with valid ZIP CRCs. It contains DATA logs/manifests,
+Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 10:58:09,
+1,404,271 bytes, 474 members with valid ZIP CRCs. It contains DATA logs/manifests,
 not all PROJECT data/caches. The archive was read without importing over local evidence.
 Do not infer current scheduler state or full-cache validation from this archive.
 
 | Job | Check | Observed result |
 |---|---|---|
-| 62423296 | CPU/data/questions | Passed; 946 tests, 33 skips, four deselections; exhaustive 18-file question audit. |
-| 62423297 | Two-node Lustre lock/snapshot | Passed; quota/independent backup remain unverified. |
-| 62423298 | Encoder checkpoint staging | Failed: GPU guard incorrectly rejected a CPU Slurm job. Fixed locally. |
-| 62423299/300 | Liquid/Strands checkpoint staging | Logs finish with staged/fingerprinted checkpoints; live accounting not inspected. |
+| 62427444 | CPU/data/questions | Passed; 959 tests, 33 skips, four deselections; exhaustive 18-file question audit. |
+| 62427445 | Two-node Lustre lock/snapshot | Passed; quota/independent backup remain unverified. |
+| 62427446 | All three encoder checkpoints | Staged/fingerprinted; previous CPU-allocation guard failure resolved. |
+| 62427447/48/55/56/60/61/64/65/68/69 | Ten decision checkpoints | Completed in the coordinator receipt. |
+| 62427451/53/77 | Liquid/Strands/Perplexity Blackwell images | Logs end with successful seals; Perplexity not yet reconciled in the coordinator. |
+| 62427452/54/57/58/62 | Original five exact-token jobs | Completed/reused counts; no GPU inference. |
+| 62427476/92 | Liquid/Strands GPFS staging | Failed: copied-link checksum normalization mismatch, fixed locally. |
+| 62427463/66/67/70/71 | H2O/SII/Kev/Decision3/Nimble exact tokens | Still progressing in this partial archive; completion unverified. |
 
-The coordinator stopped at 62423298 before submitting any container build, new
-token audit, native-GPFS test or B200 job. CPU/storage receipts identify source
-4902ca08904b62b1ab05bbb8912e58b055e1156f310c583bbcd10db8447ffb12,
+The coordinator stopped at 62427476 before any native-GPFS storage or B200 job.
+Independent already submitted CPU jobs continue. Do not cancel advancing token jobs
+or pull code into their checkout. The owner supplied a read-only diagnostic showing
+the mismatches are Tykky `_bin/*` links with duplicate separators (`bin//python`):
+sealing used Path normalization but relocation compared raw readlink text. Both now
+share the original seal normalization; changed images/links still fail. Do not rebuild
+or delete sealed containers. CPU/storage receipts identify source
+ab7453fb8590c70734df77ea11c5ddfd3826be0e1cbeb23e65003a49c1a8a2e9,
 runtime pins 086f1143adaa6b8811ff01a751db11db70164b293af6670f76c60ad6ffabe232,
 and prepared inputs 9ea10eed02750810c48765e692eabb1afef70ed841b253d517ca92bd63b17bf8.
-They do not certify the later local fixes. Explicit `setup_extractors --restart`
+They do not certify the later local fixes. Tokenizer files and registry identity are
+unchanged. Explicit `setup_extractors --restart`
 requires idle jobs and accounted submissions, keeps previous attempts in the same
 receipt, reuses verified sealed images and resumes existing token databases.
-Do not delete all output before finishing runtime setup.
+The owner subsequently requested a clean parallel debugging rerun. Cleanup is permitted
+only after current jobs/manual writers stop; it deliberately discards rebuildable token
+output but preserves questions, paid caches, checkpoints and containers. The final frozen
+campaign still follows successful setup. No live cluster operation was performed here.
+
+The new coordinator collects independent failures rather than stopping at the first failed
+job. Ten separate GPFS probes avoid a global first-model dependency; separate CPU/GPU/
+download/build/transfer pools allow 32 queued/running jobs. Setup has 66–76 jobs depending
+on reusable images, final 0A has 55. These are implemented plans, not observed VSC passes.
+The owner explicitly authorized Git publication for this update; future publication again
+requires explicit authorization.
+Local validation of this update: 1,003 tests passed, 20 optional-runtime/platform skips;
+Ruff, dependency consistency, pinned libraries and changed Bash syntax/LF checks passed.
+All six notebooks ran with 25 saved figures, captions and complete summaries. New direct
+comparison/control/overlap panels were rendered using isolated synthetic fixtures because
+benchmark predictions do not yet exist. These checks do not certify real B200 execution.
+
+Claude's missing durable evaluation-store staging finding was confirmed: recreated
+predictor workspaces could refit completed folds and conflict at publication. Staging
+now unions the durable prediction/completion SQLite stores for all experiment phases;
+end-to-end synthetic CV tests verify reuse and publication. SII's publisher already
+filters single-token labels beyond A–Z; new runtime guards also require distinct IDs
+and the reviewed cue, without changing tokenized inputs. Statistical reports expose
+ideal exact resolution and Holm step-down ranks; analysis remains unapproved. The
+review's claim that all A100 references vanished is literally false: rejection guards
+and their tests intentionally mention A100; no A100 route was enabled.
 
 Historical evidence retained in this ZIP:
 
@@ -149,12 +184,17 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-The 26 October local suite passed 976 tests, with 20 optional skips
+The latest 26 October local suite passed 993 tests, with 20 optional skips
 (15 tokenizer assets, four PyTorch, one POSIX link). Ruff, dependency and diff
 checks passed. The prior 25 October check verified all 28 unchanged Bash/Slurm
 files. Synthetic/local tests do not establish Blackwell compatibility. Both
 historical tokenizer modules and registry remain byte-identical to HEAD.
 Earlier validation counts belong in CHANGELOG.
+
+On 26 October, cached local Jev responses were revalidated without network calls:
+three synthetic contracts passed; 15 synthetic and 13 real-text robustness cases
+decoded successfully and still require semantic review. This does not replace a
+fresh source-bound local 0A or re-run the 288-request dataset pilot.
 
 Six notebooks run locally, prioritizing text/reuse, exact questions, feature
 widths, saved pilot behavior and paired effects. Missing benchmark results stay
@@ -177,14 +217,17 @@ CPU checkpoint staging now accepts CPU Slurm jobs while rejecting GPU allocation
 encoder staging is refused after freeze. Per-column PCA32 and joint-PCA ablations
 retain separate training-only projections, including each binary inner partition.
 
-Finish setup before cleanup. Then stop writers, delete local/DATA/Lustre/
-registered-GPFS output, regenerate/audit/upload questions, freeze matching source
+The owner authorized an interim clean debugging rerun once active jobs finish;
+use output_cleanup and test_all, without freezing yet. Finish setup before the final
+clean campaign. Then stop writers, delete local/DATA/Lustre/GPFS output (including
+known runtimes with incomplete staging), regenerate/audit/upload questions, freeze matching source
 and run fresh local/VSC 0A. Preserve data/features/weights/images. Acceptance
 requires current matching reports and quota/backup/throughput/robustness review.
 Create features, run 0B including real encoder/predictor/complete-feature checks,
 then benchmark. Full-fold resources and native predictor runtimes remain unproven
 until their real gates pass. A source/runtime change requires a reviewed stage
-transition, not deletion of mismatch evidence. The owner handles Git publication.
+transition, not deletion of mismatch evidence. Publication requires the owner's
+explicit authorization; it was given for the current parallel-testing update.
 
 ## Reusable failure lessons
 

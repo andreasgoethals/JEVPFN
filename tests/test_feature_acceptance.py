@@ -82,6 +82,7 @@ def evidence(isolated_output, monkeypatch):
             "snapshot_restore": True,
             "validation_identity": validation,
             "storage_backend": "gpfs",
+            "runtime": "liquid",
         },
     )
     write_json(
@@ -182,7 +183,7 @@ def test_explicit_completed_campaign_disambiguates_successful_reruns(evidence, m
     for name, file in (
         ("cpu", root / "preflight_cpu.json"),
         ("storage", before / "storage_contracts/fixed.json"),
-        ("gpfs_storage", before / "storage_contracts/gpfs.json"),
+        ("liquid_gpfs_storage", before / "storage_contracts/gpfs.json"),
         ("liquid_contracts", before / "gpu_contracts/liquid_fixed.json"),
         ("liquid_pilot", before / "liquid_fixed.json"),
     ):

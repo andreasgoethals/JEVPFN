@@ -2,6 +2,44 @@
 
 ## 26-10-2026
 
+- Added one `scripts/test_all.sh` entrypoint for complete parallel B200 setup/testing.
+  Shared resumable scheduling isolates failures, records blocked descendants and reserves
+  separate CPU/GPU/download/build/transfer pools; formal 0A uses the same coordinator.
+  Each runtime tests its own GPFS workspace. Invalid graphs and ambiguous submissions
+  fail closed; unrelated providers continue after ordinary test failures.
+- GPU checks collect independent diagnostic failures; fatal CUDA/resource failures stop
+  only that worker. CPU library/question/test commands all produce diagnostics.
+- Added direct decision/embedding, control and text-overlap result panels, exact paired
+  recipe tables, extraction timing inventory and measured post-PCA input width.
+  Plots use saved complete arms only; no model selection or invented efficacy/cost.
+- Inspected the 10:58 downloaded archive: the same staging failures remain; no new B200
+  inference pass. Active token jobs and old-source evidence are not current-code validation.
+- Cleanup now includes output from known runtime GPFS workspaces whose staging failed
+  before registration; model assets and prepared/permanent data remain protected.
+- Parallel-testing update validation: 1,003 tests passed, 20 optional-runtime/platform
+  skips; lint, dependency, library-pin and changed-shell syntax/LF checks passed.
+  All six notebooks executed with 25 saved figures, captions and complete reports.
+  Existing plots were visually reviewed; the three new result-panel types were rendered
+  with isolated synthetic fixtures, never saved as research results. No paid inference,
+  remote jobs, model downloads or output deletion were performed. The owner authorized
+  publication of this update.
+
+- Reviewed the later 10:14 VSC archive and Claude's claims. New CPU/Lustre checks and
+  encoder staging passed; three Blackwell images sealed. Liquid/Strands GPFS copies
+  failed before B200 submission. Five added-provider token jobs were still progressing.
+- Fixed copied-container symlink checks to use the same normalization as sealing;
+  Tykky's duplicate path separators no longer cause false corruption errors. Retained
+  image/link integrity checks and added mismatch filenames and regression tests.
+- Restored durable evaluation SQLite stores when staging predictor working sets,
+  with transactional union and CV resume/publication tests across experiment phases.
+- Added SII single-token/unique-ID/cue validation before weight loading. The publisher
+  already filters labels beyond A–Z; no prompt/tokenizer identity was changed. Added
+  statistical-resolution, method and Holm-rank diagnostics without approving a plan.
+- Earlier local validation before the parallel-testing update: 993 tests passed, 20 optional-runtime/platform skips;
+  Ruff, dependencies and diff checks passed. No remote mutation, paid inference,
+  model downloads, cleanup or Git publication. No notebook code or figures changed.
+- Revalidated saved Jev responses locally without network calls: three basic,
+  15 synthetic-robustness and 13 real-text cases decoded; robustness review remains.
 - Inspected the latest VSC archive: CPU/question audit 62423296 and Lustre storage
   test 62423297 passed; encoder staging 62423298 rejected a valid CPU allocation.
   That setup attempt submitted no B200 jobs. Historical H100 evidence remains separate.

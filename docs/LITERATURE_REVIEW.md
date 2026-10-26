@@ -1,7 +1,8 @@
 # Literature review
 
 This document records JEVPFN-specific evidence and limits of interpretation, checked on
-**24 October 2026**. It is not an execution report or a list of future experiments.
+**24 October 2026**, with SII interface and statistical-resolution clarifications on
+26 October. It is not an execution report or a list of future experiments.
 The selected methods are defined in [README](../README.md) and configuration;
 dataset meanings in [DATA_SOURCES](DATA_SOURCES.md); operating instructions in [VSC](VSC.md).
 A source review or passing interface test does not establish real GPU compatibility.
@@ -127,6 +128,14 @@ Implementation comparison points are `src/jev/registry.py:ExtendedCounter`,
 `src/jev/provider.py:response_features`; source maps are in the DM Library.
 Matching a schema is not sufficient: attention, calibration, token rendering, option order,
 numeric mapping, rounding and complete-input handling also need real runtime contracts.
+
+The pinned SII publisher snapshot (`dm-library/repositories/SIIDecision.txt`,
+`sii_decision.prompts.option_labels` and `prompt`) filters A–Z and two-letter candidates
+to 255 single-token labels. Its training and inference use standalone label IDs after
+`The correct answer is (`. Labels beyond 26 are therefore not inherently multi-token.
+JEVPFN additionally validates distinct token IDs and the reviewed answer cue before
+loading weights. This preserves the publisher interface; it does not prove real GPU
+accuracy or calibrate the 30-class Wine task.
 
 The common **semantic** inputs are the same task definition, question, named text and answer
 descriptions/order. Native requests are not byte-identical: each checkpoint requires its
@@ -335,6 +344,15 @@ significance at .05 is impossible with three independent dataset units under tha
 Report paired effects, coverage and limitations rather than manufacturing power from folds.
 [Bengio and Grandvalet, 2004](https://jmlr.org/papers/v5/grandvalet04a.html),
 [Demšar, 2006](https://jmlr.org/papers/v7/demsar06a.html)
+
+The implementation explicitly uses SciPy's `method="auto"`, dropping zero differences;
+the ideal exact bounds above are resolution diagnostics, not a promise of an exact
+null distribution or a power calculation. Reports retain the nonzero dataset count,
+method and correction-family size. Holm uses ordered thresholds .05/(m−rank+1), so a
+six-dataset contrast can pass later in a mixed family even though it could not pass
+the first threshold alone. Do not select a smaller family after viewing results.
+[SciPy Wilcoxon](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.wilcoxon.html),
+[Holm adjustment](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/p.adjust.html)
 
 ## 7. Question clarity, context and useful diagnostics
 

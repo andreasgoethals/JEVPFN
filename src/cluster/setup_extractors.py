@@ -15,6 +15,7 @@ import time
 from datetime import UTC, datetime
 
 from src.cluster.freeze import check_if_present, source_snapshot
+from src.cluster.job_graph import advance
 from src.cluster.maintenance import require_idle_vsc
 from src.cluster.scheduling import gpu_profile
 from src.cluster.token_preparation import resources as token_resources
@@ -54,11 +55,11 @@ def plan(providers, *, reuse=()):
                 cluster="wice",
             )
         )
-    for i, provider in enumerate(providers):
+    for provider in providers:
         steps.append(
             dict(
                 name=provider + "_stage",
-                dependencies=[providers[i - 2] + "_stage"] if i >= 2 else [],
+                dependencies=[],
                 script="experiment_0_stage.slurm",
                 args=[provider, root],
                 flags=[],
@@ -68,8 +69,6 @@ def plan(providers, *, reuse=()):
         ready = provider + "_stage"
         if provider not in reuse:
             deps = [ready]
-            if i >= 2 and providers[i - 2] not in reuse:
-                deps.append(providers[i - 2] + "_build")
             steps.append(
                 dict(
                     name=provider + "_build",
@@ -109,17 +108,10 @@ def plan(providers, *, reuse=()):
                 cluster="wice",
             )
         )
-        if i == 0:
-            steps.append(
-                dict(
-                    name="gpfs_storage",
-                    dependencies=[provider + "_scratch"],
-                    script="experiment_0_storage_gpfs.slurm",
-                    args=[provider],
-                    flags=[],
-                    cluster="mindwell",
-                )
-            )
+        storage = "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"
+        steps.append(dict(name=storage, dependencies=[provider + "_scratch"],
+                          script="experiment_0_storage_gpfs.slurm", args=[provider],
+                          flags=[], cluster="mindwell"))
         gpu_root = gpu_profile(runtime=provider)["staging_root"]
         gpu = [
             f"--partition={profile['partition']}",
@@ -130,7 +122,7 @@ def plan(providers, *, reuse=()):
         steps.append(
             dict(
                 name=provider + "_contracts",
-                dependencies=["cpu", "storage", "gpfs_storage", provider + "_scratch"],
+                dependencies=["cpu", "storage", storage, provider + "_scratch"],
                 script="experiment_0_decision_contracts.slurm",
                 args=[provider, provider, gpu_root],
                 flags=gpu,
@@ -249,10 +241,9 @@ def _run(providers, *, execute=False, restart=False):
                         raise ValueError("Recorded setup job is active or absent from accounting; restart refused")
                 elif step.get("status") == "starting":
                     raise ValueError("Unrecorded submission requires Slurm review; restart refused")
-        for provider in reuse:
-            manifest = containers.verify(provider, profile=runtime_profile)
-            if manifest.get("runtime_profile") != runtime_profile:
-                raise ValueError("Existing image does not match the B200 runtime profile")
+        # Reused images are verified in each provider's CPU scratch-stage job.
+        # Hashing large images on the login node would serialize setup and let one
+        # corrupt image prevent unrelated providers from being diagnosed.
     report.update(identity=identity, status="submitting", steps=steps)
     report["created_utc"] = previous.get("created_utc") if previous else datetime.now(UTC).isoformat()
     report["updated_utc"] = datetime.now(UTC).isoformat()
@@ -261,61 +252,31 @@ def _run(providers, *, execute=False, restart=False):
     try:
         from src.cluster.experiment_zero import scheduler_state
 
-        # Reconcile every active job before dispatching any downstream work. An
-        # accounting delay keeps the job pending; a nonzero terminal state stops.
-        for step in steps:
-            if step.get("job_id") and step.get("status") != "completed":
-                state = scheduler_state(step["job_id"], cluster=step["cluster"])
-                if state is not None:
-                    if state != ("COMPLETED", "0:0"):
-                        raise RuntimeError(
-                            f"Setup job {step['job_id']} ended {state}; inspect its log"
-                        )
-                    step["status"] = "completed"
-            elif step.get("status") == "starting":
-                raise ValueError(
-                    "Submission was interrupted without a receipt; inspect Slurm before retrying"
-                )
-        write_json(receipt, report)
-        limit = load_yaml("experiment_0/scheduling")["max_active_jobs"]
-        if type(limit) is not int or limit < 1:
-            raise ValueError("max_active_jobs must be a positive integer")
-        for step in steps:
-            active_step = step
-            if step.get("job_id"):
-                continue
-            if step.get("status") == "starting":
-                raise ValueError(
-                    "Submission was interrupted without a receipt; inspect Slurm before retrying"
-                )
-            completed = {s["name"] for s in steps if s.get("status") == "completed"}
-            active = sum(bool(s.get("job_id")) and s.get("status") != "completed" for s in steps)
-            if active >= limit or not set(step["dependencies"]) <= completed:
-                continue
-            command = [
-                "sbatch",
-                "--parsable",
-                f"--clusters={step['cluster']}",
-                f"--account={load_yaml('experiment_0/scheduling')['account']}",
-                *step["flags"],
-            ]
-            command += ["scripts/slurm/" + step["script"], *step["args"]]
-            step.update(status="starting", command=command)
+        def save():
             write_json(receipt, report)
-            result = subprocess.run(
-                command, cwd=paths.REPO_ROOT, text=True, capture_output=True, timeout=60, check=True
-            )
+
+        def submit(step):
+            nonlocal active_step
+            active_step = step
+            command = ["sbatch", "--parsable", f"--clusters={step['cluster']}",
+                       f"--account={load_yaml('experiment_0/scheduling')['account']}",
+                       *step["flags"], "scripts/slurm/" + step["script"], *step["args"]]
+            step.update(status="starting", command=command)
+            save()
+            result = subprocess.run(command, cwd=paths.REPO_ROOT, text=True,
+                                    capture_output=True, timeout=60, check=True)
             value = result.stdout.strip()
             if not re.fullmatch(r"\d+(;" + step["cluster"] + r")?", value):
-                raise ValueError(
-                    "Ambiguous sbatch response; inspect Slurm rather than submitting a duplicate"
-                )
+                raise ValueError("Ambiguous sbatch response; inspect Slurm rather than submitting a duplicate")
             step.update(job_id=value.split(";")[0], status="submitted")
-            write_json(receipt, report)
+            save()
             print(f"Submitted {step['name']}: {step['job_id']}", flush=True)
+
+        report["summary"] = advance(steps, settings=load_yaml("experiment_0/scheduling"),
+                                    state=scheduler_state, submit=submit, save=save)
         report["status"] = (
-            "setup_completed_requires_review"
-            if all(s.get("status") == "completed" for s in steps)
+            ("setup_completed_with_failures" if report["summary"]["failures"]
+             else "setup_completed_requires_review") if report["summary"]["all_terminal"]
             else "waiting_for_job"
         )
     except BaseException as exc:
@@ -332,7 +293,7 @@ def _run(providers, *, execute=False, restart=False):
     return report
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", action="append", choices=SELF_HOSTED)
     parser.add_argument(
@@ -346,7 +307,7 @@ def main():
     parser.add_argument(
         "--watch", action="store_true", help="Poll once/minute; safe to interrupt/resume"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.all and args.provider:
         parser.error("Use --all or --provider, not both")
     if args.watch and not args.execute:
@@ -357,11 +318,12 @@ def main():
             execute=args.execute, restart=args.restart,
         )
         args.restart = False  # Subsequent watcher polls resume the new attempt.
-        print(json.dumps(report, indent=2) if not args.watch else report["status"], flush=True)
+        print(json.dumps(report, indent=2) if not args.watch else
+              json.dumps({"status": report["status"], **report.get("summary", {})}), flush=True)
         if not args.watch or report["status"] != "waiting_for_job":
-            break
+            return 1 if report["status"] == "setup_completed_with_failures" else 0
         time.sleep(60)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

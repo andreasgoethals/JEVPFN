@@ -298,6 +298,16 @@ def stage(runtime):
             )
         ]
         candidates = {}
+        if runtime not in containers.SELF_HOSTED:
+            # Completed fold records and their predictions are resume inputs too.
+            # A fresh native workspace must see durable attempts before fitting;
+            # otherwise it would refit them and conflict when publishing back.
+            for folder in sorted(
+                (durable / "output_JEVPFN").glob("*. experiment_*/results/evaluation")
+            ):
+                paths.phase_name(folder.parents[1].name)  # Require canonical experiment numbering.
+                for source in _dataset_stores(folder):
+                    candidates[source.relative_to(durable)] = source
         for folder in inputs:
             location = durable / folder
             sources = (
@@ -347,6 +357,13 @@ def stage(runtime):
             elif relative.parts[:2] == ("data", "text_embeddings") and destination.is_file():
                 from src.data.text_embeddings import merge
 
+                with tempfile.TemporaryDirectory(prefix=".merge-", dir=destination.parent) as temp:
+                    merge(snapshot(source, Path(temp) / source.name), destination)
+                files[relative.as_posix()] = file_sha256(destination)
+            elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
+                from src.evaluation.store import merge
+
+                destination.parent.mkdir(parents=True, exist_ok=True)
                 with tempfile.TemporaryDirectory(prefix=".merge-", dir=destination.parent) as temp:
                     merge(snapshot(source, Path(temp) / source.name), destination)
                 files[relative.as_posix()] = file_sha256(destination)

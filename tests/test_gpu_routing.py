@@ -11,7 +11,7 @@ def test_default_gpu_plans_use_b200_and_cpu_jobs_stay_on_cpu():
 
     for step in steps("vsc"):
         command = step["command"]
-        if step["cluster"] == "wice" or step["name"] == "gpfs_storage":
+        if step["cluster"] == "wice" or step["name"].endswith("gpfs_storage"):
             assert not any(flag.startswith("--partition=gpu") for flag in command)
         else:
             assert "--partition=gpu_b200" in command
@@ -21,7 +21,7 @@ def test_default_gpu_plans_use_b200_and_cpu_jobs_stay_on_cpu():
     assert by_name["gpfs_storage"]["depends_on"] == ["cloudflare_scratch"]
     for step in by_name.values():
         if "--partition=gpu_b200" in step["command"]:
-            assert "gpfs_storage" in step["depends_on"]
+            assert any(d.endswith("gpfs_storage") for d in step["depends_on"])
     assert plan("experiment_1", "tabpfn_3_5")["route"]["partition"] == "gpu_b200"
     assert plan("experiment_1", "catboost")["gpu"] is False
     with pytest.raises(ValueError, match="Unknown GPU"):

@@ -43,6 +43,20 @@ DIMENSIONLESS = {
 }
 
 
+def exact_resolution(values):
+    """Optimistic two-sided sign-pattern bound, not a power calculation or p-value.
+
+    Wilcoxon drops zero differences here. Its auto method may use a different
+    null distribution with ties/zeros, so this bound describes ideal exact
+    enumeration only and must not be used to replace the actual test.
+    """
+    nonzero = int(np.count_nonzero(np.asarray(values, dtype=float)))
+    return {
+        "nonzero_datasets": nonzero,
+        "ideal_exact_two_sided_p_floor_nonzero": min(1.0, 2.0 ** (1 - nonzero)),
+    }
+
+
 def dataset_differences(paired):
     if paired.empty:
         return pd.DataFrame(columns=GROUP + ["dataset_id", "mean_difference", "defined_folds"])
@@ -85,10 +99,11 @@ def across_datasets(datasets):
                 "positive_deltas": int((values > 0).sum()),
                 "zero_deltas": int((values == 0).sum()),
                 "negative_deltas": int((values < 0).sum()),
+                **exact_resolution(values),
                 "minimum_two_sided_exact_sign_p_no_ties": 2.0 ** (1 - len(values))
                 if len(values)
                 else None,
-                "power_note": "Ideal lower bound before multiplicity correction; ties/zeros reduce information. Three binary datasets cannot establish p < .05 using this exact test.",
+                "power_note": "Ideal exact two-sided resolution before multiplicity correction: 3/6/9 nonzero datasets give .25/.03125/.00390625. This is not power or the auto-method p-value. Holm is step-down: compare ordered p-values with .05/(family_size-rank+1); later ranks have less strict thresholds. Keep fold SD descriptive and approve the family before outcomes.",
                 "interpretation": "Descriptive; positive is better only for higher-is-better metrics. Raw magnitudes with dataset-specific units are not pooled.",
                 "inference_status": ",".join(sorted(group.inference_status.unique()))
                 if "inference_status" in group
@@ -144,7 +159,11 @@ def confirmatory_tests(datasets, plan):
         p = (
             1.0
             if np.all(differences == 0)
-            else float(wilcoxon(differences, alternative="two-sided", zero_method="wilcox").pvalue)
+            else float(
+                wilcoxon(
+                    differences, alternative="two-sided", zero_method="wilcox", method="auto"
+                ).pvalue
+            )
         )
         results.append(
             {
@@ -152,6 +171,10 @@ def confirmatory_tests(datasets, plan):
                 "datasets": len(chosen),
                 "median_oriented_delta": float(np.median(differences)),
                 "p_raw": p,
+                **exact_resolution(differences),
+                "wilcoxon_method": "auto",
+                "zero_method": "wilcox",
+                "holm_family_size": len(plan["contrasts"]),
             }
         )
     order = np.argsort([r["p_raw"] for r in results])
@@ -159,4 +182,6 @@ def confirmatory_tests(datasets, plan):
     for rank, index in enumerate(order):
         adjusted = min(1.0, max(adjusted, results[index]["p_raw"] * (len(results) - rank)))
         results[index]["p_holm"] = adjusted
+        results[index]["holm_rank"] = rank + 1
+        results[index]["holm_step_threshold_at_0_05"] = 0.05 / (len(results) - rank)
     return pd.DataFrame(results)
