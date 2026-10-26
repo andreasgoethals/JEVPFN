@@ -1,6 +1,6 @@
 # Current operational evidence
 
-Updated 25 October 2026. README owns the method, VSC owns commands,
+Updated 26 October 2026. README owns the method, VSC owns commands,
 DATA_SOURCES owns dataset meanings and LITERATURE_REVIEW owns research claims.
 Older details/test counts remain in CHANGELOG/Git. Submission is not completion.
 
@@ -38,10 +38,29 @@ Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Inspected Downloads/output_JEVPFN.zip, modified 24 October 2026 10:27:03,
-1,245,527 bytes, 418 members with valid ZIP CRCs. It contains DATA logs/manifests,
+Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 08:12:22,
+1,267,611 bytes, 435 members with valid ZIP CRCs. It contains DATA logs/manifests,
 not all PROJECT data/caches. The archive was read without importing over local evidence.
 Do not infer current scheduler state or full-cache validation from this archive.
+
+| Job | Check | Observed result |
+|---|---|---|
+| 62423296 | CPU/data/questions | Passed; 946 tests, 33 skips, four deselections; exhaustive 18-file question audit. |
+| 62423297 | Two-node Lustre lock/snapshot | Passed; quota/independent backup remain unverified. |
+| 62423298 | Encoder checkpoint staging | Failed: GPU guard incorrectly rejected a CPU Slurm job. Fixed locally. |
+| 62423299/300 | Liquid/Strands checkpoint staging | Logs finish with staged/fingerprinted checkpoints; live accounting not inspected. |
+
+The coordinator stopped at 62423298 before submitting any container build, new
+token audit, native-GPFS test or B200 job. CPU/storage receipts identify source
+4902ca08904b62b1ab05bbb8912e58b055e1156f310c583bbcd10db8447ffb12,
+runtime pins 086f1143adaa6b8811ff01a751db11db70164b293af6670f76c60ad6ffabe232,
+and prepared inputs 9ea10eed02750810c48765e692eabb1afef70ed841b253d517ca92bd63b17bf8.
+They do not certify the later local fixes. Explicit `setup_extractors --restart`
+requires idle jobs and accounted submissions, keeps previous attempts in the same
+receipt, reuses verified sealed images and resumes existing token databases.
+Do not delete all output before finishing runtime setup.
+
+Historical evidence retained in this ZIP:
 
 | Job | Check | Observed result |
 |---|---|---|
@@ -130,11 +149,12 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-The final 25 October local suite passed 963 tests, with 20 optional skips
-(15 tokenizer assets, four PyTorch, one POSIX link). Ruff, dependencies and all
-28 Bash/Slurm syntax/LF checks passed. Synthetic/local tests do not establish
-Blackwell compatibility. Both historical tokenizer modules and registry remain
-byte-identical to HEAD. Earlier validation counts belong in CHANGELOG.
+The 26 October local suite passed 976 tests, with 20 optional skips
+(15 tokenizer assets, four PyTorch, one POSIX link). Ruff, dependency and diff
+checks passed. The prior 25 October check verified all 28 unchanged Bash/Slurm
+files. Synthetic/local tests do not establish Blackwell compatibility. Both
+historical tokenizer modules and registry remain byte-identical to HEAD.
+Earlier validation counts belong in CHANGELOG.
 
 Six notebooks run locally, prioritizing text/reuse, exact questions, feature
 widths, saved pilot behavior and paired effects. Missing benchmark results stay
@@ -151,6 +171,11 @@ not changed. Real 0B testing remains required. Presence/statistics controls now 
 the same empty/nonfinite-text policy as extraction; nonfinite regression targets
 are rejected before splitting. Joint-PCA summary curves use matched dataset/split
 cohorts across widths, preventing partial completion from changing the comparison.
+The 26 October check also aligned embedding input construction with the same
+missing-text policy: numeric infinity is missing; literal "inf"/"nan" remain text.
+CPU checkpoint staging now accepts CPU Slurm jobs while rejecting GPU allocations;
+encoder staging is refused after freeze. Per-column PCA32 and joint-PCA ablations
+retain separate training-only projections, including each binary inner partition.
 
 Finish setup before cleanup. Then stop writers, delete local/DATA/Lustre/
 registered-GPFS output, regenerate/audit/upload questions, freeze matching source

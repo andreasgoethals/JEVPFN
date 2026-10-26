@@ -221,13 +221,13 @@ def publish(runtime):
 def stage(runtime):
     from src.cluster import containers
     from src.cluster.runtime_profiles import BLACKWELL, selected
+    from src.cluster.scheduling import require_cpu_staging
 
     if selected() != BLACKWELL:
         raise ValueError("B200 staging requires JEVPFN_RUNTIME_PROFILE=blackwell-cu130")
 
     durable, work = roots(runtime)
-    if os.environ.get("SLURM_JOB_GPUS"):
-        raise RuntimeError("Prepare B200 inputs on CPU before allocating a GPU")
+    require_cpu_staging()
     with workspace_lease(work):
         if (work / MARKER).exists():
             previous = json.loads((work / MARKER).read_text())

@@ -156,10 +156,28 @@ Use the reported integer in place of `JOB_ID`. Successful submission or an empty
 queue is not a test result. A failed prerequisite stops new submissions; retain
 its logs and receipts. Do not erase a receipt to guess whether a job needs resubmitting.
 
+After fixing a stopped setup or changing its source, wait until all JEVPFN jobs
+finish, then explicitly restart the checks:
+
+```bash
+"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all --restart
+"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all --restart --execute --watch
+```
+
+Restart checks both clusters for active JEVPFN jobs and requires accounting for
+every recorded job. An ambiguous submission is refused. It preserves earlier
+attempts inside the same receipt, verifies and reuses sealed Blackwell images,
+and retains weights, token batches, caches and logs. Cheap checks run again;
+the previous failure is never relabelled as a pass. After a disconnect, resume
+with `--all --execute --watch` without `--restart`.
+
 The `--all` graph includes E5-small-v2, E5-large-v2 and Qwen3-Embedding-0.6B. Their
 CPU checkpoint-staging job finishes before the Clef runtime's GPFS working set is
 copied; their B200 tests then use that sealed runtime. There is no separate manual
 encoder download step. A provider-only setup without Clef deliberately omits encoders.
+Checkpoint downloads are allowed in connected CPU Slurm allocations; a Slurm job
+ID alone is not a GPU allocation. GPU allocations and frozen-campaign encoder
+downloads are refused before any network work.
 Mindwell activation resolves and verifies the prepared native GPFS workspace before
 inference. No GPU job downloads weights or copies a missing working set. Contract
 tests and pilots check actual

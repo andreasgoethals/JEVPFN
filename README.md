@@ -6,12 +6,13 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 24 October VSC archive confirms historical CPU/data/question checks, two-node storage
-contracts, Liquid/Perplexity/Clef/Intern H100 contracts and dataset pilots, and all three
-encoder tests. Five added-provider CPU token jobs hit their four-hour limit; their saved
-batches can resume. Strands' rounding and two images' installer-discovery failures were
-corrected locally but still need new execution. These outcomes do not certify the current
-working tree or B200 execution.
+The 26 October VSC archive confirms new CPU/data/question and two-node Lustre storage
+passes. Setup then stopped in the encoder download job: its guard incorrectly rejected
+a CPU Slurm allocation. This is corrected locally; the setup coordinator can explicitly
+restart after all recorded jobs finish, retaining evidence, weights and resumable work.
+That attempt submitted no B200 jobs. Historical H100 contracts/pilots and encoder passes
+do not certify B200 execution or the current working tree. The five added-provider token
+audits, Strands rerun and rebuilt runtimes still need successful execution.
 Eleven extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
 distinct inputs and 3,294,340 row/input links. Dated evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
@@ -129,7 +130,8 @@ components** after concatenating the text vectors. These compare both grouping a
 compression budget; no setting is claimed optimal. Neither reduces non-text or decision
 features. Joint PCA imputes missing blocks with training coordinate means; every text
 column retains its missingness flag. Validation/test rows transform through the same
-training projection. Insufficient training rank leaves unused components missing.
+training projection. If there are too few nonempty training rows or embedding coordinates
+for the requested width, unused output components stay missing.
 
 Prepare PCA on a CPU allocation with `python -m src.evaluation.prepare_pca --dataset ID
 --encoder ENCODER`. It prepares the exact five outer-training partitions and, for binary

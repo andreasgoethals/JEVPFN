@@ -26,7 +26,7 @@ from src.utils.config import load_yaml
 from src.utils.events import append_event
 from src.utils.locking import file_lock
 from src.utils.provenance import code_identity
-from src.utils.serialization import canonical_json, digest, file_sha256, write_json
+from src.utils.serialization import canonical_json, digest, file_sha256, text_value, write_json
 from src.utils.timing import TimingJournal
 
 SCHEMA = "jevpfn.frozen-text.v1"
@@ -87,8 +87,12 @@ def _files(folder):
 
 
 def stage(cfg):
-    if os.environ.get("SLURM_JOB_ID"):
-        raise RuntimeError("Stage embeddings on a connected setup host before acquiring a GPU")
+    from src.cluster.freeze import check_if_present
+    from src.cluster.scheduling import require_cpu_staging
+
+    require_cpu_staging()
+    if check_if_present()["frozen"]:
+        raise RuntimeError("Stage encoder checkpoints before freezing the validation campaign")
     # Hub/Xet constants are fixed on first import; keep download caches on PROJECT too.
     os.environ["HF_HOME"] = str(paths.checkpoints_dir("huggingface"))
     os.environ["HF_HUB_CACHE"] = str(paths.checkpoints_dir("huggingface", "hub"))
@@ -323,8 +327,9 @@ def input_rows(dataset):
     for column in dataset.metadata.text_columns:
         keys = []
         for value in dataset.frame[column]:
-            text = None if pd.isna(value) else str(value)
-            key = None if text is None or not text.strip() else digest(text)
+            value = text_value(value)
+            text = None if value is None else str(value)
+            key = None if text is None else digest(text)
             if key is not None:
                 unique[key] = text
             keys.append(key)

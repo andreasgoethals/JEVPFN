@@ -63,3 +63,16 @@ def reject_a100_allocation():
         or (partition == "interactive" and os.environ.get("SLURM_JOB_GPUS"))
     ):
         raise RuntimeError("A100 allocations are disabled by owner decision; use Mindwell gpu_b200")
+
+
+def require_cpu_staging():
+    """Allow connected CPU allocations; never download/copy weights on a GPU job."""
+    partition = os.environ.get("SLURM_JOB_PARTITION", "").lower()
+    # GPU ID zero is an allocated GPU, whereas a zero *count* means no GPUs.
+    ids = any(os.environ.get(key) for key in ("SLURM_JOB_GPUS", "SLURM_STEP_GPUS"))
+    counts = any(
+        os.environ.get(key, "").strip() not in {"", "0"}
+        for key in ("SLURM_GPUS", "SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE", "SLURM_GPUS_PER_TASK")
+    )
+    if partition.startswith("gpu") or ids or counts:
+        raise RuntimeError("Stage downloads on a connected CPU setup allocation before acquiring a GPU")

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.data.text_embeddings import MODEL_NAMESPACES, encoder_config
+from src.data.text_embeddings import MODEL_NAMESPACES, encoder_config, input_rows
 from src.evaluation.features import add_text_presence, text_statistics
 from src.evaluation.protocol import shared_splits
 from src.utils.serialization import text_value
@@ -26,6 +26,13 @@ def test_text_controls_share_request_missingness_without_erasing_literal_strings
     assert stats["text_stats__text_000__missing"].tolist() == expected_missing
     assert stats["text_stats__text_000__characters"].tolist() == [0] * 6 + [1, 3, 3, 3, 9]
     assert stats["text_stats__text_000__words"].tolist() == [0] * 6 + [1, 1, 1, 1, 2]
+    import json
+    import zlib
+
+    unique, columns = input_rows(dataset)
+    keys = json.loads(zlib.decompress(columns[0][1]))
+    assert [int(key is None) for key in keys] == expected_missing
+    assert set(unique.values()) == {"0", "0.0", "nan", "inf", "two words"}
 
 
 @pytest.mark.parametrize("model,encoder", MODEL_NAMESPACES.items())

@@ -1,5 +1,20 @@
 # Changelog
 
+## 26-10-2026
+
+- Inspected the latest VSC archive: CPU/question audit 62423296 and Lustre storage
+  test 62423297 passed; encoder staging 62423298 rejected a valid CPU allocation.
+  That setup attempt submitted no B200 jobs. Historical H100 evidence remains separate.
+- Corrected the shared CPU/GPU staging guard and blocked encoder changes after the
+  campaign freeze. Added explicit, idle-only setup restart with accounting checks,
+  preserved attempt history and reuse of verified images and resumable token batches.
+- Aligned embedding input missingness with decision requests and text controls:
+  numeric infinities are missing, while literal strings such as "inf" remain text.
+  Kept both approved PCA scopes and training-only projection fitting unchanged.
+- Local validation: 976 tests passed, 20 optional-runtime/platform skips; Ruff,
+  dependency checks and diff checks passed. No remote jobs, paid calls, downloads,
+  cleanup, changes to questions or Git publication were performed.
+
 ## 25-10-2026
 
 - Finished the 24 October evidence/method audit: all 18 prepared question files passed

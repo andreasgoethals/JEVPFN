@@ -193,6 +193,71 @@ def test_ambiguous_submission_requires_review_not_automatic_retry(monkeypatch, t
     assert len(commands) == 1
 
 
+def test_restart_retains_history_reuses_sealed_assets_and_rechecks_source(monkeypatch, tmp_path):
+    from src.cluster import experiment_zero
+
+    receipt = _submission_fixture(monkeypatch, tmp_path)
+    submits = []
+
+    def submit(command, **kwargs):
+        submits.append(command)
+        return SimpleNamespace(stdout=f"{100 + len(submits)};wice\n")
+
+    monkeypatch.setattr(setup_extractors.subprocess, "run", submit)
+    monkeypatch.setattr(experiment_zero, "scheduler_state", lambda *a, **kw: None)
+    old = setup_extractors.run(["h2o"], execute=True)
+    old["status"] = "stopped_requires_review"
+    receipt.write_text(json.dumps(old))
+    old_bytes = receipt.read_bytes()
+    monkeypatch.setattr(setup_extractors, "source_snapshot", lambda: {"sha": "fixed-source"})
+    marker = tmp_path / "containers/h2o/_JEVPFN_CONTAINER.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text("{}")
+    preview = setup_extractors.run(["h2o"], restart=True)
+    assert preview["reused_containers"] == ["h2o"]
+    assert receipt.read_bytes() == old_bytes
+    with pytest.raises(ValueError, match="accounting"):
+        setup_extractors.run(["h2o"], restart=True, execute=True)
+    assert receipt.read_bytes() == old_bytes and len(submits) == 3
+    monkeypatch.setattr(experiment_zero, "scheduler_state", lambda *a, **kw: ("FAILED", "1:0"))
+    new = setup_extractors.run(["h2o"], restart=True, execute=True)
+    assert new["prior_attempts"] == [old]
+    assert new["identity"] != old["identity"]
+    assert "h2o_build" not in {s["name"] for s in new["steps"]}
+    assert len(submits) == 6  # Fresh cheap checks; cached data/model bytes remain intact.
+    monkeypatch.setattr(experiment_zero, "scheduler_state", lambda *a, **kw: None)
+    resumed = setup_extractors.run(["h2o"], execute=True)
+    assert resumed["prior_attempts"] == [old] and len(submits) == 6
+
+
+def test_restart_refuses_ambiguous_submission_and_active_project_jobs(monkeypatch, tmp_path):
+    receipt = _submission_fixture(monkeypatch, tmp_path)
+    receipt.parent.mkdir(parents=True)
+    old = {"providers": ["h2o"], "steps": [{"status": "starting", "name": "cpu"}]}
+    receipt.write_text(json.dumps(old))
+    before = receipt.read_bytes()
+    with pytest.raises(ValueError, match="Unrecorded"):
+        setup_extractors.run(["h2o"], restart=True, execute=True)
+    monkeypatch.setattr(setup_extractors, "require_idle_vsc", lambda: (_ for _ in ()).throw(RuntimeError("active jobs")))
+    with pytest.raises(RuntimeError, match="active jobs"):
+        setup_extractors.run(["h2o"], restart=True, execute=True)
+    assert receipt.read_bytes() == before
+
+
+def test_restart_watcher_restarts_only_once(monkeypatch):
+    calls = []
+
+    def run(*a, **kw):
+        calls.append(kw)
+        return {"status": "waiting_for_job" if len(calls) == 1 else "setup_completed_requires_review"}
+
+    monkeypatch.setattr(setup_extractors, "run", run)
+    monkeypatch.setattr(setup_extractors.time, "sleep", lambda _: None)
+    monkeypatch.setattr("sys.argv", ["setup", "--all", "--execute", "--restart", "--watch"])
+    setup_extractors.main()
+    assert [c["restart"] for c in calls] == [True, False]
+
+
 def test_hash_memo_invalidates_same_size_replacement_and_inventory(
     isolated_output, tmp_path, monkeypatch
 ):

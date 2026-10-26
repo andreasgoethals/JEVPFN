@@ -55,12 +55,12 @@ def verify_checkpoint(provider):
 
 def stage(provider):
     from src.cluster.preflight import storage_policy_failures
+    from src.cluster.scheduling import require_cpu_staging
 
     failures = storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME"))
     if failures:
         raise ValueError("; ".join(failures))
-    if os.environ.get("SLURM_JOB_GPUS") or os.environ.get("SLURM_JOB_PARTITION", "").startswith("gpu"):
-        raise RuntimeError("Stage downloads on a connected CPU setup allocation before acquiring a GPU")
+    require_cpu_staging()
     # HF constants are fixed at first import. Explicit cache_dir alone does not redirect
     # the potentially large Xet download cache away from HOME/personal storage.
     os.environ["HF_HOME"] = str(paths.checkpoints_dir("huggingface"))

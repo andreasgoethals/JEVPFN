@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import time
+from datetime import UTC, datetime
 
 from src.cluster.freeze import check_if_present, source_snapshot
 from src.cluster.maintenance import require_idle_vsc
@@ -162,22 +163,27 @@ def plan(providers, *, reuse=()):
     return steps
 
 
-def run(providers, *, execute=False):
+def run(providers, *, execute=False, restart=False):
     if execute:
         lock = paths.manifests_dir("experiment_0") / "container_setup" / ".submission.lock"
         with file_lock(lock, timeout=1):
-            return _run(providers, execute=True)
-    return _run(providers)
+            return _run(providers, execute=True, restart=restart)
+    return _run(providers, restart=restart)
 
 
-def _run(providers, *, execute=False):
+def _run(providers, *, execute=False, restart=False):
     from src.cluster import containers
 
     receipt = (
         paths.manifests_dir("experiment_0") / "container_setup" / "open_models_mindwell_b200.json"
     )
     runtime_profile = gpu_profile()["runtime_profile"]
-    previous = json.loads(receipt.read_text()) if execute and receipt.exists() else None
+    previous = json.loads(receipt.read_text()) if (execute or restart) and receipt.exists() else None
+    replaced = None
+    if restart:
+        if previous is None:
+            raise ValueError("No recorded setup to restart; use the normal setup command")
+        replaced, previous = previous, None
     if previous and previous["providers"] != providers:
         raise ValueError(
             "Earlier setup selected different providers; inspect its jobs and receipt first"
@@ -201,6 +207,15 @@ def _run(providers, *, execute=False):
         final_acceptance=False,
         runtime_profile=runtime_profile,
     )
+    if replaced is not None:
+        # Keep the evidence in the same compact receipt, without copying any results.
+        report["prior_attempts"] = [
+            *replaced.get("prior_attempts", []),
+            {k: v for k, v in replaced.items() if k != "prior_attempts"},
+        ]
+        report["restart"] = "new_checks_reuse_verified_assets_preserve_outputs"
+    elif previous and previous.get("prior_attempts"):
+        report["prior_attempts"] = previous["prior_attempts"]
     if not execute:
         return report
     if not paths.on_vsc() or os.environ.get("SLURM_JOB_ID"):
@@ -214,20 +229,33 @@ def _run(providers, *, execute=False):
         saved = json.loads(receipt.read_text())
         if saved["identity"] != identity:
             raise ValueError(
-                "Earlier setup belongs to different source/providers; review or clean that receipt first"
+                "Earlier setup belongs to different source/providers; review it, wait for idle jobs, then use --restart"
             )
         steps = saved["steps"]
         if saved["status"] == "stopped_requires_review":
             raise ValueError(
-                "Earlier setup stopped; inspect its recorded jobs and errors before resuming"
+                "Earlier setup stopped; inspect its recorded jobs and errors, then use --restart after all jobs finish"
             )
     else:
         require_idle_vsc()
+        if replaced is not None:
+            # An empty squeue does not resolve an interrupted submission. Require
+            # accounting evidence for every known job and refuse ambiguous submits.
+            from src.cluster.experiment_zero import scheduler_state
+
+            for step in replaced["steps"]:
+                if step.get("job_id"):
+                    if scheduler_state(step["job_id"], cluster=step["cluster"]) is None:
+                        raise ValueError("Recorded setup job is active or absent from accounting; restart refused")
+                elif step.get("status") == "starting":
+                    raise ValueError("Unrecorded submission requires Slurm review; restart refused")
         for provider in reuse:
             manifest = containers.verify(provider, profile=runtime_profile)
             if manifest.get("runtime_profile") != runtime_profile:
                 raise ValueError("Existing image does not match the B200 runtime profile")
     report.update(identity=identity, status="submitting", steps=steps)
+    report["created_utc"] = previous.get("created_utc") if previous else datetime.now(UTC).isoformat()
+    report["updated_utc"] = datetime.now(UTC).isoformat()
     write_json(receipt, report)
     active_step = None
     try:
@@ -312,6 +340,10 @@ def main():
     )
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(
+        "--restart", action="store_true",
+        help="After reviewing a stopped/old setup, start fresh checks while preserving outputs and sealed assets; requires idle jobs",
+    )
+    parser.add_argument(
         "--watch", action="store_true", help="Poll once/minute; safe to interrupt/resume"
     )
     args = parser.parse_args()
@@ -321,8 +353,10 @@ def main():
         parser.error("--watch requires --execute")
     while True:
         report = run(
-            list(SELF_HOSTED if args.all else args.provider or ADDED), execute=args.execute
+            list(SELF_HOSTED if args.all else args.provider or ADDED),
+            execute=args.execute, restart=args.restart,
         )
+        args.restart = False  # Subsequent watcher polls resume the new attempt.
         print(json.dumps(report, indent=2) if not args.watch else report["status"], flush=True)
         if not args.watch or report["status"] != "waiting_for_job":
             break
