@@ -104,11 +104,28 @@ def remote_worker(command, *, run_id, expect_busy):
     argv = [*command, "--probe-id", probe_id]
     if expect_busy:
         argv.append("--expect-busy")
-    with (
-        (log_dir / f"{receipt.stem}.stdout.log").open("w", encoding="utf-8") as out,
-        (log_dir / f"{receipt.stem}.stderr.log").open("w", encoding="utf-8") as err,
-    ):
-        subprocess.run(argv, stdout=out, stderr=err, check=True, timeout=60)
+    try:
+        with (
+            (log_dir / f"{receipt.stem}.stdout.log").open("w", encoding="utf-8") as out,
+            (log_dir / f"{receipt.stem}.stderr.log").open("w", encoding="utf-8") as err,
+        ):
+            subprocess.run(argv, stdout=out, stderr=err, check=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        # Flush/close the worker logs before surfacing their tails in the main job
+        # log. Preserve the original failure, and never rerun a possibly started worker.
+        print(f"Storage worker failed; full diagnostics: {log_dir}", file=sys.stderr, flush=True)
+        for stream in ("stdout", "stderr"):
+            path = log_dir / f"{receipt.stem}.{stream}.log"
+            try:
+                with path.open("rb") as handle:
+                    handle.seek(0, os.SEEK_END)
+                    handle.seek(max(0, handle.tell() - 4096))
+                    tail = handle.read().decode("utf-8", errors="replace")
+            except OSError as exc:
+                tail = f"Cannot read diagnostic log: {exc}"
+            if tail:
+                print(f"Worker {stream}:\n{tail}", file=sys.stderr, flush=True)
+        raise
     try:
         result, visibility_wait = read_worker_receipt(receipt)
     except TimeoutError as exc:

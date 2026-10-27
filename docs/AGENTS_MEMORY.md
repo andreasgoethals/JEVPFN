@@ -38,103 +38,53 @@ Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 14:15:36,
-282,635 bytes, 106 members. It contains DATA logs/manifests, not complete PROJECT
-caches. Coordinator snapshot at 13:15 UTC: 73 steps, 26 completed, five failed,
-14 blocked, seven submitted and 21 not yet ready. No B200 inference pass is present.
+Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 21:39:06,
+772,588 bytes, 395 members. It contains DATA logs/manifests, not the PROJECT count
+or feature databases. Correlate individual receipts with job IDs; the coordinator
+stopped at 15:33 and its submitted/pending totals are stale.
 
-| Job | Check | Observed result |
-|---|---|---|
-| 62429150 | CPU/data/questions | Passed; 986 tests, 33 skips, four deselections; all 18 question files audited. |
-| 62429151 | Two-node Lustre lock/snapshot | Passed under the old lock implementation; quota/backup unverified. |
-| 62429152 and ten provider stage jobs | Encoder/decision checkpoints | Staged; this alone does not verify inference. |
-| 62429157/65/66/72/74 | Liquid/Strands/Perplexity/Clef/Intern exact counts | Completed; 1,698,127 inputs each, no context overflow. |
-| 11739508/16/45/53 | Liquid/Strands/Clef/Intern GPFS locks | Failed: both nodes acquired the same BSD flock lock. |
-| 62429841 | Perplexity scratch checkpoint | Failed: missing source/uv.lock, confirmed by owner diagnostic; staging filter corrected. |
-| 62429190/91/95/96, 62429209 | H2O/SII/Kev/Decision3/Nimble token audits | Owner confirmed RUNNING at 14:21, about 2h33 elapsed, 24h limits. |
-| 62430552/53 | Kev/Decision3 containers | Owner confirmed RUNNING at 14:21, about 21m elapsed, 2h limits. |
+| Check | Latest observed result |
+|---|---|
+| CPU/data/questions, 62431318 | Passed; setup checks, not complete 0A acceptance. |
+| Liquid/Strands/Perplexity/Clef/Intern tokens | All ten parts and strict merge passed. Merge jobs 62431739/40/69, 62431826/27; each covers 1,698,127 unique inputs with zero overflow. |
+| H2O/SII/Nimble tokens | All ten parts complete for each provider; final merges not submitted. Do not infer complete-audit acceptance until merging validates coverage. |
+| Kev/Decision3 tokens | Checkpoint staging and token preparation completed; partition jobs not submitted. |
+| Ten Blackwell containers | Setup reused ten sealed images. Presence/sealing is not real GPU validation. |
+| Lustre, 62431319 | Failed: srun could not contact wICE's controller; main log also reports controller DNS failure. No locking assertion was reached. |
+| Liquid GPFS, 11739854 | Passed on p11c05n2/p11c08n2 with posix_lockf: competing writer blocked, acquired after release, snapshot restored. Quota/independent backup remain unverified. |
+| B200 contracts, pilots and encoders | Not yet executed in this setup; no current B200 inference pass. |
 
-Tykky link normalization is corrected; four scratch stages now passed that check.
-Linux file locks/workspace leases now use POSIX record locking instead of flock.
-Thread serialization prevents one same-process lock user closing another's lock.
-Real two-node GPFS and Lustre checks must validate the new implementation; local
-Windows tests do not establish distributed locking. Staging now preserves publisher
-lockfiles and reports checkpoint mismatch filenames. The owner confirmed the sole
-Perplexity mismatch was missing source/uv.lock. Restaging must still verify the fix on VSC.
+Owner sacct at 21:40 confirmed GPFS job 11739854 COMPLETED 0:0, submitted at
+15:33:52 despite the preceding sbatch timeout. Its report is
+storage_contracts/fd0c26ce4cea421eb0620598c7a2a035.json, source fingerprint
+a1575b2fdd12840d6f282c2d6aa053086b75ed61c01f4dbb2af526ad71778547.
+The launcher receipt still has liquid_gpfs_storage starting without a job ID.
+The new setup_recovery command verifies live accounting against the saved command,
+user/account/checkout, records that accepted ID and preserves the stopped status.
+After all JEVPFN jobs stop, publish/pull source and use the explicit setup restart.
+No output reset is needed now; completed token batches and sealed images are reusable.
 
-Token audits now split into ten disjoint ranges per provider. Up to 40 CPU token
-jobs coexist with six other CPU checks/merges, 12 GPU tests, and two jobs in each
-of the build, download and transfer pools (64 active total). Setup has 176-186
-steps depending on reused images; frozen 0A has 165. These are plans, not passes.
-The reviewed tokenization files and registry remain byte-identical, so completed
-monolithic counts can seed the partitions. Strict merges preserve identities,
-complete coverage and compressed prepared tokens; conflicts roll back all inserts.
-Partition restart databases are not copied to GPFS or result exports.
+Older errors in the ZIP are historical: GPFS BSD flock permitted two owners;
+POSIX record locking now has the real two-node Liquid pass above. Other runtime
+working sets and a new Lustre pass remain gates. Perplexity staging omitted source/uv.lock;
+the filter was corrected, but its new scratch stage still needs to run. Tykky link
+normalization uses the same rules for sealing and relocation. No guard was bypassed.
 
-Migration: stop the old watcher, cancel only the five identified token jobs if
-still active, and let the container builds finish. Do not update the checkout
-until its jobs stop. Publish source separately, then use the setup --restart path;
-retain output to reuse committed work. No remote cancellation/submission, paid
-call or Git publication was performed for the partition implementation.
-Final cleanup/regeneration/freeze happens only after setup/diagnostics work.
+Token audits use ten disjoint ranges per provider: up to 40 CPU token jobs, six other
+CPU checks/merges, 12 GPU tests, and two jobs in each build/download/transfer pool,
+64 active total. Setup has 176-186 steps depending on reused images; frozen 0A has
+165. Tokenization modules/registry remain byte-identical, allowing matching committed
+counts to seed partitions. Strict merges check complete coverage and identities;
+restart databases stay off GPFS and out of result exports. H2O/SII/Nimble's longest
+completed counting parts took about 354/285/78 minutes; queueing and remaining work
+cannot be predicted from those durations alone.
 
-Local validation of the partition/locking update: 1,024 passed, 22 skipped (Linux or
-optional staged model dependencies). Ruff, pip check, library-pin verification, changed
-Bash syntax/LF and diff whitespace checks passed. No notebook/figure code changed.
-These checks do not certify GPFS record locking or B200 inference.
-
-Claude's missing durable evaluation-store staging finding was confirmed: recreated
-predictor workspaces could refit completed folds and conflict at publication. Staging
-now unions the durable prediction/completion SQLite stores for all experiment phases;
-end-to-end synthetic CV tests verify reuse and publication. SII's publisher already
-filters single-token labels beyond A–Z; new runtime guards also require distinct IDs
-and the reviewed cue, without changing tokenized inputs. Statistical reports expose
-ideal exact resolution and Holm step-down ranks; analysis remains unapproved. The
-review's claim that all A100 references vanished is literally false: rejection guards
-and their tests intentionally mention A100; no A100 route was enabled.
-
-Historical evidence retained in this ZIP:
-
-| Job | Check | Observed result |
-|---|---|---|
-| 62408630 | CPU/data/questions | Passed. |
-| 62408631 | Two-node Lustre lock/snapshot | Passed. |
-| 62408634 | Liquid H100 contracts | Passed requiring review; 102 diagnostic requests. |
-| 62408638 | Strands H100 contracts | Failed on four-decimal rounding; fixed locally, rerun needed. |
-| 62408642 | Perplexity H100 contracts | Passed requiring review; 106 requests. |
-| 62408646 | Clef H100 contracts | Passed requiring review; 106 requests. |
-| 62408650 | Intern H100 contracts | Passed requiring review; 102 requests. |
-| 62408653 | H2O image | Sealed; not GPU acceptance. |
-| 62408658/63 | SII/Kev images | Empty Miniforge version discovery; now explicit URL/checksum, rebuild needed. |
-| 62408635/43/47/51 | Liquid/Perplexity/Clef/Intern H100 dataset pilots | Completed requiring review across 18 datasets. |
-| 62408696/97/98 | E5-small/E5-large/Qwen H100 contracts | Passed; Qwen float export now exercised. |
-| 62408654/59/64/69/74 | Added-provider token jobs | All stopped at four-hour time limit; committed batches retained. |
-
-No added-provider GPU/pilot completion or B200 completion is present. The four
-decision contract/pilot pairs name source fingerprint
-8c348bdaf743ac676b1b6cd6a6ff8a550d23a64bf7e5ef8b55eab3d511097b95,
-not the current working tree. Encoder reports can be correlated to their job logs,
-but lacked explicit source/job fields; new reports record validation identity, job,
-cluster and start/end timestamps. Do not infer their exact source from download time.
-The five original tokenizers each completed 1,698,127 unique inputs with no overflow.
-The five added tokenizers remain partial; do not extrapolate that result to them.
-That earlier CPU implementation used eight workers and one SQLite writer with 24-hour
-segments. It is superseded by the ten-partition plan above, preserving tokenizer identity
-and committed batches.
-Relocated B200 container evidence now retains its durable source identity; environment
-retirement verifies that identity, the approved GPFS path and unchanged image bytes.
-This fixes a false mismatch between original and relocated container IDs without
-allowing unverified environment deletion. Real B200 execution is still pending.
-
-The 24 October terminal pulled d12ffda but the B200 implementation was still local.
-It rejected --watch before launch. PowerShell commands pasted into Bash also failed;
-the helper was not uploaded by that attempt. The owner must publish all local changes
-before the corresponding VSC pull. No fresh B200 job was launched by that transcript.
-
-Some telemetry failed because a single
-container GPU was index 0 while Slurm used a host index. Only that unambiguous
-case now maps to its UUID; missing samples never mean idle GPU. Perplexity had
-44 samples, mean utilization 3.84%, peak 68%; diagnostics are not extraction throughput.
+Historical H100 contracts/pilots passed for Liquid, Perplexity, Clef and Intern,
+with source 8c348bdaf743ac676b1b6cd6a6ff8a550d23a64bf7e5ef8b55eab3d511097b95.
+Strands then failed its four-decimal rounding validation, subsequently corrected.
+Historical E5-small/E5-large/Qwen contracts passed on H100. None certifies B200,
+current code or final acceptance. Reports now include source/job/runtime identities.
+Earlier detailed run histories remain in CHANGELOG/Git and retained receipts.
 
 ## Jev and permanent accounting
 
@@ -182,10 +132,9 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-The latest 26 October local suite passed 993 tests, with 20 optional skips
-(15 tokenizer assets, four PyTorch, one POSIX link). Ruff, dependency and diff
-checks passed. The prior 25 October check verified all 28 unchanged Bash/Slurm
-files. Synthetic/local tests do not establish Blackwell compatibility. Both
+After the recovery helper, the 26 October local suite passed 1,049 tests in
+331.55 seconds, with 22 platform/optional-runtime skips. Ruff, dependency and
+diff checks passed. The prior 25 October check verified all 28 unchanged Bash/Slurm files. Synthetic/local tests do not establish Blackwell compatibility. Both
 historical tokenizer modules and registry remain byte-identical to HEAD.
 Earlier validation counts belong in CHANGELOG.
 

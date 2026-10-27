@@ -169,6 +169,28 @@ continue; the same receipt's `summary` lists failed job IDs, commands/exit codes
 blocked tests. The watcher exits nonzero after all runnable tests finish if any failed.
 Missing accounting stays pending. Ambiguous/interrupted submissions still stop the
 coordinator to prevent duplicate jobs. Keep its receipt; never erase it to guess retries.
+Submission errors now display their saved stdout/stderr; frozen 0A also retains these
+diagnostics. Failed storage workers print bounded log tails into the parent job log.
+Controller DNS/socket errors are infrastructure failures, not model or credit-balance
+failures. Submitted jobs can continue while the coordinator is stopped. A timed-out
+sbatch may have been accepted: inspect squeue and sacct on that cluster before any
+retry. Do not clear a starting receipt or update source while existing jobs use it.
+
+If accounting confirms that a timed-out submission was accepted and is now terminal,
+record its ID before restarting. The helper queries [Slurm accounting](https://slurm.schedmd.com/sacct.html)
+and matches the user, account, checkout and full submission command. It refuses active,
+missing or mismatched records; applying it also requires all JEVPFN jobs to be idle.
+It preserves diagnostics and the stopped status and never submits a replacement or
+claims test acceptance. For the confirmed 26 October GPFS job:
+
+```bash
+"$JEVPFN_PYTHON" -m src.cluster.setup_recovery --step liquid_gpfs_storage --job-id 11739854
+"$JEVPFN_PYTHON" -m src.cluster.setup_recovery --step liquid_gpfs_storage --job-id 11739854 --apply
+```
+
+The first command previews; the second updates only the stopped setup receipt.
+Then use the restart command below. If accounting cannot identify the submission,
+keep the receipt unchanged and investigate; this helper provides no force override.
 
 Within a provider, independent GPU diagnostic groups and real-dataset checks collect
 failures before returning a failing job. A poisoned CUDA context, memory exhaustion or

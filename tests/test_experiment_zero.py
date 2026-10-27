@@ -99,6 +99,33 @@ def test_failed_vsc_job_never_starts_the_next_test(isolated_output, monkeypatch)
     assert exp0.run("vsc", execute=True)["summary"] == report["summary"]
 
 
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_frozen_submission_preserves_scheduler_error(isolated_output, monkeypatch, timed_out):
+    import subprocess
+
+    from src.cluster import freeze
+
+    monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": True})
+    monkeypatch.setattr(exp0, "require_idle_vsc", lambda: None)
+    commands = []
+
+    def fail(command, **kwargs):
+        commands.append(command)
+        if timed_out:
+            raise subprocess.TimeoutExpired(command, 60, stderr="Slurm socket timed out")
+        raise subprocess.CalledProcessError(1, command, stderr="Slurm socket timed out")
+
+    monkeypatch.setattr(exp0.subprocess, "run", fail)
+    with pytest.raises((subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+        exp0.run("vsc", execute=True)
+    receipt = next((paths.manifests_dir("experiment_0") / "0A_vsc").glob("*.json"))
+    body = json.loads(receipt.read_text())
+    assert body["status"] == "stopped_requires_review"
+    assert body["steps"][0]["status"] == "starting"
+    assert body["steps"][0]["submission_diagnostics"]["stderr"] == "Slurm socket timed out"
+    assert len(commands) == 1
+
+
 def test_saved_sequence_cannot_be_reused_after_source_change(isolated_output, monkeypatch):
     from src.cluster import freeze
 

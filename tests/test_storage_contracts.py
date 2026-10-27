@@ -129,7 +129,7 @@ def test_storage_probe_saves_evidence_and_restores_snapshot(
 
 
 @pytest.mark.parametrize("failure", ["exit", "timeout", "missing_receipt"])
-def test_storage_probe_keeps_failed_launch_evidence(isolated_output, storage_run, failure):
+def test_storage_probe_keeps_failed_launch_evidence(isolated_output, storage_run, failure, capsys):
     storage_run.update(failure=failure, stdout="diagnostic, not a JSON result\n")
     expected = {
         "exit": subprocess.CalledProcessError,
@@ -147,6 +147,10 @@ def test_storage_probe_keeps_failed_launch_evidence(isolated_output, storage_run
     assert (Path(report["worker_logs"]) / "blocked.stdout.log").read_text() == storage_run["stdout"]
     assert (Path(report["worker_logs"]) / "blocked.stderr.log").is_file()
     assert len(storage_run["calls"]) == 1  # No release phase after a failed exclusion check.
+    if failure != "missing_receipt":
+        main_log = capsys.readouterr().err
+        assert "Synthetic launcher diagnostic" in main_log
+        assert report["worker_logs"] in main_log
 
 
 def test_storage_probe_waits_for_released_receipt_without_relaunching_worker(

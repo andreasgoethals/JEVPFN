@@ -2,6 +2,20 @@
 
 ## 26-10-2026
 
+- Add guarded recovery of an accepted setup job after a submission timeout: match live
+  Slurm ownership, checkout and command, preserve diagnostics, and record the job ID
+  without resubmission or acceptance. Preview by default; apply requires idle JEVPFN jobs.
+- Recovery-update validation: 1,049 passed, 22 platform/optional-runtime skips;
+  lint, dependency and diff checks passed. No remote job or Git publication.
+- Reconcile the 21:39 download with owner accounting: five token audits merged, three
+  more have all ten parts complete, and GPFS job 11739854 passed with POSIX record locks.
+  The launcher had not recorded its accepted job ID; no B200 inference pass is implied.
+- Surface saved Slurm submission errors in setup/frozen 0A and worker log tails in
+  storage-test logs; preserve ambiguous submissions without automatic retries.
+- Recorded the 15:33 parallel-audit progress and verified wICE controller-connect /
+  Mindwell submission-timeout failures; no model failure or new storage pass inferred.
+- Diagnostic-update validation: 1,028 tests passed, 22 platform/optional-dependency skips;
+  lint, dependency and diff checks passed. No VSC mutation or Git publication.
 - Split token audits into ten disjoint CPU partitions per provider, with up to 40 active
   partition jobs, a cancelled-journal recovery check and a transactional coverage/checksum merge. Reuse committed legacy batches,
   preserve tokenizer identities, print periodic throughput, and keep restart partitions off GPFS

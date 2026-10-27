@@ -192,10 +192,24 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
             def submit(step):
                 step["status"] = "starting"
                 write_json(receipt, report)
-                result = subprocess.run(step["command"], cwd=paths.REPO_ROOT,
-                                        capture_output=True, text=True, check=True, timeout=60)
+                try:
+                    result = subprocess.run(step["command"], cwd=paths.REPO_ROOT,
+                                            capture_output=True, text=True, check=True, timeout=60)
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                    step["submission_diagnostics"] = {
+                        key: str(getattr(exc, key, None) or "")[-4096:]
+                        for key in ("stdout", "stderr")
+                    }
+                    log.error("Submission of %s failed; inspect Slurm before retrying. %s",
+                              step["name"], json.dumps(step["submission_diagnostics"]))
+                    raise
+                step["submission_diagnostics"] = {
+                    key: str(getattr(result, key, None) or "")[-4096:]
+                    for key in ("stdout", "stderr")
+                }
                 job = result.stdout.strip()
                 if not re.fullmatch(r"[0-9]+(?:;" + step["cluster"] + r")?", job):
+                    log.error("Unrecognized submission response: %s", step["submission_diagnostics"])
                     raise ValueError("Unrecognized sbatch receipt; inspect scheduler before any retry")
                 step.update(status="submitted_not_verified", job_id=job.split(";")[0])
                 write_json(receipt, report)

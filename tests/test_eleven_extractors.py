@@ -195,6 +195,34 @@ def test_ambiguous_submission_requires_review_not_automatic_retry(monkeypatch, t
     with pytest.raises(ValueError, match="Earlier setup stopped"):
         setup_extractors.run(["h2o"], execute=True)
     assert len(commands) == 1
+    assert json.loads(receipt.read_text())["steps"][0]["submission_diagnostics"]["stdout"] == (
+        "scheduler accepted but response is ambiguous"
+    )
+
+
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_submission_error_is_visible_and_keeps_ambiguous_receipt(
+    monkeypatch, tmp_path, capsys, timed_out
+):
+    import subprocess
+
+    receipt = _submission_fixture(monkeypatch, tmp_path)
+    commands = []
+
+    def fail(command, **kwargs):
+        commands.append(command)
+        if timed_out:
+            raise subprocess.TimeoutExpired(command, 60, stderr="Controller not reachable")
+        raise subprocess.CalledProcessError(1, command, stderr="Controller not reachable")
+
+    monkeypatch.setattr(setup_extractors.subprocess, "run", fail)
+    with pytest.raises((subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+        setup_extractors.run(["h2o"], execute=True)
+    body = json.loads(receipt.read_text())
+    assert body["steps"][0]["status"] == "starting"
+    assert body["steps"][0]["submission_diagnostics"]["stderr"] == "Controller not reachable"
+    assert "Controller not reachable" in capsys.readouterr().err
+    assert len(commands) == 1
 
 
 def test_restart_retains_history_reuses_sealed_assets_and_rechecks_source(monkeypatch, tmp_path):

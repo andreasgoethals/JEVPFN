@@ -6,16 +6,16 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 26 October 14:15 downloaded VSC snapshot confirms CPU/data/questions, two-node Lustre,
-all checkpoint staging and the original five token audits. Four GPFS lock probes failed;
-Perplexity's copy omitted the publisher file source/uv.lock (confirmed by the owner). Five added-provider token jobs
-and two container builds were running. No B200 inference pass is established by this snapshot.
-Linux locks now use POSIX record locking; its GPFS behavior still requires the two-node test.
-Staging preserves publisher dependency lockfiles and reports checkpoint mismatch filenames.
-Token audits now use ten independent CPU partitions per provider and a strict merge, reusing
-matching committed counts. Stop the old coordinator, cancel only the chosen token jobs,
-and let container builds finish before updating the shared checkout. Preserve current output
-until setup passes. Historical H100 results do not certify B200 or current-source execution.
+The 26 October 21:39 download confirms CPU checks and complete merged token audits for
+Liquid, Strands, Perplexity, Clef and Intern. H2O/SII/Nimble finished all ten parts but
+still need merges; Kev/Decision3 counting was not submitted. The new POSIX lock passed
+on two GPFS nodes (job 11739854). Its submission timed out, but the job was accepted;
+the stopped launcher needs that ID recorded through the guarded recovery command in
+[VSC](docs/VSC.md). Preserve output and completed counts. The Lustre check still needs
+a retry after its scheduler-connectivity failure; GPU and remaining storage gates await execution.
+Token audits use ten independent CPU partitions per provider and a strict merge, reusing
+matching committed counts. No B200 inference pass is established by the latest evidence.
+Historical H100 results do not certify B200 or current-source execution.
 Eleven extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
 distinct inputs and 3,294,340 row/input links. Dated evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).

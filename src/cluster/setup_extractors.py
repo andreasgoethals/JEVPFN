@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import UTC, datetime
 
@@ -256,6 +257,10 @@ def _run(providers, *, execute=False, restart=False):
             save()
             result = subprocess.run(command, cwd=paths.REPO_ROOT, text=True,
                                     capture_output=True, timeout=60, check=True)
+            step["submission_diagnostics"] = {
+                key: str(getattr(result, key, None) or "")[-4096:]
+                for key in ("stdout", "stderr")
+            }
             value = result.stdout.strip()
             if not re.fullmatch(r"\d+(;" + step["cluster"] + r")?", value):
                 raise ValueError("Ambiguous sbatch response; inspect Slurm rather than submitting a duplicate")
@@ -275,9 +280,15 @@ def _run(providers, *, execute=False, restart=False):
             status="stopped_requires_review", error_type=type(exc).__name__, error=str(exc)
         )
         if active_step is not None:
-            active_step["submission_diagnostics"] = {
-                key: str(getattr(exc, key, None) or "")[-4096:] for key in ("stdout", "stderr")
-            }
+            diagnostics = active_step.setdefault("submission_diagnostics", {})
+            for key in ("stdout", "stderr"):
+                value = getattr(exc, key, None)
+                if value is not None:
+                    diagnostics[key] = str(value)[-4096:]
+            print(json.dumps({"step": active_step["name"], "receipt": str(receipt),
+                              "submission_diagnostics": diagnostics,
+                              "action": "Inspect Slurm before retrying; acceptance may be ambiguous"}),
+                  file=sys.stderr, flush=True)
         raise
     finally:
         write_json(receipt, report)
