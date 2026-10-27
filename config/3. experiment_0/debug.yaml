@@ -1,7 +1,7 @@
 phase: experiment_0
 name: debugging
 enabled: false  # Full experiment acceptance remains disabled; bounded checks are separate commands.
-predictor_execution_enabled: false
+predictor_execution_enabled: true  # Bounded fixtures still require --execute and a staged runtime.
 full_fold_profile_enabled: false
 execution_site: vsc_compute_node
 local_preparation_command: python -m src.cluster.preflight --local --verify-data --tests

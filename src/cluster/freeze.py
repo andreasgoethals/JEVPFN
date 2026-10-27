@@ -35,6 +35,7 @@ def runtime_pins():
         "environments/*/JEVPFN_RUNTIME.json",
         "checkpoints/decision_models/*/_JEVPFN_CHECKPOINT.json",
         "checkpoints/text_embeddings/*/_JEVPFN_EMBEDDING.json",
+        "checkpoints/predictors/*/_JEVPFN_PREDICTOR.json",
     )
     return {
         p.relative_to(root).as_posix(): file_sha256(p)

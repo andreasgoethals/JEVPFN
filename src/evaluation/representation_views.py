@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from src.evaluation.endpoints import HEADLINES
+
 PAIR_KEYS = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id", "outer_fold", "metric"]
 MODES = ["non_text_plus_joint", "non_text_plus_per_column", "non_text_plus_both"]
 
@@ -16,8 +18,7 @@ def decision_vs_embedding(folds):
         return pd.DataFrame()
     complete = folds.groupby("arm_id").outer_fold.nunique()
     chosen = folds[folds.arm_id.isin(complete[complete.eq(5)].index)]
-    metric = chosen.task_type.map({"binary_classification": "roc_auc",
-                                  "multiclass_classification": "log_loss", "regression": "rmse"})
+    metric = chosen.task_type.map(HEADLINES)
     chosen = chosen[chosen.metric.eq(metric)]
     decisions = chosen[chosen.phase.eq("experiment_1") & chosen.feature_set.isin(MODES)]
     embeddings = chosen[chosen.phase.eq("experiment_2") & chosen.encoder.notna()]

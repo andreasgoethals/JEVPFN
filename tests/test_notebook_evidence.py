@@ -152,8 +152,8 @@ def test_paired_plot_requires_five_defined_differences_per_dataset():
 
 @pytest.mark.parametrize("task,metric,difference", [
     ("binary_classification", "roc_auc", 0.1),
-    ("multiclass_classification", "log_loss", -0.1),
-    ("regression", "rmse", -0.1),
+    ("multiclass_classification", "roc_auc_ovr_macro", 0.1),
+    ("regression", "r2", 0.1),
 ])
 def test_embedding_plot_preserves_metric_direction_and_complete_paired_folds(task, metric, difference):
     import matplotlib.pyplot as plt
@@ -171,7 +171,7 @@ def test_embedding_plot_preserves_metric_direction_and_complete_paired_folds(tas
                              "outer_fold": fold, "reference_value": 1,
                              "difference": difference if dataset == "complete" else 100})
     fig, _, caption = next(embedding_effect_figures(pd.DataFrame(rows)))
-    expected = 10 if task == "regression" else 0.1
+    expected = 0.1
     assert np.allclose(fig.axes[0].lines[0].get_ydata(), [expected] * 6)
     assert fig.axes[0].get_ylim() == fig.axes[1].get_ylim()
     assert "not equal-budget" in caption and "missing/unsupported arms are not imputed" in caption
@@ -204,7 +204,7 @@ def test_embedding_curves_cannot_turn_changing_dataset_coverage_into_a_width_eff
 def test_regression_plot_effect_is_invariant_to_target_units_and_refuses_zero_reference():
     from src.visualize.paired import _dataset_effects
 
-    rows = [{"dataset_id": name, "outer_fold": fold, "difference": difference,
+    rows = [{"dataset_id": name, "outer_fold": fold, "difference": difference, "metric": "rmse",
              "reference_value": reference}
             for name, difference, reference in [("small_units", -1, 10),
                                                  ("large_units", -1000, 10000),

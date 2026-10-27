@@ -9,8 +9,10 @@ import argparse
 import json
 import os
 import sqlite3
+import time
 import zlib
 from contextlib import closing
+from itertools import islice
 from pathlib import Path
 
 from src.utils import paths
@@ -57,6 +59,76 @@ def has_prepared(db):
     return bool(db.execute("SELECT 1 FROM sqlite_master WHERE name='prepared_tokens'").fetchone())
 
 
+def copy_counts(source, target, dataset, start, stop):
+    """Compare existing counts in memory, then insert one dataset range in bulk."""
+    rows = source.execute(
+        "SELECT * FROM counts WHERE dataset_id=? AND input_no>=? AND input_no<? ORDER BY input_no",
+        (dataset, start, stop),
+    ).fetchall()
+    existing = dict(
+        (row[1], row)
+        for row in target.execute(
+            "SELECT * FROM counts WHERE dataset_id=? AND input_no>=? AND input_no<?",
+            (dataset, start, stop),
+        )
+    )
+    for row in rows:
+        if row[1] in existing and existing[row[1]] != row:
+            raise ValueError("Conflicting token counts; preserved the original database")
+    target.executemany("INSERT OR IGNORE INTO counts VALUES (?,?,?,?)", rows)
+    return rows
+
+
+def copy_prepared(source, target, required, *, progress=print):
+    """Scan compressed blobs in key order, avoiding random per-input file reads.
+
+    A partition's count map is small; token arrays remain in bounded batches.
+    Both incoming and already saved blobs retain checksum and token-count checks.
+    """
+    required = dict(required)
+    total, copied, last = len(required), 0, time.monotonic()
+    progress(f"prepared tokens: validating {total:,} inputs in key order")
+    if not required:
+        return
+    records = iter(
+        source.execute(
+            "SELECT payload_sha256,prepared_sha256,content FROM prepared_tokens ORDER BY payload_sha256"
+        )
+    )
+    while batch := list(islice(records, 256)):
+        selected = [row for row in batch if row[0] in required]
+        if not selected:
+            continue
+        placeholders = ",".join("?" for _ in selected)
+        existing = {
+            row[0]: row[1:]
+            for row in target.execute(
+                "SELECT payload_sha256,prepared_sha256,content FROM prepared_tokens "
+                f"WHERE payload_sha256 IN ({placeholders})",
+                [row[0] for row in selected],
+            )
+        }
+        for key, checksum, content in selected:
+            value = json.loads(zlib.decompress(content))
+            if digest(value) != checksum or len(value["ids"]) != required[key]:
+                raise ValueError("Prepared-token checksum or count mismatch")
+            if key in existing:
+                old_checksum, old_content = existing[key]
+                if old_checksum != checksum:
+                    raise ValueError("Conflicting prepared tokens")
+                if digest(json.loads(zlib.decompress(old_content))) != old_checksum:
+                    raise ValueError("Existing prepared-token checksum mismatch")
+            del required[key]
+        target.executemany("INSERT OR IGNORE INTO prepared_tokens VALUES (?,?,?)", selected)
+        copied += len(selected)
+        now = time.monotonic()
+        if now - last >= 30 or copied == total:
+            progress(f"prepared tokens: {copied:,}/{total:,} verified and copied")
+            last = now
+    if required:
+        raise ValueError("Missing publisher-prepared tokens")
+
+
 def copy_rows(source, target, dataset, start, stop, *, prepared):
     """Conflicts fail instead of replacing counts or publisher-prepared inputs."""
     for row in source.execute(
@@ -100,6 +172,21 @@ def seed_existing(db, original, recipe, inputs, index, count):
         raise ValueError("Saved partition assignment differs")
     db.execute("INSERT OR IGNORE INTO partition VALUES (1,?,?)", (index, count))
     db.commit()
+    destination = Path(db.execute("PRAGMA database_list").fetchone()[2])
+    receipt = receipt_path(destination)
+    if receipt.is_file():
+        saved = json.loads(receipt.read_text(encoding="utf-8"))
+        if (
+            saved.get("status") == "partition_complete_requires_merge"
+            and saved.get("audit_id") == digest(recipe)
+            and saved.get("index") == index
+            and saved.get("shards") == count
+        ):
+            if saved.get("database_sha256") != file_sha256(destination):
+                raise ValueError("Completed token partition changed; review before reuse")
+            # The strict merge still checks every input and original-count conflict.
+            # Avoid random blob rereads/copies from an older monolithic prefix here.
+            return
     if not original.is_file():
         return
     with (
@@ -221,12 +308,24 @@ def merge(provider, inputs=None, *, counter=None, shards=10):
             db.execute(
                 "CREATE TABLE IF NOT EXISTS prepared_tokens (payload_sha256 TEXT PRIMARY KEY, prepared_sha256 TEXT NOT NULL, content BLOB NOT NULL) WITHOUT ROWID"
             )
+            # WITHOUT ROWID stores token blobs in the primary B-tree. A compact
+            # covering index lets the final completeness join read keys alone.
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS prepared_payload_keys ON prepared_tokens(payload_sha256)"
+            )
             db.commit()
+        db.execute("PRAGMA cache_size=-262144")  # Bounded 256 MiB, not the SQLite 2 MiB default.
         # One transaction: any missing partition, identity/hash conflict or incomplete
         # range rolls back every merge insert, preserving the old resumable prefix.
         with db:
+            changes_before_merge = db.total_changes
             for index in range(shards):
                 part = shard_path(destination, index, shards)
+                part_started = time.monotonic()
+                print(
+                    f"{provider}: checking partition {index + 1}/{shards} checksum and coverage",
+                    flush=True,
+                )
                 with (
                     file_lock(part.with_suffix(".lock"), timeout=1),
                     closing(readonly(part)) as source,
@@ -247,6 +346,7 @@ def merge(provider, inputs=None, *, counter=None, shards=10):
                     ):
                         raise ValueError("Token partition assignment mismatch")
                     expected_total = 0
+                    required = {}
                     for item in inputs:
                         n = item["unique_inputs"]
                         start, stop = n * index // shards, n * (index + 1) // shards
@@ -270,24 +370,56 @@ def merge(provider, inputs=None, *, counter=None, shards=10):
                                     raise ValueError(
                                         "Incomplete or mismatched token partition coverage"
                                     )
-                        copy_rows(source, db, item["dataset_id"], start, stop, prepared=prepared)
+                        rows = copy_counts(source, db, item["dataset_id"], start, stop)
+                        if prepared:
+                            for _, _, key, count in rows:
+                                if key in required and required[key] != count:
+                                    raise ValueError(
+                                        "Conflicting counts for the same prepared input"
+                                    )
+                                required[key] = count
                     if (
                         source.execute("SELECT COUNT(*) FROM counts").fetchone()[0]
                         != expected_total
                     ):
                         raise ValueError("Token partition contains out-of-range inputs")
-                print(f"{provider}: verified partition {index + 1}/{shards}", flush=True)
+                    if prepared:
+                        copy_prepared(
+                            source,
+                            db,
+                            required,
+                            progress=lambda message, part_no=index + 1: print(
+                                f"{provider} partition {part_no}/{shards}: {message}", flush=True
+                            ),
+                        )
+                print(
+                    f"{provider}: verified partition {index + 1}/{shards}; "
+                    f"{expected_total:,} inputs; {time.monotonic() - part_started:.1f}s",
+                    flush=True,
+                )
             if db.execute("SELECT COUNT(*) FROM counts").fetchone()[0] != sum(
                 i["unique_inputs"] for i in inputs
             ):
                 raise ValueError("Merged token audit has unexpected inputs")
+            if prepared:
+                statistics = (
+                    db.execute("SELECT 1 FROM sqlite_master WHERE name='sqlite_stat1'").fetchone()
+                    and db.execute(
+                        "SELECT 1 FROM sqlite_stat1 WHERE tbl='prepared_tokens' AND idx='prepared_payload_keys'"
+                    ).fetchone()
+                )
+                if db.total_changes != changes_before_merge or not statistics:
+                    print(f"{provider}: analyzing the compact coverage index", flush=True)
+                    db.execute("ANALYZE prepared_tokens")
     # Existing summary/overflow logic and GPU consumers retain precisely the same schema.
     # All counts already exist; this does not call the tokenizer again.
+    print(f"{provider}: merge committed; producing final dataset/context summaries", flush=True)
     return audit_provider(provider, inputs, counter=counter)
 
 
 def plan(provider, root, *, dependencies=()):
     from src.cluster.token_preparation import resources
+    from src.jev.registry import ADDED
 
     count = load_yaml("experiment_0/scheduling").get("token_audit_shards", 10)
     validate_shard(0, count)
@@ -319,7 +451,11 @@ def plan(provider, root, *, dependencies=()):
             dependencies=[p["name"] for p in parts],
             script="experiment_0_tokens.slurm",
             args=[root, provider, "merge", str(count)],
-            flags=["--cpus-per-task=1", "--mem=6800M", "--time=04:00:00"],
+            flags=[
+                "--cpus-per-task=1",
+                "--mem=6800M",
+                "--time=24:00:00" if provider in ADDED else "--time=04:00:00",
+            ],
             cluster="wice",
         ),
     ]

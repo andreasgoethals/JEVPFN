@@ -2,7 +2,8 @@
 
 This document records JEVPFN-specific evidence and limits of interpretation, checked on
 **24 October 2026**, with SII interface and statistical-resolution clarifications on
-26 October. It is not an execution report or a list of future experiments.
+26 October and a native-text version/control review on 27 October. It is not an
+execution report or a list of future experiments.
 The selected methods are defined in [README](../README.md) and configuration;
 dataset meanings in [DATA_SOURCES](DATA_SOURCES.md); operating instructions in [VSC](VSC.md).
 A source review or passing interface test does not establish real GPU compatibility.
@@ -173,6 +174,16 @@ than five disjoint outer CV folds over all rows. JEVPFN's approved all-row shuff
 protocol is intentionally different; published scores are context, not directly paired
 baselines. [Pinned split source](https://github.com/alanarazi7/MulTaBench/blob/3bb95079a6146ed35d45187e98bcad5b063273a1/multabench/preprocessing/splits.py)
 
+The 27 October recheck of Figure 4 found TabICL v2 narrowly highest for text-tabular TAR,
+close to TabPFN-2.5; the largest frozen text bar belongs to TabPFN-2.5. AG-MM is highest
+among its original-text E2E references, ahead of TabSTAR and ConTextTab. These are aggregate
+normalized means with overlapping uncertainty, not proof of a universal winner. Table 10
+instead measures TAR-over-frozen win frequency and is not a ranking of absolute accuracy.
+The paper uses AUC for classification (macro one-vs-rest for multiclass in its implementation)
+and R² for regression. The owner selected these headline metrics; all other scores remain
+recorded. We keep six fixed predictors and three native references, not every historical
+learner, image experiments, text-only arm or supervised TAR condition from the paper.
+
 Appendix A.1's target-aware representation (TAR) shares E5-small across columns and adapts its
 last three layers with LoRA (rank 16, alpha 32, dropout 0.1). Column-name/value examples use
 training-row targets; an internal 90/10 split selects the checkpoint. Regression adaptation
@@ -225,7 +236,9 @@ See `src/data/text_embeddings.py` and
 
 A useful fourth representation family is word/character **TF-IDF**, optionally followed by
 TruncatedSVD. Length/count controls do not replace lexical representations. This remains a
-recommendation, not an approved executable arm. Vocabulary, IDF and SVD would need fold-local
+scope limitation: the owner declined these extra baselines on 27 October. TF-IDF is a
+weighted vocabulary-count representation; SVD compresses it, not a second pretrained encoder.
+Vocabulary, IDF and SVD would need fold-local
 fitting. [Official text-feature guide](https://scikit-learn.org/stable/modules/feature_extraction.html#text-feature-extraction)
 
 ### What the prediction systems mean by text support
@@ -255,6 +268,17 @@ The three native-text references have different learning procedures:
 - **[TabSTAR](https://github.com/alanarazi7/TabSTAR)** uses text representations and supervised
   task adaptation. Its internal validation and verbalizer fit use the supplied training fold.
   Required adaptation is part of this model, not a new HPO campaign.
+  The adapter now explicitly selects **TabSTAR v1.1**, `tabstar.tabstarv1p1_model`, through
+  package 1.2.2 with separate classification/regression checkpoint revisions. The original
+  interface remains in the package but is not selected. Offline assets include the E5
+  dependency, and the published three-epoch prediction averaging is retained. The current
+  model cards describe expanded pretraining, overlap
+  filtering and fixed downstream LoRA adaptation; these are publisher claims, not an
+  independent reproduction or proof that all eighteen tasks are uncontaminated.
+  [Classification card](https://github.com/alanarazi7/TabSTAR/blob/master/docs/model_cards/tabstar-v1.1-cls.md),
+  [regression card](https://github.com/alanarazi7/TabSTAR/blob/master/docs/model_cards/tabstar-v1.1-reg.md).
+  The source/version check used TFM Library `e604ade99f7cf135f41c17a49e1f91da528e835d`;
+  the earlier pins in section 1 identify the broader literature review.
 - **[ConTextTab / SAP RPT-1 OSS](https://github.com/SAP-samples/sap-rpt-1-oss)** embeds column
   names/values and uses labeled training rows as semantic in-context examples. The publisher
   encoder truncates individual strings to 512 tokens. Our all-training-row, one-bag recipe
@@ -317,6 +341,11 @@ Decision features receive target semantics; frozen E5/Qwen vectors do not. Compa
 estimates practical representation utility, not solely architecture superiority.
 The common presence-only reference separates text availability from content; cheap text
 statistics measure length/string cues. Neither establishes a complete lexical baseline.
+The permutation control shuffles complete decision-feature vectors independently within
+each training/test partition and within identical missingness patterns. Every row's NaN
+locations and text-presence flags remain consistent. Moving missing values between rows
+would confound content alignment with availability. Singleton patterns cannot be shuffled,
+so this control does not guarantee that every row changes.
 
 A binary value is evidence for a supplied class, not an empirically calibrated
 `P(dataset target | all original features)`. Multiclass probabilities concern the whole

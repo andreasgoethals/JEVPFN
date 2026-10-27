@@ -173,6 +173,9 @@ def run(model, *, execute=False):
     report["execution_container"] = active_identity() or {}
     report["settings_sha256"] = digest(settings)
     report["validation_identity"] = current_identity()
+    from src.evaluation.acceptance import evaluation_identity
+
+    report["evaluation_identity"] = evaluation_identity()
     write_json(manifest, report)
     try:
         for dataset, (case, features, components) in (

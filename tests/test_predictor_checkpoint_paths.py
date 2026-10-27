@@ -93,7 +93,7 @@ def test_native_predictor_constructor_uses_staged_asset(trees, monkeypatch, mode
             calls.update(kwargs)
             self.tokenizer = SimpleNamespace()
 
-    module = SimpleNamespace(TabSTARClassifier=FakePredictor, SAP_RPT_OSS_Classifier=FakePredictor)
+    module = SimpleNamespace(TabSTARv1p1Classifier=FakePredictor, SAP_RPT_OSS_Classifier=FakePredictor)
     monkeypatch.setattr(models.importlib, "import_module", lambda _: module)
     monkeypatch.setattr(paths, "results_dir", lambda *args, **kwargs: native / "test-results")
     settings = {

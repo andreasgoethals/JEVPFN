@@ -6,16 +6,18 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 26 October 21:39 download confirms CPU checks and complete merged token audits for
-Liquid, Strands, Perplexity, Clef and Intern. H2O/SII/Nimble finished all ten parts but
-still need merges; Kev/Decision3 counting was not submitted. The new POSIX lock passed
-on two GPFS nodes (job 11739854). Its submission timed out, but the job was accepted;
-the stopped launcher needs that ID recorded through the guarded recovery command in
-[VSC](docs/VSC.md). Preserve output and completed counts. The Lustre check still needs
-a retry after its scheduler-connectivity failure; GPU and remaining storage gates await execution.
+The 27 October 13:53 download confirms successful recovery, CPU/Lustre checks,
+five GPFS working-set checks, B200 contracts and 18-dataset pilots for Liquid,
+Strands, Perplexity, Clef and Intern, plus all three embedding encoder contracts.
+All ten providers finished their token partitions. The five added providers' final
+merges exhausted four-hour limits, blocking their staging/storage/GPU tests.
+The merge now uses bulk count inserts, sequential prepared-token scans, bounded
+batches and a compact lookup index; checksums, conflict detection and atomic rollback
+remain required. Added-provider merges have a 24-hour allowance and progress logs.
+These fixes still need the VSC rerun in [VSC](docs/VSC.md). Preserve existing work.
 Token audits use ten independent CPU partitions per provider and a strict merge, reusing
-matching committed counts. No B200 inference pass is established by the latest evidence.
-Historical H100 results do not certify B200 or current-source execution.
+matching committed counts. Bounded B200 passes do not certify full-dataset extraction
+or final acceptance. Source identities are recorded; the final frozen run repeats all gates.
 Eleven extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
 distinct inputs and 3,294,340 row/input links. Dated evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
@@ -27,7 +29,7 @@ small manifests remain on DATA. Committed feature/prediction databases publish p
 and at job exit; predictor staging also restores durable completed folds and predictions
 so a recreated scratch workspace resumes them. Scratch is not a backup. No new
 GPFS project allocation is required. Existing H100 images remain preserved; all A100
-routes are excluded. Actual B200 kernel/provider/encoder tests remain required. See [VSC](docs/VSC.md).
+routes are excluded. The five added decision runtimes still need B200 validation. See [VSC](docs/VSC.md).
 
 The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
 Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
@@ -153,6 +155,12 @@ so Kumo refuses that arm. The recipe's 500-column guard prevents silent feature 
 Other models still require checkpoint/resource checks; width compatibility does not prove
 full-fold feasibility. AG-MM uses fixed medium-quality ELECTRA-base/fusion, no HPO or
 ensemble, in its separate runtime. Actual native-model compatibility remains unverified.
+Native-text TabSTAR selects **v1.1**, through `tabstar.tabstarv1p1_model` in package 1.2.2,
+with separate pinned classification/regression checkpoints and its E5 dependency. Stage
+them on CPU with `python -m src.cluster.predictor_assets --execute`. The runtime resolves
+verified offline cache aliases; a local directory is not passed as a Hugging Face repo ID.
+Its versioned `tabstar-v1p1` image preserves older containers. Defaults include LoRA adaptation
+and averaging three internally selected epochs; transient epoch checkpoints are removed.
 
 Use five-fold shuffled stratified CV for binary/multiclass classification and shuffled
 KFold for regression. Binary F1 thresholds use three inner out-of-fold splits, followed
@@ -171,8 +179,10 @@ timings, resource use and artifact identities. Analyze paired feature effects wi
 predictor, including seen/unseen text cohorts. Decision and embedding arms also compare
 with the same predictor using missing-text indicators only when that control is available.
 Operational output folders do not change predictor/checkpoint comparison identities. Fold SD is descriptive, not a standard error.
-Headline metrics and optional dataset-level Wilcoxon/Holm contrasts remain unapproved until
-before comparative outcomes are reviewed. Exact protocol/settings live in
+The owner fixed MulTaBench-compatible headline metrics before comparative outcomes:
+binary ROC-AUC, multiclass macro one-vs-rest ROC-AUC, and regression R². Other metrics stay
+recorded, including binary validation-selected F1. Optional dataset-level Wilcoxon/Holm
+contrasts still require prespecification. Exact protocol/settings live in
 `config/4. experiment_1/`; optional analysis is in `config/8. experiment_5/`.
 
 Extraction timings separate new inference, cache reuse and failures. Jev records client
@@ -183,7 +193,9 @@ under the phase's PROJECT `results/timings/`; compact summaries use DATA `manife
 All existing classification/regression metrics are saved, not just AUC; full probabilities
 and row-level predictions remain available for subsequent metrics and paired analyses.
 Cheap text statistics, permutation controls and retained-probability ablations are also
-available. Public-data pretraining overlap is a limitation; “label-free” describes the
+available. The optional shuffled-feature control preserves each row's missingness pattern
+and permutes complete vectors within matching patterns separately in train/test partitions.
+Public-data pretraining overlap is a limitation; “label-free” describes the
 inputs to extraction, not a guarantee about pretraining. See [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md).
 The uncertainty view computes normalized entropy, maximum probability and, for regression,
 directional variance from the saved probabilities. Raw provider confidence is retained for
@@ -202,11 +214,22 @@ before full feature creation despite its higher folder number.
 | [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Frozen wording, source meanings, grouped inputs and original-row links. |
 | [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Token counts, workload, cost/throughput scenarios and feature combinations. |
 | [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Coverage, distributions, agreement and disagreements once real features exist. |
-| [01_paired_representation_effects](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>) | Complete-fold paired effects, training-only PCA diagnostics and original-text references; pending until real benchmark records exist. |
+| [0A evidence](<notebooks/3. experiment_0/01_before_feature_creation.ipynb>) | Local dated input/token/API/GPU evidence; never claims live cluster acceptance. |
+| [0B evidence](<notebooks/3. experiment_0/02_after_feature_creation.ipynb>) | Saved representation inventory, nine predictor contracts and full-fold readiness. |
+| [Experiment 1](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>) | Decision modes within fixed predictors; seen/unseen-text effects and measured width/time. |
+| [Experiment 2](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>) | Three encoders, seven compression recipes, training-only PCA variance and predictive/compute effects. |
+| [Experiment 3](<notebooks/6. experiment_3/01_native_text_systems.ipynb>) | Original-text reference systems on matched folds, with checkpoint and resource identities. |
+| [Experiment 4](<notebooks/7. experiment_4/01_question_sensitivity.ipynb>) | Question/context/option-order sensitivity and retained directional distributions. |
+| [Experiment 5](<notebooks/8. experiment_5/01_controls_and_followups.ipynb>) | Prespecified controls against no-text and exact aligned artifacts; separate exploratory follow-ups. |
+| [Combined Experiments 1–3](<notebooks/9. synthesis/01_representation_comparison.ipynb>) | All matched decision-versus-embedding recipes and descriptive native-system comparisons, without selecting winners. |
 
 Notebooks contain orchestration/display only; reusable logic is in `src/`. They perform
 no inference or model training. Each ends with the complete printed report. The comparison
 notebook shows coverage gaps until matching complete artifacts exist; it does not invent results.
+The thirteen notebooks keep complete displayed/plot summaries, not repeated dumps of every
+raw metric row. Full predictions/metrics remain in their evaluation stores. Empty all-zero
+coverage heatmaps are omitted; predictive figures await genuine complete records. Synthesis
+is a general notebook phase, not an extra experiment or configuration grid.
 Input-design figures include dated, hash-bound saved prompt diagnostics; they are small case
 studies rather than population robustness rates. Extraction costs distinguish approximate
 full-run scenarios from cumulative recorded diagnostic charges. The study map counts the
@@ -336,6 +359,8 @@ Slurm jobs reject changes; local/VSC receipts compare source identity. Notebook 
 not change source identity. After reviewing a stage, explicitly finish its freeze before
 changing next-stage configuration; do not erase passed evidence at each transition.
 Experiment 0B validates complete saved features and real predictors/full-fold resource use.
+Benchmark execution checks that its reviewed 0B `evaluation_identity` matches the current
+implementation, model settings and feature/protocol recipes, independently of enable switches.
 Finite tests cannot establish that no bugs remain or guarantee multimillion-request throughput.
 
 ## Documentation and licence

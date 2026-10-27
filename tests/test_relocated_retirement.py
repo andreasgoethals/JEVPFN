@@ -43,7 +43,7 @@ def relocated_runtime(request, isolated_output, monkeypatch):
     (native / "bin/python").write_bytes(b"unpacked environment; never executed")
     source_seal = containers.seal(provider, wrapped_existing=True)
     _, work = scratch_stage.roots(provider)
-    target = work / "containers/blackwell-cu130" / provider
+    target = work / source.relative_to(durable / "JEVPFN")
     shutil.copytree(source, target)
     relocated = containers.relocate(source, target)
     assert relocated["container_id"] != source_seal["container_id"]

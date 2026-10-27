@@ -42,7 +42,8 @@ def container_dir(provider, *, profile=None):
         raise ValueError("Unknown decision provider")
     base = paths.checkpoints_dir().parent / "containers"
     profile = runtime_profiles.selected(profile)
-    return base / provider if profile == runtime_profiles.LEGACY else base / profile / provider
+    leaf = "tabstar-v1p1" if provider == "tabstar" else provider
+    return base / leaf if profile == runtime_profiles.LEGACY else base / profile / leaf
 
 
 def native_dir(provider):
@@ -338,7 +339,7 @@ def _retirement_image_matches(provider, image, manifest):
 
     durable, work = roots(provider)
     source = container_dir(provider)
-    destination = work / "containers" / runtime_profiles.BLACKWELL / provider
+    destination = work / source.relative_to(durable)
     if (
         durable != paths.checkpoints_dir().parent
         or relocation.get("source") != str(source)

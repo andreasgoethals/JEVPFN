@@ -222,7 +222,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
     check_if_present()
     if not profile:
-        reviewed_acceptance(cfg.get("experiment_0_acceptance"), stage="after_extraction")
+        from src.evaluation.acceptance import evaluation_identity
+
+        reviewed_acceptance(
+            cfg.get("experiment_0_acceptance"), stage="after_extraction",
+            expected={"evaluation_identity": evaluation_identity()},
+        )
     if arm not in benchmark_plan(include_controls=True):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     catalog = load_yaml("experiment_1/models")
@@ -322,6 +327,10 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "view": arm.get("view", "main"),
         "embedding": embedding_cfg,
     }
+    if arm.get("control") == "permuted":
+        from src.evaluation.features import PERMUTATION_POLICY
+
+        representation["permutation_policy"] = PERMUTATION_POLICY
     if selection:
         representation["selection"] = selection
         representation["inference_status"] = "exploratory_post_selection"

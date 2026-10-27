@@ -10,9 +10,9 @@ negative_control:
   proposed: true
   name: shuffled_jev_features
   implementation: src.evaluation.features.shuffle_feature_block
-  shuffle_scope: independent_training_and_test_partitions_whole_feature_vectors
+  shuffle_scope: independent_training_and_test_partitions_whole_vectors_within_missingness_patterns
   non_text_features: unchanged
-  purpose: test_whether_gains_require_text_to_row_correspondence
+  purpose: test_content_to_row_correspondence_conditional_on_text_availability
 proposal: true
 feature_artifacts: []
 candidate_views:

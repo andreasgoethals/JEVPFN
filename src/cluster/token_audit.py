@@ -134,8 +134,9 @@ def saved_exact_token_tables():
     }, pd.DataFrame(rows)
 
 
-def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, preparation_workers=1,
-                   shard=None):
+def audit_provider(
+    provider, inputs=None, *, counter=None, batch_size=256, preparation_workers=1, shard=None
+):
     """Transactional batches and immutable input/counter identities allow safe restart."""
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     if batch_size < 1:
@@ -167,8 +168,11 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
     log = (
         paths.logs_dir("experiment_0")
         / "before_extraction"
-        / (f"tokens_{provider}_{audit_id[:12]}"
-           + (f"_part{shard[0]:02d}of{shard[1]:02d}" if shard else "") + ".log")
+        / (
+            f"tokens_{provider}_{audit_id[:12]}"
+            + (f"_part{shard[0]:02d}of{shard[1]:02d}" if shard else "")
+            + ".log"
+        )
     )
     log.parent.mkdir(parents=True, exist_ok=True)
 
@@ -186,6 +190,9 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
         closing(sqlite3.connect(destination, timeout=60)) as db,
         ExitStack() as workers,
     ):
+        # Keep key/summary lookups from thrashing SQLite's default 2 MiB cache.
+        # This is a bounded connection setting, not a change to saved input bytes.
+        db.execute("PRAGMA cache_size=-262144")
         db.executescript("""
             CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id=1), recipe_json TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS counts (
@@ -215,9 +222,13 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
             count_many = pool.count_many
         for item in inputs:
             dataset_id = item["dataset_id"]
-            start, stop = (0, item["unique_inputs"]) if shard is None else (
-                item["unique_inputs"] * shard[0] // shard[1],
-                item["unique_inputs"] * (shard[0] + 1) // shard[1],
+            start, stop = (
+                (0, item["unique_inputs"])
+                if shard is None
+                else (
+                    item["unique_inputs"] * shard[0] // shard[1],
+                    item["unique_inputs"] * (shard[0] + 1) // shard[1],
+                )
             )
             n, last = db.execute(
                 "SELECT COUNT(*),MAX(input_no) FROM counts WHERE dataset_id=?", (dataset_id,)
@@ -227,11 +238,15 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
                     "Saved token audit is not a contiguous prefix of the prepared inputs"
                 )
             progress(
-                f"{provider} / {dataset_id}: {n:,}/{stop-start:,} counted; input range [{start},{stop})"
+                f"{provider} / {dataset_id}: {n:,}/{stop - start:,} counted; input range [{start},{stop})"
             )
-            records = islice(iter_prepared_inputs(
-                item["path"], input_set_id=item["input_set_id"], after_input_no=last if n else start-1
-            ), stop-start-n
+            records = islice(
+                iter_prepared_inputs(
+                    item["path"],
+                    input_set_id=item["input_set_id"],
+                    after_input_no=last if n else start - 1,
+                ),
+                stop - start - n,
             )
             resumed, dataset_started = n, time.perf_counter()
             last_progress = dataset_started
@@ -253,14 +268,14 @@ def audit_provider(provider, inputs=None, *, counter=None, batch_size=256, prepa
                     )
                 old, n = n, n + len(batch)
                 now = time.perf_counter()
-                if n // 25000 != old // 25000 or now-last_progress >= 60 or n == stop-start:
-                    rate = (n-resumed) / max(now-dataset_started, 0.000001)
+                if n // 25000 != old // 25000 or now - last_progress >= 60 or n == stop - start:
+                    rate = (n - resumed) / max(now - dataset_started, 0.000001)
                     progress(
-                        f"{provider} / {dataset_id}: {n:,}/{stop-start:,} exact counts; "
-                        f"{rate:.1f} new inputs/s; {(stop-start-n)/max(rate,0.000001)/60:.1f} min remaining at current dataset rate"
+                        f"{provider} / {dataset_id}: {n:,}/{stop - start:,} exact counts; "
+                        f"{rate:.1f} new inputs/s; {(stop - start - n) / max(rate, 0.000001) / 60:.1f} min remaining at current dataset rate"
                     )
                     last_progress = now
-            if n != stop-start:
+            if n != stop - start:
                 raise ValueError("Prepared input count differs from the saved input-set summary")
             if shard is not None:
                 progress(f"{provider} / {dataset_id}: shard complete; {n:,} inputs")

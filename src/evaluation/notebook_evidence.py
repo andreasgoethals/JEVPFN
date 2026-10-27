@@ -40,7 +40,7 @@ def _reports(folder):
     return [(p, _read(p)) for p in sorted(folder.glob("*.json"))]
 
 
-def local_runtime_evidence(inventory):
+def local_runtime_evidence(inventory=None):
     """Compact receipt inventory; counts do not certify current-code acceptance.
 
     The latest dated contract is shown per runtime, with its path/hash retained.
@@ -89,13 +89,13 @@ def local_runtime_evidence(inventory):
             staged = "observed" if marker.is_file() else "unknown"
             if marker.is_file() and _read(marker).get("revision") != expected_pin:
                 staged = "review"
-        if model_id in set(inventory.provider):
+        if inventory is not None and model_id in set(inventory.provider):
             current = inventory[inventory.provider.eq(model_id)]
             counts = [current[current.representation.eq(m)].loc[lambda t: t.status.eq("available")].dataset.nunique()
                       for m in ("per_column", "joint")]
             coverage = f"{counts[0]}/{current.dataset.nunique()} · {counts[1]}/{current.dataset.nunique()}"
         else:
-            coverage = "separate encoder store"
+            coverage = "separate encoder store" if embedding else "not assessed here"
         rows.append({"model_id": model_id, "model": config["model"], "pin": expected_pin,
                      "configured": "observed", "staged_receipt": staged,
                      "full_bank_tokens": "observed" if model_id in token_providers else

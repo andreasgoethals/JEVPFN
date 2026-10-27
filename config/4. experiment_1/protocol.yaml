@@ -23,6 +23,7 @@ evaluation:
     applies_to: binary_threshold_selection_only
     preprocessing_fit_scope: each_inner_training_partition
   binary:
+    primary_metric: roc_auc
     threshold_objective: f1
     threshold_source: inner_validation_predictions_only
     test_threshold_tuning: forbidden
@@ -34,8 +35,8 @@ evaluation:
     record_thresholds: [default_0_5, validation_selected]
     record_confusion_matrix_and_per_class_scores: true
   multiclass:
+    primary_metric: roc_auc_ovr_macro
     decision_rule_proposal: argmax
-    primary_metric_proposal: f1_macro
     per_class_threshold_tuning: false  # Needs a separate design if later requested.
     secondary_metrics_proposal: [log_loss, accuracy, roc_auc_ovr_macro]
     record_probability_metrics: [log_loss, brier_multiclass_sum, roc_auc_ovr_macro, roc_auc_ovr_weighted, roc_auc_ovo_macro, roc_auc_ovo_weighted, average_precision_macro, average_precision_micro, average_precision_weighted, ece, maximum_calibration_error]
@@ -45,8 +46,7 @@ evaluation:
     probability_columns: fixed_class_vocabulary_aligned_across_folds
     rare_classes: review_split_feasibility_never_silently_merge_or_drop
   regression:
-    primary_metric: null
-    primary_metric_proposal: rmse
+    primary_metric: r2
     secondary_metrics_proposal: [mae, r2]
     candidate_metrics: [rmse, mae, r2]
     classification_threshold: not_applicable
@@ -58,7 +58,7 @@ evaluation:
   metric_conventions:
     implementation: src.evaluation.metrics
     version: prediction-metrics-v2
-    headline_metric_selection: deferred_until_before_reviewing_feature_comparison_results
+    headline_metric_selection: approved_2026_10_27_multabench_auc_and_r2
     headline_metric_does_not_block_metric_recording: true
     record_all_configured_metrics: true
     never_select_primary_metric_after_results: true
@@ -99,8 +99,9 @@ evaluation:
   preprocessing_fit_scope: training_partition_only
   model_tuning_budget: 0
   hyperparameters: pinned_library_defaults_with_explicit_seed_device_and_resource_settings
-  optional_finetuning: disabled
+  optional_finetuning: disabled  # Native models retain their required, fixed adaptation recipe.
   optional_automl_or_bagging: disabled
+  native_epoch_averaging: TabSTAR_v1p1_three_internal_validation_epochs_as_published
   calibration: none
   small_n: outside_current_scope
   statistical_tests: experiment_5/analysis  # Disabled until metrics/contrasts are approved before outcomes.

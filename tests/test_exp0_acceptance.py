@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from src.cluster import preflight
+from src.evaluation import acceptance
 from src.utils import paths
 
 
@@ -30,6 +31,9 @@ def local_preflight(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(preflight, "load_yaml", lambda _name: cfg)
     monkeypatch.setattr(preflight, "load_catalog", lambda: {"datasets": []})
+    # This fixture intentionally has no benchmark configuration/source tree.
+    # The real identity's drift/activation rules are tested separately.
+    monkeypatch.setattr(acceptance, "evaluation_identity", lambda: "fixture-evaluation")
     return cfg
 
 
@@ -63,6 +67,7 @@ def test_exp0_before_and_after_features_have_distinct_requirements(local_preflig
     assert "provider_task_contracts" in {c["id"] for c in before["stage_pending_acceptance"]}
     after = preflight.run_preflight(local=True, stage="after_extraction")
     assert after["status"] == "failed"
+    assert after["evaluation_identity"] == "fixture-evaluation"
     assert any("0B requires" in failure for failure in after["failures"])
 
 

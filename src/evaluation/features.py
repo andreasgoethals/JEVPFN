@@ -8,6 +8,7 @@ import pandas as pd
 from src.utils.serialization import text_value
 
 MISSINGNESS_VERSION = "shared_text_missing_v1"
+PERMUTATION_POLICY = "independent_partitions_within_missingness_patterns_v2"
 
 
 def missing_column(index):
@@ -296,20 +297,27 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
 
 
 def shuffle_feature_block(train: pd.DataFrame, test: pd.DataFrame, *, seed: int):
-    """Shuffle whole probability vectors independently inside training and test partitions.
+    """Shuffle complete vectors within each partition and missingness pattern.
 
-    Break the association with the row, preserve the feature distribution and
-    dependencies inside each vector. Never exchange features across CV partitions.
-    No targets are accepted. Apply to Jev columns only, not non-text features.
+    Keep every row's availability flags and NaN locations fixed, breaking content
+    alignment conditional on availability. Preserve dependencies inside vectors.
+    No targets are accepted and no vector crosses the training/test boundary.
+    Singleton patterns cannot be shuffled; this control may then be conservative.
     """
     if list(train.columns) != list(test.columns):
         raise ValueError("Train/test feature schemas differ")
     rng = np.random.default_rng(seed)
-    return tuple(
-        pd.DataFrame(
-            frame.to_numpy()[rng.permutation(len(frame))],
-            index=frame.index,
-            columns=frame.columns,
-        )
-        for frame in (train, test)
-    )
+    result = []
+    for frame in (train, test):
+        order = np.arange(len(frame))
+        if len(frame) > 1 and len(frame.columns):
+            masks = np.packbits(frame.isna().to_numpy(), axis=1)
+            _, group = np.unique(masks, axis=0, return_inverse=True)
+            grouped = np.argsort(group, kind="stable")
+            boundaries = np.flatnonzero(np.diff(group[grouped])) + 1
+            for indices in np.split(grouped, boundaries):
+                order[indices] = rng.permutation(indices)
+        changed = frame.iloc[order].copy()
+        changed.index = frame.index
+        result.append(changed)
+    return tuple(result)

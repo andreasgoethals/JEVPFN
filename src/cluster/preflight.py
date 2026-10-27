@@ -349,6 +349,9 @@ def run_preflight(
             )
     _validate_artifacts(cfg, report)
     if stage == "after_extraction":
+        from src.evaluation.acceptance import evaluation_identity
+
+        report["evaluation_identity"] = evaluation_identity()
         report["embedding_artifacts"] = embedding_checks(cfg)
         failed = sum(item["status"] != "passed" for item in report["embedding_artifacts"])
         if failed:

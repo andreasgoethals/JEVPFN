@@ -7,11 +7,11 @@ from src.visualize import style
 from src.visualize.decision_comparison import LABELS
 from src.visualize.research import ENCODER_LABELS
 
-# Descriptive views of recorded metrics, not approval of a confirmatory endpoint.
+# Endpoints fixed before comparative outcomes; fold spread stays descriptive.
 METRIC_VIEWS = {
     "binary_classification": ("roc_auc", 1, "AUC: augmented − reference"),
-    "multiclass_classification": ("log_loss", -1, "Log loss: reference − augmented"),
-    "regression": ("rmse", -1, "RMSE reduction (%)"),
+    "multiclass_classification": ("roc_auc_ovr_macro", 1, "Macro OvR AUC: augmented − reference"),
+    "regression": ("r2", 1, "R²: augmented − reference"),
 }
 MODES = {"non_text_plus_joint": "Joint", "non_text_plus_per_column": "Per-column",
          "non_text_plus_both": "Both"}
@@ -21,13 +21,14 @@ JOINT_WIDTHS = (8, 16, 32, 64, 128, 256)
 def _dataset_effects(group, keys, task, direction):
     aggregations = {"mean": ("difference", "mean"), "count": ("difference", "count"),
                     "folds": ("outer_fold", "nunique")}
-    if task == "regression":
+    rmse = task == "regression" and "metric" in group and group.metric.eq("rmse").all()
+    if rmse:
         aggregations.update(reference_mean=("reference_value", "mean"),
                             reference_count=("reference_value", "count"))
     result = group.groupby(keys, dropna=False).agg(**aggregations).reset_index()
     result = result[result["count"].eq(5) & result.folds.eq(5)].copy()
     result["effect"] = result["mean"] * direction
-    if task == "regression":
+    if rmse:
         # Target units differ across datasets. Compare the percentage reduction in
         # mean fold RMSE, never an average of dollars, salary units and review scores.
         result = result[result.reference_count.eq(5) & result.reference_mean.gt(0)
@@ -78,12 +79,10 @@ def paired_effect_figures(paired):
                 "Paired representation effects within the same predictor and named reference. "
                 "Small points are per-dataset averages of five defined paired outer-fold differences; "
                 "diamonds are unweighted averages across the available datasets, separately per "
-                "extractor/mode. Positive values indicate improvement. Regression shows percentage "
-                "reduction in mean fold RMSE relative to the same dataset/reference; zero or "
-                "undefined reference RMSE is excluded. Other tasks retain their named metric units. "
+                "extractor/mode. Positive values indicate improvement in the prespecified "
+                "AUC or R² endpoint; values retain their named metric units. "
                 "Coverage may differ; exact dataset identities/counts remain in the table. "
-                "Fold spread is not a confidence interval. These descriptive metric views do not "
-                "select a confirmatory endpoint or establish a cross-model leaderboard."
+                "Fold spread is not a confidence interval; these plots do not select a winning recipe."
             )
 
 
@@ -143,9 +142,7 @@ def embedding_effect_figures(paired):
                 "cohort size; cohorts may differ between encoders. Per-column "
                 "points are individual dataset differences and diamonds their means. Exact counts "
                 "and identities remain in the tables; missing/unsupported arms are not imputed. "
-                "Positive values indicate improvement. Regression is percentage reduction in mean "
-                "fold RMSE against a positive same-dataset reference; other tasks use their named "
-                "metric units. Per-column32 "
+                "Positive values indicate improvement in the named AUC or R² metric. Per-column32 "
                 "has 32 coordinates per text field, not 32 total; the panels are not equal-budget "
                 "grouping comparisons. PCA is fitted within the corresponding training partition."
             )

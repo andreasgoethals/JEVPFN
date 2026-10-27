@@ -1,6 +1,6 @@
 # Current operational evidence
 
-Updated 26 October 2026. README owns the method, VSC owns commands,
+Updated 27 October 2026. README owns the method, VSC owns commands,
 DATA_SOURCES owns dataset meanings and LITERATURE_REVIEW owns research claims.
 Older details/test counts remain in CHANGELOG/Git. Submission is not completion.
 
@@ -38,53 +38,58 @@ Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Inspected Downloads/output_JEVPFN.zip, modified 26 October 2026 21:39:06,
-772,588 bytes, 395 members. It contains DATA logs/manifests, not the PROJECT count
-or feature databases. Correlate individual receipts with job IDs; the coordinator
-stopped at 15:33 and its submitted/pending totals are stale.
+Inspected Downloads/output_JEVPFN.zip, modified 27 October 2026 13:53:18,
+1,526,721 bytes, 833 members. It contains DATA logs/manifests, not complete PROJECT
+count/response databases. The setup receipt ended setup_completed_with_failures:
+151 completed, five failed, 20 blocked, all terminal. Its new attempt began
+27 October 07:05 UTC; job receipts share source fingerprint
+422b33e71f48ca08f25377350e37587ab83969c1f1b8b2e6137a1b310b289621,
+runtime pins 42474dae6611c00955f851a072da2b996ecbc4d5f479c677f5bd55e0badc6e84,
+prepared inputs 9ea10eed02750810c48765e692eabb1afef70ed841b253d517ca92bd63b17bf8.
+These precede the new merge changes; do not present them as current-source passes.
 
 | Check | Latest observed result |
 |---|---|
-| CPU/data/questions, 62431318 | Passed; setup checks, not complete 0A acceptance. |
-| Liquid/Strands/Perplexity/Clef/Intern tokens | All ten parts and strict merge passed. Merge jobs 62431739/40/69, 62431826/27; each covers 1,698,127 unique inputs with zero overflow. |
-| H2O/SII/Nimble tokens | All ten parts complete for each provider; final merges not submitted. Do not infer complete-audit acceptance until merging validates coverage. |
-| Kev/Decision3 tokens | Checkpoint staging and token preparation completed; partition jobs not submitted. |
-| Ten Blackwell containers | Setup reused ten sealed images. Presence/sealing is not real GPU validation. |
-| Lustre, 62431319 | Failed: srun could not contact wICE's controller; main log also reports controller DNS failure. No locking assertion was reached. |
-| Liquid GPFS, 11739854 | Passed on p11c05n2/p11c08n2 with posix_lockf: competing writer blocked, acquired after release, snapshot restored. Quota/independent backup remain unverified. |
-| B200 contracts, pilots and encoders | Not yet executed in this setup; no current B200 inference pass. |
+| Recovery | Recorded accepted GPFS job 11739854 at 07:05:36 UTC; saved Slurm user/account/checkout/command match. Restart succeeded. |
+| CPU, 62440843 | Passed. |
+| Lustre, 62440844 | POSIX two-node lock/reacquisition/snapshot checks passed; the earlier controller failure was retried successfully. |
+| Liquid/Strands/Perplexity/Clef/Intern token audits | All merged: 62440903/04/27/28 and 62441362. Each covers 1,698,127 distinct inputs with zero overflow. |
+| All ten tokenizers | All 100 partition receipts completed. H2O/SII/Kev/Decision3/Nimble still need their strict final merges. |
+| Added-provider merges | H2O 62441778, SII 62441719, Kev 62441464, Decision3 62441465, Nimble 62441727 exhausted 4-hour limits. TIMEOUT with ExitCode 0:0 is a failure. |
+| Five GPFS working sets | Liquid 11741548, Strands 11741549, Perplexity 11741576, Clef 11741555, Intern 11741560 passed. Quota/independent backup remain separate reviews. |
+| Five B200 decision contracts | Liquid 11741550, Strands 11741551, Perplexity 11741577, Clef 11741556, Intern 11741563: 26 diagnostic groups each passed, actual NVIDIA B200, runtime token-count parity confirmed. |
+| Five B200 dataset pilots | Liquid 11741553, Strands 11741554, Perplexity 11741578, Clef 11741562, Intern 11741565: each covered 18 datasets, 414 completed requests, 36 reused and no failed requests. |
+| Three B200 embedding contracts | E5-small 11741557, E5-large 11741558, Qwen3-Embedding-0.6B 11741559 passed on four-row fixtures: three unique texts encoded, missing inputs skipped, resume without inference. Not complete-dataset embeddings. |
+| Five added providers | Their scratch, GPFS lock, B200 contract and dataset pilot stages were blocked by token merges, not attempted model failures. |
 
-Owner sacct at 21:40 confirmed GPFS job 11739854 COMPLETED 0:0, submitted at
-15:33:52 despite the preceding sbatch timeout. Its report is
-storage_contracts/fd0c26ce4cea421eb0620598c7a2a035.json, source fingerprint
-a1575b2fdd12840d6f282c2d6aa053086b75ed61c01f4dbb2af526ad71778547.
-The launcher receipt still has liquid_gpfs_storage starting without a job ID.
-The new setup_recovery command verifies live accounting against the saved command,
-user/account/checkout, records that accepted ID and preserves the stopped status.
-After all JEVPFN jobs stop, publish/pull source and use the explicit setup restart.
-No output reset is needed now; completed token batches and sealed images are reusable.
+Real-text sensitivity remains a research limitation requiring review. Clef changed
+its top answer on irrelevant-context/instruction variants (max probability change
+about 0.555); Intern changed its multiclass answer after option reversal (about
+0.517). Synthetic semantic anchors passed. Keep fixed questions and class order;
+do not tune the main questions against target labels to conceal these diagnostics.
 
-Older errors in the ZIP are historical: GPFS BSD flock permitted two owners;
-POSIX record locking now has the real two-node Liquid pass above. Other runtime
-working sets and a new Lustre pass remain gates. Perplexity staging omitted source/uv.lock;
-the filter was corrected, but its new scratch stage still needs to run. Tykky link
-normalization uses the same rules for sealing and relocation. No guard was bypassed.
+Merge bottleneck: the old path made per-input count/blob lookups against large
+prepared-token B-trees and rolled back at timeout. It now bulk-compares/inserts
+counts, sequentially scans token blobs once per partition in key order and verifies
+checksums/counts in bounded batches. A covering key index stays inside the same
+SQLite file for final coverage joins; cache is bounded to 256 MiB. Conflicts and
+incomplete partitions still roll back the entire merge. Added merges get 24 hours
+and phase/progress/elapsed logs. Complete partition receipt/hash reuse skips costly
+monolithic-prefix recopying. Tokenizers/registry/questions remain unchanged, so all
+completed count work can be reused. Live performance of the fix is not yet measured.
 
-Token audits use ten disjoint ranges per provider: up to 40 CPU token jobs, six other
-CPU checks/merges, 12 GPU tests, and two jobs in each build/download/transfer pool,
-64 active total. Setup has 176-186 steps depending on reused images; frozen 0A has
-165. Tokenization modules/registry remain byte-identical, allowing matching committed
-counts to seed partitions. Strict merges check complete coverage and identities;
-restart databases stay off GPFS and out of result exports. H2O/SII/Nimble's longest
-completed counting parts took about 354/285/78 minutes; queueing and remaining work
-cannot be predicted from those durations alone.
+After publishing/pulling with idle JEVPFN jobs, restart the five unfinished provider
+branches using setup_extractors --provider flags, retaining previous evidence in the
+same receipt. This is 87 diagnostic steps with images reused, not fresh feature
+creation. Do not clean yet. Once all setup gates and robustness/storage reviews
+pass, perform the agreed clean regeneration/freeze and complete all-provider 0A.
 
-Historical H100 contracts/pilots passed for Liquid, Perplexity, Clef and Intern,
-with source 8c348bdaf743ac676b1b6cd6a6ff8a550d23a64bf7e5ef8b55eab3d511097b95.
-Strands then failed its four-decimal rounding validation, subsequently corrected.
-Historical E5-small/E5-large/Qwen contracts passed on H100. None certifies B200,
-current code or final acceptance. Reports now include source/job/runtime identities.
-Earlier detailed run histories remain in CHANGELOG/Git and retained receipts.
+Historical lessons: GPFS BSD flock allowed simultaneous owners; POSIX record locking
+now has real two-node GPFS and Lustre passes. Perplexity staging omitted source/uv.lock;
+its corrected scratch copy and B200 tests now passed. Tykky link normalization uses
+the same rules for sealing and relocation. Compact images addressed the former
+~111k-file native-environment problem. H100 evidence is historical; B200 receipts
+above now demonstrate bounded inference for five decision models and three encoders.
 
 ## Jev and permanent accounting
 
@@ -121,9 +126,13 @@ numeric schema does not imply equal probabilities. Exclude provenance URLs,
 non-text row values and row targets from model text; retain sources separately.
 Mechanical checks cannot prove language interpretation or calibrated confidence.
 
-Read-only pins: DM 5f1b3f8f1611681579aba052a86c2626a6a17b96;
+The 24 October literature/methodology review used read-only pins:
+DM 5f1b3f8f1611681579aba052a86c2626a6a17b96;
 TFM 702d9ab0b66f6639ba8d443ff9c4a91231964465;
 VSC 3bcdf55e576d10161d6189b40ac39380bbba9eca.
+The 27 October storage/Slurm check used VSC Library
+1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87 (upstream
+7c04105490d610fee13125c8c70fa4bddd854a88); no pins were changed in this task.
 Reviewed sibling manuscript, CreditICL figure recommendations, MulTaBench v2 and
 relevant library guides. LoRA TAR is supervised; frozen task conditioning here
 does not train on dataset targets. TILE/STRABLE are adjacent work; do not claim
@@ -132,22 +141,55 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-After the recovery helper, the 26 October local suite passed 1,049 tests in
-331.55 seconds, with 22 platform/optional-runtime skips. Ruff, dependency and
-diff checks passed. The prior 25 October check verified all 28 unchanged Bash/Slurm files. Synthetic/local tests do not establish Blackwell compatibility. Both
-historical tokenizer modules and registry remain byte-identical to HEAD.
-Earlier validation counts belong in CHANGELOG.
+The latest 27 October update passed 1,089 local tests in 266.46 seconds,
+with 22 platform/optional-runtime skips. Ruff, dependency and diff checks passed.
+Regression tests exercise incomplete/altered partitions, damaged/conflicting saved
+tokens, atomic rollback, bounded/bulk copying and verified partition resume. The
+reviewed tokenization modules and registry remain byte-identical to HEAD; their
+cache identities are unchanged. Library pins were not changed.
+No remote execution, paid calls, cleanup or Git publication occurred in this task.
+Local tests do not establish the new merge's Lustre performance or added-model B200
+compatibility. Earlier validation counts remain in CHANGELOG.
+
+The current-source review confirmed Claude's completed-fold restoration, SII label/cue
+checks, token-merge validation, failed-semantic-probe propagation, paired representation
+views and runtime-specific GPFS evidence. It found two further issues: the permutation
+control moved NaNs between rows, and 0B approval was not bound to the tested evaluation
+pipeline. Permutation now preserves complete missingness patterns within each partition;
+0B reports/approval carry evaluation_identity for source, model pins/settings, protocol,
+selectors and encoder/PCA recipes. Finalize these before 0B; only activation switches and
+the acceptance path may change afterward without invalidating that identity.
+The earlier review found that TabSTAR selected the original generation. Following the
+owner's instruction, it now selects v1.1 explicitly through tabstar 1.2.2 and its distinct
+module, with Transformers 4.57.6. CPU staging pins separate classification/regression
+snapshots and E5, including offline HF-cache aliases required by the publisher's warm-cache
+check. A versioned tabstar-v1p1 container preserves earlier images; native GPFS staging
+copies the declared assets. Container retirement proof uses the actual versioned image
+path. Bounded predictor contracts are permitted with --execute; full-fold/benchmark gates
+remain disabled. This new runtime/checkpoint combination needs real B200 tests.
+The review used DM 4cf49431cab921fb727e883760ed535ca8e77f72, TFM
+e604ade99f7cf135f41c17a49e1f91da528e835d and VSC
+1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87 without moving pins.
+The scientific comparison is task-conditioned frozen feature extraction, not supervised
+representation learning. The owner declined word/character TF-IDF plus SVD additions;
+keep the existing three pretrained embedding encoders and existing cheap-statistics control.
 
 On 26 October, cached local Jev responses were revalidated without network calls:
 three synthetic contracts passed; 15 synthetic and 13 real-text robustness cases
 decoded successfully and still require semantic review. This does not replace a
 fresh source-bound local 0A or re-run the 288-request dataset pilot.
 
-Six notebooks run locally, prioritizing text/reuse, exact questions, feature
-widths, saved pilot behavior and paired effects. Missing benchmark results stay
-pending. PCA fits training rows only. Across-dataset regression figures use
-relative RMSE changes, not averages mixing salary/price/score units. Synthetic
-layout data must not be stored as research results.
+All thirteen notebooks ran locally with saved outputs, 25 PDF figures, aggregated captions
+and complete printed reports. Each experiment has its own notebook (0A/0B separate), with
+a final synthesis for Experiments 1-3. Empty performance plots and repeated figures were
+removed; missing benchmark results remain pending. Every generated PDF was visually checked.
+Future result-panel layouts were checked with explicitly synthetic fixtures outside research
+output. Their values must never enter research stores. PCA fits training rows only.
+Following the owner, headline metrics now match MulTaBench: binary ROC-AUC, multiclass
+macro OvR ROC-AUC and regression R-squared. All secondary metrics remain recorded.
+Regression headline deltas are R-squared differences, with no relative-RMSE conversion.
+Statistical contrast families still require approval. Native-system comparisons are
+descriptive; aligned/shuffled/full-distribution controls retain exact artifact pairing.
 
 The 24 October methodological review found combined train/query preprocessing in
 the pinned LimiX-2 implementation. The adapter now fits filtering, categorical
@@ -174,7 +216,7 @@ Create features, run 0B including real encoder/predictor/complete-feature checks
 then benchmark. Full-fold resources and native predictor runtimes remain unproven
 until their real gates pass. A source/runtime change requires a reviewed stage
 transition, not deletion of mismatch evidence. Publication requires the owner's
-explicit authorization; it was given for the current parallel-testing update.
+explicit authorization for the current task; the owner handles Git publication.
 
 ## Reusable failure lessons
 

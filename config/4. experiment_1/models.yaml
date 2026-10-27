@@ -153,9 +153,11 @@ models:
           path: null
           sha256: null
   tabstar:
-    name: TabSTAR
+    name: TabSTAR v1.1
+    model_generation: v1.1
+    interface: tabstar.tabstarv1p1_model
     priority: selected_original_text_baseline
-    package: tabstar==1.1.16
+    package: tabstar==1.2.2
     extra: tabstar
     device_proposal: cuda
     review:
@@ -166,7 +168,8 @@ models:
     raw_text: pretrained_language_encoder_and_supervised_task_adaptation
     runtime:
       packages:
-        tabstar: 1.1.16
+        tabstar: 1.2.2
+        transformers: 4.57.6
       seed: 20260929
       device: cuda
       threads: 8  # capped to the actual Slurm CPU allocation
@@ -174,6 +177,16 @@ models:
       checkpoints: {}
       pretrain_dataset_or_path: null
       assets: []
+      repositories:
+        classification:
+          model: alana89/TabSTAR-v1.1-cls-20261011
+          revision: 4480a25fea83029b02b07c10b9f03a376481daaf
+        regression:
+          model: alana89/TabSTAR-v1.1-reg-20261009
+          revision: 076160ddcfe71faa98841df274bc0ebdc5d2c093
+        text_encoder:
+          model: intfloat/e5-small-v2
+          revision: ffb93f3bd4047442299a41ebb6fa998a38507c52
   contexttab:
     name: ConTextTab (SAP RPT-1 OSS)
     priority: selected_original_text_baseline

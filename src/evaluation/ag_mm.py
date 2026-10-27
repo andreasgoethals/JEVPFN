@@ -52,6 +52,9 @@ class AutoMMBackend:
         self.workspace = tempfile.TemporaryDirectory(prefix="jevpfn-agmm-", dir=scratch)
         self.model = MultiModalPredictor(
             label=self.label,
+            eval_metric={"binary_classification": "roc_auc",
+                         "multiclass_classification": "roc_auc_ovr",
+                         "regression": "r2"}[task],
             problem_type={
                 "binary_classification": "binary",
                 "multiclass_classification": "multiclass",

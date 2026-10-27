@@ -1,5 +1,46 @@
 # Changelog
 
+## 27-10-2026
+
+- Add experiment-specific notebooks for 0A/0B and Experiments 1-5, plus a combined
+  Experiments 1-3 synthesis. Centralize read-only summaries and paper-style result panels;
+  pair controls against their aligned artifacts, preserve checkpoint identities, and show
+  pending status instead of empty or invented result plots. Remove duplicate figures.
+- Set MulTaBench-compatible headline metrics before comparative outcomes: binary ROC-AUC,
+  multiclass macro OvR ROC-AUC and regression R-squared. Preserve secondary metrics and
+  binary inner-validation threshold selection. The owner declined TF-IDF/SVD additions.
+- Select TabSTAR v1.1 explicitly through package 1.2.2 and Transformers 4.57.6. Add CPU
+  staging of pinned task checkpoints/E5 with verified offline cache aliases, a separate
+  versioned Blackwell image and GPFS asset staging. Fix retirement proof for versioned
+  image paths; allow explicit bounded predictor fixtures while full-fold/benchmark gates
+  remain disabled. The new runtime still requires real B200 validation.
+- Latest verification: 1,089 tests passed, 22 platform/optional-runtime skips; all thirteen
+  notebooks executed successfully, saving 25 visually checked PDFs, captions and complete
+  reports. Lint, shell syntax, dependencies and diff checks passed. No Git publication,
+  remote execution, paid calls, data cleanup or library-pin changes.
+- Bind benchmark execution to the evaluation identity recorded in 0B reports and
+  reviewed acceptance: implementation, model pins/settings, protocol, selectors and
+  embedding/PCA recipes. Execution switches remain independent; stale/missing identities
+  cannot authorize a changed evaluation pipeline.
+- Critical pipeline review: correct the optional permutation control to preserve each
+  row's missingness pattern while shuffling complete vectors independently in training/test
+  partitions. Record the policy in representation identities; add regression tests for
+  masks, vector distributions, partition separation, determinism and singleton patterns.
+- Verify Claude's report against the current source and document the original TabSTAR
+  interface separately from newly released v1.1. No model/experiment roster was changed.
+- Final local verification: 1,072 passed in 269.96 seconds, 22 platform/optional-runtime skips; lint,
+  dependencies and diff checks passed. No remote/paid execution or Git publication.
+- Reconcile the latest output: accepted-job recovery succeeded; CPU/Lustre, five GPFS
+  workspaces, five decision contracts/pilots and three embedding encoders passed on B200.
+  All 100 token partitions finished; five added-provider merges timed out and blocked
+  their 20 descendants. Keep source/job identities and semantic-review limitations.
+- Replace merge-time per-input random lookups with bulk count inserts and sequential,
+  bounded prepared-token validation/copy. Add a compact covering index within the same
+  database and a 256 MiB page cache; preserve checksum/conflict checks and atomic rollback.
+- Reuse checksum-verified completed partitions without recopying monolithic prefixes.
+  Log merge phases and progress; allow 24 hours for added-provider merges. No tokenizer,
+  question, feature or prediction semantics changed. VSC verification is still required.
+
 ## 26-10-2026
 
 - Add guarded recovery of an accepted setup job after a submission timeout: match live

@@ -135,6 +135,13 @@ EVIDENCE_COLORS = {
     "not_applicable": "white",
 }
 METHOD_COLORS = ("#5A6E8C", "#987448", "#4F8075")
+MAIN_PREDICTORS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear")
+PREDICTOR_LABELS = {"catboost": "CatBoost", "tabpfn_3_5": "TabPFN-3.5", "tabicl_v2": "TabICL v2",
+                    "limix_2": "LimiX-2", "kumo_tabular": "Kumo", "linear": "Linear/logistic",
+                    "tabstar": "TabSTAR v1.1", "contexttab": "ConTextTab", "ag_mm": "AG-MM"}
+NATIVE_COLORS = {"tabstar": "#473B78", "contexttab": "#26736C", "ag_mm": "#9B6034"}
+NATIVE_MARKERS = {"tabstar": "o", "contexttab": "s", "ag_mm": "^"}
+FAMILY_COLORS = dict(zip(("experiment_1", "experiment_2", "experiment_3"), METHOD_COLORS))
 EMBEDDING_COLORS = {"e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
                     "qwen3_embedding_0_6b": "#558B2F"}
 EFFECT_CMAP = "BrBG"  # Positive effect means improvement in the explicitly named contrast.
@@ -182,6 +189,11 @@ def comparison_size(rows: int, *, rotated_labels: bool = False) -> tuple[float, 
     """Keep sparse last pages compact without changing final-print label sizes."""
     margin = 1.95 if rotated_labels else 1.35
     return WIDTH_FULL, min(MAX_HEIGHT, margin + 0.23 * rows)
+
+
+def native_reference_size(rows: int) -> tuple[float, float]:
+    """Reserve title/legend space without stretching sparse native-system rows."""
+    return WIDTH_FULL, min(MAX_HEIGHT, 2.1 + 0.25 * rows)
 
 
 def apply() -> None:

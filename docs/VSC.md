@@ -1,8 +1,9 @@
 # VSC operations
 
 Use this guide for execution; use README for the experiment design and
-AGENTS_MEMORY for dated observations. **B200 execution is implemented but has not
-been validated by a real B200 job yet.** A local test pass is not GPU acceptance.
+AGENTS_MEMORY for dated observations. **Five decision runtimes and three encoders have
+bounded B200 passes; the five added decision runtimes still await their tests.**
+Final acceptance requires the complete frozen campaign and review.
 
 ## Storage and hardware
 
@@ -62,6 +63,9 @@ Infrastructure evidence: pinned VSC Library
 `3bcdf55e576d10161d6189b40ac39380bbba9eca`, upstream
 `1a0cf04a5aab107021d98c563351f912a3caf062`, reviewed 23 October 2026.
 See its `guides/SLURM.md`, `STORAGE.md`, `SOFTWARE.md` and `CLUSTERS.md`.
+Storage/Slurm guidance for this merge-recovery update was rechecked on 27 October
+at VSC Library `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`, upstream
+`7c04105490d610fee13125c8c70fa4bddd854a88`. The earlier pin records the hardware review.
 
 ## Stop only this project's H100 jobs and update
 
@@ -211,6 +215,33 @@ attempts inside the same receipt, verifies and reuses sealed Blackwell images,
 and retains weights, token batches, caches and logs. Cheap checks run again;
 the previous failure is never relabelled as a pass. After a disconnect, resume
 with `--all --execute --watch` without `--restart`.
+
+The 27 October setup completed 151/176 steps, with five token-merge timeouts and
+20 blocked descendants. All 100 count partitions finished; no recount is needed.
+The former merge did individual random database lookups for counts and large token
+blobs. It now bulk-inserts counts, scans prepared blobs once per partition in key
+order, verifies them in bounded batches, and keeps a covering key index inside the
+same SQLite file, analyzed for completeness queries. A 256 MiB page cache and a 24-hour merge
+allowance apply to added providers; logs report checksum/coverage, copied inputs and
+elapsed partition time. The single merge transaction still rolls back on conflicts
+or incomplete/altered inputs. Finished partition receipts and hashes permit safe
+resume without copying the monolithic prefix again. These are CPU-only jobs.
+
+After publishing/pulling the fix with JEVPFN jobs idle, repeat only the five unfinished
+provider branches. Export the roots and activate the CPU environment as above, then:
+
+```bash
+"$JEVPFN_PYTHON" -u -m src.cluster.setup_extractors \
+  --provider h2o --provider sii --provider kev \
+  --provider decision3 --provider nimble --restart --execute --watch
+```
+
+This creates an 87-step diagnostic attempt reusing sealed images and all completed
+partitions, and retains the complete previous attempt inside the same receipt.
+It repeats CPU/storage prerequisites and verifies cached inputs before submitting the
+five merges and their GPFS/B200 descendants. After a disconnect, use the same provider
+list with `--execute --watch` and omit `--restart`; the `--all` wrapper would select a
+different provider list. The final clean 0A campaign still tests all providers/encoders.
 
 The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
 mismatch: Tykky writes image paths containing `bin//python`, while the seal used the
@@ -467,8 +498,9 @@ done
 
 The merge validates stored identities and preserves other providers; imported
 spending queues remain archival evidence. Restage predictor working sets afterward.
-Fill `feature_artifacts` in `config/3. experiment_0/debug.yaml` with immutable artifact
-selections. 0B validates row IDs, source hashes, complete provider/encoder coverage,
+Before 0B, fill `feature_artifacts` in `config/3. experiment_0/debug.yaml` and the benchmark
+`feature_selectors` with immutable artifact selections; finalize predictor settings and
+encoder/PCA recipes too. 0B validates row IDs, source hashes, complete provider/encoder coverage,
 transfer/resume and all downstream preprocessing boundaries. Run its CPU validation:
 
 ```bash
@@ -478,12 +510,40 @@ sbatch scripts/slurm/experiment_0_after.slurm
 Stage the exact predictor assets listed in `config/4. experiment_1/models.yaml` and
 build isolated runtimes before GPU tests. AG-MM has its own dependency environment;
 do not combine its older Transformers requirement with the extractor runtime.
-Enable only `predictor_execution_enabled` for bounded contract tests. Example after
+`predictor_execution_enabled` permits the explicitly authorized bounded fixtures;
+each invocation still needs `--execute`, staged assets and a compute allocation.
+Full-fold profiling and benchmark switches remain disabled. Example after
 its B200 image/checkpoints/working set exist:
 
 ```bash
 sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 tabpfn_3_5
 ```
+
+TabSTAR selects v1.1 through package 1.2.2, not the original model interface. Its
+classification/regression snapshots and E5 dependency are pinned in the model catalog.
+The CPU stager writes checksummed offline Hugging Face snapshots and aliases, with one
+predictor manifest; it neither loads a model nor modifies tracked configuration.
+Do not mix TabSTAR's Transformers 4.57.6 environment with the decision-tokenizer environment.
+Its new `tabstar-v1p1` container path preserves old images. Once JEVPFN jobs are idle,
+and before a frozen stage, run in the VSC Bash terminal:
+
+```bash
+cd "$VSC_DATA/JEVPFN"
+mkdir -p "output_JEVPFN/3. experiment_0/logs"
+sbatch --wait scripts/slurm/stage_tabstar.slurm
+sbatch --wait scripts/slurm/experiment_0_container_build.slurm tabstar new /lustre1/project/stg_00211 blackwell-cu130
+sbatch --wait scripts/slurm/experiment_0_scratch_stage.slurm tabstar
+sbatch --wait scripts/slurm/experiment_0_storage_gpfs.slurm tabstar
+sbatch --wait scripts/slurm/experiment_0_predictor.slurm tabstar tabstar
+```
+
+These are prerequisite-ordered jobs for this one runtime; the extractor/encoder graph
+can progress independently through `test_all`. A source update requires idle JEVPFN jobs;
+do not pull into an active checkout. Bounded TabSTAR fits can be tested before full feature
+creation, but they are 0B predictor-interface evidence, not complete 0B acceptance. The
+full-feature and full-fold checks must run again after extraction. No weights or model
+training are run on login nodes. Required adaptation retains the publisher's fixed
+LoRA/three-epoch averaging recipe; temporary epoch checkpoints are not retained as results.
 
 CatBoost/linear use `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on wICE.
 All nine predictors need real task/feature contracts, including binary, multiclass,
@@ -502,10 +562,15 @@ sbatch scripts/slurm/prepare_pca.slurm REG_TEXT_ROTTEN_TOMATOES e5_small_v2
 
 Only training partitions fit PCA; inner and outer projections are distinct and
 cached. Restage the relevant predictor after CPU artifacts complete. After reviewed
-0B acceptance, set `experiment_0_acceptance`, selected feature artifacts and the
-experiment's `enabled` switch in its configuration. The acceptance file has
-`stage: after_extraction`, `accepted: true`, `reviewed_by` and checksummed evidence;
-no test signs it automatically. Then write an array plan:
+0B acceptance, set only `experiment_0_acceptance` and the experiment's `enabled` switch
+in its configuration. The acceptance file has
+`stage: after_extraction`, `accepted: true`, `reviewed_by`, checksummed evidence and
+the `evaluation_identity` recorded by the 0B preflight/predictor reports. This binds
+the tested implementation, model settings/checkpoints, protocol, selectors and encoder/PCA
+recipes. Changing an execution-enable switch or the acceptance-file path does not change
+that identity; changing the tested pipeline requires a new reviewed 0B acceptance.
+`python -m src.evaluation.acceptance` prints the current identity without signing anything.
+Then write an array plan:
 
 ```bash
 python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --concurrency 8 --write

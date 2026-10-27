@@ -166,7 +166,8 @@ os._exit(0)
         )
 
 
-def test_prepared_tokens_survive_partition_reuse_and_merge(inputs):
+@pytest.fixture
+def prepared_counter():
     import zlib
 
     from src.utils.serialization import digest
@@ -193,9 +194,128 @@ def test_prepared_tokens_survive_partition_reuse_and_merge(inputs):
                 lengths.append(len(value["ids"]))
             return lengths
 
-    c = Counter()
+    return Counter()
+
+
+def test_prepared_tokens_survive_partition_reuse_and_merge(inputs, prepared_counter):
+    c = prepared_counter
     for i in range(3):
         audit.audit_provider("h2o", inputs, counter=c, shard=(i, 3))
     result = shards.merge("h2o", inputs, counter=c, shards=3)
     with sqlite3.connect(result["counts_database"]) as db:
         assert db.execute("SELECT COUNT(*) FROM prepared_tokens").fetchone() == (3,)
+        assert db.execute(
+            "SELECT name FROM sqlite_master WHERE name='prepared_payload_keys'"
+        ).fetchone() == ("prepared_payload_keys",)
+
+
+@pytest.mark.parametrize("damage", ["missing", "checksum", "length"])
+def test_damaged_prepared_source_rolls_back_every_partition(inputs, prepared_counter, damage):
+    import zlib
+
+    from src.utils.serialization import digest
+
+    reports = [
+        audit.audit_provider("h2o", inputs, counter=prepared_counter, shard=(i, 3))
+        for i in range(3)
+    ]
+    damaged = Path(reports[-1]["database"])
+    with sqlite3.connect(damaged) as db:
+        if damage == "missing":
+            db.execute("DELETE FROM prepared_tokens")
+        elif damage == "checksum":
+            db.execute("UPDATE prepared_tokens SET prepared_sha256='wrong'")
+        else:
+            value = {"ids": [1]}
+            db.execute(
+                "UPDATE prepared_tokens SET content=?,prepared_sha256=?",
+                (zlib.compress(json.dumps(value).encode()), digest(value)),
+            )
+    report = reports[-1]
+    report["database_sha256"] = file_sha256(damaged)
+    write_json(shards.receipt_path(damaged), report)
+    with pytest.raises(ValueError, match="prepared|Prepared"):
+        shards.merge("h2o", inputs, counter=prepared_counter, shards=3)
+    destination = next(paths.token_audit_dir().glob("h2o_*.sqlite3"))
+    with sqlite3.connect(destination) as db:
+        assert db.execute("SELECT COUNT(*) FROM counts").fetchone() == (0,)
+        assert db.execute("SELECT COUNT(*) FROM prepared_tokens").fetchone() == (0,)
+
+
+@pytest.mark.parametrize("damage", ["conflict", "corruption"])
+def test_existing_prepared_content_is_checked_and_preserved(inputs, prepared_counter, damage):
+    reports = [
+        audit.audit_provider("h2o", inputs, counter=prepared_counter, shard=(i, 3))
+        for i in range(3)
+    ]
+    result = shards.merge("h2o", inputs, counter=prepared_counter, shards=3)
+    destination = Path(result["counts_database"])
+    with sqlite3.connect(destination) as db:
+        if damage == "conflict":
+            db.execute("UPDATE prepared_tokens SET prepared_sha256='different'")
+        else:
+            import zlib
+
+            db.execute("UPDATE prepared_tokens SET content=?", (zlib.compress(b"{}"),))
+    before = file_sha256(destination)
+    with pytest.raises(ValueError, match="prepared|Prepared"):
+        shards.merge("h2o", inputs, counter=prepared_counter, shards=3)
+    assert file_sha256(destination) == before
+    assert len(reports) == 3
+
+
+def test_finished_partition_resume_does_not_recopy_old_blob_cache(
+    inputs, prepared_counter, monkeypatch
+):
+    for i in range(3):
+        audit.audit_provider("h2o", inputs, counter=prepared_counter, shard=(i, 3))
+    shards.merge("h2o", inputs, counter=prepared_counter, shards=3)
+
+    def recopy(*a, **k):
+        raise AssertionError("A finished partition should not recopy the monolithic cache")
+
+    monkeypatch.setattr(shards, "copy_rows", recopy)
+    report = audit.audit_provider("h2o", inputs, counter=prepared_counter, shard=(1, 3))
+    assert report["status"] == "partition_complete_requires_merge"
+
+
+def test_finished_partition_cannot_be_reused_after_its_database_changes(inputs, counter):
+    report = audit.audit_provider("liquid", inputs, counter=counter, shard=(0, 1))
+    with sqlite3.connect(report["database"]) as db:
+        db.execute("UPDATE counts SET input_tokens=999 WHERE input_no=0")
+    with pytest.raises(ValueError, match="Completed token partition changed"):
+        audit.audit_provider("liquid", inputs, counter=counter, shard=(0, 1))
+
+
+def test_blob_merge_uses_bounded_batches_and_sublinear_database_queries():
+    import zlib
+
+    from src.utils.serialization import digest
+
+    with sqlite3.connect(":memory:") as source, sqlite3.connect(":memory:") as target:
+        for db in (source, target):
+            db.execute(
+                "CREATE TABLE prepared_tokens (payload_sha256 TEXT PRIMARY KEY, prepared_sha256 TEXT, content BLOB) WITHOUT ROWID"
+            )
+        required, values = {}, []
+        for i in range(1025):
+            key = digest({"row": i})
+            value = {"ids": [i] * 20, "extra": "Unicode: éλ"}
+            required[key] = 20
+            values.append((key, digest(value), zlib.compress(json.dumps(value).encode())))
+        source.executemany("INSERT INTO prepared_tokens VALUES (?,?,?)", values)
+        queries = []
+        target.set_trace_callback(queries.append)
+        shards.copy_prepared(source, target, required, progress=lambda text: None)
+        assert target.execute("SELECT COUNT(*) FROM prepared_tokens").fetchone() == (1025,)
+        assert len([q for q in queries if q.startswith("SELECT")]) < len(values) // 10
+        assert list(
+            source.execute("SELECT * FROM prepared_tokens ORDER BY payload_sha256")
+        ) == list(target.execute("SELECT * FROM prepared_tokens ORDER BY payload_sha256"))
+
+
+def test_added_merge_has_time_for_large_saved_token_arrays():
+    for provider in ("h2o", "sii", "kev", "decision3", "nimble"):
+        step = shards.plan(provider, "/project")[-1]
+        assert "--time=24:00:00" in step["flags"]
+        assert len(step["dependencies"]) == 10

@@ -275,6 +275,12 @@ def stage(runtime):
                         yield from pinned_paths(item)
 
             inputs += [str(p) for p in pinned_paths(runtime_cfg)]
+            if runtime == "tabstar" and runtime_cfg.get("repositories"):
+                from src.evaluation.tabstar_assets import MARKER as TABSTAR_MARKER
+                from src.evaluation.tabstar_assets import asset_manifest
+                assets = asset_manifest(runtime_cfg, root=durable / "checkpoints")
+                inputs += ["checkpoints/" + p["path"] for p in assets["assets"]]
+                inputs += ["checkpoints/predictors/tabstar/" + TABSTAR_MARKER]
         if runtime == "cloudflare":
             inputs += ["checkpoints/text_embeddings"]
         # Include prepared CPU artifacts (tokens and fold-specific PCA), never arbitrary outputs.

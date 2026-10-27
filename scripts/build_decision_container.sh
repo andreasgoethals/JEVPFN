@@ -1,7 +1,7 @@
 #!/bin/bash
 # Called by the bounded CPU build allocation; scratch holds all unpacked build files.
 set -euo pipefail
-JEVPFN_BUILD_PROVIDER="${1:?Pass cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble}"
+JEVPFN_BUILD_PROVIDER="${1:?Pass a selected decision provider or reviewed predictor runtime}"
 JEVPFN_BUILD_MODE="${2:-wrap}"
 export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-legacy-cu126}"
 case "$JEVPFN_RUNTIME_PROFILE" in
@@ -13,7 +13,8 @@ case "$JEVPFN_RUNTIME_PROFILE" in
 esac
 case "$JEVPFN_BUILD_PROVIDER" in
     cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble) JEVPFN_BUILD_DECISION=1 ;;
-    catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
+    tabstar) JEVPFN_BUILD_DECISION=0 ;;
+    catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|contexttab|ag_mm)
         JEVPFN_BUILD_DECISION=0
         [[ "$JEVPFN_BUILD_MODE" == wrap ]] || { echo 'Predictors: wrap a separately reviewed environment; no guessed dependency installation.' >&2; exit 2; } ;;
     *) exit 2 ;;
@@ -110,7 +111,7 @@ from pathlib import Path
 work,repo,provider,root,index,profile=sys.argv[1:]
 q=shlex.quote
 Path(work,'environment.yaml').write_text('channels: [conda-forge]\ndependencies: [python=3.12, pip]\n',encoding='utf-8')
-extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open'}[provider]
+extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open','tabstar':'tabstar'}[provider]
 prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); actual=Path(sys.prefix).resolve(); print(f"Image interpreter: {actual}; expected: {expected}"); assert actual==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
 lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'python -I -c {q(prefix_check)}', f'cd {q(repo)}',
        f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}',
@@ -119,12 +120,18 @@ if provider=='perplexity':
     requirements=Path(root,'JEVPFN/checkpoints/decision_models/perplexity/requirements.txt')
     lines+=[f'python -m pip install torch==2.14.0 torchvision==0.29.0 --index-url {q(index)}',
             f'python -m pip install -r {q(str(requirements))} -e {q(".[dev,token-audit]")}']
+elif provider=='tabstar':
+    lines+=[f'python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url {q(index)}',
+            f'python -m pip install -e {q(".[dev,tabstar]")}']
 else:
     lines+=[f'python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url {q(index)}',
             f'python -m pip install -e {q(f".[dev,token-audit,{extra}]")}']
 lines+=['python -m pip check',
-        "python -c 'import torch; from src.cluster.runtime_profiles import validate_build; validate_build(dict(torch_cuda=torch.version.cuda))'",
-        f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
+        "python -c 'import torch; from src.cluster.runtime_profiles import validate_build; validate_build(dict(torch_cuda=torch.version.cuda))'"]
+if provider!='tabstar':
+    lines += [f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
+else:
+    lines += ["python -c 'from src.utils.config import load_yaml; from src.evaluation.models import verify_runtime; verify_runtime(load_yaml(\"experiment_1/models\")[\"models\"][\"tabstar\"][\"runtime\"])'"]
 Path(work,'post_install.sh').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 PY
     # Name-based creation/activation can resolve an existing host env1 despite envs_dirs.

@@ -2,6 +2,9 @@
 # Select a sealed compact runtime when available; retain native Conda for CPU/custom envs.
 JEVPFN_REQUESTED_ENV="${JEVPFN_CONDA_ENV:-JEVPFN}"
 JEVPFN_RUNTIME_NAME="${JEVPFN_REQUESTED_ENV##*/}"
+if [[ "$JEVPFN_RUNTIME_NAME" == tabstar-v1p1 ]]; then JEVPFN_RUNTIME_NAME=tabstar; fi
+JEVPFN_RUNTIME_IMAGE="$JEVPFN_RUNTIME_NAME"
+if [[ "$JEVPFN_RUNTIME_NAME" == tabstar ]]; then JEVPFN_RUNTIME_IMAGE=tabstar-v1p1; fi
 JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}/JEVPFN"
 if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
     export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-blackwell-cu130}"
@@ -10,8 +13,8 @@ else
     export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-legacy-cu126}"
 fi
 case "$JEVPFN_RUNTIME_PROFILE" in
-    legacy-cu126) JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/$JEVPFN_RUNTIME_NAME" ;;
-    blackwell-cu130) JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/blackwell-cu130/$JEVPFN_RUNTIME_NAME" ;;
+    legacy-cu126) JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/$JEVPFN_RUNTIME_IMAGE" ;;
+    blackwell-cu130) JEVPFN_PACKED_ENV="$JEVPFN_RUNTIME_BASE/containers/blackwell-cu130/$JEVPFN_RUNTIME_IMAGE" ;;
     *) echo 'Unknown runtime profile.' >&2; return 2 ;;
 esac
 unset JEVPFN_CONTAINER_PROVIDER JEVPFN_CONTAINER_ID JEVPFN_MONITOR_PYTHON JEVPFN_NVIDIA_SMI

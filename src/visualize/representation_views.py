@@ -47,7 +47,7 @@ def direct_comparison_figures(contrasts):
                 "with that total width; P32 denotes 32 dimensions per text column. Dataset means require five defined "
                 "paired folds; cells average their available dataset means without selecting winners. Gray cells lack "
                 "complete paired evidence. Coverage can differ across cells: the accompanying table retains every "
-                "dataset, recipe and fold. Regression reports percent reduction in mean RMSE relative to embeddings. "
+                "dataset, recipe and fold. Classification shows AUC differences; regression shows R² differences. "
                 "These are descriptive comparisons, not confidence intervals or a best-model selection."
             )
 

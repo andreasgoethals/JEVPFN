@@ -183,7 +183,7 @@ def test_constructor_contracts_and_full_context(monkeypatch, tmp_path):
         "tabpfn.constants": SimpleNamespace(ModelVersion=SimpleNamespace(V3_5="V3_5")),
         "tabicl": SimpleNamespace(TabICLClassifier=Constructor),
         "sap_rpt_oss": SimpleNamespace(SAP_RPT_OSS_Classifier=Constructor),
-        "tabstar.tabstar_model": SimpleNamespace(TabSTARClassifier=Constructor),
+        "tabstar.tabstarv1p1_model": SimpleNamespace(TabSTARv1p1Classifier=Constructor),
     }
     monkeypatch.setattr(models.importlib, "import_module", modules.__getitem__)
     encoder = FoldInput().fit(pd.DataFrame({"n": [1, 2], "c": ["a", "b"]}))

@@ -260,16 +260,22 @@ def _backend(model_id, task, settings, encoder, n_train):
     if model_id == "kumo_tabular":
         return KumoBackend(task, settings, encoder.categorical_)
     if model_id == "tabstar":
+        if settings.get("repositories"):
+            from src.evaluation.tabstar_assets import verified_settings
+
+            repository, assets = verified_settings(settings, task)
+            settings = {**settings, "pretrain_dataset_or_path": repository, "assets": assets}
         _verify_assets(settings)
-        cls = getattr(importlib.import_module("tabstar.tabstar_model"), "TabSTAR" + suffix)
+        cls = getattr(importlib.import_module("tabstar.tabstarv1p1_model"), "TabSTARv1p1" + suffix)
         if not settings.get("pretrain_dataset_or_path"):
             raise ValueError("TabSTAR needs its reviewed staged checkpoint identity")
         return cls(
             device=device,
             random_state=seed,
-            pretrain_dataset_or_path=model_checkpoint_argument(
-                settings["pretrain_dataset_or_path"]
-            ),
+            keep_model=False,  # Loaded adapters survive; transient epoch checkpoints are removed.
+            pretrain_dataset_or_path=(settings["pretrain_dataset_or_path"]
+                if settings.get("repositories") else
+                model_checkpoint_argument(settings["pretrain_dataset_or_path"])),
             output_dir=str(
                 paths.results_dir(
                     "tabstar_training",

@@ -132,6 +132,7 @@ PHASES = (
     "experiment_1",
     "experiment_2",
     "experiment_3",
+    "synthesis",
 )
 
 
@@ -151,6 +152,8 @@ def phase_name(phase: str | None = None) -> str:
 def phase_folder(phase: str) -> str:
     """Stable logical phase names; numbered folders shared by config/notebooks/output."""
     name = phase_name(phase)
+    if name == "synthesis":
+        return "9. synthesis"
     index = (
         int(name.removeprefix("experiment_")) + 3
         if name.startswith("experiment_")

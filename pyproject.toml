@@ -58,7 +58,7 @@ token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  #
 baselines = ["scikit-learn==1.9.1", "catboost==1.2.10"]
 tabicl = ["tabicl==2.2.0", "torch==2.12.1"]
 ag-mm = ["autogluon.multimodal==1.6.1"]  # Separate runtime: Transformers <5.15; never combine with token-audit/embeddings.
-tabstar = ["tabstar==1.1.16", "torch==2.12.1"]
+tabstar = ["tabstar==1.2.2", "transformers==4.57.6", "torch==2.12.1"]
 limix = ["LimiX @ git+https://github.com/limix-ldm-ai/LimiX.git@516bf396333feb3198cf7aff8a6c10421f218e24"]
 kumo = ["structured-data-models @ git+https://github.com/NVIDIA/structured-data-models.git@bd2d55db104679393fcd6afe13305f37e40b5467"]
 contexttab = ["sap-rpt-oss @ git+https://github.com/SAP-samples/sap-rpt-1-oss.git@a0067b3c9db56bc35a6dcab09a9223a3ff0821e0"]

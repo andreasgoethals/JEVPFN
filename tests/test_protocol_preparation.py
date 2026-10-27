@@ -80,6 +80,56 @@ def test_shuffle_preserves_vectors_without_crossing_partitions():
     pd.testing.assert_frame_equal(a, shuffle_feature_block(train, test, seed=42)[0])
 
 
+def test_shuffle_preserves_each_rows_missingness_and_joint_vectors():
+    train = pd.DataFrame(
+        {
+            "p0": np.linspace(0.05, 0.35, 24),
+            "p1": 1 - np.linspace(0.05, 0.35, 24),
+            "score": np.linspace(-4, -0.1, 24),
+        },
+        index=[f"train:{i}" for i in range(24)],
+    )
+    test = pd.DataFrame(
+        {
+            "p0": np.linspace(0.6, 0.9, 24),
+            "p1": 1 - np.linspace(0.6, 0.9, 24),
+            "score": np.linspace(0.1, 4, 24),
+        },
+        index=[f"test:{i}" for i in range(24)],
+    )
+    for frame in (train, test):
+        frame.iloc[::2, :2] = np.nan
+        frame.iloc[::3, 2] = np.nan
+    shuffled = shuffle_feature_block(train, test, seed=42)
+    for original, changed in zip((train, test), shuffled, strict=True):
+        pd.testing.assert_frame_equal(original.isna(), changed.isna())
+        assert list(original.index) == list(changed.index)
+        patterns = original.isna().apply(tuple, axis=1)
+        for pattern in set(patterns):
+            take = patterns.map(lambda value, pattern=pattern: value == pattern)
+            assert sorted(map(tuple, original[take].fillna(-999).to_numpy())) == sorted(
+                map(tuple, changed[take].fillna(-999).to_numpy())
+            )
+        present = changed.p0.notna()
+        np.testing.assert_allclose((changed.p0 + changed.p1)[present], 1)
+    assert not shuffled[0].equals(train)
+    assert shuffled[0].p0.max() < shuffled[1].p0.min()
+    pd.testing.assert_frame_equal(shuffled[0], shuffle_feature_block(train, test, seed=42)[0])
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        pd.DataFrame(columns=["a", "b"]),
+        pd.DataFrame(index=["a", "b"]),
+        pd.DataFrame({"a": [np.nan, np.nan], "b": [1.0, np.nan]}),
+    ],
+)
+def test_shuffle_retains_empty_or_singleton_availability_patterns(frame):
+    for changed in shuffle_feature_block(frame, frame, seed=42):
+        pd.testing.assert_frame_equal(changed, frame)
+
+
 def test_regression_default_view_is_one_direction_not_eleven_features():
     columns = [f"jev__all_text__p_{i}" for i in range(9)] + [
         "jev__all_text__confidence",
@@ -346,6 +396,7 @@ def test_recorded_raw_response_recovers_without_another_call(tmp_path, intended_
 def test_eleven_offline_mappings_share_identical_questions(intended_request):
     from src.jev.provider import semantic_question
     from src.jev.registry import ADDED
+
     catalog = load_yaml("extractors")
     assert len(catalog["candidates"]) == 11 and catalog["enabled"] is False
     original = preview(intended_request, "jev")["body"]["questions"]
@@ -357,7 +408,9 @@ def test_eleven_offline_mappings_share_identical_questions(intended_request):
         elif provider in ADDED:
             assert mapped["native_question_semantics"] == original
             assert semantic_question(mapped["arguments"]["question"]) == original["semantic"]
-            assert mapped["arguments"]["state"] == json.loads(intended_request.payload_json)["state"]
+            assert (
+                mapped["arguments"]["state"] == json.loads(intended_request.payload_json)["state"]
+            )
         else:
             body = mapped.get("body", mapped.get("arguments"))
             assert body["questions"] == original
