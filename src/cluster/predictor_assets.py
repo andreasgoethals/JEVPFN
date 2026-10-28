@@ -3,8 +3,11 @@
 import argparse
 import json
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
+
+import httpx
 
 from src.cluster.freeze import check_if_present
 from src.evaluation.tabstar_assets import asset_manifest, manifest_path
@@ -13,6 +16,23 @@ from src.utils.config import load_yaml
 from src.utils.files import atomic_text
 from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
+
+
+def _download_snapshot(download, *, repo_id, revision, cache_dir):
+    """Retry interrupted public downloads using the same pinned cache, at most 3 times."""
+    for attempt in range(1, 4):
+        try:
+            return download(repo_id=repo_id, revision=revision, cache_dir=cache_dir)
+        except httpx.TransportError as exc:
+            # Do not retry HTTP status, configuration or integrity errors. Reusing
+            # the Hub cache resumes valid partial downloads without force_download.
+            if attempt == 3:
+                raise
+            delay = 5 * attempt
+            print(json.dumps({"event": "predictor_download_retry", "repository": repo_id,
+                              "attempt": attempt, "error_type": type(exc).__name__,
+                              "delay_seconds": delay}), flush=True)
+            time.sleep(delay)
 
 
 def stage_tabstar(*, execute=False, download=None):
@@ -39,7 +59,8 @@ def stage_tabstar(*, execute=False, download=None):
         cache = root / "huggingface" / "hub"
         assets = {}
         for repo in settings["repositories"].values():
-            folder = Path(download(repo_id=repo["model"], revision=repo["revision"], cache_dir=cache))
+            folder = Path(_download_snapshot(
+                download, repo_id=repo["model"], revision=repo["revision"], cache_dir=cache))
             expected = cache / ("models--" + repo["model"].replace("/", "--"))
             if folder != expected / "snapshots" / repo["revision"]:
                 raise ValueError("Snapshot downloader returned an unexpected cache path")

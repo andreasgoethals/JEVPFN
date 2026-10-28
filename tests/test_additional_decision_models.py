@@ -30,6 +30,36 @@ def test_owner_selected_roster_and_delivery():
     assert all(not v["enabled"] for v in candidates.values())
 
 
+@pytest.mark.parametrize("logical_device", [0, 2])
+def test_decision3_receives_indexed_logical_cuda_device(monkeypatch, tmp_path, logical_device):
+    from types import SimpleNamespace
+
+    from src.jev.extended_runtimes import ExtendedRuntime
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "5,8,9")
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
+        cuda=SimpleNamespace(current_device=lambda: logical_device)))
+    calls = []
+    model = object()
+
+    def load(folder, **kwargs):
+        # D3 calls torch.cuda.set_device, which rejects an indexless 'cuda'.
+        if kwargs["device"] == "cuda":
+            raise ValueError("Expected a torch.device with a specified index")
+        calls.append((folder, kwargs))
+        return model
+
+    monkeypatch.setitem(sys.modules, "transformers", SimpleNamespace(
+        AutoModel=SimpleNamespace(from_pretrained=load), AutoConfig=None,
+        AutoModelForCausalLM=None))
+    runtime = ExtendedRuntime("decision3", tmp_path, SimpleNamespace())
+    assert runtime.model is model
+    assert calls == [(str(tmp_path), {
+        "local_files_only": True, "trust_remote_code": True,
+        "device": f"cuda:{logical_device}", "verify": "fast", "batch_size": 1,
+    })]
+
+
 @pytest.mark.parametrize("case", ["valid30", "multitoken", "alias_id", "duplicate", "cue", "empty"])
 def test_sii_publisher_label_readout_checked_before_weights(case):
     from types import SimpleNamespace

@@ -89,7 +89,9 @@ class ExtendedRuntime:
                 str(folder),
                 local_files_only=True,
                 trust_remote_code=True,
-                device="cuda",
+                # D3 calls set_device: an indexless 'cuda' is invalid. Use the
+                # current logical index after Slurm's CUDA_VISIBLE_DEVICES mapping.
+                device=f"cuda:{torch.cuda.current_device()}",
                 # verify_checkpoint already checks the complete immutable inventory;
                 # do not rehash 50+ GB on an allocated GPU. Native fast verification
                 # still checks the publisher runtime's source/shape manifest.

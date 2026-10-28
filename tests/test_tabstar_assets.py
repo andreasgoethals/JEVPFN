@@ -3,12 +3,66 @@
 import copy
 import os
 
+import httpx
 import pytest
 
 from src.cluster import predictor_assets
 from src.evaluation.tabstar_assets import asset_manifest, manifest_path, verified_settings
 from src.utils import paths
 from src.utils.config import load_yaml
+
+
+@pytest.mark.parametrize("failures", [1, 2])
+def test_download_resumes_transport_failures_in_same_pinned_cache(tmp_path, monkeypatch, failures):
+    calls, waits = [], []
+    monkeypatch.setattr(predictor_assets.time, "sleep", waits.append)
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        if len(calls) <= failures:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response")
+        return tmp_path
+
+    kwargs = {"repo_id": "publisher/model", "revision": "fixed-sha", "cache_dir": tmp_path}
+    assert predictor_assets._download_snapshot(download, **kwargs) == tmp_path
+    assert calls == [kwargs] * (failures + 1)
+    assert waits == [5, 10][:failures]
+
+
+def test_failed_staging_is_bounded_and_never_writes_acceptance(isolated_output, monkeypatch):
+    monkeypatch.setattr(predictor_assets, "check_if_present", lambda: {"frozen": False})
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    waits, calls = [], []
+    monkeypatch.setattr(predictor_assets.time, "sleep", waits.append)
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        raise httpx.RemoteProtocolError("Connection reset")
+
+    with pytest.raises(httpx.RemoteProtocolError, match="Connection reset"):
+        predictor_assets.stage_tabstar(execute=True, download=download)
+    assert len(calls) == 3 and calls == [calls[0]] * 3
+    assert waits == [5, 10]
+    assert not manifest_path().exists()
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_http_rejections_are_not_download_retries(tmp_path, monkeypatch, status):
+    calls, waits = [], []
+    monkeypatch.setattr(predictor_assets.time, "sleep", waits.append)
+    request = httpx.Request("GET", "https://example.test/model")
+    error = httpx.HTTPStatusError("Rejected", request=request,
+                                 response=httpx.Response(status, request=request))
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        raise error
+
+    with pytest.raises(httpx.HTTPStatusError) as caught:
+        predictor_assets._download_snapshot(
+            download, repo_id="publisher/model", revision="fixed-sha", cache_dir=tmp_path)
+    assert caught.value is error
+    assert len(calls) == 1 and not waits
 
 
 @pytest.fixture

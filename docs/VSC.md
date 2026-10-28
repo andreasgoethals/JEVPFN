@@ -1,8 +1,8 @@
 # VSC operations
 
 Use this guide for execution; use README for the experiment design and
-AGENTS_MEMORY for dated observations. **Five decision runtimes and three encoders have
-bounded B200 passes; the five added decision runtimes still await their tests.**
+AGENTS_MEMORY for dated observations. **Nine decision runtimes and three encoders have
+bounded B200 passes; Decision3 and the new TabSTAR runtime still need inference tests.**
 Final acceptance requires the complete frozen campaign and review.
 
 ## Storage and hardware
@@ -216,31 +216,25 @@ and retains weights, token batches, caches and logs. Cheap checks run again;
 the previous failure is never relabelled as a pass. After a disconnect, resume
 with `--all --execute --watch` without `--restart`.
 
-The 27 October setup completed 151/176 steps, with five token-merge timeouts and
-20 blocked descendants. All 100 count partitions finished; no recount is needed.
-The former merge did individual random database lookups for counts and large token
-blobs. It now bulk-inserts counts, scans prepared blobs once per partition in key
-order, verifies them in bounded batches, and keeps a covering key index inside the
-same SQLite file, analyzed for completeness queries. A 256 MiB page cache and a 24-hour merge
-allowance apply to added providers; logs report checksum/coverage, copied inputs and
-elapsed partition time. The single merge transaction still rolls back on conflicts
-or incomplete/altered inputs. Finished partition receipts and hashes permit safe
-resume without copying the monolithic prefix again. These are CPU-only jobs.
+The 28 October download completed 174/176 steps. All ten token merges passed; the
+earlier five merge timeouts are resolved. Nine open-weight contracts/pilots passed.
+Decision3 failed before inference because its publisher runtime requires an explicit
+CUDA index. The adapter now uses the current logical device (respecting Slurm's visible
+device mapping). This fix does not change questions, token identities or images.
 
-After publishing/pulling the fix with JEVPFN jobs idle, repeat only the five unfinished
-provider branches. Export the roots and activate the CPU environment as above, then:
+After publishing/pulling with JEVPFN jobs idle, repeat the remaining Decision3 branch.
+Export the roots and activate the CPU environment as above, then:
 
 ```bash
 "$JEVPFN_PYTHON" -u -m src.cluster.setup_extractors \
-  --provider h2o --provider sii --provider kev \
-  --provider decision3 --provider nimble --restart --execute --watch
+  --provider decision3 --restart --execute --watch
 ```
 
-This creates an 87-step diagnostic attempt reusing sealed images and all completed
-partitions, and retains the complete previous attempt inside the same receipt.
+This creates a targeted diagnostic attempt reusing the sealed image and completed
+token counts, and retains the complete previous attempt inside the same receipt.
 It repeats CPU/storage prerequisites and verifies cached inputs before submitting the
-five merges and their GPFS/B200 descendants. After a disconnect, use the same provider
-list with `--execute --watch` and omit `--restart`; the `--all` wrapper would select a
+GPFS/B200 descendants. After a disconnect, use `--provider decision3 --execute --watch`
+and omit `--restart`; the `--all` wrapper would select a
 different provider list. The final clean 0A campaign still tests all providers/encoders.
 
 The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
@@ -523,11 +517,18 @@ TabSTAR selects v1.1 through package 1.2.2, not the original model interface. It
 classification/regression snapshots and E5 dependency are pinned in the model catalog.
 The CPU stager writes checksummed offline Hugging Face snapshots and aliases, with one
 predictor manifest; it neither loads a model nor modifies tracked configuration.
+The 28 October download records a disconnected public checkpoint transfer, before
+container/GPU tests. Staging now retries transport failures at most three times using
+the same pinned Hub cache; valid downloaded files are reused. HTTP rejections and
+integrity errors are not retried, and incomplete staging never creates an acceptance
+manifest. Rerun the chain below without removing the cache.
 Do not mix TabSTAR's Transformers 4.57.6 environment with the decision-tokenizer environment.
 Its new `tabstar-v1p1` container path preserves old images. Once JEVPFN jobs are idle,
 and before a frozen stage, run in the VSC Bash terminal:
 
 ```bash
+(
+set -euo pipefail
 cd "$VSC_DATA/JEVPFN"
 mkdir -p "output_JEVPFN/3. experiment_0/logs"
 sbatch --wait scripts/slurm/stage_tabstar.slurm
@@ -535,6 +536,7 @@ sbatch --wait scripts/slurm/experiment_0_container_build.slurm tabstar new /lust
 sbatch --wait scripts/slurm/experiment_0_scratch_stage.slurm tabstar
 sbatch --wait scripts/slurm/experiment_0_storage_gpfs.slurm tabstar
 sbatch --wait scripts/slurm/experiment_0_predictor.slurm tabstar tabstar
+)
 ```
 
 These are prerequisite-ordered jobs for this one runtime; the extractor/encoder graph

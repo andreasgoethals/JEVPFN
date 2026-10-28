@@ -2,6 +2,19 @@
 
 ## 28-10-2026
 
+- Fix Decision3's publisher device argument: use the current indexed logical CUDA
+  device, respecting Slurm visibility. Reproduced the original failure locally and
+  added regression coverage. The corrected adapter still needs its B200 rerun.
+- Retry interrupted TabSTAR public snapshot downloads at most three times, reusing
+  the pinned cache. HTTP rejections/integrity errors still stop; failed staging cannot
+  create an acceptance manifest. No weights or images were deleted.
+- Review the latest VSC evidence: 174/176 setup steps complete, all ten token merges
+  passed with zero overflow, nine B200 decision contracts/pilots and three encoder
+  contracts passed. Decision3 failed before inference; its pilot was blocked.
+  TabSTAR staging separately lost its network connection. Update targeted recovery
+  commands and preserve completed work for the eventual frozen campaign.
+- Local validation: 1,097 tests passed, 22 platform/optional-runtime skips; Ruff,
+  dependency and diff checks passed. No remote jobs, paid calls or Git publication.
 - Sync TEMPLATE.md: speed-first VSC CPU sharding/parallel submission and explicit library setup; no experiment code or run settings changed.
 
 ## 27-10-2026

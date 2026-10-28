@@ -6,15 +6,15 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 27 October 13:53 download confirms successful recovery, CPU/Lustre checks,
-five GPFS working-set checks, B200 contracts and 18-dataset pilots for Liquid,
-Strands, Perplexity, Clef and Intern, plus all three embedding encoder contracts.
-All ten providers finished their token partitions. The five added providers' final
-merges exhausted four-hour limits, blocking their staging/storage/GPU tests.
-The merge now uses bulk count inserts, sequential prepared-token scans, bounded
-batches and a compact lookup index; checksums, conflict detection and atomic rollback
-remain required. Added-provider merges have a 24-hour allowance and progress logs.
-These fixes still need the VSC rerun in [VSC](docs/VSC.md). Preserve existing work.
+The 28 October 09:39 download contains 174 completed setup steps out of 176.
+All ten exact-token audits merged successfully, with zero overflowing inputs.
+Nine open-weight decision models passed B200 contracts and bounded 18-dataset pilots;
+all three embedding encoder contracts also passed. Decision3 failed before inference:
+its adapter supplied an indexless CUDA device. That argument is now corrected locally;
+its B200 contract and blocked pilot still need rerunning. Separately, TabSTAR v1.1's
+checkpoint download lost its network connection; bounded download recovery is now
+implemented, but its container/GPU tests have not run. Use the targeted commands in
+[VSC](docs/VSC.md) and preserve completed work.
 Token audits use ten independent CPU partitions per provider and a strict merge, reusing
 matching committed counts. Bounded B200 passes do not certify full-dataset extraction
 or final acceptance. Source identities are recorded; the final frozen run repeats all gates.
@@ -29,7 +29,7 @@ small manifests remain on DATA. Committed feature/prediction databases publish p
 and at job exit; predictor staging also restores durable completed folds and predictions
 so a recreated scratch workspace resumes them. Scratch is not a backup. No new
 GPFS project allocation is required. Existing H100 images remain preserved; all A100
-routes are excluded. The five added decision runtimes still need B200 validation. See [VSC](docs/VSC.md).
+routes are excluded. Decision3 still needs B200 inference validation. See [VSC](docs/VSC.md).
 
 The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
 Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
