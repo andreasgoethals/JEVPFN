@@ -1,618 +1,343 @@
-# Andreas' repository template
+# Research repository template
 
-The structure and rules every one of my research repositories starts from.
+Andreas Goethals · KU Leuven · machine learning for tabular data
+Contact: andreas.goethals@kuleuven.be · [Canonical template](https://github.com/andreasgoethals/0.-Template)
 
-    Author   Andreas Goethals <andreas.goethals@kuleuven.be>
-    Context  PhD research, KU Leuven — machine learning on tabular data
-    Cluster  KU Leuven VSC (wICE login service, wICE and Mindwell compute)
-    Source   https://github.com/andreasgoethals/0.-Template
+**A starting point, not a compliance contract.** Keep project-specific decisions in the project's
+README/docs. Adapt deliberately and explain deviations. This file contains the portable policy;
+copying it into an existing repository does not authorize moving data or changing active campaigns.
 
-**A starting point, not a contract.** A project that grows past it is fine, and deviating where
-the work needs it is fine — deviate *on purpose* rather than by drift, and say so when you do.
-What is written here is what has been worth having in every project so far. Anything
-project-specific belongs in `README.md` or another `docs/` file, not here.
+## Layout
 
-**Everything in the repository is explained below, one chapter per folder.**
-
-```
-├── config/                  YAML configuration, grouped by experiment
-│   ├── experiment0/         VSC validation; example.yaml to replace
-│   └── experiment1/, ...    research experiments, added as needed
+```text
+├── config/experiment0/example.yaml    replace with validation configs
 ├── data/
-│   ├── raw/                 inputs. Never modified, never committed.
-│   └── processed/           generated cache, rebuildable
-├── docs/                    ONLY .md files, names in CAPITALS
-│   ├── TEMPLATE.md          this file
-│   ├── CHANGELOG.md         what changed, newest first
-│   ├── AGENTS_MEMORY.md     the runs done, and the dead ends
-│   └── VSC.md               how THIS project runs on the VSC cluster
-├── notebooks/               thin: all logic imported from src/
-│   ├── experiment0/         validation reports; example_analysis.ipynb to replace
-│   └── experiment1/, ...    corresponding research reports
-├── output/                  generated reports, logs and results
-│   ├── All_Results.md       every notebook's printed summary
-│   ├── CAPTIONS.md          one shared paper-caption file
-│   ├── experiment0/
-│   │   ├── figures/<notebook>/  one PDF per figure
-│   │   ├── logs/            the debugging record (.log only)
-│   │   ├── manifests/       what a run did
-│   │   └── results/         the numbers a run produced
-│   └── experiment1/, ...    same organization; optional stages inside an experiment
-├── scripts/                 the experiments themselves
-│   └── slurm/               the .slurm and .sh files that submit them
+│   ├── raw/                          immutable inputs, outside Git
+│   └── processed/                    reusable, rebuildable cache
+├── docs/
+│   ├── TEMPLATE.md                   this policy
+│   ├── VSC.md                        project commands, storage and measured settings
+│   ├── CHANGELOG.md                  short dated changes
+│   └── AGENTS_MEMORY.md              run evidence and reusable lessons
+├── notebooks/experiment0/example_analysis.ipynb
+├── output/
+│   ├── All_Results.md                all final notebook summaries
+│   ├── CAPTIONS.md                   all paper captions
+│   ├── manifests/submissions/        generated submission receipts; preserve
+│   └── experiment0/                  add experiment1, experiment2, ... as needed
+│       ├── figures/<notebook>/       PDF figures and report metadata
+│       ├── logs/                     compact .log files
+│       ├── manifests/                resolved configuration and provenance
+│       └── results/                  retained numerical results
+├── scripts/slurm/job.slurm           experiment launcher; adapt resource/runtime TODOs
 ├── src/
-│   ├── data/loaders.py      loading and preprocessing
+│   ├── data/loaders.py               project-defined loading/preprocessing
 │   ├── utils/
-│   │   ├── paths.py         every path in the project
-│   │   ├── atomic.py        replace complete text reports and metadata
-│   │   ├── clean_run.py     wipe the previous run
-│   │   ├── run_notebooks.py run every notebook, rebuild both summaries
-│   │   ├── update_library.py
-│   │   ├── logging_setup.py
-│   │   └── config.py        reading config/
-│   ├── visualize/
-│   │   ├── style.py         A4 sizes and print settings; the look is the project's
-│   │   └── figures.py       FigureSaver
-│   └── ...                  more as the project needs (train/, eval/, models/)
-├── tests/
-├── _template/               setup/adoption guide and initializer; remove in new projects
-├── vsc-library/             submodule: HPC/VSC guides and templates. READ-ONLY.
-├── .vscode/settings.json
-├── .github/dependabot.yml   proposes VSC submodule pin updates
-├── .gitattributes  .gitignore  .gitmodules
-├── AGENTS.md                the rules for every agent
-├── CLAUDE.md                one line: `@AGENTS.md`
-├── LICENSE
-├── README.md
-└── pyproject.toml
+│   │   ├── paths.py                  storage policy and path resolution
+│   │   ├── atomic.py                 complete-file text replacement
+│   │   ├── clean_run.py              preview/cleanup of disposable output
+│   │   ├── run_notebooks.py          notebook subprocesses and aggregate reports
+│   │   ├── submit_jobs.py            resumable submission of independent ready jobs
+│   │   ├── logging_setup.py          console and .log output
+│   │   ├── update_library.py         inspect/update one registered library pin
+│   │   └── config.py                 project-defined YAML loader
+│   └── visualize/
+│       ├── style.py                  shared project style, A4 dimensions
+│       └── figures.py                PDF FigureSaver
+├── tests/                           behavioral tests, not template compliance
+├── vsc-library/                     pinned read-only reference
+├── _template/                       initializer and adoption guide; remove after setup
+├── .github/dependabot.yml            VSC pin-update proposals
+├── .vscode/settings.json             imports, notebooks, tests and library protection
+├── .gitignore  .gitattributes  .gitmodules
+└── AGENTS.md  CLAUDE.md  README.md  LICENSE  pyproject.toml
 ```
 
-New `src/` subfolders need no permission — that is the obvious place to grow.
-
----
+`__init__.py` files mark packages; `.gitkeep` retains empty directories. Create extra source
+packages as needed. `checkpoints/`, `runtimes/` and `cache/` are generated asset namespaces,
+not tracked scaffolding; their cluster locations are on PROJECT.
 
 ## `config/`
 
-The project's YAML configuration. Use experiment folders as the default below; inside each,
-files may be flat or nested, and a YAML may describe one run or a sweep. No fixed schema.
-
-`experiment0/example.yaml` is illustrative; replace it with real validation configs.
+YAML files may describe runs or sweeps and may be flat or nested within an experiment.
+Schema and loader are project-defined. Save the resolved configuration with each run.
 
 ### Experiments
 
-Projects commonly contain **`experiment1`, `experiment2`, ...**. Organize **`config/`,
-`notebooks/` and `output/` by experiment first**, using the same names across all three.
-For example, `config/experiment1/baseline.yaml`, `notebooks/experiment1/comparison.ipynb`
-and `output/experiment1/{logs,manifests,results,figures}/`. Add only experiments that exist.
+Default to matching **`experiment0`, `experiment1`, `experiment2`, ...** folders under
+**`config/`, `notebooks/` and `output/`**, with experiment first. Add only experiments that exist.
+Shared `general/` folders, flat small projects and established layouts remain valid deviations.
+Preserve existing results, run identities and resume paths when adopting this organization.
 
-**Reserve `experiment0` for VSC validation**, before expensive research runs. Cover all
-relevant project behavior on the actual target environment: inputs/configs, CPU/GPU paths,
-numerical/output correctness, resource use, and checkpoint/resume when applicable. Local
-tests or a successful Slurm exit alone do not establish that these checks passed.
-
-Split validation into **0a, 0b, ...** when useful, for example `experiment0/0a/` for smoke
-checks and `experiment0/0b/` for broader validation. Mirror stages across the three trees;
-outputs then live at `output/experiment0/0a/{logs,manifests,results,figures}/`. Stage purposes
-are project-defined. Parallelize independent checks and gate only real dependencies.
-Record commands, coverage and pass criteria in `docs/VSC.md`, evidence in the experiment's
-output, and run outcomes in `docs/AGENTS_MEMORY.md`. Revalidate affected behavior after changes.
-
-**This is a guideline, not a compliance rule.** Shared `general/` folders, a flat small project,
-different stage naming or an established output layout may be sensible; explain the choice.
-Keep existing results and resume paths intact when adopting it. The shipped synthetic notebook
-demonstrates reporting only; it is not a completed VSC experiment 0.
-
----
+**Experiment 0 is VSC validation**, before expensive research: exercise relevant input/config,
+CPU/GPU, numerical/output, resource and recovery behavior on the actual target environment.
+Split into `experiment0/0a/`, `experiment0/0b/`, ... as useful, mirroring stages across all three
+trees. Define coverage, pass criteria and commands in `docs/VSC.md`; keep evidence with outputs
+and outcomes in agent memory. Revalidate affected behavior after changes. Local tests, a
+synthetic example notebook or Slurm exit 0 alone do not establish VSC acceptance.
 
 ## `data/`
 
-- **`raw/`** — the inputs. Never modified, never committed (licences, size), and never deleted by
-  any tool in the repository.
-- **`processed/`** — the generated cache. Rebuildable from `raw/`, so losing it costs time and
-  nothing else.
-
-Both are gitignored except a tracked `.gitkeep`, so a fresh clone still has the directories.
-
-A project that needs model weights adds **`checkpoints/`** at the root. `paths.checkpoints_dir()`
-already resolves it to project storage on the cluster, `.gitignore` already excludes it, and
-`clean_run` already refuses to touch it — weights are either downloaded from upstream or cost a
-training run to reproduce.
-
----
+- `raw/`: immutable datasets; never commit, force-add, clean automatically or paste private rows into docs.
+- `processed/`: reusable derived inputs; delete only when deliberately rebuilding them.
+- Weights and resumable checkpoints belong in `checkpoints/`; reusable caches in `cache/`.
+  Use `paths.py` so these resolve to PROJECT on VSC. Keep assets outside Git and retain licences.
 
 ## `docs/`
 
-`.md` files only, names in CAPITALS, so a documentation file is recognisable from its name.
+Use Markdown and uppercase filenames. `TEMPLATE.md` is generic; the other files describe this project.
 
-### `TEMPLATE.md`
+- **`CHANGELOG.md`**: newest date first, `DD-MM-YYYY`; one concise bullet per substantive change.
+  Be as short as possible while remaining complete; large changes may need more explanation.
+- **`AGENTS_MEMORY.md`**: read before working. Keep compact run records (config/revision, job IDs,
+  outcome, key result/evidence path), failed attempts and other reusable lessons. Record uncertainty;
+  submission is not completion. Keep it organized, newest first, without losing useful evidence.
+- **`VSC.md`**: fill in this project's paths, runtime specifications, quotas, cluster/partition,
+  measured resources, validation gates, submissions, publication, resume, cleanup and backup steps.
+  Shared infrastructure references remain in the read-only VSC Library.
 
-This file. Copied in from the template. Generic rule changes belong at the source, not here.
+### VSC storage policy
 
-### `CHANGELOG.md`
+These are **our project choices**, informed by VSC guidance, not universal VSC storage defaults.
 
-One chapter per date, `DD-MM-YYYY`, **newest at the top**. One bullet per change, **as short as
-possible** — what changed, plus the why only when it is not obvious from the what. Most fit on one
-line; a genuinely large change can take more, but no longer than it has to be. The detail belongs in
-the commit, and a changelog nobody skims is a changelog nobody reads.
+| Location | Project policy |
+|---|---|
+| **DATA** | Actual Git checkout including `.git`, code, configs, environment specifications and compact operational logs/manifests/reports. Clone, pull and submodule updates happen here. |
+| **PROJECT** | Persistent large datasets, weights, retained checkpoints/results, reusable caches, project venvs/Conda environments and container images. Outside Git; configurable allocated roots; no fallback to DATA. |
+| **SCRATCH** | Disposable isolated job workspaces, intermediates, temporary caches and offloading. Never the sole copy of required inputs, environments, results or checkpoints. |
 
-### `AGENTS_MEMORY.md`
+- **Freeze the checkout used by active or queued jobs**, including submodule pins and environment
+  versions. Use a separate DATA checkout for a new revision, or wait for all consumers to finish.
+- Set `<PROJECT_UPPER>_PROJECT_ROOT` or `VSC_PROJECT_ROOT` to an allocated **shared root**;
+  the resolver appends the project name. Legacy `*_STAGING_ROOT` names remain aliases.
+  Set roots in the job or pass them explicitly; Leuven does not inherit arbitrary shell exports.
+  Missing, invalid or unwritable large-asset destinations fail instead of redirecting writes.
+- Use **GPFS for intensive Mindwell I/O, Lustre for wICE**. Suitable native PROJECT assets may
+  be used directly; no mandatory full copy to scratch. If persistent assets are cross-mounted,
+  stage only the required working set to native storage and verify it before compute.
+  Check node accessibility, particularly GPFS access from older wICE nodes.
+- Isolate writable databases/caches per job, or use a tested filesystem-compatible locking and
+  publication protocol. Never copy a live SQLite database as an ordinary file. Compact formats
+  reduce file counts but do not make concurrent writes safe automatically.
+- **Prefer versioned immutable Apptainer/SIF runtimes on PROJECT**, with the project environment
+  inside the image where practical. A PROJECT venv/Conda environment is an allowed alternative.
+  Recreate at the destination from recorded specifications; do not move an installed venv.
+  Validate real CPU/GPU behavior before retiring originals, and retain versions needed for resume.
+  Build/download caches go to scratch; keep required images and reusable assets on PROJECT.
+- Check **byte and file-count quotas** on every relevant tier before building/staging/running.
+  Personal DATA is backed up; verify the allocation's PROJECT protection separately and keep
+  independent backups of irreplaceable outputs. Git and scratch are not those backups.
+- Publish required results/checkpoints to persistent storage **periodically and at completion**;
+  verify content and write the completion pointer last. A normal-exit trap is insufficient.
+  Record scratch workspace ownership and publication evidence in DATA manifests. Remove only the
+  exact owned workspace after verified publication **and** confirmation that no active, queued
+  or resumable job needs it. Failed/incomplete work stays identified for recovery, not forgotten.
+  Review completed workspaces after each campaign. Never wipe a shared scratch root or rely on
+  site cleanup/periodic touching to manage it; node-local scratch can disappear at job end.
 
-What is worth carrying between sessions. The changelog records edits to the repository; this
-records **experience**, and it has two halves:
+### Speed-first execution: Open OnDemand and Slurm
 
-- **Runs** — a table, one row per cluster run: date, the config or arm, the outcome (`done` /
-  `walltime` / `OOM` / `crashed` / `diverged`), and one line of notes with the headline number or
-  the output path. Projects iterate over dozens of runs, several of which do not work, and
-  *"have we already tried that configuration?"* is a question nobody should answer by re-reading
-  the experiment's results. A table because it stays scannable at forty rows.
-- **Dead ends** — four lines each: **Tried**, **Result**, **Why**, **Instead**. For anything that
-  cost more than a couple of minutes, including what you eventually fixed: the fix is one changelog
-  line, the dead end was the hour.
+Optimize **elapsed time to verified results**, not token usage or minimum credits, within the
+authorized budget. Open OnDemand is an interface to scheduled resources; an editor allocation
+does not add queue priority. Submit campaigns as batch jobs, keep heavy work off login nodes,
+and stop unused interactive allocations.
 
-Newest first, `DD-MM-YYYY`, and **as short as possible without losing useful evidence**. An agent reads it
-*before* starting and never deletes an entry: a run you would otherwise repeat and a dead end you
-already paid for are both evidence.
+- **Submit independent ready jobs together, with no artificial concurrency limit by default.**
+  Use `--array=0-9`, not a percentage throttle. No application pool, `--wait`, dependency or
+  small batch chosen solely to serialize independent work. Optional `%N`/other throttles are
+  for explicit user requests or a proposed, evidence-backed storage/service/correctness limit.
+- Preserve genuine preparation/validation gates, training-before-evaluation and producer/consumer
+  dependencies. Use same-cluster `afterok` where suitable; verify cross-cluster hand-offs explicitly.
+- Especially split separable CPU tests/evaluations: ten balanced roughly two-hour jobs can replace
+  one twenty-hour job. Preserve scientific splits/seeds and exact shard coverage; validate merges.
+  Batch tiny items to amortize startup. Two hours is an example, not a walltime rule.
+- **Slurm/site limits** govern available resources, priority, account/QoS running resources,
+  submitted pending+running jobs and array size. Inspect live limits; do not hard-code a universal
+  cap. When submission capacity is full, automatically refill as slots become available.
+  Split plans into site-admissible arrays with stable work IDs; do not split by an arbitrary
+  desired number of running jobs. `%N` does not reduce the submitted-job count.
+- Request measured CPUs, RAM, GPUs and realistic walltime **per task**. Short suitable jobs can
+  backfill; oversized allocations can queue longer. Worker processes × numerical threads must
+  fit the allocation; more Slurm tasks/GPUs do not parallelize code that cannot use them.
+- Give shards distinct outputs and temporary paths; use one validated merge writer. Measure
+  queue/setup/run/merge time and I/O. For a demonstrated bottleneck, explain evidence and propose
+  a targeted limit. Preserve successful work; never duplicate a pending or ambiguously submitted job.
 
-The run table starts empty. Record the new project's runs and dead ends as work begins.
+The template's `submit_jobs.py` has no running-job cap. Its **explicit site submission ceiling**
+is a queue-admission setting, verified for the supplied user/account/QoS/cluster scope, not a
+project speed preference. It polls every 60 seconds while full/unavailable, records accepted IDs,
+and resumes without resubmitting them. RPCs are serialized only to record acceptance safely;
+jobs are not awaited. The plan contains ready `sbatch` argument lists, with no shell evaluation.
+Preview is default; `--submit` requires authorization. Unthrottled arrays split to available
+submission slots, preserving their original task IDs; IDs must fit the site's MaxArraySize.
+Declare arrays in the plan, not hidden script/environment defaults. Select work from a stable
+task-ID manifest, never a chunk's `SLURM_ARRAY_TASK_COUNT`/`MIN`/`MAX`, which change when split.
+Explicitly throttled arrays wait for whole-array admission; oversized ones require a reviewed
+split so their requested running limit is not silently multiplied.
+Broader association/partition limits may still reject admission: definite capacity refusals retry;
+generic QoS/resource errors or uncertain acceptance stop for reconciliation, never blind retries.
+Keep the submitter alive while filling the queue; restart with the same plan/receipt after interruption.
 
-### `VSC.md`
+`run_notebooks.py` uses available CPUs (and Slurm's per-task budget), with one numerical thread
+per notebook by default; `--threads` and optional lower `--workers` share that budget. This is
+**allocation safety**, not a cap on independent Slurm jobs. Its 1,800-second per-notebook timeout
+is adjustable with `--timeout`. There is no four-worker default.
 
-How **this** project runs on the KU Leuven VSC cluster: which partitions and walltime limits it
-uses, how to submit, how to resume a job that outlives the walltime, and how to get results back.
-Built from the VSC documentation in `vsc-library/`, but written about this project.
-
-**Storage — two tiers.** On both, everything lives inside a folder named after the project.
-
-| tier | path | holds |
-|---|---|---|
-| **project storage** | `<configured staging root>/<Project>/` | big files: datasets, checkpoints, caches, **`output/<experiment>/results/`** |
-| **personal data** | `$VSC_DATA/<Project>/` | the repository, and the rest of `output/` |
-
-**Personal DATA is backed up; verify the allocation-specific project-storage protection policy.** They differ in size and in convenience: `$VSC_DATA` is only 75 GiB but you
-can browse it directly, while project storage is large but has to be pulled down locally first
-(PowerShell, `scp`/`rsync`) before you can look at anything in it. So the big, rarely-read things
-go to project storage and everything you actually want to open stays on `$VSC_DATA`. Project
-storage also has a **low inode budget** — few big files, not thousands of small ones.
-
-Set `<PROJECT_UPPER>_STAGING_ROOT` (or `VSC_STAGING_ROOT`) to the allocated storage
-directory; the resolver appends the project name. On VSC, missing configuration raises an
-error rather than guessing an allocation. Locally, unset roots use the repository;
-relative overrides are resolved against its root.
-Set cluster overrides inside the job or its sourced project environment file: Leuven does
-not propagate arbitrary exports from the submission terminal. Use a login-shell Bash script
-(`#!/bin/bash -l`) and load the target node's compatible modules explicitly.
-
-`$VSC_SCRATCH` is purged after 30 days **without access**, and `mv` and timestamp-preserving
-`rsync` do not count as an access. Do not rely on outbound internet from compute nodes;
-stage dependencies using the current VSC guidance. Any run that can exceed the walltime must be resumable,
-writing its state pointer **last** so a job killed mid-write points at the previous complete
-checkpoint.
-
-#### Speed-first execution: Open OnDemand and Slurm
-
-**Optimize elapsed time to verified results, not minimum token usage or compute credits.**
-Use the VSC's parallel capacity, especially for CPU tests, preprocessing and evaluation.
-Extra orchestration and resources are worthwhile when they shorten turnaround within the
-approved budget. This is a project preference, not permission to submit unapproved work.
-
-**Open OnDemand is an interface, not extra compute capacity or queue priority.** Its login
-shell is a shared login node; interactive apps run inside scheduled allocations. Use an editor
-session for editing/debugging and submit long campaigns as batch jobs, rather than running
-them serially inside that session. End unused allocations; closing a browser tab is not a
-cancellation. See [VSC's interactive-app guidance](https://docs.vscentrum.be/compute/portal/ondemand/interactive-apps.html).
-
-- **Split independent CPU work by default.** Prefer ten balanced roughly two-hour jobs over
-  one twenty-hour job when the work is separable. Partition datasets, folds, seeds, configs
-  or test IDs exactly once; preserve scientific splits and seeds. Check the shard union for
-  missing/duplicate work and merge only validated results. Balance by measured duration,
-  not just item count. Explain any necessary serial stage. Two hours is an example, not a
-  fixed target or a promise about queue time.
-- **Submit ready work together after a representative preflight.** Prefer arrays for similar
-  resource needs; separate CPU/GPU/memory classes. `--array=0-9%10` makes ten tasks eligible
-  concurrently; the application must use `SLURM_ARRAY_TASK_ID` to select its shard. Do not
-  launch the whole workload ten times. Choose the highest useful concurrency allowed by
-  the account/QoS and measured I/O/RAM limits, not an arbitrary small cap. Array elements
-  count toward job limits; `%N` limits running tasks, not submitted ones. Submit bounded
-  waves if the submission limit is reached. [Slurm arrays](https://slurm.schedmd.com/job_array.html).
-- **Minimize queue + setup + execution + merge time.** Request realistic walltime with
-  measured setup/checkpoint margin, not the partition maximum. Shorter suitable jobs can
-  backfill gaps; never under-request time or memory just to queue sooner. Batch very short
-  work items together so startup and filesystem overhead do not dominate. Compare eligible
-  wICE/Mindwell CPU partitions using actual availability and compatible environments, not
-  hardware names alone. [Backfill](https://slurm.schedmd.com/sched_config.html),
-  [VSC task granularity](https://docs.vscentrum.be/compute/jobs/worker_or_atools.html).
-- **Use allocated CPUs effectively.** A Python process with workers normally needs one Slurm
-  task and appropriate `--cpus-per-task`; extra `--ntasks` does not parallelize serial code.
-  Bound worker processes and BLAS/OpenMP threads together to that CPU budget; avoid nested
-  full-core pools. Request measured host RAM: excess memory can reserve extra cores.
-  GPUs/multiple nodes help only software that actually uses them.
-- **Prepare once, then fan out safely.** Stage immutable inputs on the native filesystem
-  (Lustre for wICE, GPFS for Mindwell); use job-local scratch where appropriate. Keep heavy
-  CPU preparation off GPU allocations. Give shards distinct logs, temporary files and
-  outputs; never let them race on one SQLite database, cache or checkpoint. Merge through
-  one writer after successful same-cluster `afterok` dependencies. Verify cross-cluster
-  hand-offs explicitly. Preserve completed expensive work and retry only missing/failed
-  shards. [VSC storage guidance](https://docs.vscentrum.be/leuven/tier2_hardware/parallel_filesystems.html).
-- **Measure and adjust.** Record queue/run time, CPU utilization, peak RAM, I/O waits,
-  throughput, shard counts and merge time. Increase concurrency while it reduces total
-  turnaround; fix a serial merge or shared-I/O bottleneck rather than just adding jobs.
-  Pending jobs are not failures: inspect the reason, do not resubmit duplicates or poll
-  Slurm in a tight loop. Check credits and current limits before a large submission.
-
-Useful read-only checks from a login shell (select the actual cluster):
-
-```bash
-sinfo --clusters=wice
-squeue --clusters=all --me
-sacctmgr show qos normal,long,debug,interactive format=Name,MaxSubmitJobsPerUser,MaxTRESPerUser
-scontrol --clusters=wice show config | grep MaxArraySize
-sacct --clusters=all -j JOB_ID --format=JobID,State,Elapsed,AllocCPUS,TotalCPU,MaxRSS,ExitCode
-sam-balance
-```
-
-Inspect job-step rows for memory/CPU statistics. Account-specific limits may further restrict
-the QoS ceilings; do not hard-code a universal job count. Record the chosen shard map,
-concurrency, resources, measured timings and any serial bottleneck in the project's `docs/VSC.md`.
-Site rules and commands: [Leuven Slurm](https://docs.vscentrum.be/leuven/slurm_specifics.html),
-[credit accounting](https://docs.vscentrum.be/leuven/slurm_accounting.html).
-Reviewed 28-10-2026 against official sources and VSC Library pin
-`1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`; recheck live limits before submitting.
-
----
+Reference reviewed 28-10-2026: VSC Library pin `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`,
+`guides/STORAGE.md`, `SOFTWARE.md`, `SLURM.md`, and snapshot source paths
+`source/leuven/{slurm_specifics,tier2_hardware/parallel_filesystems}.rst`.
+Live sources: [storage](https://docs.vscentrum.be/leuven/tier2_hardware/parallel_filesystems.html),
+[Leuven Slurm](https://docs.vscentrum.be/leuven/slurm_specifics.html),
+[arrays](https://slurm.schedmd.com/job_array.html),
+[containers](https://docs.vscentrum.be/compute/software/installing_software/containers.html).
+Library DATA-environment and throttled-array examples are **not our project defaults**;
+adapt them in the project, never edit the reference submodule.
 
 ## `notebooks/`
 
-Thin. A notebook presents a finished computation; it does not perform one.
-
-- **All logic lives in `src/`.** A notebook only calls it, and contains **no `def` and no
-  `class`** — a function defined in a notebook cannot be imported or tested, so it gets copied into
-  the next notebook and the copies diverge.
-- Every notebook **ends by printing a text summary** of everything it showed, section by section,
-  in the same order as its sections. That text is what `All_Results.md` is built from.
-- **A notebook saves its own figures**, not the runner, so an interactive *Run All* produces
-  exactly the same files. It clears **its own** figure folder — never another's — **before**
-  drawing: a stale PDF beside a fresh one is how a paper ends up with a figure that no longer
-  matches the code that made it.
-- **A notebook never picks a colour or a figure size.** `src/visualize/style.py` owns both.
-- Figures are **displayed inline** in the notebook, so the notebook itself is readable; the PDF on
-  disk is what the paper uses.
-
-Use the [experiment organization](#experiments) above. Identify each notebook by its path
-relative to `notebooks/`, without `.ipynb`, e.g. `FigureSaver("experiment1/comparison")`.
-This prevents same-named reports in different experiments from overwriting each other.
-`experiment0/example_analysis.ipynb` is a synthetic pattern to replace with real reports.
-
----
+Thin reports of finished computation: import logic from `src/`; no `def` or `class`.
+Use the same experiment/stage folders as configs. Pass a relative path without `.ipynb`
+to `FigureSaver`, e.g. `experiment0/0a/report`, so equal filenames cannot overwrite each other.
+Display figures inline; save PDFs through the saver. The final code cell prints the complete
+text report in notebook section order. Replace the synthetic example when real reports exist.
 
 ## `output/`
 
-**Reports, logs and results go under `output/`**, locally and on the cluster. Not beside a
-notebook, not into `src/`, not into a new top-level folder. One root means "what did this run
-produce?" and "what can I delete?" each have one answer — and it is what makes
-`src/utils/clean_run.py` possible at all. Rebuildable caches belong in `data/processed/`;
-weights and costly resumable state belong in `checkpoints/`, outside routine cleanup.
+Use the resolver on every tier. Experiment/stage folders precede these categories:
 
-Group by experiment first, optionally by validation stage next, then by the kinds below.
-For example, `output/experiment1/logs/` or `output/experiment0/0a/logs/`. The two aggregate
-Markdown reports remain directly under `output/` because they cover the whole project.
+- `logs/`: `.log` only; useful debugging context, IDs, paths, shapes, timings and failures.
+  Keep compact and avoid secrets/raw rows; large detailed traces belong on PROJECT.
+- `manifests/`: resolved config, code/library/runtime identities, progress and publication evidence.
+- `results/`: retained scores, predictions and detailed numerical evidence on PROJECT; protected
+  from routine cleanup. Archive/retire deliberately with backups, not as incidental "clean run" output.
+- `figures/<notebook>/`: one PDF per figure, `_figures.json` captions, retained `_stdout.txt`
+  final summary and `_failure.txt` when incomplete. Each saver clears only its own generated files.
 
-### `logs/`
-
-**`.log` files, and nothing else.** The debugging record, and the most important thing in here.
-
-Runs happen on the supercomputer, where an agent cannot watch the job: the log is the only thing it
-can read afterwards. So **log generously** — shapes, seeds, resolved paths, timings, intermediate
-statistics, anything you would want when a run behaves oddly. Iterating on a run means reading the
-log with an LLM, and what was not printed cannot be diagnosed.
-
-The example Slurm script also directs stdout and stderr here as `.log` files and appends across
-restarts. Create the directory before submission. Application logs should still record the run
-identity, resolved configuration and progress independently of scheduler output.
-
-### `manifests/`
-
-What a run actually did: the **resolved** configuration it used, progress or per-epoch records, the
-environment. Small, and the answer to "what produced this?" six months later — the YAML on disk may
-have been edited since.
-
-### `results/`
-
-The numbers a run produced: scores, per-fold metrics, per-row predictions. On the cluster this one
-directory lives on **project storage**, because per-row predictions across every dataset and model
-reach gigabytes and `$VSC_DATA` is 75 GiB. Locally it is a plain subdirectory.
-
-### `figures/<notebook>/`
-
-**One PDF per figure**, plus `FigureSaver`'s `_figures.json` caption metadata and retained
-`_stdout.txt` summary. A `_failure.txt` marks an incomplete runner execution. Vector, with text embedded as TrueType so journal systems
-accept it. No PNG on disk: the notebook displays its figures inline, so there is no second raster
-copy to go stale. Sized for A4 — see `src/visualize/`.
-
-### `CAPTIONS.md`
-
-**One** file for all notebooks, grouped alphabetically by relative notebook path, figures in
-the order that notebook drew them.
-
-**These captions are the paper's captions.** They are written to be pasted under the figure in the
-manuscript, so they are **pure description**: what is plotted, on what axes, from how much data. No
-interpretation, no conclusion — the argument goes in the body text, and a caption that argues has
-to be rewritten when the argument changes.
-
-### `All_Results.md`
-
-Every notebook's printed summary, in one file, because that one file answers "what did this project
-find?". Its shape is fixed:
-
-1. **One block per notebook, sorted alphabetically by relative notebook path** (experiment,
-   optional subfolders, notebook name), so same-named notebooks remain distinct.
-2. **Each block is that notebook's printed summary, verbatim** — not a rewrite. The moment this
-   file paraphrases, the two disagree and the notebook wins, but this is the file anybody reads.
-3. **That summary follows the notebook's own section order**, so the file and the notebook read the
-   same way round.
-
----
+Two project-wide files stay directly under `output/`: **`CAPTIONS.md`**, grouped alphabetically
+by relative notebook path and then drawing order; **`All_Results.md`**, one verbatim final-summary
+block per relative notebook path, alphabetically sorted, retaining notebook section order.
+Captions are paper-ready descriptions of axes/data/conditions; interpretation belongs in the paper.
+The global `manifests/submissions/` holds submission receipts/locks and is protected from cleanup.
 
 ## `scripts/`
 
-**The experiments themselves** — the things you actually submit and that run for hours on the
-supercomputer: pretraining, a sweep, an evaluation pass, plus the `.slurm` and `.sh` files that
-submit them.
-
-The split is by *what a thing is for*, not by whether it happens to be runnable:
-
-- **An experiment** — the work the paper is about — belongs here. It is invoked, watched, and
-  charged to a credit account.
-- **A utility** — cleaning up, running the notebooks, bumping the submodule pin — belongs in
-  `src/utils/`, invoked with `python -m`. None of it is the experiment, and putting it here would
-  bury the two files that matter among eight that do not.
-
-`slurm/job.slurm` is a minimal launcher requiring an explicit compute command and project-measured
-CPU/memory/walltime settings; it does not automatically shard work. Checkpointing and
-requeue need a tested project-specific protocol; see `docs/VSC.md`. Everything in `slurm/` is **bash on Linux**, so
-normal POSIX syntax — unlike everything you type locally.
-
----
+Long experiment entrypoints, Bash and Slurm launchers belong here; unrelated maintenance utilities
+belong in `src/utils/`. `slurm/job.slurm` takes explicit DATA checkout, shared PROJECT root,
+PROJECT runtime, expected Git commit and Python arguments. It checks revision/dirty state,
+uses isolated scratch caches, appends `.log` output, and never installs, pulls, checkpoints,
+requeues or deletes workspaces automatically. The project implements and tests publication/resume.
+Fill resource/module TODOs; adapt paths and experiment arguments together. Slurm Bash is Linux;
+local commands use PowerShell 5.1 (no `&&`, ternary or `??`).
 
 ## `src/`
 
-All importable logic. Always has `data/`, `utils/`, `visualize/`; add more as the project needs.
+Importable logic; add packages freely. Generic defaults are editable, not a mandatory framework.
 
-`config.py` and `data/loaders.py` are placeholders. The other modules provide reusable defaults;
-adapt them when the project's needs differ. `__init__.py` files mark Python packages.
+### `utils/`
 
-### `src/utils/`
+- `paths.py`: central resolver; DATA reports, PROJECT assets, SCRATCH workspaces. Off-cluster,
+  unset persistent roots resolve inside the repo; local scratch uses `output/workspaces/`.
+  `results_dir("scores.csv", experiment="experiment1")`, `logs_dir("experiment1")` and
+  `manifests_dir("experiment1")` align outputs; stage IDs such as `experiment0/0a` also work.
+  `config_path("experiment1/baseline")` locates YAML; `figures_dir` mirrors notebook parents.
+  `raw_dir`, `processed_dir`, `checkpoints_dir`, `cache_dir`, `runtimes_dir` use PROJECT;
+  `workspace_dir(run_id)` names disposable work. `resolve_writable` probes and fails without fallback.
+- `atomic.py`: sibling-temp then replace for text/metadata; not locking or a multi-file transaction.
+- `clean_run.py`: list by default, delete only with `--clean`; optional `--processed` rebuilds
+  processed inputs. Across all experiments/tiers, preserve `results/`, `submissions/`, `workspaces/`,
+  raw inputs, checkpoints, runtime images/environments, reusable `cache/`, libraries and markers.
+  Reject linked paths/junctions and validate targets first. Stop writers and retain needed logs
+  before cleaning; scratch cleanup needs its separate publication/ownership check.
+- `run_notebooks.py`: recursively discover nonhidden Python notebooks, execute in subprocesses,
+  capture final-cell stdout and rebuild reports. Partial reruns preserve other reports; failures
+  are explicit. `--only experiment1/report` selects an ID. Only `%matplotlib inline` is ignored;
+  kernel-specific features need a project Jupyter runner.
+- `submit_jobs.py`: preview/submit a ready-job plan, maintain receipts and refill site capacity;
+  see the VSC runbook for usage and failure recovery. No scientific workflow or gate is inferred.
+- `logging_setup.py`: console and `.log`; call `setup(experiment="experiment1", run_id="...")`.
+- `update_library.py`: inspect by default; explicit update/commit for one registered pin, never push.
+- `config.py`: intentionally empty; implement the project's YAML schema/loader.
 
-- **`paths.py`** — *filled in.* **Every path in the project comes from here and nowhere else.** Two
-  VSC tiers, one resolver, repo-root-relative, collapsing to the repository off-cluster so the same
-  code runs on a laptop with no configuration. A path assembled at a call site with
-  `"output/" + name` is correct on a laptop and wrong on the cluster.
-  Pass `experiment="experiment1"` or `"experiment0/0a"` to `outputs_dir`, `results_dir`,
-  `logs_dir` and `manifests_dir`; e.g. `results_dir("scores.csv", experiment="experiment1")`.
-  `config_path("experiment1/baseline")` finds the corresponding YAML. `figures_dir` mirrors
-  a notebook's relative parent before `figures/<stem>/`. Omit the experiment for a flat
-  layout; no global current-experiment state is inferred.
-- **`clean_run.py`** — *filled in.* `python -m src.utils.clean_run` lists what the previous run
-  produced; `--clean` wipes it. Clears the **whole `output/` tree on both storage tiers** in one
-  invocation (**all experiments**, not just the current one), locally or on the cluster,
-  and leaves the tracked `.gitkeep` markers so the next run
-  has somewhere to write. `--processed` additionally clears `data/processed/`; that is opt-in
-  because rebuilding the cache can cost far more than re-running the notebooks. `data/raw/`,
-  weights and library submodules are never touched. Preview lists individual files and validates
-  all targets before deletion; links and Windows junctions are refused. Stop writers before
-  cleaning. Keep paid responses and costly/resumable artifacts outside disposable targets.
-- **`atomic.py`** — writes UTF-8 text to a sibling temporary file, then replaces the destination.
-  Reports and figure metadata use it so interrupted writes do not expose truncated files.
-  It provides neither locking nor a multi-file transaction.
-- **`run_notebooks.py`** — *filled in.* `python -m src.utils.run_notebooks` runs every notebook in
-  parallel, in separate processes (matplotlib's figure registry is global), then rebuilds
-  `CAPTIONS.md` and `All_Results.md`. Notebooks are **discovered**, alphabetically — a hard-coded
-  list silently stops covering a notebook someone added.
-  Discovery is recursive, ignores hidden folders such as `.ipynb_checkpoints`, and uses
-  relative paths without `.ipynb`: `--only experiment1/comparison` selects one notebook.
-  Both grouped and flat Python notebooks work; Jupyter magics and shell commands are unsupported
-  (except `%matplotlib inline`, ignored headlessly). It captures the final nonempty
-  code cell's stdout, keeps it for rebuilding, and marks failed/incomplete runs in both reports.
-  Partial reruns preserve other discovered notebooks' last reports. Use a project-specific
-  Jupyter runner if kernel features are needed.
-- **`update_library.py`** — *filled in.* Bumps this project's submodule pin; see below.
-- **`logging_setup.py`** — *filled in, minimal.* One logger, writing to the console **and** to
-  `output/<experiment>/logs/` via `setup(experiment="experiment1", run_id="...")`.
-  Omitting the experiment keeps flat `output/logs/`. Scheduler stdout follows the submission settings; a log the code
-  controls survives the job that produced it.
-- **`config.py`** — *empty.* How a project reads its configuration is its own business. The one ask:
-  write the **resolved** config into the experiment's `manifests/`.
+### `visualize/`
 
-### `src/visualize/`
+`style.py` centralizes sizes, typography, grid and colours **within this project**. The template
+supplies A4 geometry/print settings; the project defines its own look/palette. Use `WIDTH_FULL`,
+`WIDTH_HALF` or `WIDTH_THIRD` with `figsize`; make labels legible at final paper size and avoid
+rescaling that shrinks text. Split dense panels; check grayscale/colour accessibility.
+`figures.py` supplies `FigureSaver`: clear only the notebook's owned files before drawing,
+number PDFs in drawing order, record captions atomically and leave figures open for inline display.
 
-- **`style.py`** — *partly filled in.* The template fixes the part that follows from the output
-  medium — the **A4 widths** and the print settings — and leaves the *look* to the project. Two
-  projects plotting different things have no reason to look alike; what matters is that **every
-  notebook inside one project shares one style**, defined here and nowhere else. A notebook never
-  picks a colour or a size itself. Fill in `_PROJECT_RC` and whatever palette the project needs. If
-  a new project is close to an existing one, copying that project's `style.py` is the fastest start.
-- **`figures.py`** — *filled in.* `FigureSaver`: one folder per notebook, one PDF per figure with a
-  numbered prefix, the folder cleared on construction, and each caption recorded in a manifest so
-  `CAPTIONS.md` is rebuildable from disk without re-executing anything.
+### `data/`
 
-**Everything is sized for A4, because everything here is for a paper.** A figure is drawn at the
-width it will occupy on the page — `WIDTH_FULL` (160 mm text block), `WIDTH_HALF`, `WIDTH_THIRD` —
-and never rescaled in the document afterwards, because rescaling carries the text with it: 9pt
-squeezed to 70 % arrives as 6.3pt, under the ~7pt floor for print. So the point sizes in `style.py`
-are the point sizes **on the printed page**, and height is clamped to half a page so the caption
-and the surrounding paragraphs still fit.
-
-Two things worth deciding when you fill in the look: give a colour a **meaning** and keep it, so a
-reader who has seen one figure can read the next without the legend; and check the palette is
-readable **printed, and in greyscale**, because a paper gets photocopied.
-
-### `src/data/`
-
-- **`loaders.py`** — *empty.* Loading and preprocessing, which is project-specific by definition.
-  Two asks: never build a path (use `paths.py`), and write a cache's marker file **last**, so a run
-  killed halfway leaves a cache correctly treated as absent rather than silently reused.
-
----
+`loaders.py` is intentionally empty. Use the resolver; publish cache completion markers last,
+so interrupted preparation cannot look complete.
 
 ## `tests/`
 
-**Not one test per module — as many as the work needs.** Test what would be expensive to get wrong,
-skip what is obvious. Tests never write outside `tmp_path` or `output/`.
-
-`conftest.py` puts the repository root on `sys.path` (so the suite runs without an editable
-install), forces matplotlib's `Agg` backend, and provides `isolated_output`, which redirects both
-cluster tiers into `tmp_path` — exercising the branch that otherwise only runs in production.
-
-The supplied tests cover path resolution, cleanup boundaries, atomic replacement, notebook
-reports (including nested experiments and partial reruns), isolated PDF figures, A4 sizing,
-library updates and initialization. Their header comments
-explain the intent. Keep relevant tests and adapt them alongside project changes.
-
-**Nothing runs them automatically.** There is no CI and no pre-commit hook in the template, so an
-agent has to be told:
-
-```
-python -m pytest -q
-```
-
-Run it before delivering, and `python -m src.utils.run_notebooks` too if you touched a notebook or
-anything under `src/visualize/`.
-
----
+As many meaningful tests as needed, not one per module. Headers explain intent. Defaults cover
+storage boundaries, cleanup, concurrency budgets, mocked Slurm admission/recovery, notebook
+reports, PDF/A4 behavior, atomic writes, initialization and library updates. `conftest.py` sets
+imports/headless plotting and isolates storage in temporary directories. No real jobs are submitted.
+There is no test CI/hook: agents run `python -m pytest -q` and `python -m ruff check .` before delivery,
+plus `python -m src.utils.run_notebooks` after notebook/visualization changes. Local passes do not
+certify VSC/runtime compatibility. Do not lint, format or test shared library contents.
 
 ## Shared library submodules
 
-The template includes **VSC Library only**, at `vsc-library/`. Initialize it after cloning:
+The template includes **VSC Library**; TFM/DM are independent optional references, not runtime packages.
+
+| Library | Repository | Mountpoint / purpose |
+|---|---|---|
+| VSC | [VSC_Library](https://github.com/andreasgoethals/VSC_Library) | `vsc-library/`: infrastructure guides and Slurm examples |
+| TFM | [TFM_Library](https://github.com/andreasgoethals/TFM_Library) | `tfm-library/`: tabular-model literature and upstream implementations |
+| DM | [DM_Library](https://github.com/andreasgoethals/DM_Library) | `dm-library/`: decision-model literature and upstream implementations |
+
+Initialize registered pins from the **DATA checkout** (locally, from the local repo):
 
 ```powershell
 git submodule update --init -- vsc-library
 git submodule status
 ```
 
-Libraries are independent repositories. Add only those the project needs:
-
-| Library | Repository | Mountpoint |
-|---|---|---|
-| VSC infrastructure | [VSC Library](https://github.com/andreasgoethals/VSC_Library) | `vsc-library` |
-| Tabular foundation models (optional) | [TFM Library](https://github.com/andreasgoethals/TFM_Library) | `tfm-library` |
-| Decision models (optional) | [DM Library](https://github.com/andreasgoethals/DM_Library) | `dm-library` |
-
-**Purpose:** TFM and DM provide paper texts, summaries, syntheses and upstream implementation
-snapshots for agents to inspect in place. VSC provides infrastructure documentation and Slurm
-examples. They are references, not project runtime packages; read them, do not install them.
-
-From the project root, run only the additions you need and which are not already registered:
+To add a missing library, use only the needed command:
 
 ```powershell
-# Included in new template projects; add only when missing from an existing project.
 git submodule add -b main https://github.com/andreasgoethals/VSC_Library.git vsc-library
-# Independent opt-ins, not a requirement to add both.
 git submodule add -b main https://github.com/andreasgoethals/TFM_Library.git tfm-library
 git submodule add -b main https://github.com/andreasgoethals/DM_Library.git dm-library
 ```
 
-For an already registered library, use `git submodule update --init -- <mountpoint>` instead.
-Then review `.gitmodules` and `git diff --submodule=log`, and publish only the intended paths
-when authorized. For example, after adding VSC Library:
+`.gitmodules` records URLs; gitlinks pin exact revisions. Review and commit only the registration
+and chosen mountpoint, then push when authorized. Never update a checkout used by active/queued jobs.
+Read papers/snapshots in place, cite paths/symbols rather than snapshot line numbers, and record pins
+with dependent evidence. Consumer submodules are read-only: no edits, refreshes, linting or tests.
+Only TFM/DM's ignored `PROJECT_SPECIFIC.md`, made from their own template, is an exception;
+durable project decisions belong in the parent's docs. VSC has no local-file exception.
 
-```powershell
-git add -- .gitmodules vsc-library
-git commit --only -m "Add VSC Library reference" -- .gitmodules vsc-library
-git push
-```
+Corrections belong in canonical `0. Literature` checkouts. That workspace's `scripts/maintain.py`
+maintains libraries; after review/commit/push, `scripts/propagate_to_downstream.py --dry-run`
+previews pin propagation and `--push` publishes it. It discovers existing registrations, never
+adds unrequested libraries; pass `--root` for consumers outside the searched Projects tree.
+For one consumer: `python -m src.utils.update_library --library vsc-library --update --commit`,
+then an authorized `git push`. Alternatively update with `git submodule update --remote -- <mountpoint>`
+and review `git diff --submodule=log`. Preserve local changes and read the library changelog first.
 
-Substitute the chosen mountpoint for optional libraries. Adding one library never installs
-the others. Keep added mountpoints excluded from packaging,
-linting and test discovery; the three paths above are already excluded here.
+## Root files and tooling
 
-The `.gitmodules` registration records the URL; the committed gitlink records the
-exact library revision. Read shared documents and snapshots in place, cite source
-paths and symbols, and record the pin beside results that depend on them.
+- `README.md`: downstream project front page; retain only the short template-credit chapter at its end.
+- `AGENTS.md`: shared agent instructions. `CLAUDE.md` imports it with `@AGENTS.md`; configure other
+  agents explicitly if needed. Do not assume tests or instructions execute automatically.
+- `LICENSE`: MIT, Andreas Goethals; third-party materials retain their own licences.
+- `pyproject.toml`: Python 3.11–3.12, project metadata/dependencies and pytest/Ruff settings.
+  Record reproducible environment specifications alongside it; package ranges are not a lockfile.
+- `.gitignore`: exclude assets/environments/caches; keep only selected small reports. Root-specific
+  rules start with `/`; unanchored `figures/` would also match nested output folders.
+- `.gitattributes`: UTF-8 text with LF checkout for Linux scripts; avoid CRLF Slurm failures.
+- `.gitmodules`: independent library registrations; exclude new mounts from packaging/lint/tests.
+- `.vscode/settings.json`: source imports, root-relative notebooks, pytest/Ruff and read-only libraries.
+- `.github/dependabot.yml`: proposes VSC pin updates; does not merge them or run project tests.
+- `_template/README.md`: new/existing-project instructions. `init_project.py` validates and substitutes
+  placeholders, skipping assets, submodules and linked directories; no install, Git mutation or deletion.
+  Remove `_template/` after setup; verify template edits in an initialized throwaway copy.
 
-**Consumer copies are read-only.** Never edit, refresh, lint, format or test inside
-them. VSC has no local-file exception: put project-specific operations in
-`docs/VSC.md`. TFM and DM permit only their ignored `PROJECT_SPECIFIC.md`, created
-from their own `PROJECT_SPECIFIC.template.md`. Corrections belong in the canonical
-library checkout. These ignored local notes are not carried by the parent repository;
-keep durable shared project decisions in its own `docs/`.
-
-The owner's canonical checkouts live together in the local `0. Literature`
-workspace. Its `scripts/maintain.py` runs each library's maintenance in parallel.
-After reviewing, committing and pushing library changes, run from that workspace:
-
-```powershell
-python scripts/propagate_to_downstream.py --dry-run
-python scripts/propagate_to_downstream.py --push
-```
-
-Propagation discovers existing consumers through their submodule URLs, including
-this template. It pins the exact clean published library commit, commits only the
-submodule path and optionally pushes. It never adds an unregistered library.
-A new consumer must be inside the searched Projects tree or supplied through
-`--root`. The template's daily Dependabot configuration proposes VSC pin updates
-on GitHub; proposals require review and merging.
-
-For a single consumer, the local helper reports the current pin by default:
-
-```powershell
-python -m src.utils.update_library
-python -m src.utils.update_library --library vsc-library --update --commit
-git push
-```
-
-Without that helper, use `git submodule update --init -- <mountpoint>` to initialize the
-recorded pin, then `git submodule update --remote -- <mountpoint>` to advance it, review
-`git diff --submodule=log`, and commit only that mountpoint when authorized. Never overwrite
-local submodule changes. Pin updates are distinct from editing/refreshing library content.
-Review the library changelog before updating. Publishing a library alone does not
-change a consumer's committed pin; run propagation or merge an update proposal.
-
----
-
-## Root files
-
-- **`README.md`** — the project's own front page. It **ends** with the short "Based on the
-  repository template" chapter and nothing after it; everything above is the project's.
-- **`CLAUDE.md`** — one line, `@AGENTS.md`. Claude Code reads `CLAUDE.md` and not `AGENTS.md`,
-  while Codex reads `AGENTS.md` directly. Other tools may need explicit configuration. `AGENTS.md` is
-  the single source of truth and this file imports it — nothing duplicated, nothing to keep in sync.
-  A symlink also works, but not on Windows without Administrator rights, so the import is the
-  portable form. Claude-specific instructions, if ever needed, go below the import.
-- **`AGENTS.md`** — the rules an agent follows here: follow this template and say when you deviate;
-  library submodules are read-only; never commit data or weights; never install, train or push without
-  asking; verify claims against a source rather than filling gaps plausibly; read
-  `docs/AGENTS_MEMORY.md` first and add to it after a failure; Windows PowerShell 5.1 has no `&&`,
-  so one command per line.
-- **`LICENSE`** — MIT in the author's name, plus a line stating that third-party material (the
-  submodule, datasets, downloaded weights) keeps its own licence.
-- **`pyproject.toml`** — Python **3.11–3.12**, `ruff` and `pytest` in a `dev` extra, library submodules
-  excluded from ruff, pytest collection and the package. Every non-obvious pin says **why**.
-- **`.gitignore`** — never commit raw data, weights, caches, environments, tool caches or figures.
-  **Anchor a rule with a leading slash** when a name should only match at the root: a bare
-  `figures/` also matches `output/figures/`.
-- **`.gitattributes`** — `* text=auto eol=lf`. The dev machine is Windows and every cluster job is
-  Linux bash; a CRLF `.slurm` file fails with a bare `$'\r': command not found` that reads like a
-  script bug and is not one.
-- **`.gitmodules`** — declares `vsc-library`; optional libraries are added explicitly.
-- **`.vscode/settings.json`** — committed, and not a preference: `python.analysis.extraPaths` is
-  what lets an editor resolve `from src.utils…` given the flat `src/` package root, and
-  `jupyter.notebookFileRoot` makes an interactive notebook run from the same directory as the
-  notebook runner.
-
----
-
-## Comments
-
-Every non-obvious decision carries a short comment saying **why**, not what: a pin, a fallback, an
-exclusion, a magic number, an ordering that matters. Say what breaks if it changes. Comments that
-restate the code are noise.
-
-## `_template/`
-
-Template-only setup, removed after initialization: `README.md` explains creating or adopting
-a project; `init_project.py` substitutes names and metadata after validating all replacements.
-It skips submodules, linked directories and generated files and performs no installs or Git writes.
-
-## `.github/`
-
-`dependabot.yml` proposes daily updates to the registered VSC Library pin. It does not
-run tests or merge updates; review proposals before accepting them.
+Comments explain non-obvious **why**, not obvious mechanics. Keep docs short, structured and consistent.
