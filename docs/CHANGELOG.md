@@ -1,5 +1,9 @@
 # Changelog
 
+## 28-10-2026
+
+- Sync TEMPLATE.md: speed-first VSC CPU sharding/parallel submission and explicit library setup; no experiment code or run settings changed.
+
 ## 27-10-2026
 
 - Add experiment-specific notebooks for 0A/0B and Experiments 1-5, plus a combined

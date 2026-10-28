@@ -50,6 +50,7 @@ project-specific belongs in `README.md` or another `docs/` file, not here.
 │   │   └── figures.py       FigureSaver
 │   └── ...                  more as the project needs (train/, eval/, models/)
 ├── tests/
+├── _template/               setup/adoption guide and initializer; remove in new projects
 ├── vsc-library/             submodule: HPC/VSC guides and templates. READ-ONLY.
 ├── .vscode/settings.json
 ├── .github/dependabot.yml   proposes VSC submodule pin updates
@@ -148,12 +149,85 @@ Set `<PROJECT_UPPER>_STAGING_ROOT` (or `VSC_STAGING_ROOT`) to the allocated stor
 directory; the resolver appends the project name. On VSC, missing configuration raises an
 error rather than guessing an allocation. Locally, unset roots use the repository;
 relative overrides are resolved against its root.
+Set cluster overrides inside the job or its sourced project environment file: Leuven does
+not propagate arbitrary exports from the submission terminal. Use a login-shell Bash script
+(`#!/bin/bash -l`) and load the target node's compatible modules explicitly.
 
 `$VSC_SCRATCH` is purged after 30 days **without access**, and `mv` and timestamp-preserving
 `rsync` do not count as an access. Do not rely on outbound internet from compute nodes;
 stage dependencies using the current VSC guidance. Any run that can exceed the walltime must be resumable,
 writing its state pointer **last** so a job killed mid-write points at the previous complete
 checkpoint.
+
+#### Speed-first execution: Open OnDemand and Slurm
+
+**Optimize elapsed time to verified results, not minimum token usage or compute credits.**
+Use the VSC's parallel capacity, especially for CPU tests, preprocessing and evaluation.
+Extra orchestration and resources are worthwhile when they shorten turnaround within the
+approved budget. This is a project preference, not permission to submit unapproved work.
+
+**Open OnDemand is an interface, not extra compute capacity or queue priority.** Its login
+shell is a shared login node; interactive apps run inside scheduled allocations. Use an editor
+session for editing/debugging and submit long campaigns as batch jobs, rather than running
+them serially inside that session. End unused allocations; closing a browser tab is not a
+cancellation. See [VSC's interactive-app guidance](https://docs.vscentrum.be/compute/portal/ondemand/interactive-apps.html).
+
+- **Split independent CPU work by default.** Prefer ten balanced roughly two-hour jobs over
+  one twenty-hour job when the work is separable. Partition datasets, folds, seeds, configs
+  or test IDs exactly once; preserve scientific splits and seeds. Check the shard union for
+  missing/duplicate work and merge only validated results. Balance by measured duration,
+  not just item count. Explain any necessary serial stage. Two hours is an example, not a
+  fixed target or a promise about queue time.
+- **Submit ready work together after a representative preflight.** Prefer arrays for similar
+  resource needs; separate CPU/GPU/memory classes. `--array=0-9%10` makes ten tasks eligible
+  concurrently; the application must use `SLURM_ARRAY_TASK_ID` to select its shard. Do not
+  launch the whole workload ten times. Choose the highest useful concurrency allowed by
+  the account/QoS and measured I/O/RAM limits, not an arbitrary small cap. Array elements
+  count toward job limits; `%N` limits running tasks, not submitted ones. Submit bounded
+  waves if the submission limit is reached. [Slurm arrays](https://slurm.schedmd.com/job_array.html).
+- **Minimize queue + setup + execution + merge time.** Request realistic walltime with
+  measured setup/checkpoint margin, not the partition maximum. Shorter suitable jobs can
+  backfill gaps; never under-request time or memory just to queue sooner. Batch very short
+  work items together so startup and filesystem overhead do not dominate. Compare eligible
+  wICE/Mindwell CPU partitions using actual availability and compatible environments, not
+  hardware names alone. [Backfill](https://slurm.schedmd.com/sched_config.html),
+  [VSC task granularity](https://docs.vscentrum.be/compute/jobs/worker_or_atools.html).
+- **Use allocated CPUs effectively.** A Python process with workers normally needs one Slurm
+  task and appropriate `--cpus-per-task`; extra `--ntasks` does not parallelize serial code.
+  Bound worker processes and BLAS/OpenMP threads together to that CPU budget; avoid nested
+  full-core pools. Request measured host RAM: excess memory can reserve extra cores.
+  GPUs/multiple nodes help only software that actually uses them.
+- **Prepare once, then fan out safely.** Stage immutable inputs on the native filesystem
+  (Lustre for wICE, GPFS for Mindwell); use job-local scratch where appropriate. Keep heavy
+  CPU preparation off GPU allocations. Give shards distinct logs, temporary files and
+  outputs; never let them race on one SQLite database, cache or checkpoint. Merge through
+  one writer after successful same-cluster `afterok` dependencies. Verify cross-cluster
+  hand-offs explicitly. Preserve completed expensive work and retry only missing/failed
+  shards. [VSC storage guidance](https://docs.vscentrum.be/leuven/tier2_hardware/parallel_filesystems.html).
+- **Measure and adjust.** Record queue/run time, CPU utilization, peak RAM, I/O waits,
+  throughput, shard counts and merge time. Increase concurrency while it reduces total
+  turnaround; fix a serial merge or shared-I/O bottleneck rather than just adding jobs.
+  Pending jobs are not failures: inspect the reason, do not resubmit duplicates or poll
+  Slurm in a tight loop. Check credits and current limits before a large submission.
+
+Useful read-only checks from a login shell (select the actual cluster):
+
+```bash
+sinfo --clusters=wice
+squeue --clusters=all --me
+sacctmgr show qos normal,long,debug,interactive format=Name,MaxSubmitJobsPerUser,MaxTRESPerUser
+scontrol --clusters=wice show config | grep MaxArraySize
+sacct --clusters=all -j JOB_ID --format=JobID,State,Elapsed,AllocCPUS,TotalCPU,MaxRSS,ExitCode
+sam-balance
+```
+
+Inspect job-step rows for memory/CPU statistics. Account-specific limits may further restrict
+the QoS ceilings; do not hard-code a universal job count. Record the chosen shard map,
+concurrency, resources, measured timings and any serial bottleneck in the project's `docs/VSC.md`.
+Site rules and commands: [Leuven Slurm](https://docs.vscentrum.be/leuven/slurm_specifics.html),
+[credit accounting](https://docs.vscentrum.be/leuven/slurm_accounting.html).
+Reviewed 28-10-2026 against official sources and VSC Library pin
+`1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`; recheck live limits before submitting.
 
 ---
 
@@ -255,7 +329,8 @@ The split is by *what a thing is for*, not by whether it happens to be runnable:
   `src/utils/`, invoked with `python -m`. None of it is the experiment, and putting it here would
   bury the two files that matter among eight that do not.
 
-`slurm/job.slurm` is a minimal launcher requiring an explicit compute command. Checkpointing and
+`slurm/job.slurm` is a minimal launcher requiring an explicit compute command and project-measured
+CPU/memory/walltime settings; it does not automatically shard work. Checkpointing and
 requeue need a tested project-specific protocol; see `docs/VSC.md`. Everything in `slurm/` is **bash on Linux**, so
 normal POSIX syntax — unlike everything you type locally.
 
@@ -374,18 +449,32 @@ Libraries are independent repositories. Add only those the project needs:
 | Tabular foundation models (optional) | [TFM Library](https://github.com/andreasgoethals/TFM_Library) | `tfm-library` |
 | Decision models (optional) | [DM Library](https://github.com/andreasgoethals/DM_Library) | `dm-library` |
 
-For a project without VSC Library, this is the complete registration example:
+**Purpose:** TFM and DM provide paper texts, summaries, syntheses and upstream implementation
+snapshots for agents to inspect in place. VSC provides infrastructure documentation and Slurm
+examples. They are references, not project runtime packages; read them, do not install them.
+
+From the project root, run only the additions you need and which are not already registered:
 
 ```powershell
+# Included in new template projects; add only when missing from an existing project.
 git submodule add -b main https://github.com/andreasgoethals/VSC_Library.git vsc-library
+# Independent opt-ins, not a requirement to add both.
+git submodule add -b main https://github.com/andreasgoethals/TFM_Library.git tfm-library
+git submodule add -b main https://github.com/andreasgoethals/DM_Library.git dm-library
+```
+
+For an already registered library, use `git submodule update --init -- <mountpoint>` instead.
+Then review `.gitmodules` and `git diff --submodule=log`, and publish only the intended paths
+when authorized. For example, after adding VSC Library:
+
+```powershell
 git add -- .gitmodules vsc-library
 git commit --only -m "Add VSC Library reference" -- .gitmodules vsc-library
 git push
 ```
 
-Do not repeat `submodule add` when the path is already registered. For an optional
-library, substitute its repository URL and mountpoint from the table. Adding one
-library never installs the others. Keep added mountpoints excluded from packaging,
+Substitute the chosen mountpoint for optional libraries. Adding one library never installs
+the others. Keep added mountpoints excluded from packaging,
 linting and test discovery; the three paths above are already excluded here.
 
 The `.gitmodules` registration records the URL; the committed gitlink records the
@@ -396,7 +485,8 @@ paths and symbols, and record the pin beside results that depend on them.
 them. VSC has no local-file exception: put project-specific operations in
 `docs/VSC.md`. TFM and DM permit only their ignored `PROJECT_SPECIFIC.md`, created
 from their own `PROJECT_SPECIFIC.template.md`. Corrections belong in the canonical
-library checkout.
+library checkout. These ignored local notes are not carried by the parent repository;
+keep durable shared project decisions in its own `docs/`.
 
 The owner's canonical checkouts live together in the local `0. Literature`
 workspace. Its `scripts/maintain.py` runs each library's maintenance in parallel.
@@ -422,6 +512,10 @@ python -m src.utils.update_library --library vsc-library --update --commit
 git push
 ```
 
+Without that helper, use `git submodule update --init -- <mountpoint>` to initialize the
+recorded pin, then `git submodule update --remote -- <mountpoint>` to advance it, review
+`git diff --submodule=log`, and commit only that mountpoint when authorized. Never overwrite
+local submodule changes. Pin updates are distinct from editing/refreshing library content.
 Review the library changelog before updating. Publishing a library alone does not
 change a consumer's committed pin; run propagation or merge an update proposal.
 
