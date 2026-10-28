@@ -14,7 +14,7 @@ import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.cluster.job_graph import advance
+from src.cluster.job_graph import AccountingUnavailable, advance
 from src.cluster.maintenance import require_idle_vsc
 from src.cluster.token_shards import plan as token_plan
 from src.jev.registry import SELF_HOSTED
@@ -260,24 +260,26 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
 
 
 def scheduler_state(job_id, *, cluster="wice"):
-    result = subprocess.run(
-        [
-            "sacct",
-            f"--clusters={cluster}",
-            "-j",
-            job_id,
-            "--noheader",
-            "--parsable2",
-            "--format=JobIDRaw,State,ExitCode",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
-    )
+    command = [
+        "sacct", f"--clusters={cluster}", "-j", job_id, "--noheader", "--parsable2",
+        "--format=JobIDRaw,State,ExitCode",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=30)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        # A failed read cannot establish a job outcome. Submission exceptions are
+        # deliberately handled elsewhere and must never use this retry path.
+        raise AccountingUnavailable({
+            "cluster": cluster, "job_id": job_id, "command": command,
+            "error_type": type(exc).__name__, "returncode": getattr(exc, "returncode", None),
+            **{key: str(getattr(exc, key, None) or "")[-4096:]
+               for key in ("stdout", "stderr")},
+        }) from exc
     for line in result.stdout.splitlines():
         fields = line.strip().split("|")
         if len(fields) >= 3 and fields[0] == job_id:
+            if not fields[1].strip() or not fields[2].strip():
+                return None  # An incomplete accounting record is not a terminal result.
             state = fields[1].split()[0]
             if state in {
                 "PENDING",

@@ -5,7 +5,9 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
 
 ## Boundaries
 
-- Do not stage, commit or push unless the owner explicitly authorizes publication for the current task.
+- Since 28 October 2026, the owner authorizes committing and pushing reviewed JEVPFN changes
+  without asking again. This supersedes the earlier no-publication preference; later
+  read-only or no-publication instructions still take precedence. Publish only relevant changes.
   Never change branches/remotes/history without a separate explicit instruction.
 - Proposed plans and requested explanations belong in chat, not temporary documents.
 - `tfm-library/` is a pinned read-only submodule. Never edit, move, delete, lint or test it.

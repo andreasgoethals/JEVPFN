@@ -6,8 +6,20 @@ receipt is deliberately fatal: continuing could duplicate an already accepted jo
 """
 
 from collections import Counter
+from datetime import UTC, datetime
 
 TERMINAL = {"completed", "failed", "blocked"}
+
+
+class AccountingUnavailable(RuntimeError):
+    """A read-only status query failed; the known job's outcome remains unknown."""
+
+    def __init__(self, diagnostics):
+        self.diagnostics = diagnostics
+        super().__init__(
+            f"Slurm accounting unavailable for {diagnostics['cluster']} job "
+            f"{diagnostics['job_id']}; retain the job ID and retry the status query"
+        )
 
 
 def dependencies(step):
@@ -59,6 +71,11 @@ def summary(steps):
                      for s in steps if s.get("status") == "failed"],
         "blocked": [{"name": s["name"], "blocked_by": s["blocked_by"]}
                     for s in steps if s.get("status") == "blocked"],
+        "accounting_unavailable": [
+            {"name": s["name"], "cluster": s["cluster"], "job_id": s["job_id"],
+             "error_type": s["accounting_diagnostics"]["error_type"]}
+            for s in steps if s.get("accounting_diagnostics")
+        ],
         "all_terminal": all(s.get("status") in TERMINAL for s in steps),
     }
 
@@ -66,18 +83,35 @@ def summary(steps):
 def advance(steps, *, settings, state, submit, save):
     """One resumable pass. Unknown accounting remains active and never becomes a pass."""
     validate(steps, settings)
+    if any(s.get("status") == "starting" and not s.get("job_id") for s in steps):
+        raise ValueError("Interrupted submission has no job ID; inspect Slurm before retrying")
+    unavailable_clusters = set()
     for step in steps:
         if step.get("status") in TERMINAL:
             continue
         if step.get("job_id"):
-            result = state(step["job_id"], cluster=step["cluster"])
+            if step["cluster"] in unavailable_clusters:
+                continue  # Do not issue dozens of queries to an unavailable service.
+            try:
+                result = state(step["job_id"], cluster=step["cluster"])
+            except AccountingUnavailable as exc:
+                unavailable_clusters.add(step["cluster"])
+                step["accounting_diagnostics"] = {
+                    **exc.diagnostics, "checked_utc": datetime.now(UTC).isoformat(),
+                }
+                print(f"{step['cluster']}: accounting unavailable; retaining job IDs and "
+                      "deferring submissions until the next poll", flush=True)
+                save()
+                continue
+            recovered = step.pop("accounting_diagnostics", None)
+            if recovered is not None:
+                step["last_accounting_failure"] = recovered
+                step["accounting_recovered_utc"] = datetime.now(UTC).isoformat()
             if result is not None:
                 step.update(scheduler_state=result[0], exit_code=result[1],
                             status="completed" if result == ("COMPLETED", "0:0") else "failed")
                 print(f"{step['name']}: {step['status']} ({step['job_id']}, {result[0]}, {result[1]})", flush=True)
                 save()
-        elif step.get("status") == "starting":
-            raise ValueError("Interrupted submission has no job ID; inspect Slurm before retrying")
     # Propagate a failure to descendants only, including graphs not in topological order.
     while True:
         failed = {s["name"] for s in steps if s.get("status") in {"failed", "blocked"}}
@@ -92,6 +126,8 @@ def advance(steps, *, settings, state, submit, save):
         if not changed:
             break
     save()
+    if unavailable_clusters:
+        return summary(steps)  # Retry queries, never infer completion or submit new work.
     completed = {s["name"] for s in steps if s.get("status") == "completed"}
     active = Counter(pool(s) for s in steps if s.get("job_id") and s.get("status") not in TERMINAL)
     # CPU token jobs cannot fill the GPU/build/transfer pools. Counts include queued jobs.

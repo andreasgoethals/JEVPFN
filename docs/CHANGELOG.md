@@ -2,6 +2,14 @@
 
 ## 28-10-2026
 
+- Keep setup and frozen 0A watchers alive through Slurm accounting outages. Preserve
+  submitted IDs and bounded diagnostics, query an unavailable cluster once per pass,
+  defer submissions and resume after recovery. Ambiguous submissions still stop.
+  Add outage/recovery coverage for both launchers; do not treat unavailable status as success.
+  Local validation: 1,110 passed, 22 platform/optional-runtime skips; Ruff, dependency
+  and diff checks passed. Live scheduler recovery remains unverified.
+- Record the owner's standing permission to commit/push reviewed JEVPFN changes,
+  superseding the earlier restriction. No experiment/model settings changed.
 - Fix Decision3's publisher device argument: use the current indexed logical CUDA
   device, respecting Slurm visibility. Reproduced the original failure locally and
   added regression coverage. The corrected adapter still needs its B200 rerun.

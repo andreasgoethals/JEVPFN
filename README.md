@@ -34,7 +34,8 @@ routes are excluded. Decision3 still needs B200 inference validation. See [VSC](
 The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
 Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
 bounded setup tests, not production features or final acceptance.
-The owner normally handles Git publication; an explicit request is required to publish.
+Since 28 October 2026, the owner permits the assistant to commit and push reviewed changes.
+Never pull updated source into a VSC checkout while its jobs are active.
 
 ## Research contract
 

@@ -171,8 +171,15 @@ Use the reported integer in place of `JOB_ID`. Successful submission or an empty
 queue is not a test result. A failed job blocks only its descendants. Other branches
 continue; the same receipt's `summary` lists failed job IDs, commands/exit codes and
 blocked tests. The watcher exits nonzero after all runnable tests finish if any failed.
-Missing accounting stays pending. Ambiguous/interrupted submissions still stop the
-coordinator to prevent duplicate jobs. Keep its receipt; never erase it to guess retries.
+Missing accounting stays pending. Failed/timed-out `sacct` queries also remain pending:
+setup and frozen 0A watchers retain job IDs, save the bounded error details, defer new
+submissions and retry on their next minute poll. At most one failed query per cluster
+is made in a pass; the other cluster can still have its recorded jobs reconciled.
+Recovery resumes the same jobs and retains the last error for diagnosis. It never
+converts an unavailable status into success. Ambiguous/interrupted `sbatch` submissions
+still stop the coordinator to prevent duplicate jobs. Keep its receipt; never erase it
+to guess retries. An older launcher already marked `stopped_requires_review` needs the
+idle/restart procedure below after accounting recovers; do not manually edit its receipt.
 Submission errors now display their saved stdout/stderr; frozen 0A also retains these
 diagnostics. Failed storage workers print bounded log tails into the parent job log.
 Controller DNS/socket errors are infrastructure failures, not model or credit-balance

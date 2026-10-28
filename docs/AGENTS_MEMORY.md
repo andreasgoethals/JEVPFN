@@ -4,6 +4,10 @@ Updated 28 October 2026. README owns the method, VSC owns commands,
 DATA_SOURCES owns dataset meanings and LITERATURE_REVIEW owns research claims.
 Older details/test counts remain in CHANGELOG/Git. Submission is not completion.
 
+Owner instruction, 28 October 2026: the assistant may commit and push reviewed JEVPFN
+changes without asking again. This supersedes the former no-commit/no-push preference.
+Read-only task boundaries still apply; never update a checkout used by active VSC jobs.
+
 ## Execution decision and storage
 
 The owner selected Mindwell B200 without requesting a new GPFS allocation.
@@ -69,6 +73,15 @@ Hub cache; HTTP/integrity errors still stop and no incomplete manifest is accept
 Neither fix changes tokenization, questions or model pins. Decision3's sealed image
 and completed token counts can be reused. Retry its branch and the independent TabSTAR
 staging/container/GPU chain as documented in VSC; do not clean completed work yet.
+
+28 October targeted Decision3 retry: staging 62452622 and Lustre storage 62452621
+reported COMPLETED/0:0. CPU 62452620 and token preparation 62452632 were submitted;
+their completion is unverified. The watcher then stopped on a failed sacct query.
+A manual query at 10:04 confirmed slurmdbd connection refused, not a model failure.
+The updated watcher pauses/retries read-only accounting errors, retains known job IDs
+and diagnostics, and defers new submissions. Ambiguous sbatch responses still require
+review. This older stopped attempt needs an idle restart after accounting recovers
+and the fix is pulled; never erase receipts, cancel jobs or infer success from this outage.
 
 Real-text sensitivity remains a research limitation requiring review. Earlier Clef
 instruction/context variants and Intern option reversal changed predictions despite
