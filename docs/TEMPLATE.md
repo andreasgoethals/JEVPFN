@@ -15,7 +15,9 @@ project-specific belongs in `README.md` or another `docs/` file, not here.
 **Everything in the repository is explained below, one chapter per folder.**
 
 ```
-├── config/                  YAML configuration
+├── config/                  YAML configuration, grouped by experiment
+│   ├── experiment0/         VSC validation; example.yaml to replace
+│   └── experiment1/, ...    research experiments, added as needed
 ├── data/
 │   ├── raw/                 inputs. Never modified, never committed.
 │   └── processed/           generated cache, rebuildable
@@ -25,14 +27,17 @@ project-specific belongs in `README.md` or another `docs/` file, not here.
 │   ├── AGENTS_MEMORY.md     the runs done, and the dead ends
 │   └── VSC.md               how THIS project runs on the VSC cluster
 ├── notebooks/               thin: all logic imported from src/
+│   ├── experiment0/         validation reports; example_analysis.ipynb to replace
+│   └── experiment1/, ...    corresponding research reports
 ├── output/                  generated reports, logs and results
 │   ├── All_Results.md       every notebook's printed summary
-│   ├── figures/
-│   │   ├── CAPTIONS.md      one shared captions file
-│   │   └── <notebook>/      one PDF per figure
-│   ├── logs/                the debugging record
-│   ├── manifests/           what a run did
-│   └── results/             the numbers a run produced
+│   ├── CAPTIONS.md          one shared paper-caption file
+│   ├── experiment0/
+│   │   ├── figures/<notebook>/  one PDF per figure
+│   │   ├── logs/            the debugging record (.log only)
+│   │   ├── manifests/       what a run did
+│   │   └── results/         the numbers a run produced
+│   └── experiment1/, ...    same organization; optional stages inside an experiment
 ├── scripts/                 the experiments themselves
 │   └── slurm/               the .slurm and .sh files that submit them
 ├── src/
@@ -68,10 +73,34 @@ New `src/` subfolders need no permission — that is the obvious place to grow.
 
 ## `config/`
 
-The project's YAML configuration. **Flat, or in folders and subfolders — however the project wants
-it.** The template has no opinion beyond "configuration lives here".
+The project's YAML configuration. Use experiment folders as the default below; inside each,
+files may be flat or nested, and a YAML may describe one run or a sweep. No fixed schema.
 
-`example.yaml` is a shape to copy; delete it once there are real configs.
+`experiment0/example.yaml` is illustrative; replace it with real validation configs.
+
+### Experiments
+
+Projects commonly contain **`experiment1`, `experiment2`, ...**. Organize **`config/`,
+`notebooks/` and `output/` by experiment first**, using the same names across all three.
+For example, `config/experiment1/baseline.yaml`, `notebooks/experiment1/comparison.ipynb`
+and `output/experiment1/{logs,manifests,results,figures}/`. Add only experiments that exist.
+
+**Reserve `experiment0` for VSC validation**, before expensive research runs. Cover all
+relevant project behavior on the actual target environment: inputs/configs, CPU/GPU paths,
+numerical/output correctness, resource use, and checkpoint/resume when applicable. Local
+tests or a successful Slurm exit alone do not establish that these checks passed.
+
+Split validation into **0a, 0b, ...** when useful, for example `experiment0/0a/` for smoke
+checks and `experiment0/0b/` for broader validation. Mirror stages across the three trees;
+outputs then live at `output/experiment0/0a/{logs,manifests,results,figures}/`. Stage purposes
+are project-defined. Parallelize independent checks and gate only real dependencies.
+Record commands, coverage and pass criteria in `docs/VSC.md`, evidence in the experiment's
+output, and run outcomes in `docs/AGENTS_MEMORY.md`. Revalidate affected behavior after changes.
+
+**This is a guideline, not a compliance rule.** Shared `general/` folders, a flat small project,
+different stage naming or an established output layout may be sensible; explain the choice.
+Keep existing results and resume paths intact when adopting it. The shipped synthetic notebook
+demonstrates reporting only; it is not a completed VSC experiment 0.
 
 ---
 
@@ -115,7 +144,7 @@ records **experience**, and it has two halves:
   `walltime` / `OOM` / `crashed` / `diverged`), and one line of notes with the headline number or
   the output path. Projects iterate over dozens of runs, several of which do not work, and
   *"have we already tried that configuration?"* is a question nobody should answer by re-reading
-  `output/results/`. A table because it stays scannable at forty rows.
+  the experiment's results. A table because it stays scannable at forty rows.
 - **Dead ends** — four lines each: **Tried**, **Result**, **Why**, **Instead**. For anything that
   cost more than a couple of minutes, including what you eventually fixed: the fix is one changelog
   line, the dead end was the hour.
@@ -136,7 +165,7 @@ Built from the VSC documentation in `vsc-library/`, but written about this proje
 
 | tier | path | holds |
 |---|---|---|
-| **project storage** | `<configured staging root>/<Project>/` | big files: datasets, checkpoints, caches, **`output/results/`** |
+| **project storage** | `<configured staging root>/<Project>/` | big files: datasets, checkpoints, caches, **`output/<experiment>/results/`** |
 | **personal data** | `$VSC_DATA/<Project>/` | the repository, and the rest of `output/` |
 
 **Personal DATA is backed up; verify the allocation-specific project-storage protection policy.** They differ in size and in convenience: `$VSC_DATA` is only 75 GiB but you
@@ -248,7 +277,10 @@ Thin. A notebook presents a finished computation; it does not perform one.
 - Figures are **displayed inline** in the notebook, so the notebook itself is readable; the PDF on
   disk is what the paper uses.
 
-`example_analysis.ipynb` is the pattern to copy. Delete it once a real notebook exists.
+Use the [experiment organization](#experiments) above. Identify each notebook by its path
+relative to `notebooks/`, without `.ipynb`, e.g. `FigureSaver("experiment1/comparison")`.
+This prevents same-named reports in different experiments from overwriting each other.
+`experiment0/example_analysis.ipynb` is a synthetic pattern to replace with real reports.
 
 ---
 
@@ -259,6 +291,10 @@ notebook, not into `src/`, not into a new top-level folder. One root means "what
 produce?" and "what can I delete?" each have one answer — and it is what makes
 `src/utils/clean_run.py` possible at all. Rebuildable caches belong in `data/processed/`;
 weights and costly resumable state belong in `checkpoints/`, outside routine cleanup.
+
+Group by experiment first, optionally by validation stage next, then by the kinds below.
+For example, `output/experiment1/logs/` or `output/experiment0/0a/logs/`. The two aggregate
+Markdown reports remain directly under `output/` because they cover the whole project.
 
 ### `logs/`
 
@@ -292,9 +328,10 @@ reach gigabytes and `$VSC_DATA` is 75 GiB. Locally it is a plain subdirectory.
 accept it. No PNG on disk: the notebook displays its figures inline, so there is no second raster
 copy to go stale. Sized for A4 — see `src/visualize/`.
 
-### `figures/CAPTIONS.md`
+### `CAPTIONS.md`
 
-**One** file for all notebooks, grouped per notebook, figures in the order that notebook drew them.
+**One** file for all notebooks, grouped alphabetically by relative notebook path, figures in
+the order that notebook drew them.
 
 **These captions are the paper's captions.** They are written to be pasted under the figure in the
 manuscript, so they are **pure description**: what is plotted, on what axes, from how much data. No
@@ -306,8 +343,8 @@ to be rewritten when the argument changes.
 Every notebook's printed summary, in one file, because that one file answers "what did this project
 find?". Its shape is fixed:
 
-1. **One block per notebook, sorted alphabetically by notebook name.** A notebook whose name comes
-   earlier in the alphabet appears earlier in the file.
+1. **One block per notebook, sorted alphabetically by relative notebook path** (experiment,
+   optional subfolders, notebook name), so same-named notebooks remain distinct.
 2. **Each block is that notebook's printed summary, verbatim** — not a rewrite. The moment this
    file paraphrases, the two disagree and the notebook wins, but this is the file anybody reads.
 3. **That summary follows the notebook's own section order**, so the file and the notebook read the
@@ -349,9 +386,15 @@ adapt them when the project's needs differ. `__init__.py` files mark Python pack
   VSC tiers, one resolver, repo-root-relative, collapsing to the repository off-cluster so the same
   code runs on a laptop with no configuration. A path assembled at a call site with
   `"output/" + name` is correct on a laptop and wrong on the cluster.
+  Pass `experiment="experiment1"` or `"experiment0/0a"` to `outputs_dir`, `results_dir`,
+  `logs_dir` and `manifests_dir`; e.g. `results_dir("scores.csv", experiment="experiment1")`.
+  `config_path("experiment1/baseline")` finds the corresponding YAML. `figures_dir` mirrors
+  a notebook's relative parent before `figures/<stem>/`. Omit the experiment for a flat
+  layout; no global current-experiment state is inferred.
 - **`clean_run.py`** — *filled in.* `python -m src.utils.clean_run` lists what the previous run
   produced; `--clean` wipes it. Clears the **whole `output/` tree on both storage tiers** in one
-  invocation, locally or on the cluster, and leaves the tracked `.gitkeep` markers so the next run
+  invocation (**all experiments**, not just the current one), locally or on the cluster,
+  and leaves the tracked `.gitkeep` markers so the next run
   has somewhere to write. `--processed` additionally clears `data/processed/`; that is opt-in
   because rebuilding the cache can cost far more than re-running the notebooks. `data/raw/`,
   weights and library submodules are never touched. Preview lists individual files and validates
@@ -364,17 +407,20 @@ adapt them when the project's needs differ. `__init__.py` files mark Python pack
   parallel, in separate processes (matplotlib's figure registry is global), then rebuilds
   `CAPTIONS.md` and `All_Results.md`. Notebooks are **discovered**, alphabetically — a hard-coded
   list silently stops covering a notebook someone added.
-  The lightweight runner supports top-level Python notebooks, not Jupyter magics or shell
-  commands (except `%matplotlib inline`, ignored headlessly). It captures the final nonempty
+  Discovery is recursive, ignores hidden folders such as `.ipynb_checkpoints`, and uses
+  relative paths without `.ipynb`: `--only experiment1/comparison` selects one notebook.
+  Both grouped and flat Python notebooks work; Jupyter magics and shell commands are unsupported
+  (except `%matplotlib inline`, ignored headlessly). It captures the final nonempty
   code cell's stdout, keeps it for rebuilding, and marks failed/incomplete runs in both reports.
   Partial reruns preserve other discovered notebooks' last reports. Use a project-specific
-  Jupyter runner if kernel features or nested notebooks are needed.
+  Jupyter runner if kernel features are needed.
 - **`update_library.py`** — *filled in.* Bumps this project's submodule pin; see below.
 - **`logging_setup.py`** — *filled in, minimal.* One logger, writing to the console **and** to
-  `output/logs/`. Scheduler stdout follows the submission settings; a log the code
+  `output/<experiment>/logs/` via `setup(experiment="experiment1", run_id="...")`.
+  Omitting the experiment keeps flat `output/logs/`. Scheduler stdout follows the submission settings; a log the code
   controls survives the job that produced it.
 - **`config.py`** — *empty.* How a project reads its configuration is its own business. The one ask:
-  write the **resolved** config into `output/manifests/`.
+  write the **resolved** config into the experiment's `manifests/`.
 
 ### `src/visualize/`
 
@@ -417,7 +463,8 @@ install), forces matplotlib's `Agg` backend, and provides `isolated_output`, whi
 cluster tiers into `tmp_path` — exercising the branch that otherwise only runs in production.
 
 The supplied tests cover path resolution, cleanup boundaries, atomic replacement, notebook
-reports, PDF figures, A4 sizing, library updates and initialization. Their header comments
+reports (including nested experiments and partial reruns), isolated PDF figures, A4 sizing,
+library updates and initialization. Their header comments
 explain the intent. Keep relevant tests and adapt them alongside project changes.
 
 **Nothing runs them automatically.** There is no CI and no pre-commit hook in the template, so an

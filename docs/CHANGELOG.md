@@ -2,6 +2,7 @@
 
 ## 28-10-2026
 
+- Sync TEMPLATE.md: flexible experiment folders and staged experiment-0 VSC validation; preserve this project's code, layout and run evidence.
 - Keep setup and frozen 0A watchers alive through Slurm accounting outages. Preserve
   submitted IDs and bounded diagnostics, query an unavailable cluster once per pass,
   defer submissions and resume after recovery. Ambiguous submissions still stop.
