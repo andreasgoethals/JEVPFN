@@ -6,14 +6,15 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The latest 28 October download confirms the targeted Decision3 retry passed CPU/storage
-checks and checkpoint staging; token preparation was still running. Its older watcher
-stopped during a Slurm accounting outage. The updated watcher preserves submitted jobs
-and waits for accounting recovery. Keep active VSC checkouts unchanged.
+The latest 28 October download confirms CPU/storage checks passed. Decision3's saved-token
+preparation exceeded its two-hour limit; the startup check now avoids a redundant full
+token-blob scan and logs its stages, while the merge retains full content verification.
+Liquid d1-2B's download, container, exact counts and native GPFS storage checks passed;
+its B200 test was still queued at 14:57. Keep active VSC checkouts unchanged.
 The preceding campaign completed 174/176 steps: ten exact-token audits, nine B200 decision
 contracts/pilots and three encoder contracts passed. Decision3's corrected device argument
-still needs live inference testing. Newly added Liquid d1-2B needs its own setup and B200
-tests; TabSTAR v1.1 needs its interrupted checkpoint transfer and runtime tests completed.
+still needs live inference testing. Liquid d1-2B needs its B200 contract and dataset pilot;
+TabSTAR v1.1 needs its interrupted checkpoint transfer and runtime tests completed.
 Use the targeted commands in [VSC](docs/VSC.md) and preserve completed work.
 Token audits use ten independent CPU partitions per provider and a strict merge, reusing
 matching committed counts. Bounded B200 passes do not certify full-dataset extraction

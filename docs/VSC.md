@@ -234,7 +234,7 @@ Decision3 failed before inference because its publisher runtime requires an expl
 CUDA index. The adapter now uses the current logical device (respecting Slurm's visible
 device mapping). This fix does not change questions, token identities or images.
 
-After publishing/pulling with JEVPFN jobs idle, repeat Decision3 and set up Liquid d1-2B.
+After publishing/pulling with JEVPFN jobs idle, the targeted setup command is:
 Export the roots and activate the CPU environment as above, then:
 
 ```bash
@@ -248,6 +248,17 @@ It repeats CPU/storage prerequisites and verifies cached inputs before submittin
 GPFS/B200 descendants. After a disconnect, use `--provider decision3 --provider liquid_lfm3 --execute --watch`
 and omit `--restart`; the `--all` wrapper would select a
 different provider list. The final clean 0A campaign still tests all providers/encoders.
+
+The later 28 October targeted attempt timed out in Decision3's two-hour saved-token
+preparation; Liquid d1-2B's counts/container/storage passed and its B200 contract was
+still queued. Let the existing watcher finish Liquid's contract and dependent pilot.
+Do not pull while either can run. After all JEVPFN jobs are idle, pull the preparation
+fix and use `--provider decision3 --restart --execute --watch` to repeat only that
+provider's chain plus CPU/Lustre prerequisites. Resume this new attempt after a disconnect
+with `--provider decision3 --execute --watch` (no restart). Completed token partitions,
+sealed containers, weights and previous receipts are retained. A new shell must first
+export the roots and source `scripts/activate_conda.sh`; an unset JEVPFN_PYTHON otherwise
+causes Bash's empty-command error before Python starts.
 
 The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
 mismatch: Tykky writes image paths containing `bin//python`, while the seal used the
@@ -279,6 +290,12 @@ batches from cancelled jobs. A separate CPU merge checks identities, file hashes
 coverage and prepared-token contents, and rolls back all merge inserts on any conflict.
 The final counts retain their original schema/identity for GPU consumers. Restart partitions
 stay on PROJECT for recovery; they are excluded from GPFS copies and downloaded result bundles.
+The serial preparation step recovers interrupted SQLite transactions and checks the compact
+identity/count tables and prepared-token key coverage. It no longer scans all token blobs
+with a whole-database quick_check before the parallel work. Existing prepared caches get
+a compact lookup index if needed. Elapsed-stage messages identify recovery, table checks,
+each dataset and key coverage. This step is not final acceptance: the merge still verifies
+every input, partition checksum, compressed token checksum and count before GPU use.
 The five added renderers use eight CPUs/27,200 MiB per partition and a 12-hour limit; the
 original five and Liquid d1-2B use two CPUs/6,800 MiB and four hours. Progress logs report throughput at least
 once per minute between batches. Shorter partitions improve parallelism, but queueing, text

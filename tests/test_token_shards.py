@@ -179,7 +179,7 @@ def prepared_counter():
         def attach_cache(self, db, *, writable):
             self.db = db
             db.execute(
-                "CREATE TABLE IF NOT EXISTS prepared_tokens (payload_sha256 TEXT PRIMARY KEY, prepared_sha256 TEXT, content BLOB)"
+                "CREATE TABLE IF NOT EXISTS prepared_tokens (payload_sha256 TEXT PRIMARY KEY, prepared_sha256 TEXT, content BLOB) WITHOUT ROWID"
             )
             db.commit()
 
@@ -319,3 +319,66 @@ def test_added_merge_has_time_for_large_saved_token_arrays():
         step = shards.plan(provider, "/project")[-1]
         assert "--time=24:00:00" in step["flags"]
         assert len(step["dependencies"]) == 10
+
+
+def test_prepare_legacy_blob_cache_checks_compact_tables_and_keys(
+    inputs, prepared_counter, monkeypatch, capsys
+):
+    result = audit.audit_provider("decision3", inputs, counter=prepared_counter)
+    destination = result["counts_database"]
+    connect = sqlite3.connect
+    queries = []
+
+    def traced_connect(*args, **kwargs):
+        db = connect(*args, **kwargs)
+        db.set_trace_callback(queries.append)
+        return db
+
+    monkeypatch.setattr(shards.sqlite3, "connect", traced_connect)
+    report = shards.prepare("decision3", inputs, counter=prepared_counter)
+    assert report["reusable_committed_inputs"] == 3
+    assert report["status"] == "ready_for_parallel_counting"
+    assert report["seconds"] >= 0
+    assert {q for q in queries if q.startswith("PRAGMA quick_check")} == {
+        "PRAGMA quick_check(identity)",
+        "PRAGMA quick_check(counts)",
+    }
+    coverage = next(q for q in queries if "LEFT JOIN prepared_tokens" in q)
+    with connect(destination) as db:
+        query_plan = str(db.execute("EXPLAIN QUERY PLAN " + coverage).fetchall())
+        assert "COVERING INDEX prepared_payload_keys" in query_plan
+        assert db.execute("SELECT SUM(input_tokens) FROM counts").fetchone() == (15,)
+    output = capsys.readouterr().out
+    assert "token contents are verified by the merge" in output
+    assert "3 reusable inputs" in output
+
+
+@pytest.mark.parametrize("damage", ["missing_table", "missing_key", "gap", "unknown_dataset"])
+def test_prepare_still_refuses_invalid_existing_coverage(inputs, prepared_counter, damage):
+    result = audit.audit_provider("decision3", inputs, counter=prepared_counter)
+    with sqlite3.connect(result["counts_database"]) as db:
+        if damage == "missing_table":
+            db.execute("DROP TABLE prepared_tokens")
+        elif damage == "missing_key":
+            db.execute("DELETE FROM prepared_tokens")
+        elif damage == "gap":
+            db.execute("DELETE FROM counts WHERE input_no=1")
+        else:
+            db.execute("UPDATE counts SET dataset_id='unknown' WHERE input_no=1")
+    with pytest.raises(ValueError):
+        shards.prepare("decision3", inputs, counter=prepared_counter)
+
+
+def test_prepare_is_not_acceptance_and_merge_still_rejects_corrupt_blob(inputs, prepared_counter):
+    for i in range(3):
+        audit.audit_provider("decision3", inputs, counter=prepared_counter, shard=(i, 3))
+    result = shards.merge("decision3", inputs, counter=prepared_counter, shards=3)
+    with sqlite3.connect(result["counts_database"]) as db:
+        db.execute("UPDATE prepared_tokens SET prepared_sha256='corrupted'")
+    report = shards.prepare("decision3", inputs, counter=prepared_counter)
+    assert (
+        report["prepared_content_verification"]
+        == "required_in_partition_merge_before_gpu_acceptance"
+    )
+    with pytest.raises(ValueError, match="Conflicting prepared tokens"):
+        shards.merge("decision3", inputs, counter=prepared_counter, shards=3)

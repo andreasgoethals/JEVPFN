@@ -42,14 +42,35 @@ Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Latest inspected Downloads/output_JEVPFN.zip, modified 28 October 2026 10:41:54,
-2,567,961 bytes, 1,342 members. The Decision3-only restart receipt stopped at
-09:03:35 UTC because sacct could not connect to Slurm accounting. The ZIP confirms
-CPU 62452620 preflight passed, storage 62452621 passed, and checkpoint stage 62452622
-passed. Token preparation 62452632 has only startup lines; the owner's subsequent
-scheduler output confirms it was still running. No failure or finish is established.
-Do not pull, clean, cancel or resubmit while that job is active. The local accounting
-recovery fix (7ffc89b) postdates its VSC checkout. Preserve completed token counts.
+Latest inspected Downloads/output_JEVPFN.zip, modified 28 October 2026 14:54:46,
+2,683,955 bytes, 1,405 members. Targeted Decision3/Liquid d1-2B graph: 19 completed,
+one failed, 15 blocked, one submitted and one pending. CPU 62456535, Lustre 62456536
+and both checkpoint stages passed. Decision3 preparation 62456544 timed out after
+two hours; its ten partitions, merge, scratch/storage, GPU test and pilot were blocked.
+Earlier preparation 62452632 did complete, reporting 1,698,127 reusable inputs.
+The timeout therefore does not mean those counts were lost or need retokenizing.
+
+Liquid d1-2B stage 62456538, container 62456545, preparation 62456625, all ten token
+partitions, merge 62456814, scratch 62456843 and GPFS storage 11748950 passed.
+Its exact audit covers 18 datasets, 1,698,127 inputs and 710,490,406 tokens; maximum
+3,044 tokens, zero overflow. The merge summary's short duration is not total audit time.
+Owner's 14:57 accounting/queue output confirms B200 contract 11748961 was PENDING
+for Priority; its pilot had not been submitted. Keep this watcher running; no source
+pull, cleanup or duplicate submission while it or its descendant can still run.
+
+The preparation timeout log had no intermediate stages, so it cannot locate the
+exact stall. Code inspection found a whole-database quick_check (including token blobs)
+and a coverage join that could read blob-bearing pages in older caches. Preparation now
+checks the identity/count tables, ensures/analyzes a compact key index, uses a bounded
+256 MiB SQLite cache and logs elapsed phases. Full per-input/blob checks remain in
+the strict merge before GPU acceptance. No question, tokenizer, counter identity or
+saved token contents change. Actual Lustre runtime improvement still needs a rerun.
+After Liquid's queued test and pilot finish, an idle targeted Decision3 restart reuses
+assets/counts. Do not delete output to troubleshoot this failure.
+Local validation: 1,127 tests passed, 25 skips for unavailable staged assets/Torch or
+POSIX-only behavior. Focused token tests passed 33/33, including recovery and corrupt
+content rejection; Ruff, formatting, dependencies and diff checks passed. No remote
+jobs, paid calls, model downloads or output cleanup were performed for this fix.
 
 The preceding full setup ended with 174 completed, one failed and one blocked job.
 The table below is historical evidence from that campaign, not current-source acceptance.

@@ -225,11 +225,22 @@ def finish_shard(destination, recipe, shard, seconds):
 
 
 def prepare(provider, inputs=None, *, counter=None):
-    """Recover a cancelled writer's hot SQLite journal before parallel readers start."""
+    """Recover a hot journal and check count/key structure before parallel readers.
+
+    This is not final audit acceptance. The merge verifies every partition hash,
+    input identity and compressed token checksum before producing GPU evidence.
+    Scanning the large token-blob table here would serialize that work again.
+    """
     from src.cluster.token_audit import selected_inputs
     from src.jev.catalog import ADDED, ExactCounter
     from src.jev.registry import require_prepared_coverage
 
+    started = time.monotonic()
+
+    def progress(message):
+        print(f"{provider} preparation [{time.monotonic() - started:.1f}s]: {message}", flush=True)
+
+    progress("loading pinned tokenizer and question-bank identities")
     counter = ExactCounter(provider) if counter is None else counter
     inputs = selected_inputs() if inputs is None else inputs
     recipe = dict(
@@ -244,15 +255,19 @@ def prepare(provider, inputs=None, *, counter=None):
     )
     reused = 0
     if destination.is_file():
+        progress("opening saved counts; recovering any interrupted transaction")
         with (
             file_lock(destination.with_suffix(".lock"), timeout=1),
             closing(sqlite3.connect(destination)) as db,
         ):
             # A writable connection recovers a hot rollback journal automatically.
             # Do not remove journals manually or let parallel read-only jobs recover it.
+            db.execute("PRAGMA cache_size=-262144")  # Same bounded 256 MiB as audit/merge.
             identity(db, recipe)
-            if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
-                raise ValueError("Existing token database failed integrity verification")
+            progress("checking identity/count tables; token contents are verified by the merge")
+            for table in ("identity", "counts"):
+                if db.execute(f"PRAGMA quick_check({table})").fetchall() != [("ok",)]:
+                    raise ValueError("Existing token database failed integrity verification")
             for item in inputs:
                 n, first, last = db.execute(
                     "SELECT COUNT(*),MIN(input_no),MAX(input_no) FROM counts WHERE dataset_id=?",
@@ -261,15 +276,31 @@ def prepare(provider, inputs=None, *, counter=None):
                 if (n and (first != 0 or last != n - 1)) or n > item["unique_inputs"]:
                     raise ValueError("Existing monolithic audit is not a resumable prefix")
                 reused += n
+                progress(f"{item['dataset_id']}: {n:,} committed inputs available for reuse")
             if db.execute("SELECT COUNT(*) FROM counts").fetchone()[0] != reused:
                 raise ValueError("Existing token database contains an unknown dataset")
             if provider in ADDED:
+                if not has_prepared(db):
+                    raise ValueError("CPU-prepared token table is missing; review before reuse")
+                progress("ensuring compact prepared-token key index")
+                # Older monolithic audits may predate the index added by merge.
+                # WITHOUT ROWID primary keys share pages with large token blobs;
+                # a key-only index keeps the completeness join off those pages.
+                db.execute(
+                    "CREATE INDEX IF NOT EXISTS prepared_payload_keys ON prepared_tokens(payload_sha256)"
+                )
+                db.execute("ANALYZE prepared_payload_keys")
+                db.commit()
+                progress("checking every count has prepared tokens using the compact index")
                 require_prepared_coverage(db)
+    progress(f"ready for parallel verification/counting; {reused:,} reusable inputs")
     return dict(
         status="ready_for_parallel_counting",
         provider=provider,
         audit_id=digest(recipe),
         reusable_committed_inputs=reused,
+        seconds=time.monotonic() - started,
+        prepared_content_verification="required_in_partition_merge_before_gpu_acceptance",
     )
 
 

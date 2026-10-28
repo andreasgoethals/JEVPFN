@@ -2,6 +2,14 @@
 
 ## 28-10-2026
 
+- Narrow saved-token startup verification to identity/count tables and compact prepared-key
+  coverage, avoiding a serial full token-blob scan before partition validation. Add elapsed
+  progress and bounded SQLite caching; retain strict merge content checks and tokenizer
+  identities. Record Decision3's preparation timeout and Liquid d1-2B's passed CPU/storage
+  stages with its B200 test still queued. Live recovery timing remains unverified.
+  Validation: 1,127 local tests passed, 25 asset/runtime/platform skips; Ruff, dependency,
+  formatting and diff checks passed. Six regression cases cover reuse, invalid coverage,
+  compact-index use and rejection of corrupt token content at merge.
 - Add separately pinned Liquid d1-2B (`liquid_lfm3`), exact publisher rendering/answer lead,
   mean score readout, isolated Transformers 5.19 CPU/GPU container, eleven-provider setup
   and twelve-extractor comparison. Preserve historical token counts and counter files.
