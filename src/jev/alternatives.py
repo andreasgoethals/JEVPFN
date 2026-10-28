@@ -28,7 +28,7 @@ def preview(request, provider):
     state = json.loads(request.payload_json)["state"]
     question = semantic_question(json.loads(request.payload_json)["question"])
     questions = {QUESTION_ID: question}
-    from src.jev.registry import ADDED
+    from src.jev.catalog import ADDED
 
     if provider in ADDED:
         from src.utils.config import load_yaml
@@ -102,16 +102,17 @@ def preview(request, provider):
             "reference": "https://github.com/strands-labs/strands-decider/blob/b9fc83626bcca822d00f822d6c2e151b8d244ee9/src/strands_decider/infer.py",
             "live_verified": False,
         }
-    if provider == "liquid":
+    if provider in {"liquid", "liquid_lfm3"}:
         return {
             "transport": "self_hosted_python_model.system_one",
             "call": "model.system_one(**arguments)",
-            "arguments": {"state": canonical_json(state), "questions": questions},
+            "arguments": {"state": canonical_json(state), "questions": questions,
+                          **({"score_readout": "mean"} if provider == "liquid_lfm3" else {})},
             "pin_requirement": "checkpoint revision and custom inference code hash",
             "runtime_requirements": [
                 "Load the staged pinned checkpoint with the publisher's custom decision implementation."
             ],
-            "reference": "https://huggingface.co/LiquidAI/d1-3B",
+            "reference": "https://huggingface.co/LiquidAI/" + ("d1-2B" if provider == "liquid_lfm3" else "d1-3B"),
             "live_verified": False,
         }
     if provider == "perplexity":

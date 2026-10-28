@@ -227,7 +227,8 @@ def finish_shard(destination, recipe, shard, seconds):
 def prepare(provider, inputs=None, *, counter=None):
     """Recover a cancelled writer's hot SQLite journal before parallel readers start."""
     from src.cluster.token_audit import selected_inputs
-    from src.jev.registry import ADDED, ExactCounter, require_prepared_coverage
+    from src.jev.catalog import ADDED, ExactCounter
+    from src.jev.registry import require_prepared_coverage
 
     counter = ExactCounter(provider) if counter is None else counter
     inputs = selected_inputs() if inputs is None else inputs
@@ -274,7 +275,7 @@ def prepare(provider, inputs=None, *, counter=None):
 
 def merge(provider, inputs=None, *, counter=None, shards=10):
     from src.cluster.token_audit import audit_provider, selected_inputs
-    from src.jev.registry import ADDED, ExactCounter
+    from src.jev.catalog import ADDED, ExactCounter
 
     validate_shard(0, shards)
     counter = ExactCounter(provider) if counter is None else counter
@@ -419,7 +420,7 @@ def merge(provider, inputs=None, *, counter=None, shards=10):
 
 def plan(provider, root, *, dependencies=()):
     from src.cluster.token_preparation import resources
-    from src.jev.registry import ADDED
+    from src.jev.catalog import ADDED
 
     count = load_yaml("experiment_0/scheduling").get("token_audit_shards", 10)
     validate_shard(0, count)
@@ -464,7 +465,7 @@ def plan(provider, root, *, dependencies=()):
 def main():
     from src.cluster.preflight import storage_policy_failures
     from src.cluster.token_audit import audit_provider, save_reports
-    from src.jev.registry import ADDED, SELF_HOSTED
+    from src.jev.catalog import ADDED, SELF_HOSTED
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", choices=SELF_HOSTED, required=True)

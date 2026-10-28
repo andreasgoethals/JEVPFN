@@ -20,7 +20,7 @@ from src.cluster.job_graph import advance
 from src.cluster.maintenance import require_idle_vsc
 from src.cluster.scheduling import gpu_profile
 from src.cluster.token_shards import plan as token_plan
-from src.jev.registry import ADDED, SELF_HOSTED
+from src.jev.catalog import ADDED, SELF_HOSTED
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
@@ -81,7 +81,10 @@ def plan(providers, *, reuse=()):
                 )
             )
             ready = provider + "_build"
-        steps.extend(token_plan(provider, root, dependencies=[provider + "_stage"]))
+        token_dependencies = [provider + "_stage"]
+        if provider == "liquid_lfm3":
+            token_dependencies = list(dict.fromkeys([*token_dependencies, ready]))
+        steps.extend(token_plan(provider, root, dependencies=token_dependencies))
         steps.append(
             dict(
                 name=provider + "_scratch",
@@ -299,7 +302,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", action="append", choices=SELF_HOSTED)
     parser.add_argument(
-        "--all", action="store_true", help="Set up/test all ten open-weight extractors"
+        "--all", action="store_true", help="Set up/test all eleven open-weight extractors"
     )
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(

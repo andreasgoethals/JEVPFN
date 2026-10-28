@@ -393,12 +393,12 @@ def test_recorded_raw_response_recovers_without_another_call(tmp_path, intended_
     assert restarted.cache.get(intended_request, kind="verified_response") == raw
 
 
-def test_eleven_offline_mappings_share_identical_questions(intended_request):
+def test_twelve_offline_mappings_share_identical_questions(intended_request):
     from src.jev.provider import semantic_question
     from src.jev.registry import ADDED
 
     catalog = load_yaml("extractors")
-    assert len(catalog["candidates"]) == 11 and catalog["enabled"] is False
+    assert len(catalog["candidates"]) == 12 and catalog["enabled"] is False
     original = preview(intended_request, "jev")["body"]["questions"]
     for provider, candidate in catalog["candidates"].items():
         assert candidate["enabled"] is False

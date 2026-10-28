@@ -61,6 +61,7 @@ def test_all_empty_inputs_no_calls_all_derived_values_missing(
     [
         "jev",
         "liquid",
+        "liquid_lfm3",
         "perplexity",
         "strands",
         "cloudflare",

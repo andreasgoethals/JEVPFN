@@ -17,6 +17,13 @@ export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STAGING_ROOT="${1:-/lustre1/project/stg_00211}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
+# d1-2B needs the same Transformers 5.19 renderer on CPU and GPU; older counters
+# retain their existing 5.17 environment and audit identities. No GPU is requested.
+if [[ "${2:-}" == liquid_lfm3 ]]; then
+    export JEVPFN_CONDA_ENV=liquid_lfm3
+    export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
+    source scripts/activate_runtime.sh
+fi
 if [[ "${3:-}" == prepare ]]; then
     python -m src.cluster.token_shards --provider "${2:?}" --prepare
 elif [[ "${3:-}" == merge ]]; then

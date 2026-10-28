@@ -1,4 +1,4 @@
-"""Guarded, serial GPU pilot/extraction for five pinned open-weight candidates.
+"""Guarded, serial GPU pilot/extraction for pinned open-weight candidates.
 
 Default CLI only explains readiness. Actual inference requires --execute, enabled pilot
 config, a VSC GPU allocation, staged/hash-verified weights and matching complete exact
@@ -24,10 +24,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from src.jev.cache import ResponseCache
+from src.jev.catalog import ADDED, PINS, SELF_HOSTED, ExactCounter
 from src.jev.checkpoints import verify_checkpoint
 from src.jev.inputs import _read_set, iter_prepared_inputs, prepared_request
 from src.jev.provider import QUESTION_ID, response_features, semantic_question
-from src.jev.registry import ADDED, PINS, SELF_HOSTED, ExactCounter
 from src.jev.templates import TEMPLATE_VERSION
 from src.utils import paths
 from src.utils.acceptance import reviewed_acceptance
@@ -93,6 +93,8 @@ class SelfHostedClient:
                 },
             },
         }
+        if provider == "liquid_lfm3":
+            self.settings["request_configuration"]["score_readout"] = "mean"
         from src.cluster.containers import active_identity
 
         image = active_identity()
@@ -117,7 +119,7 @@ class SelfHostedClient:
             self.settings["request_configuration"]["additional_runtime_sha256"] = file_sha256(
                 paths.REPO_ROOT / "src/jev/extended_runtimes.py"
             )
-        elif provider == "liquid":
+        elif provider in {"liquid", "liquid_lfm3"}:
             from transformers import AutoModel
 
             self.model = (
@@ -185,9 +187,10 @@ class SelfHostedClient:
         with self.torch.inference_mode():
             if self.provider in ADDED:
                 raw = self.model.predict_payload(payload)
-            elif self.provider == "liquid":
+            elif self.provider in {"liquid", "liquid_lfm3"}:
                 raw = self.model.system_one(
-                    state=canonical_json(payload["state"]), questions={QUESTION_ID: question}
+                    state=canonical_json(payload["state"]), questions={QUESTION_ID: question},
+                    **({"score_readout": "mean"} if self.provider == "liquid_lfm3" else {}),
                 )
             elif self.provider == "strands":
                 raw = self.model.evaluate(

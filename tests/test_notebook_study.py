@@ -51,7 +51,7 @@ def test_r2_differences_are_not_rescaled_or_dropped_for_negative_references():
 def test_coverage_requires_five_defined_folds_and_rejects_duplicate_campaign():
     frame = fixture_folds()
     table = study.planned_coverage(frame, "experiment_1")
-    assert table.planned.eq(34).all() and table.completed.sum() == 3
+    assert table.planned.eq(37).all() and table.completed.sum() == 3
     broken = frame.drop(frame[frame.model_id.eq("catboost") & frame.outer_fold.eq(4)].index)
     assert study.planned_coverage(broken, "experiment_1").completed.sum() == 0
     bad = frame[frame.model_id.eq("catboost")].copy()

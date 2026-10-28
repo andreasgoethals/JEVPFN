@@ -5,7 +5,7 @@ from copy import deepcopy
 import pytest
 
 from src.cluster import diagnostics, job_graph, setup_extractors
-from src.jev.registry import SELF_HOSTED
+from src.jev.catalog import SELF_HOSTED
 from src.utils.config import load_yaml
 
 

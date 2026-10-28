@@ -7,7 +7,7 @@ import platform
 import sys
 from pathlib import Path
 
-from src.jev.registry import SELF_HOSTED
+from src.jev.catalog import SELF_HOSTED
 from src.utils import paths
 from src.utils.serialization import write_json
 

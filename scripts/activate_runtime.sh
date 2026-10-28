@@ -19,7 +19,7 @@ case "$JEVPFN_RUNTIME_PROFILE" in
 esac
 unset JEVPFN_CONTAINER_PROVIDER JEVPFN_CONTAINER_ID JEVPFN_MONITOR_PYTHON JEVPFN_NVIDIA_SMI
 case "$JEVPFN_RUNTIME_NAME" in
-    cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble|catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
+    cloudflare|intern|liquid|liquid_lfm3|strands|perplexity|h2o|sii|kev|decision3|nimble|catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|tabstar|contexttab|ag_mm)
         if [[ "$JEVPFN_REQUESTED_ENV" == "$JEVPFN_RUNTIME_NAME" ]]; then
             JEVPFN_REQUESTED_ENV="$JEVPFN_RUNTIME_BASE/environments/$JEVPFN_RUNTIME_NAME"
             export JEVPFN_CONDA_ENV="$JEVPFN_REQUESTED_ENV"

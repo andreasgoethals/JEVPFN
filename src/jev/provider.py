@@ -193,7 +193,7 @@ def response_features(request: IntendedRequest, response: dict) -> dict[str, flo
     if provider == "jev":
         wire = api_preview(request)
     else:
-        from src.jev.registry import SELF_HOSTED
+        from src.jev.catalog import SELF_HOSTED
 
         payload = json.loads(request.payload_json)
         require_nonempty_text(payload)

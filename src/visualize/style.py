@@ -164,6 +164,7 @@ TASK_COLORS = {
 DECISION_COLORS = {
     "jev": "#276A87",
     "liquid": "#C37929",
+    "liquid_lfm3": "#885200",
     "perplexity": "#54765A",
     "cloudflare": "#846C9C",
     "intern": "#8C6D31",

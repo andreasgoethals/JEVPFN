@@ -25,10 +25,10 @@ from src.cluster.semantic_contracts import exercise_robustness, exercise_semanti
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.jev.cache import ResponseCache
+from src.jev.catalog import SELF_HOSTED, ExactCounter
 from src.jev.features import load_block, materialize_cached_block, save_block
 from src.jev.inputs import iter_prepared_inputs, prepared_request
 from src.jev.provider import response_features
-from src.jev.registry import SELF_HOSTED, ExactCounter
 from src.jev.requests import IntendedRequest, build_requests
 from src.jev.self_hosted import (
     SelfHostedClient,

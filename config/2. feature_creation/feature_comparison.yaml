@@ -4,6 +4,7 @@ comparison:
   providers:
   - jev
   - liquid
+  - liquid_lfm3
   - perplexity
   - cloudflare
   - strands

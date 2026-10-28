@@ -6,19 +6,19 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 28 October 09:39 download contains 174 completed setup steps out of 176.
-All ten exact-token audits merged successfully, with zero overflowing inputs.
-Nine open-weight decision models passed B200 contracts and bounded 18-dataset pilots;
-all three embedding encoder contracts also passed. Decision3 failed before inference:
-its adapter supplied an indexless CUDA device. That argument is now corrected locally;
-its B200 contract and blocked pilot still need rerunning. Separately, TabSTAR v1.1's
-checkpoint download lost its network connection; bounded download recovery is now
-implemented, but its container/GPU tests have not run. Use the targeted commands in
-[VSC](docs/VSC.md) and preserve completed work.
+The latest 28 October download confirms the targeted Decision3 retry passed CPU/storage
+checks and checkpoint staging; token preparation was still running. Its older watcher
+stopped during a Slurm accounting outage. The updated watcher preserves submitted jobs
+and waits for accounting recovery. Keep active VSC checkouts unchanged.
+The preceding campaign completed 174/176 steps: ten exact-token audits, nine B200 decision
+contracts/pilots and three encoder contracts passed. Decision3's corrected device argument
+still needs live inference testing. Newly added Liquid d1-2B needs its own setup and B200
+tests; TabSTAR v1.1 needs its interrupted checkpoint transfer and runtime tests completed.
+Use the targeted commands in [VSC](docs/VSC.md) and preserve completed work.
 Token audits use ten independent CPU partitions per provider and a strict merge, reusing
 matching committed counts. Bounded B200 passes do not certify full-dataset extraction
 or final acceptance. Source identities are recorded; the final frozen run repeats all gates.
-Eleven extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
+Twelve extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
 distinct inputs and 3,294,340 row/input links. Dated evidence is in
 [AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
 
@@ -29,7 +29,7 @@ small manifests remain on DATA. Committed feature/prediction databases publish p
 and at job exit; predictor staging also restores durable completed folds and predictions
 so a recreated scratch workspace resumes them. Scratch is not a backup. No new
 GPFS project allocation is required. Existing H100 images remain preserved; all A100
-routes are excluded. Decision3 still needs B200 inference validation. See [VSC](docs/VSC.md).
+routes are excluded. See [VSC](docs/VSC.md).
 
 The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
 Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
@@ -69,6 +69,7 @@ per-column request; duplicate numeric columns are included only once in combined
 |---|---|
 | Jev 1.13.0 | TypeSafe API, locally |
 | Liquid d1-3B | Open weights, VSC |
+| Liquid d1-2B (LFM3) | Open weights, VSC; new candidate awaiting live acceptance |
 | Strands Decider 2B | Open weights, VSC |
 | Perplexity Decider v1.1-27B | Open weights, VSC |
 | Cloudflare Clef-flash | Open weights, VSC |
@@ -82,11 +83,16 @@ per-column request; duplicate numeric columns are included only once in combined
 Microsoft is excluded by owner decision. Pins, licences, context and price references
 are in `config/2. feature_creation/extractors.yaml`. Open weights have no vendor token
 fee; GPU credits and licence conditions still apply. Compatibility requires real testing.
-The five additions use Apache-2.0 releases, not additional hosted APIs. Decision3 uses
+H2O, SII, Kev, Decision3 and Nimble use Apache-2.0 releases, not additional hosted APIs. Decision3 uses
 the current selected d3-turbo checkpoint; Nimble uses the Apache release, not a later
 noncommercial variant. H2O's released binary formatter floors the winning probability
 at 0.801. Preserve and disclose that policy; it is not evidence of target calibration.
-All eleven adapters preserve the same canonical task metadata, question, named text, class
+Liquid d1-2B (`liquid_lfm3`) is an additional pinned candidate alongside d1-3B;
+its text-only path uses the same question v3 and explicitly requests mean score readout.
+Its separate Transformers 5.19 Blackwell image serves both CPU audits and GPU inference.
+It still needs its own live VSC contracts and dataset pilot; earlier Liquid evidence is for d1-3B.
+
+All twelve adapters preserve the same canonical task metadata, question, named text, class
 meanings and option order. Native framing, token IDs, probability calibration and wire
 formats differ. Adapters expose the same downstream feature schema; numeric answers are
 expected to differ. Raw provider confidence is not an interchangeable calibrated quantity. Conservative complete-request caps also
@@ -99,19 +105,19 @@ and logistic/linear regression**. All use the same rows and folds. The approved 
 |---|---|
 | 0A | Before extraction: local Jev interfaces/pilot; VSC storage, exact decision token counts, ten decision runtimes and three embedding encoders. |
 | 0B | After extraction: complete caches/row mappings; all nine predictors, PCA widths/scopes, native-text augmentation, resume and full-fold feasibility. |
-| 1 | Each of six predictors: non-text alone, then joint, per-column and both decision features for each of eleven extractors. |
+| 1 | Each of six predictors: non-text alone, then joint, per-column and both decision features for each of twelve extractors. |
 | 2 | Six predictors, three frozen encoders: per-column PCA32 and joint PCA256/128/64/32/16/8. No decision features. |
 | 3 | TabSTAR, ConTextTab and AG-MM on original text and non-text features. |
 | 4 | Label-blind question/context/option-order sensitivity; analysis reuses explicit real diagnostic reports. |
 | 5 | Presence/statistics, shuffled decision features, probability/uncertainty controls; separate descriptive winner-selected combinations. |
 
-Experiments 1/2/3 contain **3,672 / 2,268 / 54 configurations**: 29,970 outer fits,
-plus 14,985 binary inner fits. A configuration means one dataset/predictor/representation;
+Experiments 1/2/3 contain **3,996 / 2,268 / 54 configurations**: 31,590 outer fits,
+plus 15,795 binary inner fits. A configuration means one dataset/predictor/representation;
 it has five outer folds. No expensive HPO is performed. Experiment 1 shares its non-text
 baseline across extractors. Experiment 2 has seven PCA settings, not their Cartesian
 product with every decision model. Experiment 3 has one original-feature setting per model.
 
-Optional concatenation of all eleven decision models is exposed with
+Optional concatenation of all twelve decision models is exposed with
 `--control combined_extractors` (324 configurations before width exclusions).
 Experiment 5's later combinations use one reviewed decision extractor/mode and one
 reviewed encoder/PCA recipe, plus the three native-text models: 162 additional
@@ -151,7 +157,7 @@ fitting PCA while a GPU waits. These parameters are rebuildable output, not paid
 The widest Experiment 2 input is Rotten Tomatoes with per-column PCA32: **431 columns**
 (13×32 components, 13 missingness flags, two non-text columns). Adding one provider's
 separate and joint features later gives 445; even a conservative bound on Kumo's category
-expansion is 447. The optional all-eleven-provider combination reaches 995 on Wine Reviews,
+expansion is 447. The optional all-twelve-provider combination reaches 1,085 on Wine Reviews,
 so Kumo refuses that arm. The recipe's 500-column guard prevents silent feature selection.
 Other models still require checkpoint/resource checks; width compatibility does not prove
 full-fold feasibility. AG-MM uses fixed medium-quality ELECTRA-base/fusion, no HPO or
@@ -211,7 +217,7 @@ before full feature creation despite its higher folder number.
 | Local notebook | Purpose |
 |---|---|
 | [01_data_exploration](<notebooks/0. exploration/01_data_exploration.ipynb>) | All 20 datasets: text length, missingness, exact reuse, long text and feature dimensions. |
-| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | Task examples and request previews for all 18 datasets and eleven extractors. |
+| [02_jev_input_design](<notebooks/0. exploration/02_jev_input_design.ipynb>) | Task examples and request previews for all 18 datasets and twelve extractors. |
 | [01_prepare_questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) | Frozen wording, source meanings, grouped inputs and original-row links. |
 | [03_feature_creation](<notebooks/2. feature_creation/03_feature_creation.ipynb>) | Token counts, workload, cost/throughput scenarios and feature combinations. |
 | [04_decision_feature_comparison](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>) | Coverage, distributions, agreement and disagreements once real features exist. |
@@ -364,6 +370,13 @@ Benchmark execution checks that its reviewed 0B `evaluation_identity` matches th
 implementation, model settings and feature/protocol recipes, independently of enable switches.
 Finite tests cannot establish that no bugs remain or guarantee multimillion-request throughput.
 
+The paired-results notebook also directly contrasts every decision recipe with each
+embedding recipe within matching predictors/folds, displays prespecified controls and
+seen/unseen-text effects, and reports measured timing and post-PCA representation width.
+It selects no winners and creates no predictive plots before saved complete arms exist.
+Extraction timing retains its run/hardware identity; partial runs are not presented as
+complete feature-generation costs or automatically joined to predictive performance.
+
 ## Documentation and licence
 
 [DATA_SOURCES](docs/DATA_SOURCES.md): provenance/semantics;
@@ -381,10 +394,3 @@ Project-specific deviations preserve the agreed numbered phases, `output_JEVPFN`
 report names, permanent paid-response stores and explicit local/VSC execution gates. Dense
 figures are paginated at final A4 width; notebook metadata/logs/results are kept outside the
 figure folders. Python entry points stay under `src/`; Slurm launchers stay under `scripts/`.
-
-The paired-results notebook also directly contrasts every decision recipe with each
-embedding recipe within matching predictors/folds, displays prespecified controls and
-seen/unseen-text effects, and reports measured timing and post-PCA representation width.
-It selects no winners and creates no predictive plots before saved complete arms exist.
-Extraction timing retains its run/hardware identity; partial runs are not presented as
-complete feature-generation costs or automatically joined to predictive performance.

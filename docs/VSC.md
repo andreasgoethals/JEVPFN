@@ -2,7 +2,7 @@
 
 Use this guide for execution; use README for the experiment design and
 AGENTS_MEMORY for dated observations. **Nine decision runtimes and three encoders have
-bounded B200 passes; Decision3 and the new TabSTAR runtime still need inference tests.**
+bounded B200 passes; Decision3, Liquid d1-2B and the new TabSTAR runtime still need inference tests.**
 Final acceptance requires the complete frozen campaign and review.
 
 ## Storage and hardware
@@ -102,7 +102,7 @@ squeue --clusters=wice,mindwell --me
 This does not change the active checkout. Never cancel by username.
 Wait for the remaining JEVPFN CPU jobs and cancellation to finish, then update:
 
-The owner must first publish the local implementation, including new files. A successful
+The tested local implementation, including new files, must first be committed and pushed. A successful
 `git pull` cannot retrieve uncommitted local work. PowerShell blocks run on Windows;
 Bash blocks run in the VSC terminal. Pasting `Set-Location` or `$LASTEXITCODE` into Bash
 does not upload or validate anything.
@@ -127,7 +127,7 @@ modify another project's environment.
 
 ## Finish setup before the clean campaign
 
-One command prepares and tests all ten open-weight extractors and three encoders. Preview first:
+One command prepares and tests all eleven open-weight extractors and three encoders. Preview first:
 
 ```bash
 bash scripts/test_all.sh
@@ -144,7 +144,12 @@ B200 contracts, bounded dataset pilots and all three encoder tests. Both filesys
 must pass two-node locking and SQLite snapshot tests: durable Lustre on wICE and
 native GPFS scratch on Mindwell's `batch_graniterapids` CPU partition. Every GPU
 job waits for those checks. It does not enable full extraction or certify acceptance.
-The complete setup contains 186 jobs with no reusable containers, or 176 when all ten
+Liquid d1-2B is `liquid_lfm3`; it keeps its own weights, image and token database.
+Its CPU partitions wait for its Transformers 5.19 container and run inside that image;
+other models retain their existing tokenizer environments. The same question v3 files
+are reused: no grammar or class-vocabulary change accompanies this addition.
+
+The complete setup contains 204 jobs with no reusable containers, or 193 when all eleven
 sealed images exist. Containers are verified in their own CPU staging jobs, not hashed
 serially on the login node. Each runtime has its own two-node GPFS storage check; a
 failed model cannot block every other model through a shared staging prerequisite.
@@ -229,18 +234,18 @@ Decision3 failed before inference because its publisher runtime requires an expl
 CUDA index. The adapter now uses the current logical device (respecting Slurm's visible
 device mapping). This fix does not change questions, token identities or images.
 
-After publishing/pulling with JEVPFN jobs idle, repeat the remaining Decision3 branch.
+After publishing/pulling with JEVPFN jobs idle, repeat Decision3 and set up Liquid d1-2B.
 Export the roots and activate the CPU environment as above, then:
 
 ```bash
 "$JEVPFN_PYTHON" -u -m src.cluster.setup_extractors \
-  --provider decision3 --restart --execute --watch
+  --provider decision3 --provider liquid_lfm3 --restart --execute --watch
 ```
 
 This creates a targeted diagnostic attempt reusing the sealed image and completed
 token counts, and retains the complete previous attempt inside the same receipt.
 It repeats CPU/storage prerequisites and verifies cached inputs before submitting the
-GPFS/B200 descendants. After a disconnect, use `--provider decision3 --execute --watch`
+GPFS/B200 descendants. After a disconnect, use `--provider decision3 --provider liquid_lfm3 --execute --watch`
 and omit `--restart`; the `--all` wrapper would select a
 different provider list. The final clean 0A campaign still tests all providers/encoders.
 
@@ -275,11 +280,11 @@ coverage and prepared-token contents, and rolls back all merge inserts on any co
 The final counts retain their original schema/identity for GPU consumers. Restart partitions
 stay on PROJECT for recovery; they are excluded from GPFS copies and downloaded result bundles.
 The five added renderers use eight CPUs/27,200 MiB per partition and a 12-hour limit; the
-original five use two CPUs/6,800 MiB and four hours. Progress logs report throughput at least
+original five and Liquid d1-2B use two CPUs/6,800 MiB and four hours. Progress logs report throughput at least
 once per minute between batches. Shorter partitions improve parallelism, but queueing, text
-length and I/O prevent a guaranteed tenfold speedup. Frozen 0A contains 165 VSC jobs: ten recovery checks, 100 token
-partitions, ten merges, CPU checks, one Lustre check, ten scratch stages, ten native GPFS checks,
-ten GPU contracts, ten bounded pilots and three encoder tests. Setup also downloads/builds.
+length and I/O prevent a guaranteed tenfold speedup. Frozen 0A contains 181 VSC jobs: eleven recovery checks, 110 token
+partitions, eleven merges, CPU checks, one Lustre check, eleven scratch stages, eleven native GPFS checks,
+eleven GPU contracts, eleven bounded pilots and three encoder tests. Setup also downloads/builds.
 
 To migrate an active monolithic audit, first stop its watching coordinator with Ctrl+C.
 Cancel only its explicitly verified token job IDs, leave container builds running, and wait

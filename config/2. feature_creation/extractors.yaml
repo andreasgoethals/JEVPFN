@@ -1,4 +1,4 @@
-checked_on: '2026-10-23'
+checked_on: '2026-10-28'
 enabled: false
 shared_semantics:
 - binary_probability
@@ -31,6 +31,17 @@ candidates:
     license: LFM_Open_License
     input_price_per_million_usd: null
     reference: https://huggingface.co/LiquidAI/d1-3B
+  liquid_lfm3:
+    enabled: false
+    model: LiquidAI/d1-2B
+    revision: cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41
+    delivery: self_hosted
+    context_tokens: 128000
+    license: LFM_Open_License_v1.0
+    input_price_per_million_usd: null
+    score_readout: mean  # Publisher defaults to median; retain our expected-direction contract.
+    input_modalities: [text]  # Images and native numerical estimates are outside this benchmark.
+    reference: https://huggingface.co/LiquidAI/d1-2B
   perplexity:
     enabled: false
     model: perplexity-ai/pplx-decider-v1.1-27b

@@ -38,6 +38,7 @@ experiment_0_acceptance: null
 candidate_extractors: &id001
 - jev
 - liquid
+- liquid_lfm3
 - perplexity
 - cloudflare
 - strands
@@ -53,6 +54,7 @@ additional_controls:
 feature_selectors:
   jev: null
   liquid: null
+  liquid_lfm3: null
   perplexity: null
   cloudflare: null
   strands: null

@@ -63,6 +63,8 @@ limix = ["LimiX @ git+https://github.com/limix-ldm-ai/LimiX.git@516bf396333feb31
 kumo = ["structured-data-models @ git+https://github.com/NVIDIA/structured-data-models.git@bd2d55db104679393fcd6afe13305f37e40b5467"]
 contexttab = ["sap-rpt-oss @ git+https://github.com/SAP-samples/sap-rpt-1-oss.git@a0067b3c9db56bc35a6dcab09a9223a3ff0821e0"]
 # Install custom decision runtimes in separate environments, never the notebook venv.
+# d1-2B publisher targets Transformers 5.19; isolate it from the 5.17 historical token counters.
+liquid-lfm3 = ["transformers==5.19.0", "tokenizers==0.23.3", "jinja2==3.1.6", "torch>=2.9", "torchvision", "pillow"]
 liquid = ["transformers>=5.14,<6", "torch>=2.9", "torchvision", "pillow"]
 clef = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "accelerate", "pillow", "safetensors"]
 intern = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1", "pillow"]

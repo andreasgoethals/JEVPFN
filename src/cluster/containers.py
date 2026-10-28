@@ -18,7 +18,7 @@ import yaml
 
 from src.cluster import runtime_profiles
 from src.cluster.maintenance import reject_links, require_idle_vsc
-from src.jev.registry import SELF_HOSTED
+from src.jev.catalog import SELF_HOSTED
 from src.utils import paths
 from src.utils.serialization import digest, file_sha256, write_json
 

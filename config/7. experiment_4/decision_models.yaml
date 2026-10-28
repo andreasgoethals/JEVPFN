@@ -4,6 +4,7 @@ enabled: false
 candidate_extractors:
 - jev
 - liquid
+- liquid_lfm3
 - perplexity
 - cloudflare
 - strands

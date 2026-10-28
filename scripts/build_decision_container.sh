@@ -12,7 +12,7 @@ case "$JEVPFN_RUNTIME_PROFILE" in
     *) echo 'Unknown runtime profile.' >&2; exit 2 ;;
 esac
 case "$JEVPFN_BUILD_PROVIDER" in
-    cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble) JEVPFN_BUILD_DECISION=1 ;;
+    cloudflare|intern|liquid|liquid_lfm3|strands|perplexity|h2o|sii|kev|decision3|nimble) JEVPFN_BUILD_DECISION=1 ;;
     tabstar) JEVPFN_BUILD_DECISION=0 ;;
     catboost|tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|linear|contexttab|ag_mm)
         JEVPFN_BUILD_DECISION=0
@@ -111,7 +111,7 @@ from pathlib import Path
 work,repo,provider,root,index,profile=sys.argv[1:]
 q=shlex.quote
 Path(work,'environment.yaml').write_text('channels: [conda-forge]\ndependencies: [python=3.12, pip]\n',encoding='utf-8')
-extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open','tabstar':'tabstar'}[provider]
+extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','liquid_lfm3':'liquid-lfm3','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open','tabstar':'tabstar'}[provider]
 prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); actual=Path(sys.prefix).resolve(); print(f"Image interpreter: {actual}; expected: {expected}"); assert actual==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
 lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'python -I -c {q(prefix_check)}', f'cd {q(repo)}',
        f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}',
@@ -120,9 +120,9 @@ if provider=='perplexity':
     requirements=Path(root,'JEVPFN/checkpoints/decision_models/perplexity/requirements.txt')
     lines+=[f'python -m pip install torch==2.14.0 torchvision==0.29.0 --index-url {q(index)}',
             f'python -m pip install -r {q(str(requirements))} -e {q(".[dev,token-audit]")}']
-elif provider=='tabstar':
+elif provider in {'tabstar', 'liquid_lfm3'}:
     lines+=[f'python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url {q(index)}',
-            f'python -m pip install -e {q(".[dev,tabstar]")}']
+            f'python -m pip install -e {q(f".[dev,{extra}]")}']
 else:
     lines+=[f'python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url {q(index)}',
             f'python -m pip install -e {q(f".[dev,token-audit,{extra}]")}']

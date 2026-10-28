@@ -105,7 +105,7 @@ def benchmark_configurations_figure(table):
             "Experiment 1; the last row belongs to Experiment 2, repeated for each encoder and "
             "per-column PCA32 or joint PCA256/128/64/32/16/8. PCA is fitted on CPU using only training partitions. Non-text includes "
             "numerical and categorical columns. Joint and per-column decision features use one "
-            "extractor at a time; all eleven extractors are included. The Experiment 1 non-text "
+            "extractor at a time; all twelve extractors are included. The Experiment 1 non-text "
             "baseline is shared across extractors (108 configurations); it is not refitted for "
             "every encoder or PCA setting. Experiment 3 uses original text. "
             "Winner-selected combinations belong only to exploratory Experiment 5."

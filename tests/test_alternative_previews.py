@@ -50,7 +50,7 @@ def test_direct_strands_preview_requires_strict_window_and_serialization(request
 
 
 def test_all_previews_are_inspectable_json_and_explicitly_unverified(request_by_task):
-    from src.jev.registry import SELF_HOSTED
+    from src.jev.catalog import SELF_HOSTED
 
     before = request_by_task.to_json()
     for provider in ("jev", *SELF_HOSTED):

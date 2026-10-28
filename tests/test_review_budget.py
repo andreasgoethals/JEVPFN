@@ -74,7 +74,7 @@ def test_budget_matches_real_wire_and_cache_identity(texts, task, labels, frozen
     from src.jev.feasibility import comparison_feasibility
     from src.utils.config import load_yaml
     table = comparison_feasibility(pd.DataFrame(records), load_yaml("extractors"), cfg)
-    assert len(table) == 11 and table.unique_requests_above_context_screen.notna().all()
+    assert len(table) == 12 and table.unique_requests_above_context_screen.notna().all()
     all_requests = []
     for context in (False,):
         variant = copy.deepcopy(cfg)

@@ -2,6 +2,14 @@
 
 ## 28-10-2026
 
+- Add separately pinned Liquid d1-2B (`liquid_lfm3`), exact publisher rendering/answer lead,
+  mean score readout, isolated Transformers 5.19 CPU/GPU container, eleven-provider setup
+  and twelve-extractor comparison. Preserve historical token counts and counter files.
+  Clarify TabSTAR epoch selection from publisher source, update notebooks/grid labels
+  and align the README with the synced template. Live d1-2B B200 acceptance is pending.
+  Validation: 1,124 local tests passed, 22 runtime/asset/platform skips; all 13 notebooks
+  executed and 25 PDFs visually inspected. Ruff, dependency, shell syntax and diff checks
+  passed. Real d1-2B tokenizer rendering was checked locally without model weights.
 - Sync TEMPLATE.md: flexible experiment folders and staged experiment-0 VSC validation; preserve this project's code, layout and run evidence.
 - Keep setup and frozen 0A watchers alive through Slurm accounting outages. Preserve
   submitted IDs and bounded diagnostics, query an unavailable cluster once per pass,

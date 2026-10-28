@@ -1,5 +1,5 @@
 phase: experiment_0
-providers: [liquid, strands, perplexity, cloudflare, intern, h2o, sii, kev, decision3, nimble]
+providers: [liquid, liquid_lfm3, strands, perplexity, cloudflare, intern, h2o, sii, kev, decision3, nimble]
 execution_site: vsc_gpu_allocation
 requires_explicit_execute: true
 max_live_requests: 110

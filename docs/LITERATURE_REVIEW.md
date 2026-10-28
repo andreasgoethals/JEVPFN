@@ -92,7 +92,7 @@ Reported results are the authors' measurements, not results reproduced by JEVPFN
 
 The papers generally support the usefulness of compact typed interfaces, while giving
 mixed evidence for calibration, framing invariance, causal understanding and robustness.
-They do not establish that the eleven selected extractors produce interchangeable beliefs.
+They do not establish that the twelve selected extractors produce interchangeable beliefs.
 The comparison must preserve their differences rather than normalize them away.
 
 Public tools already apply these interfaces to individual text columns. The
@@ -101,9 +101,9 @@ procurement demonstration shows that documentary class descriptions change mappi
 organization names. This is a developer demonstration, not an independent benchmark;
 it also illustrates that a short name may lack the information needed for the true label.
 
-## 4. Why these eleven extractors and how their interfaces differ
+## 4. Why these twelve extractors and how their interfaces differ
 
-The selected roster combines one funded hosted reference and ten open-weight releases
+The selected roster combines one funded hosted reference and eleven open-weight releases
 that can express the complete answer spaces in the retained tasks. The largest target
 vocabulary has thirty classes; regression uses nine options. Revisions, licences, configured
 context bounds and base-model dependencies belong in
@@ -114,6 +114,7 @@ mutable tables. Open-weight availability does not mean zero compute cost or unre
 |---|---|
 | [Jev 1.13](https://docs.typesafe.ai/api) | Hosted Noul, Choice and Score. Pin the model; preserve usage/version and raw response. Organization throughput and context/billing bounds are separate concepts. |
 | [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Custom decision runtime, not ordinary generated chat. LFM Open License is a conditional open-weight licence, not a blanket permissive open-source claim; qualifying research permissions and redistribution conditions must be respected. |
+| [Liquid d1-2B](https://huggingface.co/LiquidAI/d1-2B) | Separate LFM3 successor, text-only in this study; same questions and explicit mean readout. Its new runtime/window need independent acceptance; vendor benchmark improvements are not downstream evidence. |
 | [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Native decision head, noncausal full attention and saved calibration temperature. Generic causal-LM next-token inference is not equivalent. |
 | [Clef-flash](https://huggingface.co/Cloudflare/clef-flash) | `joint_schema_model.encode_record` and its joint head render/score the schema. The convenience encoder slices overlong state; JEVPFN rejects overflow and retains full-precision softmax. Hosted and open-weight context limits are not interchangeable. |
 | [Intern-Decision-4B](https://huggingface.co/internlm/Intern-Decision-4B) | Shifted answer-slot logits over legal candidates, then checkpoint-bound temperature. Keep the published calibration; do not refit it on benchmark labels. |
@@ -158,6 +159,20 @@ computation and probability meaning. Fastino's checked schema and full ordered-d
 mapping were not established for this common protocol. Reasoning, multi-round grouping or
 domain-specific extractors belong to separate methodological choices. Adding every release
 would not by itself improve an interpretable, reproducible comparison.
+
+**28 October addition: Liquid d1-2B.** The [official model card](https://huggingface.co/LiquidAI/d1-2B)
+and publisher code at `cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41` identify a distinct LFM3
+checkpoint with a 128,000-token configured text window and an LFM Open License v1.0.
+Vendor DecisionBench/ImajevBench improvements do not establish downstream tabular gains.
+We retain d1-3B and add d1-2B as `liquid_lfm3`, using identical canonical text/questions,
+complete class distributions and the same nine directional levels. `api.py:answer` defaults
+to a median level, so `SelfHostedClient.evaluate` explicitly passes `score_readout="mean"`.
+`lfm3.py` registers the non-thinking answer lead; the CPU counter reads that exact registration
+without importing Torch. Images, multi-select and native numerical-estimation outputs are
+outside the approved comparison. Its pinned Transformers 5.19 runtime is isolated from the
+older counters. CPU rendering is verified locally; real B200 acceptance remains pending.
+This is a targeted official-source check beyond the dated library corpus, not a global refresh.
+
 
 ## 5. MulTaBench, embeddings and native-text predictors
 
@@ -277,6 +292,14 @@ The three native-text references have different learning procedures:
   independent reproduction or proof that all eighteen tasks are uncontaminated.
   [Classification card](https://github.com/alanarazi7/TabSTAR/blob/master/docs/model_cards/tabstar-v1.1-cls.md),
   [regression card](https://github.com/alanarazi7/TabSTAR/blob/master/docs/model_cards/tabstar-v1.1-reg.md).
+  The pinned `repositories/TabSTAR.txt`, sections `tabstarv1p1_pretrain/README.md` and
+  `finetunability/datasets.py:select_finetunability_datasets`, explicitly identify **TabArena**
+  as the epoch-selection suite (fold 0, capped subsamples, Elo against baselines). The same
+  README describes exclusion fingerprints from every MulTaBench `data.csv` before pretraining.
+  Thus the review's claim that the epoch-selection suite is unspecified is not supported by
+  these sources. This is publisher-documented procedure, not an independently reproduced
+  guarantee of no overlap through source aliases or the pretrained text encoder. We retain
+  v1.1 and do not treat this as evidence of leakage from JEVPFN's test folds.
   The source/version check used TFM Library `e604ade99f7cf135f41c17a49e1f91da528e835d`;
   the earlier pins in section 1 identify the broader literature review.
 - **[ConTextTab / SAP RPT-1 OSS](https://github.com/SAP-samples/sap-rpt-1-oss)** embeds column

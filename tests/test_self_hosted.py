@@ -10,9 +10,9 @@ import pytest
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.jev.cache import ResponseCache
+from src.jev.catalog import SELF_HOSTED
 from src.jev.features import load_block, materialize_cached_block, save_block
 from src.jev.provider import QUESTION_ID, response_features
-from src.jev.registry import SELF_HOSTED
 from src.jev.requests import IntendedRequest, build_requests
 from src.jev.self_hosted import SelfHostedClient, cached_evaluate, run
 from src.utils.config import load_config
@@ -78,6 +78,8 @@ def test_all_three_provider_transports_preserve_task_vectors(provider, kind):
     client.decode = lambda *args: answer
     response = client.evaluate(request)
     features = response_features(request, response)
+    if provider == "liquid_lfm3":
+        assert client.model.system_one.call_args.kwargs["score_readout"] == "mean"
     assert response["publisher_response"]["answers"][QUESTION_ID] == answer
     assert features.get("p_positive", 0.7) == 0.7
     assert features.get("expected_direction", 0) == pytest.approx(0)

@@ -55,7 +55,7 @@ def fixture_paired():
 def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
     folds = fixture_folds()
     paired = decision_vs_embedding(folds)
-    assert len(paired) == 3 * 5 * 11 * 3 * 7
+    assert len(paired) == 3 * 5 * 12 * 3 * 7
     assert (paired.difference == paired.value - paired.reference_value).all()
     bad = folds.copy()
     bad.loc[bad.phase.eq("experiment_2"), "checkpoint_id"] = "different"

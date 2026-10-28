@@ -3,7 +3,7 @@
 python -m src.cluster.token_audit --stage-tokenizers  # small public files, then count
 python -m src.cluster.token_audit                     # offline; resume saved counts
 
-Ten open-weight tokenizers are available. Jev's hosted counts remain explicitly
+Eleven open-weight tokenizers are available. Jev's hosted counts remain explicitly
 unverified. This never removes rows, shortens text, loads weights or performs inference.
 """
 
@@ -24,13 +24,13 @@ import numpy as np
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
-from src.jev.inputs import _read_set, input_origins, iter_prepared_inputs
-from src.jev.registry import (
+from src.jev.catalog import (
     HOSTED_UNAVAILABLE,
     SELF_HOSTED,
     ExactCounter,
     stage_tokenizers,
 )
+from src.jev.inputs import _read_set, input_origins, iter_prepared_inputs
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
@@ -214,7 +214,7 @@ def audit_provider(
         count_many = counter.count_many
         if preparation_workers > 1:
             from src.cluster.token_preparation import PreparedTokenPool
-            from src.jev.registry import ADDED
+            from src.jev.catalog import ADDED
 
             if provider not in ADDED or not hasattr(counter, "cache_db"):
                 raise ValueError("Parallel preparation requires a publisher prepared-token cache")
@@ -503,7 +503,7 @@ def _count_selected(providers):
     inputs = selected_inputs()
     reports, failures = [], []
     if len(providers) == 1:
-        from src.jev.registry import ADDED
+        from src.jev.catalog import ADDED
 
         provider = providers[0]
         workers = (

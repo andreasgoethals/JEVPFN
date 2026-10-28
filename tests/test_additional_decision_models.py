@@ -4,9 +4,9 @@ import sys
 
 import pytest
 
+from src.jev.catalog import SELF_HOSTED, ExactCounter
 from src.jev.open_runtimes import ClefRuntime, probability_answer
 from src.jev.provider import QUESTION_ID, semantic_question
-from src.jev.registry import SELF_HOSTED, ExactCounter
 from src.utils import paths
 from src.utils.config import load_yaml
 
@@ -16,6 +16,7 @@ def test_owner_selected_roster_and_delivery():
     assert set(candidates) == {
         "jev",
         "liquid",
+        "liquid_lfm3",
         "strands",
         "perplexity",
         "cloudflare",

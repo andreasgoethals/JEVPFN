@@ -42,16 +42,19 @@ Never delete working images or other projects to make space.
 
 ## Latest downloaded VSC evidence
 
-Inspected Downloads/output_JEVPFN.zip, modified 28 October 2026 09:39:33,
-2,547,577 bytes, 1,327 members. It contains DATA logs/manifests, not complete PROJECT
-count/response databases. The setup receipt ended setup_completed_with_failures:
-174 completed, one failed, one blocked, all terminal. This attempt began 27 October
-16:11 UTC and ended 28 October 08:37 UTC. Reports match pre-fix checkout 5a50643:
-source abc44698a33e5006e8c8a0613699e2ab76151b9f1c6e476cfff528bb2720f463,
-runtime pins 42474dae6611c00955f851a072da2b996ecbc4d5f479c677f5bd55e0badc6e84,
-prepared inputs 9ea10eed02750810c48765e692eabb1afef70ed841b253d517ca92bd63b17bf8.
-The local device/download fixes postdate these reports; they still require live tests.
-ZIP member timestamps were rewritten on download; use receipt times/job IDs.
+Latest inspected Downloads/output_JEVPFN.zip, modified 28 October 2026 10:41:54,
+2,567,961 bytes, 1,342 members. The Decision3-only restart receipt stopped at
+09:03:35 UTC because sacct could not connect to Slurm accounting. The ZIP confirms
+CPU 62452620 preflight passed, storage 62452621 passed, and checkpoint stage 62452622
+passed. Token preparation 62452632 has only startup lines; the owner's subsequent
+scheduler output confirms it was still running. No failure or finish is established.
+Do not pull, clean, cancel or resubmit while that job is active. The local accounting
+recovery fix (7ffc89b) postdates its VSC checkout. Preserve completed token counts.
+
+The preceding full setup ended with 174 completed, one failed and one blocked job.
+The table below is historical evidence from that campaign, not current-source acceptance.
+It matches pre-fix checkout 5a50643; all twelve selected extractors need current-source
+acceptance after the final freeze. The ZIP contains DATA reports, not full PROJECT databases.
 
 | Check | Latest observed result |
 |---|---|
@@ -74,10 +77,8 @@ Neither fix changes tokenization, questions or model pins. Decision3's sealed im
 and completed token counts can be reused. Retry its branch and the independent TabSTAR
 staging/container/GPU chain as documented in VSC; do not clean completed work yet.
 
-28 October targeted Decision3 retry: staging 62452622 and Lustre storage 62452621
-reported COMPLETED/0:0. CPU 62452620 and token preparation 62452632 were submitted;
-their completion is unverified. The watcher then stopped on a failed sacct query.
-A manual query at 10:04 confirmed slurmdbd connection refused, not a model failure.
+The 28 October targeted Decision3 watcher's accounting failure was confirmed by a
+manual query at 10:04: slurmdbd connection refused, not a model failure.
 The updated watcher pauses/retries read-only accounting errors, retains known job IDs
 and diagnostics, and defers new submissions. Ambiguous sbatch responses still require
 review. This older stopped attempt needs an idle restart after accounting recovers
@@ -223,8 +224,33 @@ requires current matching reports and quota/backup/throughput/robustness review.
 Create features, run 0B including real encoder/predictor/complete-feature checks,
 then benchmark. Full-fold resources and native predictor runtimes remain unproven
 until their real gates pass. A source/runtime change requires a reviewed stage
-transition, not deletion of mismatch evidence. Publication requires the owner's
-explicit authorization for the current task; the owner handles Git publication.
+transition, not deletion of mismatch evidence. The owner granted standing commit/push authorization on 28 October; active VSC
+checkouts must still remain unchanged until their jobs stop.
+
+## Liquid d1-2B addition and latest review
+
+The owner authorized Liquid d1-2B alongside d1-3B on 28 October. The active catalogue
+is `src/jev/catalog.py`; the fingerprinted registry.py, tokenization.py and
+decision_tokenization.py remain unchanged. d1-2B uses its own `liquid_lfm3` assets,
+image and cache identities, pinned at cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41.
+CPU token jobs and GPU tests use its isolated Transformers 5.19 image. Explicit mean
+score readout preserves the expected-direction design; the publisher's default is median.
+Its lfm3.py answer-lead registration matters and is read without importing Torch on CPU.
+All full-extraction/evaluation gates remain disabled. Model weights and live B200 tests
+were not run locally. The twelve-extractor grid has 3,996/2,268/54 configurations in
+Experiments 1/2/3; the all-runtime setup has 204 jobs, 193 with all images reusable.
+
+Claude's TabSTAR concern was checked against the pinned publisher source. Epochs were
+selected on TabArena fold 0, not an unspecified suite; documented pretraining filtering
+includes MulTaBench. This is not independent proof of absence of pretraining exposure.
+No experimental redesign or unrequested statistical contrasts were introduced.
+
+Local validation of this addition: 1,124 tests passed and 22 skipped (unavailable old
+tokenizer assets/Torch or POSIX-specific behavior). The d1-2B publisher tokenizer/source
+fixture was explicitly exercised on CPU, without weights or inference. All 13 notebooks
+executed, all 25 PDFs were visually inspected, and Ruff, pip check and 30 shell syntax/LF
+checks passed. Historical tokenizer files remain byte-for-byte unchanged. These checks
+do not establish the new Transformers 5.19/B200 runtime or full-dataset acceptance.
 
 ## Reusable failure lessons
 

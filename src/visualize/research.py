@@ -7,6 +7,7 @@ from textwrap import fill
 import matplotlib.pyplot as plt
 import numpy as np
 
+from src.utils.config import load_yaml
 from src.visualize import style
 from src.visualize.decision_comparison import LABELS
 
@@ -58,7 +59,7 @@ def study_grid_figure(grid):
     lines = [
         ["0A", "Questions, storage, API/GPU contracts", "Before extraction"],
         ["0B", "Completed features, PCA, full-fold feasibility", "After extraction"],
-        ["1", "11 decision models × 3 modes + baseline", "Six fixed predictors"],
+        ["1", f"{len(load_yaml('experiment_1/main')['candidate_extractors'])} decision models × 3 modes + baseline", "Six fixed predictors"],
         ["2", "3 encoders × 7 PCA recipes", "Six fixed predictors"],
         ["3", "3 original-text systems", "Separate references"],
         ["4", "Question / option / context sensitivity", "Label-blind diagnostics"],
@@ -124,7 +125,7 @@ def runtime_evidence_figure(table):
             transform=ax.transAxes, fontsize=7)
     ax.set_title("Local evidence inventory · bounded tests ≠ full extraction", pad=10)
     return fig, "runtime_evidence", (
-        "Eleven decision extractors and three frozen encoders, using locally available manifests "
+        "Selected decision extractors and frozen encoders, using locally available manifests "
         "at notebook execution. A staged receipt is not a rehash of weights. Full-bank counts "
         "require matching prepared-input identities; embedding fixtures are not full-bank decision "
         "counts. Seen API/GPU contracts are bounded historical observations, not final acceptance "

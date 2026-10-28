@@ -17,7 +17,7 @@ from uuid import uuid4
 from src.cluster.job_graph import AccountingUnavailable, advance
 from src.cluster.maintenance import require_idle_vsc
 from src.cluster.token_shards import plan as token_plan
-from src.jev.registry import SELF_HOSTED
+from src.jev.catalog import SELF_HOSTED
 from src.utils import paths
 from src.utils.logging_setup import get_logger
 from src.utils.serialization import digest, write_json
@@ -28,7 +28,7 @@ PROVIDERS = SELF_HOSTED
 def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     if site == "vsc" and dataset_pilot:
         raise ValueError(
-            "--dataset-pilot selects the local Jev pilot; VSC always tests its ten open-weight providers"
+            "--dataset-pilot selects the local Jev pilot; VSC always tests its eleven open-weight providers"
         )
     if site == "local":
         items = [

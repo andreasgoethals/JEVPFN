@@ -17,7 +17,8 @@ from src.visualize import style
 
 LABELS = {
     "jev": "Jev",
-    "liquid": "Liquid",
+    "liquid": "Liquid d1-3B",
+    "liquid_lfm3": "Liquid d1-2B",
     "perplexity": "Perplexity",
     "cloudflare": "Clef-flash",
     "intern": "Intern-Decision-4B",

@@ -8,7 +8,7 @@ import argparse
 import json
 import os
 
-from src.jev.registry import ADDED, PINS, SELF_HOSTED, asset_urls, stage_tokenizers
+from src.jev.catalog import ADDED, PINS, SELF_HOSTED, asset_urls, stage_tokenizers
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, file_sha256, write_json
@@ -49,7 +49,7 @@ def verify_checkpoint(provider):
             or checkpoint_files(base) != expected["files"]
         ):
             raise ValueError("Separate base checkpoint differs from the staged identity")
-    if provider in ADDED:
+    if provider in {*ADDED, "liquid_lfm3"}:
         for name in asset_urls(provider):
             if file_sha256(folder / name) != file_sha256(paths.tokenizer_dir(provider) / name):
                 raise ValueError("Runtime source differs from the audited provider assets")
@@ -78,7 +78,7 @@ def stage(provider):
     snapshot_download(
         candidate["model"], revision=PINS[provider], local_dir=folder, cache_dir=cache
     )
-    if provider in ADDED:
+    if provider in {*ADDED, "liquid_lfm3"}:
         import shutil
         for name in asset_urls(provider):
             target = folder / name

@@ -223,7 +223,7 @@ def test_controls_are_executable_without_duplicating_main_embedding_arms():
 
     main = benchmark_plan()
     plan = benchmark_plan(include_controls=True)
-    assert len(main) == 5994
+    assert len(main) == 6318
     added = [a for a in plan if a["phase"] == "experiment_5"]
     assert {a["control"] for a in added} == {
         "text_presence",

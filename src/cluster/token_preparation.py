@@ -11,7 +11,7 @@ import os
 import zlib
 from concurrent.futures import ProcessPoolExecutor
 
-from src.jev.registry import ADDED, ExactCounter
+from src.jev.catalog import ADDED, ExactCounter
 from src.utils.serialization import digest
 
 _counter = None

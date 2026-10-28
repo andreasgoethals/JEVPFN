@@ -23,7 +23,7 @@ from src.utils.serialization import digest
 
 def test_eleven_pins_licenses_and_no_download_on_import():
     candidates = load_yaml("extractors")["candidates"]
-    assert len(candidates) == 11 and len(registry.SELF_HOSTED) == 10
+    assert len(candidates) == 12 and len(registry.SELF_HOSTED) == 10
     for provider in registry.ADDED:
         cfg = candidates[provider]
         assert cfg["delivery"] == "self_hosted" and not cfg["enabled"]
