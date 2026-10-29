@@ -16,6 +16,8 @@ cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_CONTROL_TEST=1 JEVPFN_CONTROL_LEGACY=0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_PHASE=experiment_0
 export JEVPFN_STAGING_ROOT="${JEVPFN_PROJECT_ROOT:-/lustre1/project/stg_00211}"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.control_runtime test
-python -m src.cluster.storage_contracts --execute
-python -m src.cluster.preflight --verify-data --tests
+control_status=0
+python -m src.cluster.control_runtime test || control_status=1
+python -m src.cluster.storage_contracts --execute || control_status=1
+python -m src.cluster.preflight --verify-data --tests || control_status=1
+exit "$control_status"

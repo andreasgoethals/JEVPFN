@@ -94,11 +94,20 @@ def integration_test():
             text=True,
             capture_output=True,
             timeout=120,
-            check=True,
+            check=False,
         )
-        results.append(dict(command=command, stdout=run.stdout[-4000:], stderr=run.stderr[-2000:]))
+        results.append(
+            dict(
+                command=command,
+                returncode=run.returncode,
+                stdout=run.stdout[-4000:],
+                stderr=run.stderr[-2000:],
+            )
+        )
     result = dict(
-        status="control_integration_passed",
+        status="control_integration_passed"
+        if all(r["returncode"] == 0 for r in results)
+        else "control_integration_failed",
         container_id=manifest["container_id"],
         job_id=os.environ["SLURM_JOB_ID"],
         checks=results,
@@ -109,6 +118,9 @@ def integration_test():
         / ("control_" + os.environ["SLURM_JOB_ID"] + ".json"),
         result,
     )
+    print(json.dumps(result, indent=2), flush=True)
+    if result["status"] != "control_integration_passed":
+        raise RuntimeError("Control integration failed; complete command diagnostics were saved")
     return result
 
 

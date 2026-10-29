@@ -109,7 +109,9 @@ def remote_worker(command, *, run_id, expect_busy):
             (log_dir / f"{receipt.stem}.stdout.log").open("w", encoding="utf-8") as out,
             (log_dir / f"{receipt.stem}.stderr.log").open("w", encoding="utf-8") as err,
         ):
-            subprocess.run(argv, stdout=out, stderr=err, check=True, timeout=60)
+            from src.cluster.control_runtime import child_environment
+
+            subprocess.run(argv, stdout=out, stderr=err, check=True, timeout=60, env=child_environment())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         # Flush/close the worker logs before surfacing their tails in the main job
         # log. Preserve the original failure, and never rerun a possibly started worker.
