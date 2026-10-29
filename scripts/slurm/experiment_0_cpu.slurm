@@ -3,11 +3,11 @@
 #SBATCH --job-name=jevpfn-exp0-cpu
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=wice
-#SBATCH --partition=interactive
+#SBATCH --partition=batch
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=8G
+#SBATCH --cpus-per-task=3
+# Use the verified batch default of 3400 MiB/core instead of inflating a 2-core request.
 #SBATCH --time=00:20:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"

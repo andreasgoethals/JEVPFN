@@ -2,6 +2,11 @@
 
 ## 29-10-2026
 
+- Fix Linux activation-test isolation by selecting its synthetic legacy prefix explicitly;
+  clear stale interpreter pointers before a rejected control-image activation. Route CPU
+  preflight to batch with three cores/default memory after verifying the live partition,
+  avoiding the shared interactive QoS blockage and implicit memory-driven CPU expansion.
+
 - Fresh local 0A uses frozen-source-specific diagnostic rounds for actual live Jev
   interface calls. Keep earlier paid ledgers and dataset caches intact; resuming a
   round revalidates saved responses without repeating its calls.

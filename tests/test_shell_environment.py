@@ -171,6 +171,7 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
         TEST_ENV=selected.as_posix(),
         TEST_FAILURE=failure,
         TEST_ACTIVATION=(ROOT / "scripts" / "activate_conda.sh").as_posix(),
+        JEVPFN_CONDA_ENV=selected.as_posix(),  # This fixture tests the legacy-prefix route.
     )
     result = subprocess.run(
         [bash_executable(), str(driver)],
@@ -252,6 +253,21 @@ def test_gpu_memory_profiles_fit_b200_and_token_job_matches_four_cores():
             assert memory.endswith("M") and int(memory[:-1]) <= 194400
     assert gpu_jobs == 8
     assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+
+
+def test_rejected_control_activation_clears_a_previous_interpreter(tmp_path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "activate_control.sh").write_text("return 17\n", encoding="utf-8")
+    driver = tmp_path / "reject_control.sh"
+    driver.write_text(
+        'export JEVPFN_CONDA_ENV=JEVPFN JEVPFN_CONTROL_TEST=1 JEVPFN_CONTROL_LEGACY=0 JEVPFN_PYTHON=STALE\n'
+        'if source "$TEST_ACTIVATION"; then exit 99; fi\n'
+        '[[ -z "${JEVPFN_PYTHON:-}" ]]\n', encoding="utf-8")
+    result = subprocess.run([bash_executable(), str(driver)], cwd=tmp_path,
+                            env={**os.environ, "TEST_ACTIVATION": (ROOT / "scripts/activate_conda.sh").as_posix()},
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
 
 
 def test_a100_override_stops_before_environment_activation(tmp_path):

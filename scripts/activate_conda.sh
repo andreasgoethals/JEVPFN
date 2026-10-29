@@ -2,13 +2,13 @@
 # Source from a login/setup shell or a Slurm job. This never installs packages.
 # Keep interpreter selection identical before installation and during experiments.
 jevpfn_activate_conda() {
+    unset JEVPFN_PYTHON  # A rejected control image must not leave a previous interpreter selected.
     local control_root="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}/JEVPFN/containers"
     if [[ "${JEVPFN_CONTROL_LEGACY:-0}" != 1 && ( "${JEVPFN_CONTROL_TEST:-0}" == 1 || -f "$control_root/control.active.json" ) && "${JEVPFN_CONDA_ENV:-JEVPFN}" == JEVPFN ]]; then
         local control_image="${JEVPFN_STAGING_ROOT:-${control_root%/JEVPFN/containers}}/JEVPFN/containers/control-v1"
         source scripts/activate_control.sh "$control_image"
         return $?
     fi
-    unset JEVPFN_PYTHON
     if declare -F deactivate >/dev/null; then deactivate || return; fi
     unset VIRTUAL_ENV PYTHONHOME PYTHONPATH
     export PYTHONNOUSERSITE=1

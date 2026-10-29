@@ -53,6 +53,19 @@ The latest full local suite passed 1,147 tests with 25 platform/optional skips.
 Fresh-round Jev diagnostics and 0A orchestration additionally passed 22 focused tests.
 Full extraction and predictive execution remain disabled until the fresh 0A review.
 
+First clean source dadf9a5: local 0A passed all eight steps, including 31 new Jev
+diagnostic calls (USD 0.000667506) and 288 reused dataset-pilot responses. Known real-text
+instruction and option-order sensitivity was reviewed and retained as a limitation.
+VSC CPU 62470909 passed the exhaustive questions/data checks but failed three synthetic
+legacy-activation fixtures: they inherited the live control route instead of selecting
+their fake Conda prefix. Make that selection explicit; do not weaken image verification.
+Also clear a stale interpreter before any activation branch. The remaining independent
+token jobs continue on the old frozen VSC source; no remote pull while they run.
+The interactive CPU route hit QOSMaxCpuPerUserLimit. A recorded pending-job reroute to
+batch ran successfully through the tests. Future CPU preflight defaults to batch with
+three cores and partition-default memory (3400 MiB/core verified live), avoiding Slurm's
+implicit expansion of the previous two-core/8 GiB request. A final corrected 0A is still required.
+
 ## Current scope and direct access, 29 October
 
 Owner removed Experiments 4/5. Only 0A/0B and Experiments 1–3 remain; statistical

@@ -110,6 +110,10 @@ at VSC Library `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`, upstream
 
 ## CPU control container
 
+CPU preflight uses wICE batch, three cores and its verified 3400 MiB/core default.
+The former interactive route was blocked by the user's shared interactive CPU QoS;
+no other project's allocation was cancelled to make room.
+
 `experiment_0/control_runtime.yaml` records the exact Python/package versions read
 from the former DATA control environment. `control_build.slurm` recreates these
 inside `PROJECT/JEVPFN/containers/control-v1`, using only temporary Lustre scratch
