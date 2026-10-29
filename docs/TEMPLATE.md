@@ -96,6 +96,98 @@ Use Markdown and uppercase filenames. `TEMPLATE.md` is generic; the other files 
   measured resources, validation gates, submissions, publication, resume, cleanup and backup steps.
   Shared infrastructure references remain in the read-only VSC Library.
 
+### VSC access: Windows and agents
+
+**The user renews access**, normally at the start of work, in Windows PowerShell:
+
+```powershell
+step ssh login --context VSC
+```
+
+Complete the browser sign-in and KU Leuven Authenticator approval. The tested lifetime is about
+16 hours; inspect the certificate's actual validity below. Agents must not schedule reminders,
+open login flows, enable automatic renewal hooks or bypass MFA. If renewal is needed during a
+task, tell the user to run this command and wait for confirmation before retrying.
+
+**One-time setup**, performed by the user or with explicit installation permission, following
+[VSC Windows agent](https://docs.vscentrum.be/accounts/ssh_agent_windows.html) and
+[Smallstep](https://docs.vscentrum.be/accounts/mfa_login_smallstep.html) instructions:
+
+1. Use the native Windows OpenSSH **client**, not Git's bundled SSH or Pageant. If absent, install
+   the client using [Microsoft's instructions](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse).
+   The elevated PowerShell command is `Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0`.
+   In an elevated PowerShell, enable the agent service once:
+
+   ```powershell
+   Set-Service -Name ssh-agent -StartupType Automatic
+   Start-Service ssh-agent
+   Get-Service ssh-agent
+   ```
+
+2. Install Smallstep, then bootstrap under the Windows account that will run the agents:
+
+   ```powershell
+   winget install Smallstep.step-ca
+   step ca bootstrap --context VSC --team VSC --team-url=https://hpc.vub.be/_static/VSC-CA.json
+   ```
+
+3. Run the manual login command above. Native clients under the **same Windows account** can use
+   that agent's valid certificate when permitted to reach its service. Other machines, cloud agents,
+   WSL and separate SSH agents do not automatically inherit it. Never export private keys to bridge this.
+   Verify the server host key against a trusted VSC source before accepting it on first connection;
+   retain `known_hosts` verification. Do not install the optional Smallstep auto-login `ProxyCommand`.
+
+Check certificates locally; compare the relevant VSC certificate's **Valid** interval with the
+current time (including timezone). This does not renew access; keep identities/certificate output private:
+
+```powershell
+$openSsh = Join-Path $env:WINDIR 'System32\OpenSSH'
+Get-Date -Format o
+& "$openSsh\ssh-add.exe" -l
+& "$openSsh\ssh-add.exe" -L | Select-String '\S+-cert-v01@openssh.com' | ForEach-Object {
+    $_.Line | & "$openSsh\ssh-keygen.exe" -L -f -
+}
+```
+
+**Direct inspection:** after a bounded read-only check, agents read relevant VSC files/logs/results,
+quotas and Slurm state themselves instead of routinely requesting pasted terminal output. Keep reads
+scoped and output bounded. Computational debugging belongs in Slurm within existing authorization
+and resource limits; access grants no unrelated experiments, cancellations, downloads or deletions.
+
+**Observed gateway behavior:** during setup, `ssh host command` returned no output with exit 0.
+An LF-delimited script on stdin to native `ssh.exe -T`, **without a trailing remote command**, worked.
+Treat this as an observed route-specific issue, not universal SSH behavior. A PowerShell example
+using Python's standard library preserves LF bytes and bounds the whole check to 30 seconds:
+
+```powershell
+@'
+import os, subprocess, sys
+from pathlib import Path
+ssh = Path(os.environ["WINDIR"]) / "System32/OpenSSH/ssh.exe"
+target = "VSC_USER@login.hpc.kuleuven.be"  # Replace locally; never commit personal access details.
+args = [str(ssh), "-F", "none", "-T", "-o", "BatchMode=yes",
+        "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10",
+        "-o", "ConnectionAttempts=1", "-o", "ServerAliveInterval=5",
+        "-o", "ServerAliveCountMax=2", target]
+# A deliberate failure checks stdout, stderr and remote exit propagation without changing files.
+script = b"printf 'VSC_ACCESS_OK\\n'\nprintf 'VSC_ERROR_CHECK\\n' >&2\nexit 7\n"
+p = subprocess.run(args, input=script, capture_output=True, timeout=30)
+sys.stdout.buffer.write(p.stdout)
+sys.stderr.buffer.write(p.stderr)
+if p.returncode != 7 or b"VSC_ACCESS_OK" not in p.stdout or b"VSC_ERROR_CHECK" not in p.stderr:
+    raise SystemExit(f"Unverified SSH command channel (status {p.returncode}); diagnose before work.")
+'@ | python -
+```
+
+`-F none` avoids config hooks that could launch MFA; use an explicit hostname/user and a reviewed
+noninteractive route if a proxy is required. Host-key checks remain enabled. The probe intentionally
+expects **remote exit 7**; ordinary read-only scripts should use `set -eu`, explicit completion/status
+markers and checked exit status. Keep stdout/stderr separate; never equate empty output/exit 0 with success.
+Expired/missing certificates or `Permission denied` require authentication diagnosis (renew only when
+needed); DNS/timeouts/refused connections indicate network/service issues, not proof of expiry.
+Host-key failures require trusted verification. Missing markers or a remote command error require channel/
+command diagnosis. Do not retry uncertain mutations. Check live VSC status/firewall guidance when relevant.
+
 ### VSC storage policy
 
 These are **our project choices**, informed by VSC guidance, not universal VSC storage defaults.
@@ -103,8 +195,8 @@ These are **our project choices**, informed by VSC guidance, not universal VSC s
 | Location | Project policy |
 |---|---|
 | **DATA** | Actual Git checkout including `.git`, code, configs, environment specifications and compact operational logs/manifests/reports. Clone, pull and submodule updates happen here. |
-| **PROJECT** | Persistent large datasets, weights, retained checkpoints/results, reusable caches, project venvs/Conda environments and container images. Outside Git; configurable allocated roots; no fallback to DATA. |
-| **SCRATCH** | Disposable isolated job workspaces, intermediates, temporary caches and offloading. Never the sole copy of required inputs, environments, results or checkpoints. |
+| **PROJECT** | Persistent datasets, weights, checkpoints, retained results, large reusable caches and container images containing installed venv/Conda dependencies. Outside Git; configurable allocated roots; no fallback to DATA. |
+| **SCRATCH (GPFS and Lustre)** | Temporary isolated workspaces, intermediates, caches and offloading only. No obsolete workspaces; aim for empty project scratch between workloads when no job or recovery needs it. Never the sole copy of important files. |
 
 - **Freeze the checkout used by active or queued jobs**, including submodule pins and environment
   versions. Use a separate DATA checkout for a new revision, or wait for all consumers to finish.
@@ -119,11 +211,13 @@ These are **our project choices**, informed by VSC guidance, not universal VSC s
 - Isolate writable databases/caches per job, or use a tested filesystem-compatible locking and
   publication protocol. Never copy a live SQLite database as an ordinary file. Compact formats
   reduce file counts but do not make concurrent writes safe automatically.
-- **Prefer versioned immutable Apptainer/SIF runtimes on PROJECT**, with the project environment
-  inside the image where practical. A PROJECT venv/Conda environment is an allowed alternative.
-  Recreate at the destination from recorded specifications; do not move an installed venv.
-  Validate real CPU/GPU behavior before retiring originals, and retain versions needed for resume.
-  Build/download caches go to scratch; keep required images and reusable assets on PROJECT.
+- **Always containerize project dependencies on PROJECT**: versioned immutable Apptainer/SIF images
+  keep installed venv/Conda files inside the image because PROJECT has a strict file-count limit.
+  No unpacked dependency trees or persistent container sandboxes there. Recreate from recorded
+  definitions/locks for the destination; do not relocate populated environments. Validate architecture,
+  host modules/drivers, dependencies and real CPU/GPU behavior before retiring originals; preserve
+  versions needed by active/queued/resumable jobs. Build caches are temporary on SCRATCH. Local laptop
+  venvs remain valid; this mandatory container rule is our cluster policy, not a universal VSC requirement.
 - Check **byte and file-count quotas** on every relevant tier before building/staging/running.
   Personal DATA is backed up; verify the allocation's PROJECT protection separately and keep
   independent backups of irreplaceable outputs. Git and scratch are not those backups.
@@ -132,7 +226,9 @@ These are **our project choices**, informed by VSC guidance, not universal VSC s
   Record scratch workspace ownership and publication evidence in DATA manifests. Remove only the
   exact owned workspace after verified publication **and** confirmation that no active, queued
   or resumable job needs it. Failed/incomplete work stays identified for recovery, not forgotten.
-  Review completed workspaces after each campaign. Never wipe a shared scratch root or rely on
+  Inspect both GPFS and Lustre project scratch after workloads; retire obsolete owned workspaces.
+  Never interpret the empty-between-workloads aim as permission to delete active or recoverable work.
+  Never wipe a shared scratch root or rely on
   site cleanup/periodic touching to manage it; node-local scratch can disappear at job end.
 
 ### Speed-first execution: Open OnDemand and Slurm
@@ -159,6 +255,9 @@ and stop unused interactive allocations.
 - Request measured CPUs, RAM, GPUs and realistic walltime **per task**. Short suitable jobs can
   backfill; oversized allocations can queue longer. Worker processes × numerical threads must
   fit the allocation; more Slurm tasks/GPUs do not parallelize code that cannot use them.
+  Leuven currently warns against combining explicit memory with `--cpus-per-task` (`srun` can fail).
+  The launcher requests CPUs and partition-default memory: verify `DefMemPerCPU`/limits and actual
+  allocation. An explicit-memory variant must remove the CPU directive and validate its thread budget.
 - Give shards distinct outputs and temporary paths; use one validated merge writer. Measure
   queue/setup/run/merge time and I/O. For a demonstrated bottleneck, explain evidence and propose
   a targeted limit. Preserve successful work; never duplicate a pending or ambiguously submitted job.
@@ -183,14 +282,15 @@ per notebook by default; `--threads` and optional lower `--workers` share that b
 **allocation safety**, not a cap on independent Slurm jobs. Its 1,800-second per-notebook timeout
 is adjustable with `--timeout`. There is no four-worker default.
 
-Reference reviewed 28-10-2026: VSC Library pin `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`,
-`guides/STORAGE.md`, `SOFTWARE.md`, `SLURM.md`, and snapshot source paths
+Access/storage/scheduling reviewed 29-10-2026. VSC Library pin
+`0ed4ffa89d312b9bb6411681b6a14f81672439f3`: `guides/HPC_AND_ACCESS.md`, `STORAGE.md`,
+`SOFTWARE.md`, `SLURM.md`; snapshot `source/accounts/{mfa_login_smallstep,ssh_agent_windows}.rst` and
 `source/leuven/{slurm_specifics,tier2_hardware/parallel_filesystems}.rst`.
 Live sources: [storage](https://docs.vscentrum.be/leuven/tier2_hardware/parallel_filesystems.html),
 [Leuven Slurm](https://docs.vscentrum.be/leuven/slurm_specifics.html),
 [arrays](https://slurm.schedmd.com/job_array.html),
 [containers](https://docs.vscentrum.be/compute/software/installing_software/containers.html).
-Library DATA-environment and throttled-array examples are **not our project defaults**;
+Library auto-login, DATA-environment and throttled-array examples are **not our project policy**;
 adapt them in the project, never edit the reference submodule.
 
 ## `notebooks/`
@@ -223,7 +323,7 @@ The global `manifests/submissions/` holds submission receipts/locks and is prote
 
 Long experiment entrypoints, Bash and Slurm launchers belong here; unrelated maintenance utilities
 belong in `src/utils/`. `slurm/job.slurm` takes explicit DATA checkout, shared PROJECT root,
-PROJECT runtime, expected Git commit and Python arguments. It checks revision/dirty state,
+PROJECT SIF image, expected Git commit and Python arguments. It rejects unpacked runtimes, checks revision/dirty state,
 uses isolated scratch caches, appends `.log` output, and never installs, pulls, checkpoints,
 requeues or deletes workspaces automatically. The project implements and tests publication/resume.
 Fill resource/module TODOs; adapt paths and experiment arguments together. Slurm Bash is Linux;
@@ -275,7 +375,7 @@ so interrupted preparation cannot look complete.
 ## `tests/`
 
 As many meaningful tests as needed, not one per module. Headers explain intent. Defaults cover
-storage boundaries, cleanup, concurrency budgets, mocked Slurm admission/recovery, notebook
+storage boundaries, cleanup, container-only launch/exit handling, concurrency budgets, mocked Slurm admission/recovery, notebook
 reports, PDF/A4 behavior, atomic writes, initialization and library updates. `conftest.py` sets
 imports/headless plotting and isolates storage in temporary directories. No real jobs are submitted.
 There is no test CI/hook: agents run `python -m pytest -q` and `python -m ruff check .` before delivery,
@@ -341,3 +441,13 @@ and review `git diff --submodule=log`. Preserve local changes and read the libra
   Remove `_template/` after setup; verify template edits in an initialized throwaway copy.
 
 Comments explain non-obvious **why**, not obvious mechanics. Keep docs short, structured and consistent.
+All access/storage examples use placeholders for personal logins, allocations, paths and accounts;
+never publish credentials, certificate contents or temporary authentication links.
+
+### Receiving template updates
+
+After the canonical update is reviewed and pushed, copy its `docs/TEMPLATE.md` byte-for-byte into
+each explicitly selected downstream repository; compare hashes, review the one-file diff, commit
+and push when authorized. New projects receive it with **Use this template**. Existing projects
+do not update automatically: this document-copy workflow is separate from library-pin propagation.
+It does not authorize changing downstream code, active campaigns or storage. Review adoption separately.
