@@ -29,8 +29,8 @@ Authoritative inputs, weights and durable results remain on Lustre PROJECT; logs
 small manifests remain on DATA. The actual checkout and Git operations stay on DATA.
 Manual Windows-agent access and PROJECT-root overrides follow the updated template; the
 CPU controller now uses a sealed PROJECT container. Its dependency, nested-launch,
-two-node storage and data tests passed; retirement of the former DATA prefix also
-requires native B200 validation. Committed feature/prediction databases publish periodically
+two-node storage, data and native B200 migration tests passed; the former DATA
+environment was then retired. Committed feature/prediction databases publish periodically
 and at job exit; predictor staging also restores durable completed folds and predictions
 so a recreated scratch workspace resumes them. A 200 GiB application working-set
 budget and 20 GiB personal headroom check prevent staging all runtimes at once.

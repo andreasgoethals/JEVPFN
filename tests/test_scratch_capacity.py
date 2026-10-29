@@ -90,6 +90,33 @@ def test_missing_authoritative_inputs_prevent_release(roots):
     assert (work / "checkpoints/only-copy").exists()
 
 
+def test_release_uses_verified_unmasked_control_image_not_its_executing_bin(roots, monkeypatch):
+    from src.cluster import control_runtime as control
+    from src.utils.serialization import write_json
+
+    durable, work = roots
+    copied_assets(durable, work)
+    source = durable / "containers/control-v1"
+    unmasked = durable / "host-view"
+    source.mkdir()
+    (unmasked / "bin").mkdir(parents=True)
+    (unmasked / "deps.sqfs").write_bytes(b"dependencies")
+    (unmasked / "bin/_debug_exec").write_bytes(b"host-only wrapper")
+    body = dict(provider="control", runtime_profile="cpu-control-v1", files=control.image_files(unmasked))
+    body["container_id"] = control.digest(body)
+    write_json(source / control.MARKER, body)
+    native = work / "containers/control-v1/bin/_debug_exec"
+    native.parent.mkdir(parents=True)
+    native.write_bytes(b"host-only wrapper")
+    monkeypatch.setenv("JEVPFN_CONTROL_IMAGE", str(source))
+    monkeypatch.setattr(control, "HOST_VIEW", unmasked)
+    assert cap.release("intern")["status"] == "preview"
+    (unmasked / "deps.sqfs").write_bytes(b"corrupt authoritative image")
+    with pytest.raises(ValueError, match="sealed identity"):
+        cap.release("intern", apply=True)
+    assert native.is_file()
+
+
 def test_release_refuses_running_workspace_lease(roots):
     durable, work = roots
     copied_assets(durable, work)

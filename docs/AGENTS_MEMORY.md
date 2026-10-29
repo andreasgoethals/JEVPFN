@@ -18,7 +18,7 @@ The existing control Python is 3.12.15. Its package versions are frozen in
 experiment_0/control_runtime.yaml. CPU image build 62468642 passed (27m02s), with sealed ID
 f04a2aef749aea1e56a397289aab237465a6f9dbc4cd6a8494d500bf305a2b7d.
 Read-only upload validation 62468736 passed all 18 members; none matched the old
-installed file bytes, so installation remains required. Local question audit passed
+installed file bytes, so a later installation replaced them. Local question audit passed
 18 datasets, 1,698,127 inputs and 3,294,340 links. Control test 62468965 passed Slurm
 accounting/scheduling, two-node Lustre locks and CPU/data contracts; its overall
 status failed because the monitored model wrapper rejects another enclosing image.
@@ -30,12 +30,21 @@ remain unchanged. Job 62469013 passed all integration/storage/data checks (3m44s
 and the PROJECT control image is now selected by its persistent cutover receipt.
 Input install 62470733 failed before replacement because --noheader also hides
 Slurm cluster labels. Maintenance now queries both clusters separately, exempting
-only its exact current allocation. Native B200 control validation and old-prefix
-retirement are the remaining migration gates. Input install 62470782 passed (2m25s),
+only its exact current allocation. Input install 62470782 passed (2m25s),
 replacing all eighteen files with the independently validated upload. A queued
 dependent consumer correctly blocks installation too; submit staging only after
 the globally quiescent installer finishes. Local suite: 1,144 passed, 25 platform/
 optional skips; compact-backup and uncertain full-campaign submission checks also pass.
+Native stage 62470816 passed (4m32s); GPFS storage 11753505 passed (1m43s), and
+B200 control/model-image launch 11753506 passed (1m06s) with CUDA 13.0, native sm_100
+and BF16 kernels. This basic migration check is not full model inference acceptance.
+The old DATA/conda_envs/JEVPFN prefix is absent; the persistent retirement receipt
+embeds the B200 evidence. Shared Miniconda and all other environments are preserved.
+Working-copy release 62470859 was submitted; inspect its outcome before claiming cleanup.
+At 21:29 eight tracked MulTaBench reference snapshots disappeared locally during
+concurrent workspace activity. Their deletion is uncommitted and was not made by this
+task. The owner was asked whether restoration is intended. Preserve the current changes;
+do not freeze/reset/start 0A with different local/VSC source while that is unresolved.
 
 ## Current scope and direct access, 29 October
 

@@ -50,8 +50,9 @@ to DATA is allowed. Moving to another allocation is a reviewed migration, not an
 Cluster dependencies use immutable containers on PROJECT, with temporary build files
 on scratch. The CPU image was recreated from recorded package versions and activated
 after job 62469013 passed CPU/data, nested-launch and two-node storage tests. The old
-DATA prefix remains protected until the separate native B200 migration test passes;
-its guarded retirement preserves shared Miniconda and all other environments.
+DATA prefix was retired after native B200 test 11753506 passed; its guarded retirement
+preserved shared Miniconda and all other environments. GPFS test 11753505 also passed
+cross-node exclusion, release/reacquisition and SQLite snapshot/restore.
 Model containers follow the same policy. Retain old images only while a recorded run needs them.
 
 Mindwell B200 is the default GPU route. It uses native GPFS scratch; **no GPFS

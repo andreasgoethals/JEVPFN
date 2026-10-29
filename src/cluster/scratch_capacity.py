@@ -174,6 +174,12 @@ def release(runtime, *, apply=False):
         if marker.get("runtime") != runtime or marker.get("durable_root") != str(durable):
             raise ValueError("Workspace identity/durable destination mismatch")
         targets = disposable_paths(work)
+        from src.cluster.control_runtime import host_view, verify
+
+        control = durable / "containers/control-v1"
+        control_view = host_view(control)
+        if control_view != control:
+            verify(control)  # Tykky masks bin in the executing CPU image; check its original host tree.
         # Require each asset tree's authoritative source. Failed staging is also
         # recoverable: GPU startup refuses a marker still marked 'staging'.
         for target in targets:
@@ -201,6 +207,8 @@ def release(runtime, *, apply=False):
                 ):
                     continue
                 original = source / relative
+                if original.is_relative_to(control):
+                    original = control_view / original.relative_to(control)
                 if (copied.is_file() or copied.is_symlink()) and not (
                     original.is_file() or original.is_symlink()
                 ):

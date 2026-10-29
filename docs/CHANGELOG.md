@@ -2,6 +2,14 @@
 
 ## 29-10-2026
 
+- Fix scratch retirement's CPU-image source check to use the verified unmasked host
+  view too. The executing Tykky image hides some host wrapper files; missing durable
+  assets or a corrupted source image still prevent removal.
+
+- Native GPFS storage and the CPU-controlled B200 kernel/launch test passed; retire
+  only DATA/conda_envs/JEVPFN after matching persistent image/GPU evidence. Preserve
+  the shared Conda installation, immutable model assets and other projects.
+
 - Add compact independent backup export that retains responses/features/evidence and
   optionally omits rebuildable token databases. Preserve complete submission diagnostics
   and reject unknown cluster receipts in the accepted full feature launcher; an uncertain
