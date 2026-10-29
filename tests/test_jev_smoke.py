@@ -63,6 +63,18 @@ def test_three_real_contract_shapes_resume_without_another_call(local):
     assert len(client.calls) == 3
 
 
+def test_explicit_frozen_round_preserves_old_ledger_and_reuses_its_own_responses(local):
+    original = Client()
+    smoke.run(execute=True, client_factory=lambda: original, sleep=lambda _: None)
+    round_client = Client()
+    result = smoke.run(execute=True, round_id="a" * 64, client_factory=lambda: round_client, sleep=lambda _: None)
+    assert len(round_client.calls) == 3 and result["round_id"] == "a" * 64
+    for round_id in (None, "a" * 64):
+        smoke.run(execute=True, round_id=round_id, client_factory=lambda: pytest.fail("Saved responses must survive"))
+    with pytest.raises(ValueError, match="SHA-256"):
+        smoke.run(execute=True, round_id="../outside")
+
+
 def test_robustness_has_separate_durable_budget_and_reuses_after_output_reset(local):
     client = Client()
     report = smoke.run(

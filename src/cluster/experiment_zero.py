@@ -148,6 +148,12 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
     frozen = check_if_present()
     if not frozen["frozen"]:
         raise ValueError("Record the final frozen revision after runtime setup and cleanup first")
+    if site == "local":
+        # Verify the live interface once for this frozen campaign. Preserve every
+        # earlier diagnostic ledger; resuming this exact round never pays twice.
+        for step in plan:
+            if "src.jev.smoke" in step["command"]:
+                step["command"] += ["--round-id", frozen["source_sha256"]]
     identity = digest({"source": frozen, "runtime_pins": runtime_pins(), "steps": plan})
     report["stage_identity"] = identity
     if site == "local" and dataset_pilot:

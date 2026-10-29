@@ -40,11 +40,18 @@ B200 control/model-image launch 11753506 passed (1m06s) with CUDA 13.0, native s
 and BF16 kernels. This basic migration check is not full model inference acceptance.
 The old DATA/conda_envs/JEVPFN prefix is absent; the persistent retirement receipt
 embeds the B200 evidence. Shared Miniconda and all other environments are preserved.
-Working-copy release 62470859 was submitted; inspect its outcome before claiming cleanup.
+Working-copy release 62470859 failed safely because the executing CPU image masks
+host wrapper files. Release now verifies and reads the unmasked host view as staging
+already does; retry 62470887 passed (47s), publishing all eighteen cache stores and
+removing 32,202,732,578 bytes of temporary inputs/images. The completed control build tree was
+removed, with a persistent control.build-cleanup.json receipt.
 At 21:29 eight tracked MulTaBench reference snapshots disappeared locally during
 concurrent workspace activity. Their deletion is uncommitted and was not made by this
-task. The owner was asked whether restoration is intended. Preserve the current changes;
-do not freeze/reset/start 0A with different local/VSC source while that is unresolved.
+task. The owner confirmed the deletions were unintended; all eight files were restored
+from Git and every catalogued SHA-256 matches. The local source discrepancy is resolved.
+The latest full local suite passed 1,147 tests with 25 platform/optional skips.
+Fresh-round Jev diagnostics and 0A orchestration additionally passed 22 focused tests.
+Full extraction and predictive execution remain disabled until the fresh 0A review.
 
 ## Current scope and direct access, 29 October
 

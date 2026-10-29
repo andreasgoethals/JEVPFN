@@ -572,7 +572,10 @@ VSC CPU environment:
 0A reruns CPU/question/data checks, two-node storage contracts and exact token
 counts, stages fresh native working sets, then runs all eleven decision runtimes and
 three encoders on B200. Each decision pilot follows its own contract. Local 0A
-checks Jev interfaces/robustness and the configured real-dataset pilot. Omitting
+checks Jev interfaces/robustness and the configured real-dataset pilot. Its bounded
+interface probes use a separate permanent ledger for the frozen source digest, so
+a new campaign actually tests the live API and an interrupted round reuses its
+saved responses. Earlier ledgers and dataset-pilot caches remain preserved. Omitting
 `--dataset-pilot` leaves local acceptance incomplete. Receipts are in DATA/local
 `3. experiment_0/{manifests,logs}/0A_vsc` or `0A_local`; normal Slurm logs remain.
 The VSC watcher resumes recorded IDs after a disconnect and collects independent failures

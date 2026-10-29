@@ -2,6 +2,10 @@
 
 ## 29-10-2026
 
+- Fresh local 0A uses frozen-source-specific diagnostic rounds for actual live Jev
+  interface calls. Keep earlier paid ledgers and dataset caches intact; resuming a
+  round revalidates saved responses without repeating its calls.
+
 - Fix scratch retirement's CPU-image source check to use the verified unmasked host
   view too. The executing Tykky image hides some host wrapper files; missing durable
   assets or a corrupted source image still prevent removal.

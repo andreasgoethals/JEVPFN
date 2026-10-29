@@ -10,6 +10,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import time
 from datetime import UTC, datetime
 
@@ -39,6 +40,18 @@ def preserve_smoke_state():
     state = directory / "state.json"
     legacy = paths.manifests_dir("experiment_0") / "before_extraction" / "jev_smoke.json"
     with file_lock(directory / "state.lock", timeout=1):
+        if legacy.exists():
+            latest = json.loads(legacy.read_text(encoding="utf-8"))
+            if latest.get("round_id") is not None:
+                round_id = latest["round_id"]
+                if not isinstance(round_id, str) or not re.fullmatch(r"[0-9a-f]{64}", round_id):
+                    raise ValueError("Latest Jev diagnostic has an invalid round identity")
+                saved_round = directory / "rounds" / round_id / "state.json"
+                if not saved_round.exists() or digest(latest) != digest(json.loads(saved_round.read_text(encoding="utf-8"))):
+                    raise ValueError("Latest Jev diagnostic differs from its permanent round ledger")
+                # The canonical output describes a new round. Its paid ledger is
+                # already durable; it must never replace the original ledger.
+                return directory, state
         if state.exists():
             saved = json.loads(state.read_text(encoding="utf-8"))
             if legacy.exists() and digest(saved) != digest(
@@ -102,9 +115,12 @@ def run(
     revalidate_only=False,
     dataset_robustness=False,
     config="feature_creation/jev.local",
+    round_id=None,
 ):
     if not (execute or revalidate_only) or paths.on_vsc():
         raise RuntimeError("The bounded Jev smoke test requires --execute locally")
+    if round_id is not None and not re.fullmatch(r"[0-9a-f]{64}", round_id):
+        raise ValueError("Diagnostic round must be a frozen source SHA-256")
     if MODEL != "jev-1.13.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
         raise ValueError("Smoke policy differs from the reviewed model/context/three-call budget")
     key = None if revalidate_only else api_key()
@@ -119,8 +135,10 @@ def run(
         if robustness
         else "jev_smoke"
     )
-    if diagnostic:
+    if diagnostic or round_id is not None:
         directory = paths.jev_cache_path("jev_cache/_control/" + test_name)
+        if round_id is not None:
+            directory = directory / "rounds" / round_id
         directory.mkdir(parents=True, exist_ok=True)
         state_path = directory / "state.json"
     else:
@@ -148,6 +166,7 @@ def run(
         "status": "running",
         "model": MODEL,
         "request_identity": identity,
+        "round_id": round_id,
         "scope": "label-blind real-text sensitivity sample; no feature materialization"
         if dataset_robustness
         else "synthetic prompt robustness; no dataset extraction"
@@ -363,6 +382,7 @@ def main():
         help="Separate 13-call real-text diagnostic; requires the reviewed local context envelope",
     )
     parser.add_argument("--config", default="feature_creation/jev.local")
+    parser.add_argument("--round-id", help="Explicit new frozen-source diagnostic round; retries reuse that round's saved responses")
     parser.add_argument(
         "--retry-auth-rejected",
         action="store_true",
@@ -398,6 +418,7 @@ def main():
                     revalidate_only=args.revalidate_only,
                     dataset_robustness=args.dataset_robustness,
                     config=args.config,
+                    round_id=args.round_id,
                 ),
                 indent=2,
             )
