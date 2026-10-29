@@ -46,6 +46,26 @@ def test_controller_reuses_its_interpreter_but_preserves_model_wrapper(monkeypat
     assert control.child_command(model) == model
 
 
+def test_integrity_checks_use_the_readonly_unmasked_host_view(tmp_path, monkeypatch):
+    source, unmasked = tmp_path / "source", tmp_path / "unmasked"
+    source.mkdir()
+    unmasked.mkdir()
+    for root in (source, unmasked):
+        (root / "env.sqfs").write_bytes(b"sealed image")
+        (root / "_bin").mkdir()
+        (root / "_bin/python").write_bytes(b"host wrapper")
+    body = dict(provider="control", runtime_profile="cpu-control-v1", files=control.image_files(source))
+    body["container_id"] = control.digest(body)
+    (source / control.MARKER).write_text(json.dumps(body))
+    (source / "_bin/python").write_bytes(b"image-masked executable")
+    monkeypatch.setenv("JEVPFN_CONTROL_IMAGE", str(source))
+    monkeypatch.setattr(control, "HOST_VIEW", unmasked)
+    assert control.verify(source)["container_id"] == body["container_id"]
+    (unmasked / "env.sqfs").write_bytes(b"changed host image")
+    with pytest.raises(ValueError, match="sealed identity"):
+        control.verify(source)
+
+
 def test_install_allocation_can_ignore_only_its_own_cluster_job(isolated_output, monkeypatch):
     from src.cluster import maintenance
 

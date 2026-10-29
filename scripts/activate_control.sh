@@ -26,6 +26,17 @@ jevpfn_activate_control() {
         fi
     done
     export JEVPFN_CONTROL_IMAGE="$image"
+    # Tykky masks bin while executing. Retain an unmasked read-only host view for
+    # identical integrity checks and copying the sealed tree to native scratch.
+    local bindings="" item
+    local -a previous_bindings
+    IFS=',' read -ra previous_bindings <<< "${APPTAINER_BINDPATH:-}"
+    for item in "${previous_bindings[@]}"; do
+        if [[ -n "$item" && "$item" != *":/JEVPFN_CONTROL_HOST:"* ]]; then
+            bindings="${bindings:+$bindings,}$item"
+        fi
+    done
+    export APPTAINER_BINDPATH="${bindings:+$bindings,}$image:/JEVPFN_CONTROL_HOST:ro"
     hash -r
     "$JEVPFN_PYTHON" -I -c 'import sys; assert sys.version_info[:2]==(3,12); print("JEVPFN control container:",sys.executable)' || return
 }

@@ -63,7 +63,7 @@ def _link_target(path):
     return Path(target)
 
 
-def files(folder):
+def files(folder, *, link_root=None):
     """Hash image bytes and wrapper links without following image-only executable paths."""
     result = {}
     root = folder.resolve()
@@ -78,7 +78,9 @@ def files(folder):
             continue
         if path.is_symlink():
             target = _link_target(path)
-            internal = path.resolve().is_relative_to(root)
+            internal = path.resolve().is_relative_to(root) or (
+                link_root is not None and path.resolve().is_relative_to(Path(link_root).resolve())
+            )
             # hpc-container-wrapper deliberately points _bin/* at paths mounted
             # INSIDE its image; after retirement they need not exist on the host.
             image_link = (
@@ -192,7 +194,7 @@ def verify(provider, *, profile=None):
     return manifest
 
 
-def relocate(source, destination):
+def relocate(source, destination, *, source_view=None):
     """Reseal an already copied wrapper tree for native-filesystem execution.
 
     The caller copies a complete sealed tree first. Images are never modified; only
@@ -201,12 +203,20 @@ def relocate(source, destination):
     native image. A different prefix inside the SquashFS image would break Conda.
     """
     source, destination = reject_links(Path(source)), reject_links(Path(destination))
+    view = Path(source_view) if source_view is not None else source
+    if source_view is not None:
+        from src.cluster.control_runtime import host_view
+
+        if view != host_view(source) or view == source:
+            raise ValueError("Alternate source view is only the verified CPU image bind")
     if source.resolve() == destination.resolve():
         raise ValueError("Relocation requires a distinct copied destination")
     manifest = json.loads((source / MARKER).read_text(encoding="utf-8"))
+    if source_view is not None and manifest.get("provider") != "control":
+        raise ValueError("Only the CPU control image has an alternate host view")
     if manifest.get("container_id") != digest(
         {k: v for k, v in manifest.items() if k != "container_id"}
-    ) or manifest.get("files") != files(source):
+    ) or manifest.get("files") != (files(view, link_root=source) if source_view is not None else files(source)):
         raise ValueError("Source container fingerprint differs from its seal")
     copied = json.loads((destination / MARKER).read_text(encoding="utf-8"))
     previous = copied.get("relocation", {})
@@ -242,7 +252,7 @@ def relocate(source, destination):
             + ", ".join(changed[:20])
             + (f" (+{len(changed) - 20} more)" if len(changed) > 20 else "")
         )
-    config = source / "share/conf.yaml"
+    config = view / "share/conf.yaml"
     image_root = (
         ((yaml.safe_load(config.read_text(encoding="utf-8")) or {}).get("installation_path"))
         if config.exists()

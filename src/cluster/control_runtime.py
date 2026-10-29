@@ -14,6 +14,15 @@ from pathlib import Path
 
 MARKER = "_JEVPFN_CONTAINER.json"
 LEAF = "control-v1"
+HOST_VIEW = Path("/JEVPFN_CONTROL_HOST")
+
+
+def host_view(folder):
+    """Use the read-only unmasked bind while running inside this image."""
+    image = os.environ.get("JEVPFN_CONTROL_IMAGE")
+    if image and Path(folder).resolve() == Path(image).resolve() and HOST_VIEW.is_dir():
+        return HOST_VIEW
+    return Path(folder)
 
 
 def child_environment():
@@ -143,7 +152,7 @@ def verify(folder, *, active=None):
         or manifest.get("runtime_profile") != "cpu-control-v1"
         or manifest.get("container_id")
         != digest({k: v for k, v in manifest.items() if k != "container_id"})
-        or manifest.get("files") != image_files(folder)
+        or manifest.get("files") != image_files(host_view(folder))
     ):
         raise ValueError("CPU control image differs from its sealed identity")
     if not any(name.endswith(".sqfs") for name in manifest["files"]):

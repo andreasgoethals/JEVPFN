@@ -2,6 +2,11 @@
 
 ## 29-10-2026
 
+- Diagnose the CPU image's differing self-view on VSC: Tykky masks bin with its
+  in-image executables. Preserve full byte/link verification using an additional
+  read-only unmasked host bind; use that verified view when copying the CPU image
+  to GPFS. Model image verification retains its normal path and checks.
+
 - Add a bounded accepted open-weight feature campaign: one dataset per GPU job, two
   concurrent jobs per resident decision runtime, two resident workspaces, and three
   frozen encoder branches. Jev and predictive benchmarks remain excluded.

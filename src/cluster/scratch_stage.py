@@ -335,6 +335,7 @@ def stage(runtime):
         control = durable / "containers/control-v1"
         control_selected = (durable / "containers/control.active.json").is_file()
         if control_selected:
+            from src.cluster.control_runtime import host_view
             from src.cluster.control_runtime import verify as verify_control
 
             verify_control(control)
@@ -385,9 +386,11 @@ def stage(runtime):
         containers.relocate(source_container, target_container)
         if control_selected:
             copied_control = work / "containers/control-v1"
+            control_view = host_view(control)
             if not copied_control.exists():
-                shutil.copytree(control, copied_control, symlinks=True)
-            containers.relocate(control, copied_control)
+                shutil.copytree(control_view, copied_control, symlinks=True)
+            containers.relocate(control, copied_control,
+                                **({"source_view": control_view} if control_view != control else {}))
         if runtime in containers.SELF_HOSTED:
             from src.jev.checkpoints import verify_checkpoint
 
