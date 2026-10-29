@@ -17,7 +17,7 @@ def test_all_encoders_dimensions_and_providers_are_prespecified():
     assert len({a["encoder"] for a in main}) == 3
     optional = [
         a
-        for a in benchmark_plan(include_controls=True)
+        for a in benchmark_plan()
         if a["phase"] == "experiment_2" and a["pca_scope"] == "joint"
     ]
     assert len(optional) == 18 * 6 * 3 * 6
@@ -32,7 +32,7 @@ def test_actual_predictor_fixtures_exercise_both_pca_widths_and_combined_feature
 
     for dataset in predictor_contracts.fixtures():
         cases = list(predictor_contracts.feature_cases(dataset, MAIN_MODELS[0]))
-        assert len(cases) == 10
+        assert len(cases) == 12
         # These are interface fixtures, not claimed real E5 vectors or dataset predictions.
         for name, features, width in cases:
             assert "text" not in features and "target" not in features
@@ -56,7 +56,7 @@ def test_actual_predictor_fixtures_exercise_both_pca_widths_and_combined_feature
             assert before[1].equals(after[1])
         for native in TEXT_MODELS:
             cases_native = list(predictor_contracts.feature_cases(dataset, native))
-            assert len(cases_native) == 4 and "text" in cases_native[0][1]
+            assert len(cases_native) == 1 and "text" in cases_native[0][1]
 
 
 def test_0b_embedding_checks_cover_every_selected_dataset_and_report_missing_cache(monkeypatch):

@@ -77,21 +77,6 @@ def test_cross_system_pairing_is_explicit_and_split_bound():
     assert study.cross_system_contrasts(frame).empty
 
 
-def test_aligned_control_compares_same_artifacts_not_just_same_provider():
-    data = fixture_folds().query("model_id == 'catboost'").copy()
-    data["feature_set"] = "non_text_plus_both"
-    data["provider"] = "jev"
-    data["feature_artifact_ids"] = '["exact-artifact"]'
-    control = data.copy()
-    control["phase"] = "experiment_5"
-    control["arm_id"] += "control"
-    control["feature_set"] += "__permuted__main"
-    control["value"] -= .1
-    paired = study.aligned_control_contrasts(pd.concat([data, control]))
-    assert len(paired) == 15 and np.allclose(paired.difference, -.1)
-    assert study.contrast_summary(paired).datasets.eq(1).all()
-    control["feature_artifact_ids"] = '["different"]'
-    assert study.aligned_control_contrasts(pd.concat([data, control])).empty
 
 
 def test_future_plots_draw_on_final_print_canvas_without_winner_selection():
@@ -111,7 +96,7 @@ def test_no_empty_coverage_figures_before_results_exist():
 
 
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
-    for folder in [f"{i+3}. experiment_{i}" for i in range(6)] + ["9. synthesis"]:
+    for folder in [f"{i+3}. experiment_{i}" for i in range(4)] + ["7. synthesis"]:
         notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
         assert notebooks
         for filename in notebooks:
@@ -123,8 +108,8 @@ def test_every_experiment_has_thin_notebook_and_complete_printed_report():
 
 
 def test_synthesis_uses_general_notebook_output_without_fake_experiment():
-    assert paths.notebook_phase("9. synthesis/01_representation_comparison") == "synthesis"
-    assert paths.phase_folder("synthesis") == "9. synthesis"
+    assert paths.notebook_phase("7. synthesis/01_representation_comparison") == "synthesis"
+    assert paths.phase_folder("synthesis") == "7. synthesis"
 
 
 def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():

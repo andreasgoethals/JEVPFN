@@ -31,8 +31,6 @@ def study_grid_figure(grid):
         ["1", f"{len(load_yaml('experiment_1/main')['candidate_extractors'])} decision models × 3 modes + baseline", "Six fixed predictors"],
         ["2", "3 encoders × 7 PCA recipes", "Six fixed predictors"],
         ["3", "3 original-text systems", "Separate references"],
-        ["4", "Question / option / context sensitivity", "Label-blind diagnostics"],
-        ["5", "Presence, statistics, shuffled / full outputs", "Separate controls"],
     ]
     table = ax.table(cellText=lines, colLabels=["Stage", "Controlled comparison / check", "Scope"],
                      colWidths=[0.09, 0.56, 0.35], cellLoc="left", colLoc="left",
@@ -61,7 +59,7 @@ def study_grid_figure(grid):
         "joint, per-column and both. Experiment 2 uses per-column PCA32 or joint "
         "PCA256/128/64/32/16/8 for each encoder. Each configuration has five outer folds; binary "
         "threshold selection adds three inner fits per outer fold. Counts precede feasibility "
-        "exclusions and omit Experiment 5 controls and optional concatenations. Fits and "
+        "exclusions. Fits and "
         "configurations are planned workload units, not independent statistical replicates."
     )
 

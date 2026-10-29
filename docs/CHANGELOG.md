@@ -2,6 +2,22 @@
 
 ## 29-10-2026
 
+- Remove Experiments 4/5, selected-winner combinations and their configs, execution
+  branches and notebooks. Preserve main statistical analysis under `7. synthesis`,
+  Experiment 0A robustness checks and Experiment 2's PCA variants. Keep the main
+  3,996/2,268/54 grid unchanged; update 0B fixtures and coverage to the active scope.
+- Adopt the already-current canonical VSC access/storage policy. Verify manual shared
+  Windows-agent SSH with stdout/exit markers and an explicit stderr-to-stdout gateway
+  workaround. Record live DATA checkout, quotas and idle JEVPFN state. Support PROJECT
+  root aliases throughout paths and explicit Slurm submissions, including release and
+  benchmark jobs, while preserving B200's native scratch override. Document the remaining
+  DATA CPU-control environment as a migration exception; no remote migration or jobs run.
+- Validation: 1,134 local tests passed, 25 optional/platform skips; Ruff and dependency
+  checks passed; all 31 shell scripts passed Bash syntax/LF checks. All eleven remaining
+  notebooks executed with 13 saved PDFs and complete reports; the revised study map was
+  visually inspected. Concurrent notebook writers were detected and recovery outputs
+  preserved; affected notebooks passed after the owner stopped their parallel run.
+
 - Verify the new Decision3/TabSTAR B200 receipts and successful scratch release; update
   operational status without treating setup passes as frozen-campaign acceptance.
   Review the notebook redesign: keep empty response caches reportable; label cached

@@ -18,7 +18,6 @@ def configuration(monkeypatch):
         "experiment_1/protocol",
         "experiment_2/embeddings",
         "experiment_3/native_text",
-        "experiment_5/output_ablation",
         "feature_creation/embedding_models",
     ]
     configs = {name: copy.deepcopy(original(name)) for name in names}

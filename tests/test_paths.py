@@ -107,7 +107,10 @@ def test_numbered_phases_keep_logical_config_ids_and_valid_folder_numbers(monkey
     import pytest
 
     assert paths.phase_folder("question_preparation") == "1. question_preparation"
-    assert paths.phase_folder("experiment_4") == "7. experiment_4"
+    assert paths.phase_folder("synthesis") == "7. synthesis"
+    for retired in ("experiment_4", "experiment_5"):
+        with pytest.raises(ValueError, match="Unknown research phase"):
+            paths.phase_folder(retired)
     assert (
         paths.notebook_phase("1. question_preparation/01_prepare_questions")
         == "question_preparation"
@@ -193,11 +196,13 @@ def test_phases_separate_large_results_and_small_logs(isolated_output):
     )
 
 
-def test_future_experiment_numbers_are_supported():
+def test_unapproved_experiment_numbers_are_rejected():
     import pytest
 
-    assert paths.notebook_phase("experiment_12_comparison") == "experiment_12"
-    assert paths.results_dir(phase="experiment_12").parts[-2:] == ("15. experiment_12", "results")
+    with pytest.raises(ValueError):
+        paths.notebook_phase("experiment_12_comparison")
+    with pytest.raises(ValueError):
+        paths.results_dir(phase="experiment_12")
     with pytest.raises(ValueError):
         paths.results_dir(phase="../raw")
 
@@ -250,3 +255,14 @@ def test_non_experiment_outputs_never_create_output_phase_folders(isolated_outpu
     assert (
         paths.logs_dir("feature_creation") == paths.outputs_dir() / "2. feature_creation" / "logs"
     )
+
+
+def test_project_root_aliases_and_explicit_native_working_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("VSC_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("VSC_PROJECT_ROOT", str(tmp_path / "shared"))
+    assert paths.checkpoints_dir() == tmp_path / "shared" / "JEVPFN" / "checkpoints"
+    monkeypatch.setenv("JEVPFN_PROJECT_ROOT", str(tmp_path / "allocated"))
+    assert paths.checkpoints_dir() == tmp_path / "allocated" / "JEVPFN" / "checkpoints"
+    # B200 native working-set override must not be redirected to cross-mounted PROJECT.
+    monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(tmp_path / "gpfs-working"))
+    assert paths.checkpoints_dir() == tmp_path / "gpfs-working" / "JEVPFN" / "checkpoints"

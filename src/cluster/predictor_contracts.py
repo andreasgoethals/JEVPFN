@@ -67,18 +67,6 @@ def feature_cases(dataset, model):
     original = original_features(dataset)
     if model in TEXT_MODELS:
         yield "original_text", original, None
-        for mode in ("joint", "per_column", "both"):
-            values = original.copy()
-            width = (
-                len(dataset.metadata.classes)
-                if dataset.metadata.task_type == "multiclass_classification"
-                else 1
-            )
-            for i in range(width * (2 if mode == "both" else 1)):
-                values[f"decision__{i}"] = np.where(
-                    dataset.frame["text"].isna(), np.nan, (i + 1) / (width + 2)
-                )
-            yield "original_text_plus_" + mode, values, None
         return
     base = original.drop(columns=list(dataset.metadata.text_columns))
     base.attrs["feature_artifact_ids"] = []
@@ -112,7 +100,8 @@ def feature_cases(dataset, model):
     wide.loc[missing, :] = np.nan
     wide.attrs.update(feature_artifact_ids=[], embedding_groups=[list(wide)])
     yield "embedding_1024_pca_64", add_embeddings(base, wide), 64
-    combined = combined.copy()
+    # Decision-only fixtures exercise the three actual Experiment 1 augmentations.
+    blocks = {}
     for mode in ("per_column", "joint"):
         task = dataset.metadata.task_type
         width = len(dataset.metadata.classes) if task == "multiclass_classification" else 1
@@ -122,15 +111,14 @@ def feature_cases(dataset, model):
         elif task == "regression":
             values = values * 8 - 4
         values[missing] = np.nan
-        combined = combined.join(
-            pd.DataFrame(
-                values,
-                index=base.index,
-                columns=[f"synthetic_decision__{mode}__{i}" for i in range(width)],
-            )
-        )
-    combined.attrs.update(feature_artifact_ids=[], embedding_groups=[names])
-    yield "e5_pca_32_plus_both", combined, 32
+        blocks[mode] = pd.DataFrame(values, index=base.index,
+            columns=[f"synthetic_decision__{mode}__{i}" for i in range(width)])
+        result = base.join(blocks[mode])
+        result.attrs.update(feature_artifact_ids=[])
+        yield "decision_" + mode, result, None
+    result = base.join(blocks["per_column"]).join(blocks["joint"])
+    result.attrs.update(feature_artifact_ids=[])
+    yield "decision_both", result, None
 
 
 def case_factory(base_factory, features, components):
@@ -246,7 +234,7 @@ def main():
         run(args.model, execute=True)
     else:
         print(
-            "Disabled: four tasks; main predictors test non-text, per-column PCA32, joint PCA256/128/64/32/16/8, 1024-dimensional vectors and combined decision features; native-text models test original text with and without decision features. Five-fold CV, inner binary thresholds and resume checks. No inference performed."
+            "Disabled: four tasks; main predictors test non-text, per-column PCA32, joint PCA256/128/64/32/16/8, 1024-dimensional vectors and decision-only features; native-text models test original text. Five-fold CV, inner binary thresholds and resume checks. No inference performed."
         )
 
 

@@ -41,12 +41,11 @@ checks:
   - binary_threshold_uses_inner_validation_only
   - fold_specific_non_text_and_native_text_preprocessing
   - all_three_encoders_exact_reuse_missing_inputs_long_text_chunks_and_resume
-  - all_experiment_1_2_3_and_5_feature_combinations_and_provider_provenance
+  - all_experiment_1_2_3_feature_combinations_and_provider_provenance
   - all_encoder_PCA_scopes_fit_inside_every_inner_and_outer_training_partition
   - CPU_prepared_PCA_reuse_exact_training_partition_and_encoder_identity
   - parallel_scheduler_dependencies_resume_and_native_filesystem_guards
   - GPU_utilization_logging_and_explicit_unknown_if_sampling_unavailable
-  - post_selection_combinations_are_descriptive_not_confirmatory
   - identical_single_text_columns_not_duplicated_in_combined_view
   - later_small_inference_smoke_after_weights_are_prepared
 acceptance: pending_real_runtime_evidence  # Preflight success is not full experiment-0 acceptance.
@@ -76,7 +75,7 @@ acceptance_checks:
     evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.
   - id: predictor_task_compatibility
     site: vsc_compute_node
-    evidence: All six main engines fit non-text, per-column PCA32 and joint PCA256/128/64/32/16/8 and combined decision fixtures for binary, multiclass, 30-class and regression tasks; TabSTAR/ConTextTab/AG-MM fit original-text and original-text-plus-decision fixtures. Missing values, class order and cache reuse pass. Synthetic vectors test the downstream interface; separate real-encoder contracts and cache checks validate real embeddings.
+    evidence: All six main engines fit non-text, per-column PCA32 and joint PCA256/128/64/32/16/8 and separate decision-only fixtures for binary, multiclass, 30-class and regression tasks; TabSTAR/ConTextTab/AG-MM fit original-text fixtures. Missing values, class order and cache reuse pass. Synthetic vectors test the downstream interface; separate real-encoder contracts and cache checks validate real embeddings.
   - id: predictive_pipeline_boundaries
     site: local_and_vsc
     evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds, fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.

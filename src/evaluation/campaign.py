@@ -42,7 +42,7 @@ from src.utils.provenance import code_identity
 from src.utils.serialization import digest, write_json
 
 
-def benchmark_plan(main=None, text=None, *, include_controls=False):
+def benchmark_plan(main=None, text=None):
     main = main or load_yaml("experiment_1/main")
     text = text or load_yaml("experiment_3/native_text")
     embedding = load_yaml("experiment_2/embeddings")
@@ -56,11 +56,8 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
     if tuple(main["candidate_combinations"]) != DECISION_FEATURE_SETS:
         raise ValueError("Experiment 1 has exactly four decision feature configurations")
     semantics = load_yaml("dataset_semantics")["datasets"]
-    ablation = load_yaml("experiment_5/output_ablation") if include_controls else None
     rows = []
-    from src.evaluation.design import followup_selection, pca_grid
-
-    winner = followup_selection() if include_controls else None
+    from src.evaluation.design import pca_grid
 
     def add(entry, model, feature_set, phase, **extra):
         rows.append(
@@ -89,94 +86,8 @@ def benchmark_plan(main=None, text=None, *, include_controls=False):
                 for model in MAIN_MODELS:
                     extra = dict(encoder=encoder, pca_scope=scope, pca_components=components)
                     add(entry, model, EMBEDDING_FEATURE_SETS[0], "experiment_2", **extra)
-                    if winner and winner["embedding"] == {
-                        "encoder": encoder,
-                        "scope": scope,
-                        "components": components,
-                    }:
-                        add(
-                            entry,
-                            model,
-                            "non_text_plus_frozen_e5_and_" + winner["mode"],
-                            "experiment_5",
-                            control="winner_combination",
-                            **extra,
-                        )
-                        rows[-1].update(
-                            provider=winner["provider"],
-                            selection_id=winner["selection_id"],
-                            inference_status=winner["inference_status"],
-                        )
         for model in TEXT_MODELS:
             add(entry, model, NATIVE_FEATURE_SETS[0], "experiment_3")
-            if winner:
-                add(
-                    entry,
-                    model,
-                    "original_features_plus_" + winner["mode"],
-                    "experiment_5",
-                    control="winner_combination",
-                )
-                rows[-1].update(
-                    provider=winner["provider"],
-                    selection_id=winner["selection_id"],
-                    inference_status=winner["inference_status"],
-                )
-        if not include_controls:
-            continue
-        # Explicit concatenation of independently cached providers; never average unlike scores.
-        for providers in main["combined_extractor_groups"]:
-            if len(set(providers)) != len(providers) or not set(providers) <= set(
-                main["candidate_extractors"]
-            ):
-                raise ValueError("Invalid combined provider group")
-            for model in MAIN_MODELS:
-                for feature_set in DECISION_FEATURE_SETS[1:]:
-                    add(
-                        entry,
-                        model,
-                        feature_set,
-                        "experiment_1",
-                        providers=providers,
-                        control="combined_extractors",
-                        view="main",
-                    )
-        cfg = ablation
-        for model in cfg["presence_control_models"]:
-            add(
-                entry,
-                model,
-                "non_text_plus_presence",
-                "experiment_5",
-                control="text_presence",
-                view="main",
-            )
-        for model in cfg["candidate_models"]:
-            add(
-                entry,
-                model,
-                "non_text_plus_text_statistics",
-                "experiment_5",
-                control="text_statistics",
-                view="main",
-            )
-            task = semantics[entry["id"]]["task_type"]
-            for provider in main["candidate_extractors"]:
-                controls = [("permuted", "main")]
-                if task == "regression":
-                    controls.append(("retained_view", "probabilities"))
-                if task != "binary_classification":
-                    controls.append(("retained_view", "probabilities_plus_confidence"))
-                for control, view in controls:
-                    add(
-                        entry,
-                        model,
-                        "non_text_plus_both",
-                        "experiment_5",
-                        control=control,
-                        view=view,
-                    )
-                    rows[-1]["provider"] = provider
     from types import SimpleNamespace
 
     from src.evaluation.widths import width_status
@@ -200,7 +111,6 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "experiment_1": "main",
         "experiment_2": "embeddings",
         "experiment_3": "native_text",
-        "experiment_5": "output_ablation",
     }
     cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
     enabled = (
@@ -208,16 +118,6 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     )
     if allow_model_runs is not True or enabled is not True:
         raise RuntimeError("Benchmark execution is disabled; plan only")
-    selection = None
-    if arm.get("control") == "winner_combination":
-        from src.evaluation.design import followup_selection
-
-        selection = followup_selection(require_complete=True)
-        if (
-            not cfg["winner_combination_enabled"]
-            or arm["selection_id"] != selection["selection_id"]
-        ):
-            raise ValueError("Exploratory combination requires an enabled, matching selection")
     from src.cluster.freeze import check_if_present
 
     check_if_present()
@@ -228,7 +128,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             cfg.get("experiment_0_acceptance"), stage="after_extraction",
             expected={"evaluation_identity": evaluation_identity()},
         )
-    if arm not in benchmark_plan(include_controls=True):
+    if arm not in benchmark_plan():
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     catalog = load_yaml("experiment_1/models")
     settings = copy.deepcopy(catalog["models"][arm["model"]]["runtime"])
@@ -263,7 +163,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     if status["width_status"] == "unsupported_width":
         raise ValueError(f"Unsupported width: {status}; no columns are silently discarded")
     decision_set = decision_feature_set(arm["feature_set"])
-    providers = arm.get("providers") or ([arm["provider"]] if arm["provider"] else [])
+    providers = [arm["provider"]] if arm["provider"] else []
     selectors, additions = {}, []
     for provider in providers:
         selector = cfg["feature_selectors"].get(provider)
@@ -299,8 +199,6 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         else assemble_feature_set(dataset, [], "non_text")
     )
     features = combine_representations(base, additions) if additions else base
-    if arm["feature_set"] in ("non_text_plus_presence", "non_text_plus_text_statistics"):
-        features = assemble_feature_set(dataset, [], arm["feature_set"])
     selector = selectors.get(arm["provider"]) if arm["provider"] else selectors or None
     embedding_cfg = None
     if uses_embeddings(arm["feature_set"]):
@@ -317,23 +215,14 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     representation = {
         "missingness_policy": features.attrs.get("missingness_policy"),
-        "uncertainty_summary": "normalized_entropy_peak_and_direction_variance_v1"
-        if arm.get("view") == "probabilities_plus_confidence"
-        else None,
+        "uncertainty_summary": None,
         "provider": arm["provider"],
         "providers": providers,
         "selector": selector,
-        "control": None if selection else arm.get("control"),
-        "view": arm.get("view", "main"),
+        "control": None,
+        "view": "main",
         "embedding": embedding_cfg,
     }
-    if arm.get("control") == "permuted":
-        from src.evaluation.features import PERMUTATION_POLICY
-
-        representation["permutation_policy"] = PERMUTATION_POLICY
-    if selection:
-        representation["selection"] = selection
-        representation["inference_status"] = "exploratory_post_selection"
     if embedding_cfg:
         from src.evaluation.embedding_control import EmbeddingControl
 
@@ -368,12 +257,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             specification=shared_splits(dataset, seed=cfg["random_seed"], folds=5),
             model_id=arm["model"],
             checkpoint_id=predictor_settings_identity(settings),
-            feature_set=arm["feature_set"]
-            + (
-                "__" + arm["control"] + "__" + arm["view"]
-                if "control" in arm and arm["control"] != "winner_combination"
-                else ""
-            ),
+            feature_set=arm["feature_set"],
             allow_model_runs=True,
             inner_folds=3,
             phase=phase,
@@ -381,14 +265,6 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             device=settings["device"],
             estimator_settings=settings,
             representation_recipe=representation,
-            permutation_columns=[
-                c
-                for c in features
-                if c not in dataset.metadata.non_text_columns
-                and not c.startswith("text_presence__")
-            ]
-            if arm.get("control") == "permuted"
-            else None,
             fold_numbers=[0] if profile else None,
         )
     except Exception as exc:
@@ -411,7 +287,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
     parser.add_argument(
-        "--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_5")
+        "--phase", choices=("experiment_1", "experiment_2", "experiment_3")
     )
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
@@ -419,23 +295,8 @@ def main():
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
     parser.add_argument(
         "--feature-set",
-        choices=MAIN_FEATURE_SETS
-        + NATIVE_FEATURE_SETS
-        + ("non_text_plus_text_statistics", "non_text_plus_presence"),
+        choices=MAIN_FEATURE_SETS + NATIVE_FEATURE_SETS,
     )
-    parser.add_argument("--include-controls", action="store_true")
-    parser.add_argument(
-        "--control",
-        choices=(
-            "text_statistics",
-            "text_presence",
-            "permuted",
-            "retained_view",
-            "combined_extractors",
-            "winner_combination",
-        ),
-    )
-    parser.add_argument("--view", help="Retained decision feature view, e.g. probabilities")
     parser.add_argument("--provider", choices=tuple(load_yaml("extractors")["candidates"]))
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(
@@ -444,7 +305,7 @@ def main():
         help="Experiment 0B: full first outer fold, no row cap",
     )
     args = parser.parse_args()
-    plan = benchmark_plan(include_controls=args.include_controls or args.control is not None)
+    plan = benchmark_plan()
     selected = [
         a
         for a in plan
@@ -459,8 +320,6 @@ def main():
                 "model": args.model,
                 "feature_set": args.feature_set,
                 "provider": args.provider,
-                "control": args.control,
-                "view": args.view,
             }.items()
         )
     ]

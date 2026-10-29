@@ -4,7 +4,7 @@
 # Run:     bash scripts/test_all.sh --execute --watch
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}"
 export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 export JEVPFN_CONDA_ENV=JEVPFN

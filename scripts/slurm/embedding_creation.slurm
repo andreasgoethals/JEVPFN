@@ -17,7 +17,7 @@ set -euo pipefail
 export JEVPFN_PHASE=feature_creation
 JEVPFN_ENCODER="${1:?Pass e5_small_v2|e5_large_v2|qwen3_embedding_0_6b}"
 export JEVPFN_CONDA_ENV="${2:-cloudflare}"
-export JEVPFN_STAGING_ROOT="${3:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 JEVPFN_EMBEDDING_ARGS=(--encoder "$JEVPFN_ENCODER" --execute)

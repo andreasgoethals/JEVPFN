@@ -23,11 +23,13 @@ def add_releases(steps, *, command_style=False):
             terminal_dependencies=sorted(consumers),
         )
         if command_style:
+            exports = [arg for arg in stage["command"] if arg.startswith("--export=")]
             release.update(
                 depends_on=[],
                 command=[
                     "sbatch",
                     "--parsable",
+                    *exports,
                     "scripts/slurm/experiment_0_scratch_release.slurm",
                     runtime,
                     "--apply",
@@ -38,7 +40,7 @@ def add_releases(steps, *, command_style=False):
                 dependencies=[],
                 script="experiment_0_scratch_release.slurm",
                 args=[runtime, "--apply"],
-                flags=[],
+                flags=[arg for arg in stage.get("flags", []) if arg.startswith("--export=")],
             )
         releases.append(release)
     return [*steps, *releases]

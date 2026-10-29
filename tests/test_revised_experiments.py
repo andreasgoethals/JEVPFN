@@ -22,40 +22,10 @@ def test_primary_grid_and_widths():
     table = pca_width_table()
     assert table.per_column_32.max() == 431
     assert table.joint_256.max() == 300
-    assert table.max_with_one_provider_both.max() == 445
-    assert table.conservative_kumo_upper_bound.max() == 447
+    assert table.max_embedding_columns.max() == 431
+    assert table.conservative_kumo_upper_bound.max() == 433
 
 
-def test_selected_followups_exist_only_in_exploratory_phase(monkeypatch, tmp_path):
-    from src.evaluation import design
-    from src.utils.serialization import file_sha256
-
-    evidence = tmp_path / "reviewed.csv"
-    evidence.write_text("reviewed summary", encoding="utf-8")
-    original = design.load_yaml
-    selection = dict(
-        provider="jev",
-        mode="joint",
-        evidence=str(evidence),
-        evidence_sha256=file_sha256(evidence),
-        rationale="Reviewed mean ranks",
-        embedding={"encoder": "e5_small_v2", "scope": "joint", "components": 32},
-        inference_status="exploratory_post_selection",
-    )
-    monkeypatch.setattr(
-        design,
-        "load_yaml",
-        lambda name: selection if name.endswith("followup_selection") else original(name),
-    )
-    arms = [
-        a for a in benchmark_plan(include_controls=True) if a.get("control") == "winner_combination"
-    ]
-    assert len(arms) == 108 + 54
-    assert all(a["phase"] == "experiment_5" and a["provider"] == "jev" for a in arms)
-    assert all(a["inference_status"] == "exploratory_post_selection" for a in arms)
-    evidence.write_text("changed", encoding="utf-8")
-    with pytest.raises(ValueError, match="changed"):
-        design.followup_selection()
 
 
 @pytest.mark.parametrize("scope", ["joint", "per_column"])
@@ -232,3 +202,15 @@ def test_array_plan_reports_width_exclusions(monkeypatch):
     result = benchmark_jobs.plan("experiment_1", "catboost")
     assert result["arms"] == [valid]
     assert result["excluded_arms"] == [excluded]
+
+
+def test_retired_experiments_have_no_grid_or_configuration():
+    from src.evaluation.features import EMBEDDING_FEATURE_SETS, NATIVE_FEATURE_SETS
+    from src.utils.config import load_yaml
+    assert EMBEDDING_FEATURE_SETS == ("non_text_plus_frozen_e5",)
+    assert NATIVE_FEATURE_SETS == ("original_features",)
+    assert not any(a.get("control") or a.get("selection_id") for a in benchmark_plan())
+    for phase in ("experiment_4", "experiment_5"):
+        with pytest.raises(ValueError, match="Unknown research phase"):
+            load_yaml(phase + "/main")
+    assert load_yaml("synthesis/analysis")["test"] == "two_sided_wilcoxon_signed_rank"

@@ -19,7 +19,6 @@ def evaluation_identity():
     for phase, name in (
         ("experiment_2", "embeddings"),
         ("experiment_3", "native_text"),
-        ("experiment_5", "output_ablation"),
     ):
         phases[phase] = load_yaml(phase + "/" + name)
     feature_fields = (
@@ -29,7 +28,6 @@ def evaluation_identity():
         "candidate_combinations",
         "feature_selectors",
         "dataset_selection",
-        "combined_extractor_groups",
     )
     body = {
         "schema": "jevpfn.evaluation_contract.v1",

@@ -41,9 +41,10 @@ STAGING_FALLBACK = "/lustre1/project/stg_00211"
 #: directory, so a script, a test and a notebook agree wherever they were launched from.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: Overrides for project storage, in priority order. The supported way to put big files on an
-#: external drive locally, and how the tests exercise the staging branch without a cluster.
-STAGING_ENV_VARS = ("JEVPFN_STAGING_ROOT", "VSC_STAGING_ROOT")
+#: Explicit native working sets take precedence over the durable PROJECT aliases.
+#: B200 publication/staging temporarily sets STAGING_ROOT; inheriting PROJECT_ROOT must
+#: never redirect its bulk I/O back to cross-mounted Lustre. Every value is a shared root.
+STAGING_ENV_VARS = ("JEVPFN_STAGING_ROOT", "JEVPFN_PROJECT_ROOT", "VSC_PROJECT_ROOT", "VSC_STAGING_ROOT")
 
 
 def _env_path(name: str) -> Path | None:
@@ -71,6 +72,15 @@ def staging_override() -> Path | None:
         p = _env_path(var)
         if p:
             return p
+    return None
+
+
+def durable_project_override() -> Path | None:
+    """Persistent allocation override, independent of a native scratch working set."""
+    for name in ("JEVPFN_DURABLE_ROOT", "JEVPFN_PROJECT_ROOT", "VSC_PROJECT_ROOT"):
+        value = _env_path(name)
+        if value:
+            return value
     return None
 
 
@@ -144,7 +154,7 @@ def phase_name(phase: str | None = None) -> str:
         value = numbered[2]
         if phase_folder(value) != original:
             raise ValueError(f"Incorrect phase number: {original}")
-    if value not in PHASES and not re.fullmatch(r"experiment_[0-9]+", value):
+    if value not in PHASES:
         raise ValueError(f"Unknown research phase: {value}")
     return value
 
@@ -153,7 +163,7 @@ def phase_folder(phase: str) -> str:
     """Stable logical phase names; numbered folders shared by config/notebooks/output."""
     name = phase_name(phase)
     if name == "synthesis":
-        return "9. synthesis"
+        return "7. synthesis"
     index = (
         int(name.removeprefix("experiment_")) + 3
         if name.startswith("experiment_")
@@ -172,7 +182,7 @@ def notebook_phase(notebook: str) -> str:
         return "feature_creation"
     match = re.match(r"(experiment_[0-9]+)_", notebook)
     if match:
-        return match.group(1)
+        return phase_name(match.group(1))
     return "exploration"
 
 

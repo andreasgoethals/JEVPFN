@@ -69,6 +69,12 @@ def classify(relative):
 def phase_of(relative):
     for part in relative.parts[:-1]:
         if part[:1].isdigit() and ". " in part:
+            # Old output remains removable after retiring an experiment/renumbering synthesis.
+            # This is cleanup-only compatibility, never an executable experiment route.
+            legacy = {"7. experiment_4": "retired_experiment_4",
+                      "8. experiment_5": "retired_experiment_5", "9. synthesis": "synthesis"}
+            if part in legacy:
+                return legacy[part]
             return paths.phase_name(part)
     return None
 

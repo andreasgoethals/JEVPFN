@@ -116,7 +116,7 @@ def prompt_evidence(report_paths=None):
     Defaults to the real Jev receipt and latest real GPU contract for each provider.
     Different reports are plotted separately; they are never pooled into a rate.
     """
-    from src.evaluation.prompt_ablation import analyze
+    from src.evaluation.diagnostic_reports import analyze
 
     folder = paths.manifests_dir("experiment_0") / "before_extraction"
     if report_paths is None:

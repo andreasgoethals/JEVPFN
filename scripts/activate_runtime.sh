@@ -5,7 +5,7 @@ JEVPFN_RUNTIME_NAME="${JEVPFN_REQUESTED_ENV##*/}"
 if [[ "$JEVPFN_RUNTIME_NAME" == tabstar-v1p1 ]]; then JEVPFN_RUNTIME_NAME=tabstar; fi
 JEVPFN_RUNTIME_IMAGE="$JEVPFN_RUNTIME_NAME"
 if [[ "$JEVPFN_RUNTIME_NAME" == tabstar ]]; then JEVPFN_RUNTIME_IMAGE=tabstar-v1p1; fi
-JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}/JEVPFN"
+JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}/JEVPFN"
 if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
     export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-blackwell-cu130}"
     [[ "$JEVPFN_RUNTIME_PROFILE" == blackwell-cu130 ]] || { echo 'Mindwell requires blackwell-cu130.' >&2; return 2; }

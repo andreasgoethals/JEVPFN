@@ -14,7 +14,7 @@
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
-export JEVPFN_STAGING_ROOT="${2:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${2:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
 export JEVPFN_CONDA_ENV="${1:-$JEVPFN_STAGING_ROOT/JEVPFN/environments/cloudflare}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh

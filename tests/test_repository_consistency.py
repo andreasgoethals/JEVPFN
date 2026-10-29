@@ -26,7 +26,6 @@ def test_active_rosters_and_provider_pins_agree():
         load_yaml("feature_comparison")["comparison"]["providers"],
         load_yaml("experiment_1/main")["candidate_extractors"],
         load_yaml("experiment_1/main")["feature_selectors"],
-        load_yaml("experiment_4/decision_models")["candidate_extractors"],
     ):
         assert set(providers) == roster
     assert {k: v["context_tokens"] for k, v in catalog.items()} == CONTEXT_LIMITS

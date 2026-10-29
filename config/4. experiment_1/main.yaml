@@ -18,7 +18,6 @@ candidate_combinations:
 - non_text_plus_joint
 - non_text_plus_per_column
 - non_text_plus_both
-text_statistics_baseline: src.evaluation.features.text_statistics
 include_non_text_features_in_jev: false
 feature_view:
   binary_classification: positive_class_probability
@@ -35,7 +34,7 @@ dataset_selection:
   - REG_TEXT_ZOMATO_RESTAURANTS
   - MUL_TEXT_SPOTIFY_GENRES
 experiment_0_acceptance: null
-candidate_extractors: &id001
+candidate_extractors:
 - jev
 - liquid
 - liquid_lfm3
@@ -49,8 +48,6 @@ candidate_extractors: &id001
 - decision3
 - nimble
 non_text_columns: all_original_numerical_and_categorical_features
-additional_controls:
-  text_statistics: optional_separate_ablation
 feature_selectors:
   jev: null
   liquid: null
@@ -64,6 +61,3 @@ feature_selectors:
   kev: null
   decision3: null
   nimble: null
-combined_extractor_groups:
-- *id001
-combined_extractors_in_main_plan: false

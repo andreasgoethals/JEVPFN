@@ -1,18 +1,16 @@
-"""Read-only analysis of explicit, bounded real-text diagnostic reports (Experiment 4).
+"""Read-only analysis of explicit, bounded real-text Experiment 0A diagnostics.
 
 Pass exact report files; never silently mix historical versions or dispatch new calls.
 The inference entry points remain the bounded local Jev/GPU contracts in Experiment 0A.
 """
 
-import argparse
 import json
 from pathlib import Path
 
 import pandas as pd
 
 from src.cluster.semantic_contracts import robustness_summary
-from src.utils import paths
-from src.utils.serialization import file_sha256, write_json
+from src.utils.serialization import file_sha256
 
 
 def analyze(reports):
@@ -40,29 +38,3 @@ def analyze(reports):
         for item in comparison["comparisons"]:
             rows.append({"provider": provider, "source_sha256": sha, "source": str(path), **item})
     return pd.DataFrame(rows)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--report", action="append", required=True)
-    parser.add_argument("--save", action="store_true")
-    args = parser.parse_args()
-    table = analyze(args.report)
-    print(table.to_string(index=False))
-    if args.save:
-        destination = paths.require_project_output(paths.results_dir(phase="experiment_4"))
-        destination.mkdir(parents=True, exist_ok=True)
-        table.to_csv(destination / "prompt_sensitivity.csv", index=False)
-        write_json(
-            paths.manifests_dir("experiment_4") / "prompt_sensitivity.json",
-            {
-                "inputs": args.report,
-                "rows": len(table),
-                "inference_executed": False,
-                "scope": "small fixed label-blind sample; not a population robustness guarantee",
-            },
-        )
-
-
-if __name__ == "__main__":
-    main()

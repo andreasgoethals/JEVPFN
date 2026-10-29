@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from src.cluster.freeze import check_if_present, source_snapshot
 from src.cluster.job_graph import advance
 from src.cluster.maintenance import require_idle_vsc
-from src.cluster.scheduling import gpu_profile
+from src.cluster.scheduling import gpu_profile, project_export
 from src.cluster.token_shards import plan as token_plan
 from src.jev.catalog import ADDED, SELF_HOSTED
 from src.utils import paths
@@ -38,10 +38,11 @@ def plan(providers, *, reuse=()):
     if profile.get("storage_mode") != "scratch_mirror":
         raise ValueError("Open-weight setup requires the B200 scratch-mirror profile")
     root = profile["durable_root"]
+    export_root = project_export(root)
     steps = [
-        dict(name="cpu", dependencies=[], script="experiment_0_cpu.slurm", args=[], flags=[]),
+        dict(name="cpu", dependencies=[], script="experiment_0_cpu.slurm", args=[root], flags=[]),
         dict(
-            name="storage", dependencies=[], script="experiment_0_storage.slurm", args=[], flags=[]
+            name="storage", dependencies=[], script="experiment_0_storage.slurm", args=[root], flags=[]
         ),
     ]
     for step in steps:
@@ -150,6 +151,8 @@ def plan(providers, *, reuse=()):
             )
     from src.cluster.workspace_graph import add_releases
 
+    for step in steps:
+        step["flags"].append(export_root)
     return add_releases(steps)
 
 

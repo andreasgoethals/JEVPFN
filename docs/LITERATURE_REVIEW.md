@@ -362,13 +362,10 @@ our pipeline, not a guarantee that pretrained weights never saw public labels.
 
 Decision features receive target semantics; frozen E5/Qwen vectors do not. Comparing them
 estimates practical representation utility, not solely architecture superiority.
-The common presence-only reference separates text availability from content; cheap text
-statistics measure length/string cues. Neither establishes a complete lexical baseline.
-The permutation control shuffles complete decision-feature vectors independently within
-each training/test partition and within identical missingness patterns. Every row's NaN
-locations and text-presence flags remain consistent. Moving missing values between rows
-would confound content alignment with availability. Singleton patterns cannot be shuffled,
-so this control does not guarantee that every row changes.
+The active benchmark does not include separate presence-only, text-length or shuffled-feature
+controls. Missingness is handled consistently, but the main comparisons do not isolate semantic
+content from length/availability cues. Claims concern predictive utility, not a causal mechanism.
+The owner also declined a lexical TF-IDF/SVD family.
 
 A binary value is evidence for a supplied class, not an empirically calibrated
 `P(dataset target | all original features)`. Multiclass probabilities concern the whole
@@ -380,8 +377,8 @@ Calibration claims require suitable labels, definitions and task-specific eviden
 [Guo et al., 2017](https://proceedings.mlr.press/v70/guo17a.html) does not imply that a
 provider's temperature automatically calibrates these new tasks.
 
-The primary representation families in Experiments 1–3 are prespecified. Any combination
-selected using their outer-test results belongs only to descriptive/exploratory Experiment 5.
+The primary representation families in Experiments 1–3 are prespecified. No selected-winner combinations are part of this paper. A future combination selected
+using these outer-test results would be descriptive/exploratory.
 Reusing the same test rows after selecting a winner cannot establish an independent
 confirmatory gain. Recording many metrics is useful, but a headline claim chosen afterward
 must be identified as exploratory. Full out-of-fold predictions, probabilities, row/split
@@ -452,3 +449,10 @@ mappings; reuse across folds is an amortization advantage, not repeated free inf
 A GPU or provider latency from a paper is not a throughput guarantee for this workload.
 Cached artifacts provide reproducible reuse even when repeated uncached inference is not
 deterministic. Operational timing and hardware evidence belong with the actual run.
+
+
+The owner narrowed the executable scope to Experiments 1–3 on 29 October. Separate
+question-ablation and representation-control experiments are removed; bounded 0A
+robustness diagnostics remain operational checks. No lexical or presence-only control
+is included. Improvements over the non-text arm can therefore reflect both text
+availability and content; this design cannot attribute gains solely to semantics.

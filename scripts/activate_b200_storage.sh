@@ -2,7 +2,7 @@
 # Host bootstrap; no downloads/copies occur while a GPU waits.
 if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
     export JEVPFN_STORAGE_MODE=scratch_mirror JEVPFN_RUNTIME_PROFILE=blackwell-cu130
-    export JEVPFN_DURABLE_ROOT=/lustre1/project/stg_00211
+    export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}"
     JEVPFN_SAVED_RUNTIME="${JEVPFN_CONDA_ENV:?}"
     export JEVPFN_SCRATCH_RUNTIME="${JEVPFN_SAVED_RUNTIME##*/}"
     export JEVPFN_CONDA_ENV=JEVPFN

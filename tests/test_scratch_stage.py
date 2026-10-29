@@ -296,7 +296,7 @@ def test_restage_unions_active_dataset_db_on_native_root_and_preserves_its_queue
 
 
 @pytest.mark.parametrize(
-    "phase", ["experiment_0", "experiment_1", "experiment_2", "experiment_3", "experiment_5"]
+    "phase", ["experiment_0", "experiment_1", "experiment_2", "experiment_3"]
 )
 def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results(
     roots, monkeypatch, tmp_path, phase

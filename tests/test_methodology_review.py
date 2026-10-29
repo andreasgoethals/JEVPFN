@@ -7,25 +7,21 @@ import pandas as pd
 import pytest
 
 from src.data.text_embeddings import MODEL_NAMESPACES, encoder_config, input_rows
-from src.evaluation.features import add_text_presence, text_statistics
+from src.evaluation.features import add_text_presence
 from src.evaluation.protocol import shared_splits
 from src.utils.serialization import text_value
 
 
-def test_text_controls_share_request_missingness_without_erasing_literal_strings():
+def test_text_presence_shares_request_missingness_without_erasing_literal_strings():
     values = [None, pd.NA, np.nan, np.inf, -np.inf, " \t", 0, 0.0, "nan", "inf", "two words"]
     dataset = SimpleNamespace(
         frame=pd.DataFrame({"text": values}),
         metadata=SimpleNamespace(text_columns=("text",)),
     )
     matrix = add_text_presence(pd.DataFrame(index=dataset.frame.index), dataset)
-    stats = text_statistics(dataset)
     expected_missing = [int(text_value(v) is None) for v in values]
     assert expected_missing == [1] * 6 + [0] * 5
     assert matrix.iloc[:, 0].tolist() == expected_missing
-    assert stats["text_stats__text_000__missing"].tolist() == expected_missing
-    assert stats["text_stats__text_000__characters"].tolist() == [0] * 6 + [1, 3, 3, 3, 9]
-    assert stats["text_stats__text_000__words"].tolist() == [0] * 6 + [1, 1, 1, 1, 2]
     import json
     import zlib
 

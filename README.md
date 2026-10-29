@@ -26,7 +26,9 @@ distinct inputs and 3,294,340 row/input links. Dated evidence is in
 GPU execution now defaults to **Mindwell B200**. CPU jobs build separate CUDA 13.0
 containers, count tokens and copy each required working set to native GPFS scratch.
 Authoritative inputs, weights and durable results remain on Lustre PROJECT; logs and
-small manifests remain on DATA. Committed feature/prediction databases publish periodically
+small manifests remain on DATA. The actual checkout and Git operations stay on DATA.
+Manual Windows-agent access and PROJECT-root overrides follow the updated template; the
+legacy CPU control Conda environment on DATA still awaits a reviewed container migration. Committed feature/prediction databases publish periodically
 and at job exit; predictor staging also restores durable completed folds and predictions
 so a recreated scratch workspace resumes them. A 200 GiB application working-set
 budget and 20 GiB personal headroom check prevent staging all runtimes at once.
@@ -73,7 +75,7 @@ per-column request; duplicate numeric columns are included only once in combined
 |---|---|
 | Jev 1.13.0 | TypeSafe API, locally |
 | Liquid d1-3B | Open weights, VSC |
-| Liquid d1-2B (LFM3) | Open weights, VSC; new candidate awaiting live acceptance |
+| Liquid d1-2B (LFM3) | Open weights, VSC |
 | Strands Decider 2B | Open weights, VSC |
 | Perplexity Decider v1.1-27B | Open weights, VSC |
 | Cloudflare Clef-flash | Open weights, VSC |
@@ -94,7 +96,8 @@ at 0.801. Preserve and disclose that policy; it is not evidence of target calibr
 Liquid d1-2B (`liquid_lfm3`) is an additional pinned candidate alongside d1-3B;
 its text-only path uses the same question v3 and explicitly requests mean score readout.
 Its separate Transformers 5.19 Blackwell image serves both CPU audits and GPU inference.
-It still needs its own live VSC contracts and dataset pilot; earlier Liquid evidence is for d1-3B.
+Its bounded B200 contracts and dataset pilot passed during setup. Both Liquid versions still
+need current-source frozen-campaign acceptance.
 
 All twelve adapters preserve the same canonical task metadata, question, named text, class
 meanings and option order. Native framing, token IDs, probability calibration and wire
@@ -107,13 +110,11 @@ and logistic/linear regression**. All use the same rows and folds. The approved 
 
 | Experiment | Comparison |
 |---|---|
-| 0A | Before extraction: local Jev interfaces/pilot; VSC storage, exact decision token counts, ten decision runtimes and three embedding encoders. |
-| 0B | After extraction: complete caches/row mappings; all nine predictors, PCA widths/scopes, native-text augmentation, resume and full-fold feasibility. |
+| 0A | Before extraction: local Jev interfaces/pilot; VSC storage, exact decision token counts, eleven open-weight decision runtimes and three embedding encoders. |
+| 0B | After extraction: complete caches/row mappings; all nine predictors, PCA widths/scopes, native text, resume and full-fold feasibility. |
 | 1 | Each of six predictors: non-text alone, then joint, per-column and both decision features for each of twelve extractors. |
 | 2 | Six predictors, three frozen encoders: per-column PCA32 and joint PCA256/128/64/32/16/8. No decision features. |
 | 3 | TabSTAR, ConTextTab and AG-MM on original text and non-text features. |
-| 4 | Label-blind question/context/option-order sensitivity; analysis reuses explicit real diagnostic reports. |
-| 5 | Presence/statistics, shuffled decision features, probability/uncertainty controls; separate descriptive winner-selected combinations. |
 
 Experiments 1/2/3 contain **3,996 / 2,268 / 54 configurations**: 31,590 outer fits,
 plus 15,795 binary inner fits. A configuration means one dataset/predictor/representation;
@@ -121,15 +122,8 @@ it has five outer folds. No expensive HPO is performed. Experiment 1 shares its 
 baseline across extractors. Experiment 2 has seven PCA settings, not their Cartesian
 product with every decision model. Experiment 3 has one original-feature setting per model.
 
-Optional concatenation of all twelve decision models is exposed with
-`--control combined_extractors` (324 configurations before width exclusions).
-Experiment 5's later combinations use one reviewed decision extractor/mode and one
-reviewed encoder/PCA recipe, plus the three native-text models: 162 additional
-configurations. Record the selected recipes, result-file checksum and selection rationale
-in `config/4. experiment_1/followup_selection.yaml`. Choosing them from test results makes
-those follow-ups **descriptive/exploratory**; code records that status and excludes them
-from confirmatory testing. They remain absent from the executable grid until selected.
-The primary experiments do not depend on a selected winner.
+Experiments 1–3 are the complete active benchmark. They do not select a winner or combine
+representations chosen from test results. Input robustness remains an Experiment 0A check.
 
 The encoders are **E5-small-v2 (384 dimensions), E5-large-v2 (1,024), and
 Qwen3-Embedding-0.6B (1,024)**. Immutable revisions, prefix/pooling, licences and batch sizes
@@ -159,13 +153,12 @@ and scikit-learn version. Missing/stale preparations stop the benchmark, rather 
 fitting PCA while a GPU waits. These parameters are rebuildable output, not paid features.
 
 The widest Experiment 2 input is Rotten Tomatoes with per-column PCA32: **431 columns**
-(13×32 components, 13 missingness flags, two non-text columns). Adding one provider's
-separate and joint features later gives 445; even a conservative bound on Kumo's category
-expansion is 447. The optional all-twelve-provider combination reaches 1,085 on Wine Reviews,
-so Kumo refuses that arm. The recipe's 500-column guard prevents silent feature selection.
+(13×32 components, 13 missingness flags, two non-text columns). A conservative bound
+including Kumo's category expansion is 433. The recipe's 500-column guard prevents
+silent feature selection.
 Other models still require checkpoint/resource checks; width compatibility does not prove
 full-fold feasibility. AG-MM uses fixed medium-quality ELECTRA-base/fusion, no HPO or
-ensemble, in its separate runtime. Actual native-model compatibility remains unverified.
+ensemble, in its separate runtime. TabSTAR has historical bounded B200 evidence; every native model still needs current 0B acceptance.
 Native-text TabSTAR selects **v1.1**, through `tabstar.tabstarv1p1_model` in package 1.2.2,
 with separate pinned classification/regression checkpoints and its E5 dependency. Stage
 them on CPU with `python -m src.cluster.predictor_assets --execute`. The runtime resolves
@@ -187,14 +180,12 @@ explicitly rather than silently reverting to combined train/test preprocessing.
 
 Save individual predictions, binary inner-OOF predictions, metrics, undefined-metric reasons,
 timings, resource use and artifact identities. Analyze paired feature effects within each
-predictor, including seen/unseen text cohorts. Decision and embedding arms also compare
-with the same predictor using missing-text indicators only when that control is available.
-Operational output folders do not change predictor/checkpoint comparison identities. Fold SD is descriptive, not a standard error.
+predictor, including seen/unseen text cohorts. Operational output folders do not change predictor/checkpoint comparison identities. Fold SD is descriptive, not a standard error.
 The owner fixed MulTaBench-compatible headline metrics before comparative outcomes:
 binary ROC-AUC, multiclass macro one-vs-rest ROC-AUC, and regression R². Other metrics stay
 recorded, including binary validation-selected F1. Optional dataset-level Wilcoxon/Holm
 contrasts still require prespecification. Exact protocol/settings live in
-`config/4. experiment_1/`; optional analysis is in `config/8. experiment_5/`.
+`config/4. experiment_1/`; optional analysis is in `config/7. synthesis/`.
 
 Extraction timings separate new inference, cache reuse and failures. Jev records client
 setup, rate-limit waiting and API round trips; open-weight models and encoders record loading
@@ -203,9 +194,9 @@ fit and prediction times. Detailed extraction timing journals use one SQLite fil
 under the phase's PROJECT `results/timings/`; compact summaries use DATA `manifests/timings/`.
 All existing classification/regression metrics are saved, not just AUC; full probabilities
 and row-level predictions remain available for subsequent metrics and paired analyses.
-Cheap text statistics, permutation controls and retained-probability ablations are also
-available. The optional shuffled-feature control preserves each row's missingness pattern
-and permutes complete vectors within matching patterns separately in train/test partitions.
+No separate presence-only, lexical, shuffled-feature or winner-combination controls are in
+this paper's scope. Gains over non-text can therefore include text-availability information;
+the benchmark does not isolate that mechanism from semantic content.
 Public-data pretraining overlap is a limitation; “label-free” describes the
 inputs to extraction, not a guarantee about pretraining. See [LITERATURE_REVIEW](docs/LITERATURE_REVIEW.md).
 The uncertainty view computes normalized entropy, maximum probability and, for regression,
@@ -230,21 +221,19 @@ before full feature creation despite its higher folder number.
 | [Experiment 1](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>) | Decision modes within fixed predictors; seen/unseen-text effects and measured width/time. |
 | [Experiment 2](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>) | Three encoders, seven compression recipes, training-only PCA variance and predictive/compute effects. |
 | [Experiment 3](<notebooks/6. experiment_3/01_native_text_systems.ipynb>) | Original-text reference systems on matched folds, with checkpoint and resource identities. |
-| [Experiment 4](<notebooks/7. experiment_4/01_question_sensitivity.ipynb>) | Question/context/option-order sensitivity and retained directional distributions. |
-| [Experiment 5](<notebooks/8. experiment_5/01_controls_and_followups.ipynb>) | Prespecified controls against no-text and exact aligned artifacts; separate exploratory follow-ups. |
-| [Combined Experiments 1–3](<notebooks/9. synthesis/01_representation_comparison.ipynb>) | All matched decision-versus-embedding recipes and descriptive native-system comparisons, without selecting winners. |
+| [Combined Experiments 1–3](<notebooks/7. synthesis/01_representation_comparison.ipynb>) | All matched decision-versus-embedding recipes and descriptive native-system comparisons, without selecting winners. |
 
 Notebooks contain orchestration/display only; reusable logic is in `src/`. They perform
 no inference or model training. Each ends with the complete printed report. The comparison
 notebook shows coverage gaps until matching complete artifacts exist; it does not invent results.
-The thirteen notebooks keep complete displayed/plot summaries, not repeated dumps of every
+The eleven notebooks keep complete displayed/plot summaries, not repeated dumps of every
 raw metric row. Full predictions/metrics remain in their evaluation stores. Empty all-zero
 coverage heatmaps are omitted; predictive figures await genuine complete records. Synthesis
 is a general notebook phase, not an extra experiment or configuration grid.
 Input-design figures include dated, hash-bound saved prompt diagnostics; they are small case
 studies rather than population robustness rates. Extraction costs distinguish approximate
 full-run scenarios from cumulative recorded diagnostic charges. The study map counts the
-actual main grid; optional controls and winner-selected follow-ups remain separate.
+complete active grid without outcome-selected follow-ups.
 
 Decision features are **frozen, task-conditioned representations**: target names and class
 meanings enter the question, but dataset labels do not train the extractor. MulTaBench's
@@ -301,8 +290,10 @@ not all together in the notebook environment. Full setup/transfer commands are i
 | `<phase>/results/evaluation/<dataset>.sqlite3` | All predictions, metrics, timings and resumable fold records; Parquet payloads inside one database. |
 
 On VSC, PROJECT holds large inputs, weights/containers, caches, exact-token databases,
-predictions and large results. DATA holds the checkout, small CPU environment, compact
-manifests and logs. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
+predictions and large results. DATA holds the actual checkout including `.git`, compact manifests and logs. Installed
+cluster dependencies belong inside PROJECT containers. The existing control Conda environment
+on DATA is a migration exception: recreate and validate a CPU image before an idle cutover,
+never silently relocate it. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
 On B200, large active writes use the staged GPFS working set and publish to durable
 Lustre; small logs/manifests still use DATA. Large VSC writes fail rather than falling back to DATA. Free filesystem capacity is not quota.
 Evaluation creates one PROJECT database and one small DATA locator per dataset/phase.
@@ -347,7 +338,7 @@ With `--dataset-pilot`, local 0A also checks 13 deterministic real-text variants
 three task types, using the reviewed private context envelope. VSC contracts check that
 same label-blind sample, including aligned multiclass option reversal. These measurements
 require human review; they do not select wording by predictive performance.
-VSC 0A covers CPU/storage/tokens, all three encoders and ten real provider contract/pilot pairs. It submits
+VSC 0A covers CPU/storage/tokens, all three encoders and eleven real provider contract/pilot pairs. It submits
 ready independent jobs concurrently and resumes by job ID. Failed prerequisites block only
 their descendants; the final report lists all failures and blocked tests. Before the final
 freeze, `bash scripts/test_all.sh --execute --watch` runs the complete setup/test graph,
@@ -375,8 +366,7 @@ implementation, model settings and feature/protocol recipes, independently of en
 Finite tests cannot establish that no bugs remain or guarantee multimillion-request throughput.
 
 The paired-results notebook also directly contrasts every decision recipe with each
-embedding recipe within matching predictors/folds, displays prespecified controls and
-seen/unseen-text effects, and reports measured timing and post-PCA representation width.
+embedding recipe within matching predictors/folds, displays seen/unseen-text effects, and reports measured timing and post-PCA representation width.
 It selects no winners and creates no predictive plots before saved complete arms exist.
 Extraction timing retains its run/hardware identity; partial runs are not presented as
 complete feature-generation costs or automatically joined to predictive performance.

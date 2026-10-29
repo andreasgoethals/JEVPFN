@@ -29,6 +29,8 @@ def _isolate_routing_environment(monkeypatch):
     for variable in (
         "JEVPFN_PHASE",
         "JEVPFN_STAGING_ROOT",
+        "JEVPFN_PROJECT_ROOT",
+        "VSC_PROJECT_ROOT",
         "JEVPFN_DURABLE_ROOT",
         "JEVPFN_STORAGE_MODE",
         "JEVPFN_SCRATCH_RUNTIME",

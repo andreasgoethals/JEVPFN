@@ -57,113 +57,42 @@ def test_inference_requires_prespecified_complete_dataset_family():
     assert set(base) == set(GROUP)
 
 
-def test_native_references_are_not_misleading_pairs_and_e5_is_a_comparison(isolated_output):
+def test_primary_results_pair_exact_predictors_and_keep_native_references(isolated_output):
     from types import SimpleNamespace
 
     from src.data.loaders import LoadedDataset
     from src.data.metadata import extract_metadata
     from src.evaluation.protocol import evaluate_cv, shared_splits
     from src.evaluation.results import collect
-
     frame = pd.DataFrame({"text": ["sample"] * 20, "x": np.arange(20.0), "y": np.arange(20.0)})
     official = {"target": "y", "task_type": "reg"}
-    meta = extract_metadata(
-        frame, official, dataset_id="fixture", dataset_name="Fixture", text_columns=["text"]
-    )
+    meta = extract_metadata(frame, official, dataset_id="fixture", dataset_name="Fixture", text_columns=["text"])
     data = LoadedDataset(frame, meta, official, {"data_identity": "fixed"}, [])
     matrix = frame[["x"]].set_axis([f"csv:{i}" for i in range(20)])
     for model, phase, features, error, provider in (
         ("catboost", "experiment_1", "non_text", 3, None),
-        (
-            "catboost",
-            "experiment_5",
-            "non_text_plus_presence__text_presence__main",
-            2.5,
-            None,
-        ),
         ("catboost", "experiment_1", "non_text_plus_joint", 1, "jev"),
         ("catboost", "experiment_1", "non_text_plus_joint", 1.5, "liquid"),
         ("catboost", "experiment_2", "non_text_plus_frozen_e5", 2, None),
-        ("catboost", "experiment_5", "non_text_plus_frozen_e5_and_joint", 0.5, "jev"),
-        ("catboost", "experiment_5", "non_text_plus_frozen_e5_and_joint", 0.25, "liquid"),
         ("catboost", "experiment_2", "non_text_plus_frozen_e5", 4, None),
-        ("catboost", "experiment_5", "non_text_plus_frozen_e5_and_joint", 3.5, "jev"),
         ("tabstar", "experiment_3", "original_features", 1, None),
-        ("tabstar", "experiment_5", "original_features_plus_joint", 0.5, "jev"),
     ):
-        evaluate_cv(
-            data,
-            matrix,
-            lambda error=error: SimpleNamespace(
-                fit=lambda x, y: None, predict=lambda x: x.x.to_numpy() + error
-            ),
-            specification=shared_splits(data),
-            model_id=model,
-            phase=phase,
-            checkpoint_id="pin",
-            feature_set=features,
-            allow_model_runs=True,
-            estimator_settings={},
-            feature_artifact_ids=[],
-            representation_recipe={
-                "provider": provider,
-                **(
-                    {"inference_status": "exploratory_post_selection", "selection": {"id": "test"}}
-                    if phase == "experiment_5"
-                    else {}
-                ),
-                "view": "main",
-                "embedding": {"model": "encoder2" if error >= 3.5 else "encoder1"}
-                if "e5" in features
-                else None,
-            },
-        )
+        evaluate_cv(data, matrix,
+            lambda error=error: SimpleNamespace(fit=lambda x,y: None, predict=lambda x: x.x.to_numpy()+error),
+            specification=shared_splits(data), model_id=model, phase=phase, checkpoint_id="pin",
+            feature_set=features, allow_model_runs=True, estimator_settings={}, feature_artifact_ids=[],
+            representation_recipe={"provider":provider, "view":"main",
+                "embedding": {"model":f"encoder{error}"} if "e5" in features else None})
     report, _, summary, paired = collect()
     assert "tabstar" in set(summary.model_id)
-    native = paired.loc[paired.model_id.eq("tabstar") & paired.metric.eq("rmse")]
-    assert len(native) == 5
-    assert set(native.reference) == {"original_text_without_decision_features"}
-    np.testing.assert_allclose(native.difference, -0.5)
-    for provider, expected in (("jev", -0.5), ("liquid", -1.25)):
-        contrast = paired.loc[
-            (paired.feature_set == "non_text_plus_frozen_e5_and_joint")
-            & (paired.provider == provider)
-            & (paired.reference == "same_decision_features_without_e5")
-            & (paired.metric == "rmse")
-            & (paired.value < 1)
-        ]
-        assert len(contrast) == 5
-        np.testing.assert_allclose(contrast.difference, expected)
-    assert (
-        len(
-            paired.loc[
-                paired.feature_set.eq("non_text_plus_frozen_e5_and_joint")
-                & paired.reference.eq("frozen_e5")
-                & paired.metric.eq("rmse")
-            ]
-        )
-        == 15
-    )
-    second_encoder = paired.loc[
-        paired.feature_set.eq("non_text_plus_frozen_e5_and_joint")
-        & paired.reference.eq("frozen_e5")
-        & paired.metric.eq("rmse")
-        & paired.value.gt(3)
-    ]
-    assert len(second_encoder) == 5
-    np.testing.assert_allclose(second_encoder.reference_value, 4)
-    np.testing.assert_allclose(second_encoder.difference, -0.5)
+    assert not paired.model_id.eq("tabstar").any()
+    assert set(paired.reference) == {"non_text"}
+    rmse = paired[paired.metric.eq("rmse")]
+    assert len(rmse) == 20
+    np.testing.assert_allclose(rmse.reference_value, 3)
+    np.testing.assert_allclose(rmse.difference, rmse.value - 3)
+    assert len(rmse[rmse.phase.eq("experiment_2")].embedding_recipe_id.unique()) == 2
     assert "descriptive" in report["fold_sd"]
-    embedding_presence = paired.loc[
-        paired.phase.eq("experiment_2")
-        & paired.reference.eq("non_text_plus_presence")
-        & paired.metric.eq("rmse")
-    ]
-    assert len(embedding_presence) == 10  # Both frozen encoders, all five outer folds.
-    np.testing.assert_allclose(embedding_presence.reference_value, 2.5)
-    np.testing.assert_allclose(
-        embedding_presence.difference, embedding_presence.value.to_numpy() - 2.5
-    )
 
 
 def test_target_unit_error_magnitudes_are_not_pooled_across_datasets():

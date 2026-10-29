@@ -54,37 +54,6 @@ def direct_comparison_figures(contrasts):
             )
 
 
-def control_figures(paired):
-    if paired.empty:
-        return
-    for task, (metric, direction, unit) in METRIC_VIEWS.items():
-        data = paired[paired.phase.eq("experiment_5") & paired.reference.eq("non_text")
-                      & paired.task_type.eq(task) & paired.metric.eq(metric)
-                      & paired.inference_status.eq("prespecified")]
-        for model, part in data.groupby("model_id"):
-            means = _dataset_effects(part, ["feature_set", "dataset_id", "split_id", "arm_id"], task, direction)
-            names = sorted(means.feature_set.unique())
-            for page, start in enumerate(range(0, len(names), 7), 1):
-                selected = names[start:start + 7]
-                fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.5 + len(selected)*0.48)))
-                for i, name in enumerate(selected):
-                    values = means.loc[means.feature_set.eq(name), "effect"]
-                    ax.scatter(values, i + np.linspace(-0.13, 0.13, len(values)), s=12, color=style.QUANTITY_COLOR, alpha=0.5)
-                    ax.scatter(values.mean(), i, marker="D", s=24, color=style.TEXT_COLOR)
-                import textwrap
-                ax.set_yticks(range(len(selected)), [textwrap.fill(n.replace("non_text_plus_", "").replace("__", " / "), 30) for n in selected])
-                ax.set_ylim(len(selected)-0.5, -0.5)
-                ax.axvline(0, color=style.GRID_COLOR)
-                ax.set_xlabel(unit)
-                ax.set_title(f"{style.PREDICTOR_LABELS[model]} · {TASK_LABELS[task]} · controls versus "
-                             "non-text", fontsize=9)
-                yield fig, f"controls_{model}_{task}_{page}", (
-                    "Prespecified controls compared with the same predictor using non-text columns. Points are "
-                    "dataset means of five defined paired fold differences; diamonds average the available dataset "
-                    "means. Positive values indicate improvement. Outcome-selected exploratory combinations are "
-                    "excluded. Missing controls are not replaced by zeros; coverage and the complete control names "
-                    "remain in the tables. Fold variability is not used as inferential uncertainty."
-                )
 
 
 def overlap_figures(paired):

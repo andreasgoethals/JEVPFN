@@ -14,7 +14,7 @@
 set -euo pipefail
 export JEVPFN_PHASE=experiment_2
 export JEVPFN_CONDA_ENV=JEVPFN
-export JEVPFN_STAGING_ROOT="${3:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 python -m src.evaluation.prepare_pca --dataset "${1:?Pass dataset ID}" --encoder "${2:?Pass encoder ID}"

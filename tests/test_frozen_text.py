@@ -277,20 +277,19 @@ def test_combined_join_preserves_both_artifact_identities_and_missingness():
 @pytest.mark.parametrize(
     "model", ["catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear"]
 )
-@pytest.mark.parametrize("mode", ["joint", "per_column", "both", None])
-def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
-    isolated_output, monkeypatch, model, mode, pca_ablation=None
+def test_campaign_embedding_factory_for_every_predictor(
+    isolated_output, monkeypatch, model, pca_ablation=None
 ):
     from types import SimpleNamespace
 
     from src.evaluation import campaign
 
     dataset = fixture_data()
-    name = "non_text_plus_frozen_e5" + (f"_and_{mode}" if mode else "")
+    name = "non_text_plus_frozen_e5"
     arm = dict(
         dataset_id="fixture",
         model=model,
-        provider="jev" if mode else None,
+        provider=None,
         feature_set=name,
         phase="experiment_2",
         encoder="e5_small_v2",
@@ -298,20 +297,10 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
         pca_scope="per_column",
     )
     real_load = campaign.load_yaml
-    selector = dict(
-        provider="jev",
-        model="jev-1.13.0",
-        version="pin",
-        question_bank_id="bank",
-        question_variant="accepted",
-    )
-
     def config(name):
         cfg = copy.deepcopy(real_load(name))
         if name == "experiment_0/debug":
             cfg["full_fold_profile_enabled"] = True
-        if name == "experiment_2/embeddings":
-            cfg["feature_selectors"]["jev"] = selector
         if name == "experiment_1/models":
             cfg["models"][model]["runtime"]["device"] = "cpu"
         return cfg
@@ -328,19 +317,12 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
         return []
 
     monkeypatch.setattr(campaign, "load_feature_selection", selection)
-    expected_modes = [] if mode is None else ["per_column", "joint"] if mode == "both" else [mode]
     base = dataset.frame[["x"]].set_axis([f"csv:{i}" for i in range(4)])
-    if mode:
-        base["decision"] = [0.2, 0.4, np.nan, 0.6]
-    base.attrs["feature_artifact_ids"] = [f"{m}-artifact" for m in expected_modes]
+    base.attrs["feature_artifact_ids"] = []
 
     def assemble(data, blocks, name, **kw):
-        assert name in {"non_text", f"non_text_plus_{mode}"}
-        result = base.copy()
-        if name == "non_text":
-            result = result.drop(columns=["decision"], errors="ignore")
-            result.attrs["feature_artifact_ids"] = []
-        return result
+        assert name == "non_text"
+        return base.copy()
 
     monkeypatch.setattr(campaign, "assemble_feature_set", assemble)
     encoded = pd.DataFrame(
@@ -384,14 +366,12 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
         )
         assert received[0]["text_presence__000__missing"].tolist() == [0, 0, 1]
         assert not any(c.startswith("e0") or c.startswith("e1") for c in received[0])
-        if mode:
-            assert received[0]["jev__decision"].equals(base.decision.iloc[:3])
         wrapped.predict(features.iloc[3:])
         return []
 
     monkeypatch.setattr(campaign, "evaluate_cv", evaluate)
     campaign.run_arm(arm, allow_model_runs=True, profile=True)
-    assert selected == expected_modes
+    assert selected == []
 
 
 @pytest.mark.parametrize(
@@ -401,10 +381,9 @@ def test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
 def test_pca_ablation_applies_reduction_to_the_same_cached_vectors(
     isolated_output, monkeypatch, model, dimension
 ):
-    test_campaign_embedding_factory_for_every_predictor_and_decision_mode(
+    test_campaign_embedding_factory_for_every_predictor(
         isolated_output,
         monkeypatch,
         model,
-        None,
         pca_ablation=dimension,
     )

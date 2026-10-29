@@ -5,6 +5,34 @@ import pytest
 from src.cluster import scheduling
 
 
+@pytest.mark.parametrize("variable", ["JEVPFN_PROJECT_ROOT", "VSC_PROJECT_ROOT"])
+def test_project_override_reaches_every_submission_and_release(monkeypatch, variable):
+    from src.cluster.experiment_zero import steps
+    from src.cluster.setup_extractors import plan
+
+    root = "/lustre1/project/test_allocation"
+    monkeypatch.setenv(variable, root)
+    monkeypatch.setenv("VSC_SCRATCH_GPFS1", "/gpfs1/scratch/example/user")
+    flag = scheduling.project_export(root)
+    final = steps("vsc")
+    setup = plan(["liquid", "cloudflare"])
+    assert all(flag in s["command"] for s in final)
+    assert all(flag in s["flags"] for s in setup)
+    for step in final:
+        assert "/lustre1/project/stg_00211" not in " ".join(step["command"])
+    assert next(s for s in setup if s["name"] == "cpu")["args"] == [root]
+    assert next(s for s in setup if s["name"] == "liquid_stage")["args"] == ["liquid", root]
+    profile = scheduling.gpu_profile(runtime="liquid")
+    assert profile["durable_root"] == root
+    assert profile["staging_root"].startswith("/gpfs1/scratch/")
+
+
+@pytest.mark.parametrize("root", ["relative", "/lustre1/project/JEVPFN", "/lustre1/../data", "/lustre1/a,OTHER=x", "/lustre1/a\n"])
+def test_project_export_rejects_ambiguous_roots(root):
+    with pytest.raises(ValueError, match="allocated shared root"):
+        scheduling.project_export(root)
+
+
 def test_default_gpu_plans_use_b200_and_cpu_jobs_stay_on_cpu():
     from src.cluster.benchmark_jobs import plan
     from src.cluster.experiment_zero import steps

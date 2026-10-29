@@ -9,8 +9,6 @@ def feature_width(metadata, arm):
     name = decision_feature_set(arm["feature_set"])
     if arm["feature_set"].startswith("original_features"):
         base += texts
-    if name == "non_text_plus_text_statistics":
-        return base + texts * 3 + 3
     if name == "non_text" or arm["feature_set"] == "original_features":
         width = base
     else:
@@ -84,18 +82,8 @@ def pca_width_table():
         for scope, k in pca_grid():
             arm = dict(feature_set="non_text_plus_frozen_e5", pca_scope=scope, pca_components=k)
             row[f"{scope}_{k}"] = feature_width(meta, arm)
-        arm.update(
-            feature_set="non_text_plus_frozen_e5_and_both",
-            pca_scope="per_column",
-            pca_components=32,
-            provider="any_single_provider",
-        )
-        per = feature_width(meta, arm)
-        arm.update(pca_scope="joint", pca_components=256)
-        row["max_with_one_provider_both"] = max(per, feature_width(meta, arm))
+        row["max_embedding_columns"] = max(row[f"{scope}_{k}"] for scope, k in pca_grid())
         # Kumo may add a count column for every high-cardinality categorical column.
-        row["conservative_kumo_upper_bound"] = row["max_with_one_provider_both"] + len(
-            meta.non_text_columns
-        )
+        row["conservative_kumo_upper_bound"] = row["max_embedding_columns"] + len(meta.non_text_columns)
         rows.append(row)
     return pd.DataFrame(rows)

@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from src.evaluation.prompt_ablation import analyze
+from src.evaluation.diagnostic_reports import analyze
 
 
-def test_exp4_uses_explicit_real_reports_and_measures_aligned_changes(tmp_path):
+def test_exp0_uses_explicit_real_reports_and_measures_aligned_changes(tmp_path):
     report = {
         "provider": "intern",
         "status": "gpu_contracts_passed_requires_review",
@@ -38,7 +38,7 @@ def test_exp4_uses_explicit_real_reports_and_measures_aligned_changes(tmp_path):
         analyze([file])
 
 
-def test_exp4_accepts_local_real_jev_diagnostics(tmp_path):
+def test_exp0_accepts_local_real_jev_diagnostics(tmp_path):
     report = {
         "status": "jev_dataset_robustness_requires_review",
         "attempts": [

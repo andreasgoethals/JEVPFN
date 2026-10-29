@@ -218,23 +218,6 @@ def test_cv_resumes_only_completed_folds_and_detects_corruption(isolated_output,
         protocol.evaluate_cv(dataset, matrix, factory, **kwargs)
 
 
-def test_controls_are_executable_without_duplicating_main_embedding_arms():
-    from src.evaluation.campaign import benchmark_plan
-
-    main = benchmark_plan()
-    plan = benchmark_plan(include_controls=True)
-    assert len(main) == 6318
-    added = [a for a in plan if a["phase"] == "experiment_5"]
-    assert {a["control"] for a in added} == {
-        "text_presence",
-        "text_statistics",
-        "permuted",
-        "retained_view",
-    }
-    assert {a["model"] for a in added if a["control"] not in {"text_presence"}} == {
-        "catboost",
-        "tabpfn_3_5",
-    }
 
 
 def test_provenance_urls_are_not_sent_but_urls_in_actual_text_are_preserved():

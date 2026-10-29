@@ -52,9 +52,14 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         ]
     if site != "vsc":
         raise ValueError("Site must be local or vsc")
+    from src.cluster.scheduling import gpu_profile, project_export
+
+    default_profile = gpu_profile()
+    durable = default_profile.get("durable_root", default_profile["staging_root"])
+    export_root = project_export(durable)
     items = [
-        ("cpu", "experiment_0_cpu.slurm", []),
-        ("storage", "experiment_0_storage.slurm", []),
+        ("cpu", "experiment_0_cpu.slurm", [durable]),
+        ("storage", "experiment_0_storage.slurm", [durable]),
     ]
     from src.utils.config import load_yaml
 
@@ -69,7 +74,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
             (
                 "embeddings_" + encoder_id,
                 "experiment_0_embeddings.slurm",
-                ["cloudflare", "/lustre1/project/stg_00211", encoder_id],
+                ["cloudflare", durable, encoder_id],
             )
         )
     for provider in PROVIDERS:
@@ -81,8 +86,8 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     scheduling = load_yaml("experiment_0/scheduling")
     token_steps = [dict(name=s["name"], cluster=s["cluster"], depends_on=s["dependencies"],
                    **({"pool": s["pool"]} if "pool" in s else {}),
-                   command=["sbatch", "--parsable", *s["flags"], f"scripts/slurm/{s['script']}", *s["args"]])
-              for provider in PROVIDERS for s in token_plan(provider, "/lustre1/project/stg_00211")]
+                   command=["sbatch", "--parsable", export_root, *s["flags"], f"scripts/slurm/{s['script']}", *s["args"]])
+              for provider in PROVIDERS for s in token_plan(provider, durable)]
     result = []
     for name, script, args in items:
         independent = name in {"cpu", "storage"} or name.endswith("_tokens")
@@ -95,8 +100,6 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
             flags = ["--clusters=mindwell", "--partition=batch_graniterapids"]
             dependencies = [args[0] + "_scratch"]
         elif not independent:
-            from src.cluster.scheduling import gpu_profile
-
             runtime = "cloudflare" if name.startswith("embeddings_") else args[0]
             profile = gpu_profile(
                 scheduling["routes"].get(name, scheduling["default_gpu_profile"]), runtime=runtime
@@ -119,7 +122,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 "name": name,
                 "cluster": cluster,
                 "depends_on": dependencies,
-                "command": ["sbatch", "--parsable", *flags, f"scripts/slurm/{script}", *args],
+                "command": ["sbatch", "--parsable", export_root, *flags, f"scripts/slurm/{script}", *args],
             }
         )
     from src.cluster.workspace_graph import add_releases

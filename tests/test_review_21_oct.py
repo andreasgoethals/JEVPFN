@@ -10,7 +10,7 @@ from src.evaluation.models import predictor_settings_identity
 def test_predictor_identity_excludes_only_output_routing():
     settings = {"seed": 7, "checkpoint": "pinned", "parameters": {"epochs": 2}}
     assert predictor_settings_identity({**settings, "output_phase": "experiment_3"}) == (
-        predictor_settings_identity({**settings, "output_phase": "experiment_5"})
+        predictor_settings_identity({**settings, "output_phase": "experiment_2"})
     )
     assert predictor_settings_identity(settings) != predictor_settings_identity(
         {**settings, "seed": 8}
@@ -29,12 +29,6 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
         phase="experiment_3",
         feature_set="original_features",
     )
-    extra = {
-        **base,
-        "phase": "experiment_5",
-        "provider": "jev",
-        "feature_set": "original_features_plus_joint",
-    }
     original_config = campaign.load_yaml
     selector = dict(
         provider="jev",
@@ -47,6 +41,7 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
     def config(name):
         cfg = copy.deepcopy(original_config(name))
         cfg["enabled"] = True
+        cfg["full_fold_profile_enabled"] = True
         if name == "experiment_1/models":
             cfg["models"]["tabstar"]["runtime"]["device"] = "cpu"
         if "feature_selectors" in cfg:
@@ -55,7 +50,7 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
 
     monkeypatch.setattr(campaign, "load_yaml", config)
     monkeypatch.setattr(campaign, "reviewed_acceptance", lambda *a, **kw: None)
-    monkeypatch.setattr(campaign, "benchmark_plan", lambda **kw: [base, extra])
+    monkeypatch.setattr(campaign, "benchmark_plan", lambda **kw: [base])
     monkeypatch.setattr(campaign, "load_catalog", lambda: {"datasets": [{"id": "fixture"}]})
     monkeypatch.setattr(campaign, "load_dataset", lambda *a, **kw: data)
     monkeypatch.setattr(campaign, "shared_splits", lambda *a, **kw: {})
@@ -72,11 +67,11 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
         return []
 
     monkeypatch.setattr(campaign, "evaluate_cv", evaluate)
-    for arm in (base, extra):
-        campaign.run_arm(arm, allow_model_runs=True)
+    campaign.run_arm(base, allow_model_runs=True)
+    campaign.run_arm(base, allow_model_runs=True, profile=True)
     assert [c["estimator_settings"]["output_phase"] for c in captured] == [
         "experiment_3",
-        "experiment_5",
+        "experiment_0",
     ]
     assert captured[0]["checkpoint_id"] == captured[1]["checkpoint_id"]
 

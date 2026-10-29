@@ -18,14 +18,8 @@ IDENTITY = ["arm_id", "phase", "dataset_id", "task_type", "model_id", "checkpoin
 
 
 def planned_coverage(folds, phase):
-    plan = pd.DataFrame(benchmark_plan(include_controls=phase == "experiment_5"))
-    chosen = plan.phase.eq(phase)
-    if phase == "experiment_5" and "control" in plan:
-        chosen |= plan.control.eq("combined_extractors")
-    plan = plan[chosen].rename(columns={"model": "model_id"}).copy()
-    if "control" in plan:
-        for index, row in plan[plan.control.notna() & plan.control.ne("winner_combination")].iterrows():
-            plan.loc[index, "feature_set"] += "__" + row.control + "__" + row["view"]
+    plan = pd.DataFrame(benchmark_plan())
+    plan = plan[plan.phase.eq(phase)].rename(columns={"model": "model_id"}).copy()
     for name in RECIPE:
         if name not in plan:
             plan[name] = None
@@ -67,15 +61,6 @@ def headline_summary(folds):
     ).reset_index()
 
 
-def control_catalog():
-    return pd.DataFrame([
-        ("Text presence", "Does knowing which text fields are missing explain the gain?", "All six", "No"),
-        ("Text statistics", "Do word counts and lengths explain the gain?", "CatBoost / TabPFN", "No"),
-        ("Shuffled vectors", "Does a feature need to belong to the correct row, conditional on missingness?", "CatBoost / TabPFN", "No"),
-        ("Retained distribution", "Does the full score distribution add information beyond its expected value?", "CatBoost / TabPFN", "No"),
-        ("Combined extractors", "Do different extractors supply complementary information?", "All six; width guard", "No"),
-        ("Selected combinations", "Do the selected decision features complement embeddings or native text?", "All six / three native", "No; exploratory"),
-    ], columns=["control", "question", "predictors", "new_inference"])
 
 
 def artifact_coverage():
@@ -129,26 +114,6 @@ def cross_system_contrasts(folds):
     return matched
 
 
-def aligned_control_contrasts(folds):
-    """Compare shuffled/retained views to their exact aligned main feature artifacts."""
-    if folds.empty:
-        return pd.DataFrame()
-    data = folds[folds.metric.eq(folds.task_type.map(HEADLINES))
-                 & folds.inference_status.eq("prespecified")].copy()
-    keys = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id",
-            "outer_fold", "metric", "provider", "feature_artifact_ids"]
-    aligned = data[data.phase.eq("experiment_1") & data.feature_set.eq("non_text_plus_both")]
-    controls = data[data.phase.eq("experiment_5") & data.feature_set.str.startswith(
-        ("non_text_plus_both__permuted__", "non_text_plus_both__retained_view__"))]
-    if aligned.empty or controls.empty:
-        return pd.DataFrame()
-    if aligned.duplicated(keys).any() or controls.duplicated(keys + ["feature_set"]).any():
-        raise ValueError("Multiple aligned/control recipes match; select one campaign")
-    matched = controls.merge(aligned[keys + ["value"]].rename(columns={"value": "reference_value"}),
-                             on=keys, how="inner", validate="many_to_one")
-    matched["difference"] = matched.value - matched.reference_value
-    matched["reference"] = "aligned_main_both"
-    return matched
 
 
 def contrast_summary(table):

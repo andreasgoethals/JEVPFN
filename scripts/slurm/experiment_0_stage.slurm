@@ -14,7 +14,7 @@
 set -euo pipefail
 export JEVPFN_PHASE=experiment_0
 export JEVPFN_CONDA_ENV=JEVPFN
-export JEVPFN_STAGING_ROOT="${2:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${2:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE

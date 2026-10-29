@@ -1,4 +1,4 @@
-"""Row-aligned non-text, decision and embedding features plus cheap controls."""
+"""Row-aligned non-text, decision and frozen-embedding features."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import pandas as pd
 from src.utils.serialization import text_value
 
 MISSINGNESS_VERSION = "shared_text_missing_v1"
-PERMUTATION_POLICY = "independent_partitions_within_missingness_patterns_v2"
 
 
 def missing_column(index):
@@ -29,27 +28,6 @@ def add_text_presence(matrix, dataset):
     return result
 
 
-def text_statistics(dataset) -> pd.DataFrame:
-    """No encoder, vocabulary fitting, target values or API calls are involved.
-
-    A missing/blank cell has zero lengths and missing=1. Names map to the official
-    text-column order, retained in dataset.metadata.text_columns.
-    """
-    result = pd.DataFrame(index=[f"csv:{i}" for i in range(len(dataset.frame))])
-    for i, column in enumerate(dataset.metadata.text_columns):
-        cells = dataset.frame[column].reset_index(drop=True)
-        text = cells.map(lambda x: "" if (value := text_value(x)) is None else str(value))
-        present = text.str.strip().ne("")
-        prefix = f"text_stats__text_{i:03d}"
-        result[f"{prefix}__characters"] = text.str.len().where(present, 0).to_numpy()
-        result[f"{prefix}__words"] = text.str.split().str.len().where(present, 0).to_numpy()
-        result[f"{prefix}__missing"] = (~present).astype(int).to_numpy()
-    result["text_stats__total_characters"] = result.filter(like="__characters").sum(axis=1)
-    result["text_stats__total_words"] = result.filter(like="__words").sum(axis=1)
-    result["text_stats__nonempty_columns"] = len(dataset.metadata.text_columns) - result.filter(
-        like="__missing"
-    ).sum(axis=1)
-    return result
 
 
 SELECTOR_FIELDS = {
@@ -67,9 +45,6 @@ MAIN_FEATURE_SETS = (
     "non_text_plus_per_column",
     "non_text_plus_both",
     "non_text_plus_frozen_e5",
-    "non_text_plus_frozen_e5_and_joint",
-    "non_text_plus_frozen_e5_and_per_column",
-    "non_text_plus_frozen_e5_and_both",
 )
 
 EMBEDDING_BASELINE = "non_text_plus_frozen_e5"
@@ -78,9 +53,6 @@ DECISION_FEATURE_SETS = MAIN_FEATURE_SETS[:4]
 EMBEDDING_FEATURE_SETS = MAIN_FEATURE_SETS[4:]
 NATIVE_FEATURE_SETS = (
     "original_features",
-    "original_features_plus_joint",
-    "original_features_plus_per_column",
-    "original_features_plus_both",
 )
 
 
@@ -247,8 +219,6 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
 
     modes = {
         "non_text": set(),
-        "non_text_plus_presence": set(),
-        "non_text_plus_text_statistics": set(),
         "non_text_plus_per_column": {"per_column"},
         "non_text_plus_joint": {"joint"},
         "non_text_plus_both": {"per_column", "joint"},
@@ -284,40 +254,8 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
             ):
                 raise ValueError("Identical requests have inconsistent feature values")
             matrix = matrix.drop(columns=right.columns)
-    if name == "non_text_plus_text_statistics":
-        stats = text_statistics(dataset)
-        if set(stats.columns) & set(matrix.columns):
-            raise ValueError("Text-statistics names collide with non-text feature names")
-        matrix = matrix.join(stats, validate="one_to_one")
     # pandas joins can discard attrs, including the baseline's explicit empty list.
     matrix.attrs["feature_artifact_ids"] = [b.manifest["artifact_id"] for b in selected]
-    if modes[name] or name == "non_text_plus_presence":
+    if modes[name]:
         matrix = add_text_presence(matrix, dataset)
     return matrix
-
-
-def shuffle_feature_block(train: pd.DataFrame, test: pd.DataFrame, *, seed: int):
-    """Shuffle complete vectors within each partition and missingness pattern.
-
-    Keep every row's availability flags and NaN locations fixed, breaking content
-    alignment conditional on availability. Preserve dependencies inside vectors.
-    No targets are accepted and no vector crosses the training/test boundary.
-    Singleton patterns cannot be shuffled; this control may then be conservative.
-    """
-    if list(train.columns) != list(test.columns):
-        raise ValueError("Train/test feature schemas differ")
-    rng = np.random.default_rng(seed)
-    result = []
-    for frame in (train, test):
-        order = np.arange(len(frame))
-        if len(frame) > 1 and len(frame.columns):
-            masks = np.packbits(frame.isna().to_numpy(), axis=1)
-            _, group = np.unique(masks, axis=0, return_inverse=True)
-            grouped = np.argsort(group, kind="stable")
-            boundaries = np.flatnonzero(np.diff(group[grouped])) + 1
-            for indices in np.split(grouped, boundaries):
-                order[indices] = rng.permutation(indices)
-        changed = frame.iloc[order].copy()
-        changed.index = frame.index
-        result.append(changed)
-    return tuple(result)

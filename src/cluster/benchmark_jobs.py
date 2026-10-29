@@ -16,7 +16,7 @@ from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
 
-def plan(phase, model, *, profile=None, concurrency=8, controls=False, profile_fold=False):
+def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False):
     from src.cluster.scheduling import gpu_profile
 
     if type(concurrency) is not int or concurrency < 1:
@@ -26,7 +26,7 @@ def plan(phase, model, *, profile=None, concurrency=8, controls=False, profile_f
     route = gpu_profile(profile if gpu else "wice_h100", runtime=model)
     candidates = [
         a
-        for a in benchmark_plan(include_controls=controls)
+        for a in benchmark_plan()
         if a["phase"] == phase and a["model"] == model
     ]
     arms = [a for a in candidates if a["width_status"] != "unsupported_width"]
@@ -48,6 +48,7 @@ def plan(phase, model, *, profile=None, concurrency=8, controls=False, profile_f
 
 def write_plan(body):
     from src.cluster.freeze import check_if_present
+    from src.cluster.scheduling import project_export
 
     frozen = check_if_present()
     if not frozen["frozen"]:
@@ -67,6 +68,7 @@ def write_plan(body):
     command = [
         "sbatch",
         "--parsable",
+        project_export(route.get("durable_root", route["staging_root"])),
         f"--clusters={route['cluster']}",
         f"--partition={partition}",
         f"--account={load_yaml('experiment_0/scheduling')['account']}",
@@ -116,7 +118,6 @@ def main():
     parser.add_argument("--model")
     parser.add_argument("--profile", default=None)
     parser.add_argument("--concurrency", type=int, default=8)
-    parser.add_argument("--controls", action="store_true")
     parser.add_argument("--profile-fold", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--run-manifest")
@@ -131,7 +132,6 @@ def main():
         args.model,
         profile=args.profile,
         concurrency=args.concurrency,
-        controls=args.controls,
         profile_fold=args.profile_fold,
     )
     print(

@@ -11,7 +11,7 @@
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
-export JEVPFN_STAGING_ROOT="${3:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
 export JEVPFN_RUNTIME_PROFILE="${4:-legacy-cu126}"
 cd "${VSC_DATA:?}/JEVPFN"
 bash scripts/build_decision_container.sh "${1:?Pass provider}" "${2:-wrap}"

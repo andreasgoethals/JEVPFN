@@ -8,6 +8,40 @@ Owner instruction, 28 October 2026: the assistant may commit and push reviewed J
 changes without asking again. This supersedes the former no-commit/no-push preference.
 Read-only task boundaries still apply; never update a checkout used by active VSC jobs.
 
+## Current scope and direct access, 29 October
+
+Owner removed Experiments 4/5. Only 0A/0B and Experiments 1–3 remain; statistical
+analysis and the combined notebook are under `7. synthesis`. Do not reintroduce
+winner-selected combinations, permutation/presence/length controls or a lexical
+baseline without instruction. The primary grid remains 3,996/2,268/54 configurations.
+
+TEMPLATE.md matched the canonical `0. Template/docs/TEMPLATE.md` byte-for-byte,
+SHA256 285c7c321b2cd52d8d415e30f41fe775ceb47113f39007c2490fdb0ec23fc8d8.
+Manual shared Windows-agent access worked without renewal. Native ssh.exe, `-F none
+-T`, BatchMode, host-key checks, bounded timeout and an LF script on stdin preserved
+stdout and a deliberate exit 7. This gateway dropped separate remote stderr;
+`exec 2>&1` preserved it in stdout with the exit status. Use that tested workaround.
+Never initiate authentication; ask the owner for `step ssh login --context VSC`
+only if the shared certificate needs renewal. Instructions are in AGENTS/VSC.
+
+Read-only inspection around 15:41 local time: actual checkout and .git reside on
+DATA; remote HEAD 5b7768f969ec9159ab192788706bf0d18dfa4c2d, clean. No JEVPFN jobs
+were active. Quota: PROJECT 538.2G/1T and 45,343/150,000 files; DATA 56,233M/76,800M;
+GPFS scratch 8.634G/500G. The persistent CPU control environment is still
+`$VSC_DATA/conda_envs/JEVPFN`; replacing it with a verified PROJECT CPU container
+requires a separately reviewed migration/cutover. No remote mutation, environment
+migration, cleanup or job submission was performed during this change.
+
+The supplied cleanup log records 2,571 output files removed (84,510,558,770 bytes).
+Raw/prepared data, paid caches, weights and runtimes survived. At 16:11, read-only SSH confirmed the uploaded ZIP (1,118,154,339 bytes), its checksum
+sidecar and frozen receipt, all timestamped 15:51. No JEVPFN jobs were active. The
+sidecar reports 8c63720e68a5e7e3c0e6a0a971d917f739f102a0f49d4ac24e54726fa9e7084d;
+the installer must still validate the ZIP. The inputs were prepared with a22a785 and
+the uploaded frozen source receipt is obsolete.
+Question generation itself is unchanged by the scope/access edits: reuse verified
+inputs, but record/upload a new freeze after local and VSC source agree. Do not
+accept the old receipt as evidence for the revised code.
+
 ## Execution decision and storage
 
 The owner selected Mindwell B200 without requesting a new GPFS allocation.
@@ -98,16 +132,15 @@ Decision3 now receives cuda:<current logical index>, after Slurm's device mappin
 Local regression tests reproduce the old error and cover logical devices 0 and 2.
 TabSTAR staging retries transport failures at most three times, reusing the pinned
 Hub cache; HTTP/integrity errors still stop and no incomplete manifest is accepted.
-Neither fix changes tokenization, questions or model pins. Decision3's sealed image
-and completed token counts can be reused. Retry its branch and the independent TabSTAR
-staging/container/GPU chain as documented in VSC; do not clean completed work yet.
+Neither fix changed tokenization, questions or model pins. Their successful 29 October
+retries are recorded above; these failures are retained only as historical diagnosis.
 
 The 28 October targeted Decision3 watcher's accounting failure was confirmed by a
 manual query at 10:04: slurmdbd connection refused, not a model failure.
 The updated watcher pauses/retries read-only accounting errors, retains known job IDs
 and diagnostics, and defers new submissions. Ambiguous sbatch responses still require
-review. This older stopped attempt needs an idle restart after accounting recovers
-and the fix is pulled; never erase receipts, cancel jobs or infer success from this outage.
+review. That older attempt was superseded by the successful retry above. Never infer job
+failure or success from a scheduler outage; preserve receipts before recovery.
 
 Real-text sensitivity remains a research limitation requiring review. Earlier Clef
 instruction/context variants and Intern option reversal changed predictions despite
@@ -173,80 +206,37 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-The 29 October import-cache cleanup correction passed 1,151 local tests with 25 skips for optional
-staged assets/Torch or POSIX-only behavior. Ruff, dependency, Bash syntax and diff
-checks passed. New tests cover input-copy release, preserved mutable queues, failed
-publication, queued consumers, capacity budgets, bounded graph residency and cleanup
-after failed consumers. No remote deletion or jobs were executed locally. Live release
-and the bounded B200 lifecycle remain unverified. Reviewed source changes are authorized
-for Git publication. The tokenizer modules and registry were unchanged.
+Current scope/access validation: 1,134 tests passed, 25 optional/platform skips;
+Ruff, pip check and all 31 shell syntax/LF checks passed. Eleven notebooks execute
+with 13 saved PDFs, captions and complete printed reports. The revised study map
+was visually inspected. Concurrent execution from the owner's PowerShell caused
+three protected recovery saves; those notebooks passed after the owner closed it.
+Separate 0A/0B notebooks and the synthesis remain.
+Missing benchmark results stay pending; no synthetic performance enters stores.
 
-The current-source review confirmed Claude's completed-fold restoration, SII label/cue
-checks, token-merge validation, failed-semantic-probe propagation, paired representation
-views and runtime-specific GPFS evidence. It found two further issues: the permutation
-control moved NaNs between rows, and 0B approval was not bound to the tested evaluation
-pipeline. Permutation now preserves complete missingness patterns within each partition;
-0B reports/approval carry evaluation_identity for source, model pins/settings, protocol,
-selectors and encoder/PCA recipes. Finalize these before 0B; only activation switches and
-the acceptance path may change afterward without invalidating that identity.
-The earlier review found that TabSTAR selected the original generation. Following the
-owner's instruction, it now selects v1.1 explicitly through tabstar 1.2.2 and its distinct
-module, with Transformers 4.57.6. CPU staging pins separate classification/regression
-snapshots and E5, including offline HF-cache aliases required by the publisher's warm-cache
-check. A versioned tabstar-v1p1 container preserves earlier images; native GPFS staging
-copies the declared assets. Container retirement proof uses the actual versioned image
-path. Bounded predictor contracts are permitted with --execute; full-fold/benchmark gates
-remain disabled. This new runtime/checkpoint combination needs real B200 tests.
-The review used DM 4cf49431cab921fb727e883760ed535ca8e77f72, TFM
-e604ade99f7cf135f41c17a49e1f91da528e835d and VSC
-1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87 without moving pins.
-The scientific comparison is task-conditioned frozen feature extraction, not supervised
-representation learning. The owner declined word/character TF-IDF plus SVD additions;
-keep the existing three pretrained embedding encoders and existing cheap-statistics control.
+Methodological protections retained: evaluation_identity binds 0B approval to code,
+settings, protocol and exact feature recipes; transforms/PCA fit only training rows,
+including binary inner folds. LimiX preprocessing was corrected to use training
+rows only. Missing text skips inference; missing extraction is a failure. Joint
+PCA curves compare matched complete datasets. Headline metrics are binary ROC-AUC,
+multiclass macro OvR ROC-AUC and regression R-squared. Full predictions and secondary
+metrics remain stored. Statistical contrast families still require approval before
+outcomes; native-system results are descriptive. The removed controls cannot be
+cited as evidence that any gain is specifically semantic.
 
-On 26 October, cached local Jev responses were revalidated without network calls:
-three synthetic contracts passed; 15 synthetic and 13 real-text robustness cases
-decoded successfully and still require semantic review. This does not replace a
-fresh source-bound local 0A or re-run the 288-request dataset pilot.
+TabSTAR v1.1, package 1.2.2 with Transformers 4.57.6, has historical bounded B200
+fixtures and resume evidence. Its separate pinned classification/regression models
+and E5 cache aliases remain required. Current 0B and full-fold feasibility are pending
+for all predictors. ConTextTab and AG-MM still require their own staged runtime tests.
 
-All thirteen notebooks ran locally with saved outputs, 25 PDF figures, aggregated captions
-and complete printed reports. Each experiment has its own notebook (0A/0B separate), with
-a final synthesis for Experiments 1-3. Empty performance plots and repeated figures were
-removed; missing benchmark results remain pending. Every generated PDF was visually checked.
-Future result-panel layouts were checked with explicitly synthetic fixtures outside research
-output. Their values must never enter research stores. PCA fits training rows only.
-Following the owner, headline metrics now match MulTaBench: binary ROC-AUC, multiclass
-macro OvR ROC-AUC and regression R-squared. All secondary metrics remain recorded.
-Regression headline deltas are R-squared differences, with no relative-RMSE conversion.
-Statistical contrast families still require approval. Native-system comparisons are
-descriptive; aligned/shuffled/full-distribution controls retain exact artifact pairing.
-
-The 24 October methodological review found combined train/query preprocessing in
-the pinned LimiX-2 implementation. The adapter now fits filtering, categorical
-inference/encoding and polynomial scaling on training rows only, uses torch.device
-and the allocated CPU thread budget, and rejects unreviewed API/multi-GPU paths.
-The publisher's RebalanceFeatureDistribution already uses training rows and was
-not changed. Real 0B testing remains required. Presence/statistics controls now use
-the same empty/nonfinite-text policy as extraction; nonfinite regression targets
-are rejected before splitting. Joint-PCA summary curves use matched dataset/split
-cohorts across widths, preventing partial completion from changing the comparison.
-The 26 October check also aligned embedding input construction with the same
-missing-text policy: numeric infinity is missing; literal "inf"/"nan" remain text.
-CPU checkpoint staging now accepts CPU Slurm jobs while rejecting GPU allocations;
-encoder staging is refused after freeze. Per-column PCA32 and joint-PCA ablations
-retain separate training-only projections, including each binary inner partition.
-
-The owner authorized an interim clean debugging rerun once active jobs finish;
-use output_cleanup and test_all, without freezing yet. Finish setup before the final
-clean campaign. Then stop writers, delete local/DATA/Lustre/GPFS output (including
-known runtimes with incomplete staging), regenerate/audit/upload questions, freeze matching source
-and run fresh local/VSC 0A. Preserve data/features/weights/images. Acceptance
-requires current matching reports and quota/backup/throughput/robustness review.
-Create features, run 0B including real encoder/predictor/complete-feature checks,
-then benchmark. Full-fold resources and native predictor runtimes remain unproven
-until their real gates pass. A source/runtime change requires a reviewed stage
-transition, not deletion of mismatch evidence. The owner granted standing commit/push authorization on 28 October; active VSC
-checkouts must still remain unchanged until their jobs stop.
+The final sequence is reviewed setup (including the control-runtime storage migration),
+a deliberate clean output reset, prepare/audit/upload unchanged question-v3 inputs,
+a matched source/runtime freeze, local and VSC 0A, accepted full feature creation,
+complete-feature/predictor 0B, then Experiments 1–3. Do not reset again while uploads,
+question audits or jobs are running. The latest task permits documentation/config edits
+and read-only remote inspection, not silent migration, scratch deletion or workloads.
+Paid response/accounting state always survives output cleanup. Revalidation may reuse
+cached requests and must disclose that reuse rather than claim fresh inference.
 
 ## Liquid d1-2B addition and latest review
 
@@ -271,8 +261,8 @@ Local validation of this addition: 1,124 tests passed and 22 skipped (unavailabl
 tokenizer assets/Torch or POSIX-specific behavior). The d1-2B publisher tokenizer/source
 fixture was explicitly exercised on CPU, without weights or inference. All 13 notebooks
 executed, all 25 PDFs were visually inspected, and Ruff, pip check and 30 shell syntax/LF
-checks passed. Historical tokenizer files remain byte-for-byte unchanged. These checks
-do not establish the new Transformers 5.19/B200 runtime or full-dataset acceptance.
+checks passed. Historical tokenizer files remain byte-for-byte unchanged. These local checks alone did not establish runtime acceptance. The subsequent bounded
+B200 pass is historical setup evidence; full-dataset acceptance remains pending.
 
 ## Reusable failure lessons
 

@@ -104,7 +104,7 @@ evaluation:
   native_epoch_averaging: TabSTAR_v1p1_three_internal_validation_epochs_as_published
   calibration: none
   small_n: outside_current_scope
-  statistical_tests: experiment_5/analysis  # Disabled until metrics/contrasts are approved before outcomes.
+  statistical_tests: synthesis/analysis  # Disabled until metrics/contrasts are approved before outcomes.
   comparison: jev_feature_combinations_within_the_same_model_on_identical_folds
   aggregation: per_dataset_paired_deltas_then_task_specific_across_dataset_summaries
   fold_sd_interpretation: descriptive_only_never_standard_error

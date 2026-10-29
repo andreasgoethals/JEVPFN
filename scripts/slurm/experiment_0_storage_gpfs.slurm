@@ -18,7 +18,7 @@ export JEVPFN_PHASE=experiment_0
 export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STORAGE_MODE=scratch_mirror
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
-export JEVPFN_DURABLE_ROOT=/lustre1/project/stg_00211
+export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}"
 export JEVPFN_STORAGE_RUNTIME="${1:?Pass a staged runtime}"
 source scripts/activate_conda.sh
 JEVPFN_STAGING_ROOT="$("${JEVPFN_PYTHON:?}" -m src.cluster.scratch_stage path --runtime "$JEVPFN_STORAGE_RUNTIME")"

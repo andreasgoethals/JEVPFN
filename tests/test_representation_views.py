@@ -10,7 +10,6 @@ from src.visualize.decision_comparison import LABELS
 from src.visualize.paired import MODES
 from src.visualize.representation_views import (
     RECIPES,
-    control_figures,
     direct_comparison_figures,
     overlap_figures,
 )
@@ -46,10 +45,7 @@ def fixture_paired():
         group["metric"] = f"text.{cohort}.roc_auc"
         group["difference"] -= i * 0.02
         cohorts.append(group)
-    control = rows[rows.provider.eq("jev") & rows.feature_set.eq("non_text_plus_joint")].copy()
-    control["phase"] = "experiment_5"
-    control["feature_set"] = "non_text_plus_presence__text_presence__main"
-    return pd.concat([rows, *cohorts, control], ignore_index=True)
+    return pd.concat([rows, *cohorts], ignore_index=True)
 
 
 def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
@@ -71,12 +67,12 @@ def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
 
 def test_new_panels_require_real_evidence_and_render_at_paper_width():
     empty = pd.DataFrame()
-    for make in (direct_comparison_figures, control_figures, overlap_figures):
+    for make in (direct_comparison_figures, overlap_figures):
         assert list(make(empty)) == []
     style.apply()
     figures = [*direct_comparison_figures(decision_vs_embedding(fixture_folds())),
-               *control_figures(fixture_paired()), *overlap_figures(fixture_paired())]
-    assert len(figures) == 3
+               *overlap_figures(fixture_paired())]
+    assert len(figures) == 2
     for fig, _, caption in figures:
         try:
             fig.canvas.draw()
@@ -84,6 +80,3 @@ def test_new_panels_require_real_evidence_and_render_at_paper_width():
             assert caption and not any("index" in ax.get_xlabel().lower() for ax in fig.axes)
         finally:
             plt.close(fig)
-    exploratory = fixture_paired()
-    exploratory["inference_status"] = "exploratory_post_selection"
-    assert list(control_figures(exploratory)) == []

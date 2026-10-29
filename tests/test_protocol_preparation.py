@@ -1,6 +1,5 @@
 """Exercise orchestration with fake estimators/transport, never paid calls or ML fitting."""
 
-import copy
 import json
 from dataclasses import replace
 
@@ -11,7 +10,6 @@ from sklearn.metrics import f1_score
 
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
-from src.evaluation.features import assemble_feature_set, shuffle_feature_block, text_statistics
 from src.evaluation.protocol import evaluate_cv, select_f1_threshold, shared_splits
 from src.jev.alternatives import preview
 from src.jev.cache import ResponseCache
@@ -45,89 +43,14 @@ def dataset():
     return LoadedDataset(frame, meta, official, {"data_identity": "fixed"}, [])
 
 
-def test_text_statistics_are_label_free_and_missing_aware(dataset):
-    stats = text_statistics(dataset)
-    assert stats.iloc[0].tolist() == [7, 2, 0, 7, 2, 1]
-    assert stats.iloc[1].tolist() == [0, 0, 1, 0, 0, 0]
-    changed = copy.deepcopy(dataset)
-    changed.frame["y"] = 999
-    changed.frame["n"] = -888
-    pd.testing.assert_frame_equal(stats, text_statistics(changed))
-    baseline = assemble_feature_set(dataset, [], "non_text_plus_text_statistics")
-    assert "n" in baseline and not {"text", "y"} & set(baseline.columns)
-    assert baseline.attrs["feature_artifact_ids"] == []
 
 
-def test_presence_control_contains_only_non_text_and_missing_flags(dataset):
-    matrix = assemble_feature_set(dataset, [], "non_text_plus_presence")
-    assert list(matrix) == ["n", "text_presence__000__missing"]
-    assert matrix.iloc[:4, 1].tolist() == [0, 1, 1, 0]
-    from src.evaluation.campaign import benchmark_plan
-    from src.evaluation.models import MAIN_MODELS
-
-    arms = [a for a in benchmark_plan(include_controls=True) if a.get("control") == "text_presence"]
-    assert len(arms) == 18 * 6
-    assert {a["model"] for a in arms} == set(MAIN_MODELS)
 
 
-def test_shuffle_preserves_vectors_without_crossing_partitions():
-    train = pd.DataFrame({"a": range(12), "b": range(100, 112)}, index=range(12))
-    test = train + 500
-    a, b = shuffle_feature_block(train, test, seed=42)
-    assert list(a.index) == list(train.index)
-    assert sorted(map(tuple, a.to_numpy())) == sorted(map(tuple, train.to_numpy()))
-    assert b.a.min() >= 500 and not a.equals(train)
-    pd.testing.assert_frame_equal(a, shuffle_feature_block(train, test, seed=42)[0])
 
 
-def test_shuffle_preserves_each_rows_missingness_and_joint_vectors():
-    train = pd.DataFrame(
-        {
-            "p0": np.linspace(0.05, 0.35, 24),
-            "p1": 1 - np.linspace(0.05, 0.35, 24),
-            "score": np.linspace(-4, -0.1, 24),
-        },
-        index=[f"train:{i}" for i in range(24)],
-    )
-    test = pd.DataFrame(
-        {
-            "p0": np.linspace(0.6, 0.9, 24),
-            "p1": 1 - np.linspace(0.6, 0.9, 24),
-            "score": np.linspace(0.1, 4, 24),
-        },
-        index=[f"test:{i}" for i in range(24)],
-    )
-    for frame in (train, test):
-        frame.iloc[::2, :2] = np.nan
-        frame.iloc[::3, 2] = np.nan
-    shuffled = shuffle_feature_block(train, test, seed=42)
-    for original, changed in zip((train, test), shuffled, strict=True):
-        pd.testing.assert_frame_equal(original.isna(), changed.isna())
-        assert list(original.index) == list(changed.index)
-        patterns = original.isna().apply(tuple, axis=1)
-        for pattern in set(patterns):
-            take = patterns.map(lambda value, pattern=pattern: value == pattern)
-            assert sorted(map(tuple, original[take].fillna(-999).to_numpy())) == sorted(
-                map(tuple, changed[take].fillna(-999).to_numpy())
-            )
-        present = changed.p0.notna()
-        np.testing.assert_allclose((changed.p0 + changed.p1)[present], 1)
-    assert not shuffled[0].equals(train)
-    assert shuffled[0].p0.max() < shuffled[1].p0.min()
-    pd.testing.assert_frame_equal(shuffled[0], shuffle_feature_block(train, test, seed=42)[0])
 
 
-@pytest.mark.parametrize(
-    "frame",
-    [
-        pd.DataFrame(columns=["a", "b"]),
-        pd.DataFrame(index=["a", "b"]),
-        pd.DataFrame({"a": [np.nan, np.nan], "b": [1.0, np.nan]}),
-    ],
-)
-def test_shuffle_retains_empty_or_singleton_availability_patterns(frame):
-    for changed in shuffle_feature_block(frame, frame, seed=42):
-        pd.testing.assert_frame_equal(changed, frame)
 
 
 def test_regression_default_view_is_one_direction_not_eleven_features():

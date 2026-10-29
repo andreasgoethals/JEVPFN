@@ -7,6 +7,16 @@ from pathlib import PurePosixPath
 from src.utils.config import load_yaml
 
 
+def project_export(root):
+    """Explicitly carry the durable root across Leuven's submission boundary."""
+    root = str(root)
+    path = PurePosixPath(root)
+    if (not path.is_absolute() or ".." in path.parts or path.name == "JEVPFN"
+            or any(c in root for c in (",", "\n", "\r"))):
+        raise ValueError("PROJECT override must name an absolute allocated shared root")
+    return f"--export=ALL,JEVPFN_DURABLE_ROOT={root}"
+
+
 def gpu_profile(name=None, *, runtime=None):
     """Resolve a native route; scratch workspaces are isolated per model runtime.
 
@@ -19,6 +29,17 @@ def gpu_profile(name=None, *, runtime=None):
     if name not in profiles:
         raise ValueError("Unknown GPU scheduling profile")
     profile = dict(profiles[name])
+    project = (os.environ.get("JEVPFN_DURABLE_ROOT") or os.environ.get("JEVPFN_PROJECT_ROOT")
+               or os.environ.get("VSC_PROJECT_ROOT"))
+    if project:
+        project_path = PurePosixPath(project)
+        if (not project_path.is_absolute() or ".." in project_path.parts
+                or project_path.name == "JEVPFN"):
+            raise ValueError("PROJECT override must name an absolute allocated shared root")
+        if profile.get("storage_mode") == "scratch_mirror":
+            profile["durable_root"] = project
+        else:
+            profile["staging_root"] = project
     allowed = {"wice": {"gpu_h100"}, "mindwell": {"gpu_b200"}}
     if profile["partition"] not in allowed.get(profile["cluster"], set()):
         raise ValueError("Unsupported cluster/partition combination")

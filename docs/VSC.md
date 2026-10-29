@@ -1,18 +1,59 @@
 # VSC operations
 
 Use this guide for execution; use README for the experiment design and
-AGENTS_MEMORY for dated observations. **Ten decision runtimes and three encoders have
-bounded B200 passes; Decision3 and the new TabSTAR runtime still need inference tests.**
-Final acceptance requires the complete frozen campaign and review.
+AGENTS_MEMORY for dated observations. Historical bounded B200 checks passed for all eleven
+open-weight decision runtimes, three encoders and TabSTAR. Final acceptance still requires
+one complete frozen campaign; historical setup passes are not current acceptance.
+
+## Shared manual access
+
+The canonical template and this project's copy matched byte-for-byte on 29 October 2026.
+The owner renews their shared Windows-agent certificate manually:
+
+```powershell
+step ssh login --context VSC
+```
+
+Approve KU Leuven Authenticator when prompted. Agents never initiate authentication,
+install a per-project agent, copy private keys or schedule renewal reminders. Ask for
+this command only if access actually requires renewal. Use native Windows OpenSSH with
+host-key checking and `-F none` to avoid optional automatic-login hooks.
+
+Follow TEMPLATE.md's bounded LF-script-on-stdin connection, without a trailing remote
+command. On 29 October the remote stdout marker and deliberate exit 7 arrived, but the
+unredirected stderr marker did not. Repeating the probe with `exec 2>&1` at the start of
+the remote script preserved both markers and exit 7. Use that explicit combined stream
+for this gateway, check completion/status markers, and do not treat empty exit-0 output
+as success. This is a verified gateway workaround, not an authentication failure.
+
+Read relevant files, logs, quotas and scheduler state directly after that probe. Access
+alone authorizes no submissions, cancellations, migration or deletion. Do not pull into
+a checkout consumed by active or queued jobs; keep recovery state until it is published.
 
 ## Storage and hardware
 
 | Role | Location |
 |---|---|
-| Checkout, CPU environment, small logs/manifests | `$VSC_DATA/JEVPFN` and `$VSC_DATA/conda_envs/JEVPFN` |
+| Actual Git checkout including `.git`, specs, small logs/manifests | `$VSC_DATA/JEVPFN` |
+| Legacy control environment awaiting verified replacement | `$VSC_DATA/conda_envs/JEVPFN` |
 | Authoritative raw data, prepared questions, weights, containers, features, predictions and large output | `/lustre1/project/stg_00211/JEVPFN` |
 | Active B200 working set, isolated by runtime | `$VSC_SCRATCH_GPFS1/jevpfn-work/<runtime>/JEVPFN` |
 | Local notebooks and downloaded/merged results | Local repository |
+
+Set `JEVPFN_PROJECT_ROOT` (or shared `VSC_PROJECT_ROOT`) to the allocated shared root,
+currently `/lustre1/project/stg_00211`; the resolver adds `JEVPFN`. An explicit legacy
+`JEVPFN_STAGING_ROOT` overrides it for a native working set. Launchers pass the resolved root in arguments and `--export=ALL,JEVPFN_DURABLE_ROOT=...`,
+including release jobs. Direct Slurm calls must likewise pass their root argument or explicit
+export option; arbitrary login-shell exports alone are not sufficient. No large-output fallback
+to DATA is allowed. Moving to another allocation is a reviewed migration, not an alias edit.
+
+All new cluster dependencies must be immutable containers on PROJECT, with temporary
+build files on scratch. The existing DATA control environment is still used by CPU jobs
+and container verification. Before retiring it: record its package versions, recreate
+those dependencies in a versioned PROJECT CPU image, verify CPU/question/token/storage
+and container-control behavior through Slurm, then cut over only with no consumers.
+No environment migration or retirement was performed in this update. Model containers
+already follow the policy. Retain old images only while a recorded run needs them.
 
 Mindwell B200 is the default GPU route. It uses native GPFS scratch; **no GPFS
 project allocation is required**. wICE CPU jobs stage/download/build/count on
@@ -419,7 +460,8 @@ Neither a larger balance nor successful smoke tests enables full extraction.
 
 ## One clean reset, question preparation and upload
 
-Do this **after** the B200 setup/encoder tests and local Jev pilot work, with all
+Do this **after** the B200 setup/encoder tests, local Jev pilot and reviewed CPU-control
+container migration described above, with all
 JEVPFN jobs and manual/notebook writers stopped. Preserve their evidence until the
 cause of every failure is understood. Synchronize the same reviewed source first.
 For the owner's interim clean debugging rerun, use the cleanup commands below after
@@ -659,7 +701,7 @@ This prints the exact submission command; it does not submit. GPU models default
 B200, CPU models remain wICE. Each task owns one dataset/model/representation and
 resumes its five folds through checksummed records. Predictions, probabilities,
 inner-OOF predictions, timing and all recorded metrics persist in per-dataset stores.
-Experiment 1/2/3 and optional exploratory follow-ups retain the design in README;
+Experiments 1/2/3 retain the design in README;
 GPU routing does not change the statistical protocol.
 
 ## Inspect utilization and transfer results

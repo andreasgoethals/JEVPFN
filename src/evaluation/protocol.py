@@ -179,7 +179,6 @@ def evaluate_cv(
     device: str = "cpu",
     estimator_settings: dict | None = None,
     feature_artifact_ids: list[str] | None = None,
-    permutation_columns: list[str] | None = None,
     fold_numbers: list[int] | None = None,
     representation_recipe: dict | None = None,
 ):
@@ -199,8 +198,6 @@ def evaluate_cv(
         "experiment_1",
         "experiment_2",
         "experiment_3",
-        "experiment_4",
-        "experiment_5",
     }:
         raise ValueError("Evaluation requires an experiment phase")
     row_ids = [f"csv:{i}" for i in range(len(dataset.frame))]
@@ -223,24 +220,8 @@ def evaluate_cv(
             "Resolved estimator settings and explicit feature artifact IDs are required"
         )
     feature_identity = feature_input_identity(features)
-    permutation_columns = list(permutation_columns or [])
-    if len(set(permutation_columns)) != len(permutation_columns) or set(permutation_columns) - set(
-        features
-    ):
-        raise ValueError("Invalid permutation-control columns")
-
     def partition_inputs(train, test, seed):
-        left, right = features.iloc[train].copy(), features.iloc[test].copy()
-        if permutation_columns:
-            from src.evaluation.features import shuffle_feature_block
-
-            shuffled = shuffle_feature_block(
-                left[permutation_columns], right[permutation_columns], seed=seed
-            )
-            left.loc[:, permutation_columns], right.loc[:, permutation_columns] = [
-                p.to_numpy() for p in shuffled
-            ]
-        return left, right
+        return features.iloc[train].copy(), features.iloc[test].copy()
 
     # Fail before any fit if configuration metadata cannot be serialized reproducibly.
     canonical_json(estimator_settings)
@@ -277,7 +258,6 @@ def evaluate_cv(
         "estimator_settings": estimator_settings,
         "split_id": specification["split_id"],
         "inner_folds": inner_folds if binary else None,
-        "permutation_columns": permutation_columns,
         "text_overlap_version": OVERLAP_VERSION,
         "protocol_sha256": code_identity(
             [
@@ -393,8 +373,7 @@ def evaluate_cv(
                     "inner_folds": inner_folds if binary else None,
                     "preprocessing": "inside_estimator_fit_training_partition_only",
                     "pca_diagnostics": pca_diagnostics,
-                    "permutation_columns": permutation_columns,
-                    "single_text_representations_equivalent": len(metadata.text_columns) == 1,
+                                "single_text_representations_equivalent": len(metadata.text_columns) == 1,
                     "fold_recipe_id": digest(fold_recipe),
                 }
                 for role, positions, predictions in [

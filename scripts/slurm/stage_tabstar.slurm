@@ -12,7 +12,7 @@
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT="${1:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
 export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
 unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE

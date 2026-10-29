@@ -34,18 +34,44 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
 
 ## Layout and operations
 
+The active research scope is Experiments 1–3, with prerequisite 0A/0B and a synthesis
+notebook. Experiments 4/5 and selected-winner combinations are removed. Do not reinstate
+them without an explicit request. Keep 0A input-robustness diagnostics and the main
+benchmark's statistical analysis in scope.
+
+VSC authentication is shared and manual. Reuse the owner's native Windows OpenSSH agent.
+Only when access needs renewal, ask them to run `step ssh login --context VSC` and approve
+KU Leuven Authenticator. Do not initiate login, install another agent, add project-specific
+credentials/configuration or schedule reminders. Follow docs/TEMPLATE.md's bounded native
+`ssh.exe -F none -T` stdin-script probe, with host-key verification. Verify markers and exit
+status; an empty exit-0 response proves nothing. The current gateway drops unredirected
+remote stderr: the verified project workaround is `exec 2>&1` inside the LF script, retaining
+error text in stdout and the remote exit status. See docs/VSC.md for the dated evidence.
+Inspect this project's remote logs, files, quotas and jobs directly when relevant. Access
+does not authorize new workloads, cancellation, migration or cleanup. Preserve active/queued
+checkouts and recovery data; never update source consumed by a job.
+
 Reusable Python is in src/; upstream data-source snapshots stay under src/data/upstream/ and
 are never executed. Config/notebook/output phase folders use the same numbers. Do not create
 empty phase folders or copied question files. All notebooks run locally; permanent questions
 and responses/features each use one SQLite file per selected dataset under data/.
 
-On VSC, PROJECT holds large inputs/weights/environments, permanent caches, token counts,
+On VSC, the actual Git checkout and `.git` stay on DATA. PROJECT holds large inputs/weights,
+immutable containers containing installed dependencies, permanent caches, token counts,
 predictions and large results. DATA holds the checkout, compact manifests and operational
 logs. Both use JEVPFN/output_JEVPFN/<number>. phase/. Use the validated transfer export/import,
 never wholesale replacement of populated caches. See docs/VSC.md for commands/site details.
 The owner excludes all A100 allocations, including debug/MIG routes. GPU jobs default to
 Mindwell B200. CPU staging prepares per-runtime native GPFS scratch working sets; durable
-Lustre remains authoritative. Separate blackwell-cu130 containers, staged-input receipts,
+Lustre remains authoritative. Use `JEVPFN_PROJECT_ROOT` or `VSC_PROJECT_ROOT` for the allocated
+shared root; legacy `JEVPFN_STAGING_ROOT` remains an explicit working-set override so B200
+jobs cannot accidentally read cross-mounted PROJECT. Never silently fall back to DATA.
+The existing DATA control Conda environment is a documented migration exception, not the
+desired layout. Recreate and verify a PROJECT CPU container before a deliberate idle cutover;
+do not move/retire the existing environment automatically. Scratch is temporary: retain failed
+or resumable work until verified publication and explicit scoped retirement; never wipe shared
+scratch. Check byte/file quotas and keep immutable assets needed by active jobs.
+Separate blackwell-cu130 containers, staged-input receipts,
 periodic/final durable cache publication and real GPU contracts are required. Never stream
 bulk model data from cross-mounted Lustre during B200 inference.
 

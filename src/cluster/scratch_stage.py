@@ -27,7 +27,7 @@ def roots(runtime):
 
     if runtime not in RUNTIMES:
         raise ValueError("Unknown runtime for B200 working set")
-    durable = Path(os.environ.get("JEVPFN_DURABLE_ROOT", paths.STAGING_FALLBACK))
+    durable = paths.durable_project_override() or Path(paths.STAGING_FALLBACK)
     scratch = os.environ.get("VSC_SCRATCH_GPFS1")
     if not scratch or not Path(scratch).is_absolute():
         raise ValueError("VSC_SCRATCH_GPFS1 must identify your existing GPFS scratch allocation")

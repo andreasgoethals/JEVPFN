@@ -35,6 +35,23 @@ def test_preview_and_phase_category_tier_selection(output):
     assert paths.dataset_cache_path("paid").read_text() == "paid"
 
 
+def test_retired_experiment_output_remains_scoped_and_removable(output):
+    root = paths.outputs_dir()
+    for relative in ("7. experiment_4/logs/old.log", "8. experiment_5/results/old.csv",
+                     "9. synthesis/results/old.csv"):
+        file = root / relative
+        file.parent.mkdir(parents=True)
+        file.write_text("historical output")
+    # Active-phase cleanup does not fail on old folders or include their files.
+    current = cleanup.run(tier="data", phases=["experiment_0"])
+    assert all("3. experiment_0" in f["path"] for f in current["files"])
+    synthesis = cleanup.run(tier="data", phases=["synthesis"])
+    assert any("9. synthesis" in f["path"] for f in synthesis["files"])
+    all_output = cleanup.run(tier="data")
+    assert any("7. experiment_4" in f["path"] for f in all_output["files"])
+    assert any("8. experiment_5" in f["path"] for f in all_output["files"])
+
+
 def test_age_pattern_and_no_implicit_deletion(output):
     old = paths.outputs_dir() / "3. experiment_0/logs/run.log"
     os.utime(old, (1, 1))

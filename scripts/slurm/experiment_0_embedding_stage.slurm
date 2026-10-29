@@ -13,7 +13,7 @@
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211 JEVPFN_CONDA_ENV=JEVPFN
+export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}" JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
 for encoder in e5_small_v2 e5_large_v2 qwen3_embedding_0_6b; do
     "${JEVPFN_PYTHON:?}" -m src.data.text_embeddings --stage --encoder "$encoder"
