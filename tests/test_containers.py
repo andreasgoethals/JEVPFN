@@ -5,6 +5,38 @@ from src.utils import paths
 from src.utils.serialization import digest, write_json
 
 
+def test_nested_guard_upgrade_preserves_sealed_images_and_detects_repeat(tmp_path):
+    import json
+    import shutil
+
+    source, target = tmp_path / "sealed", tmp_path / "native"
+    (source / "bin").mkdir(parents=True)
+    guard = "if  grep -q 'singularity/mnt/session\\|apptainer/mnt/session' /proc/self/mountinfo ;then"
+    for name, text in {"base.sif": "image", "env.sqfs": "dependencies", "bin/python": "wrapper",
+                       "common.sh": "INSTALLATION_PATH=/IMAGE_PREFIX\n" + guard + "\nexport _CW_IN_CONTAINER=Yes\nfi\n"}.items():
+        (source / name).write_text(text)
+    body = dict(schema="jevpfn.container.v1", provider="fixture", files=containers.files(source))
+    body["container_id"] = digest(body)
+    write_json(source / containers.MARKER, body)
+    shutil.copytree(source, target)
+    current = containers.relocate(source, target)
+    assert '&& [[ -e "$INSTALLATION_PATH" ]]' in (target / "common.sh").read_text()
+    assert guard in (source / "common.sh").read_text()
+    assert containers.relocate(source, target) == current
+    # A verified older native copy upgrades without changing its image bytes.
+    text = (target / "common.sh").read_text().replace(' && [[ -e "$INSTALLATION_PATH" ]]; then', ' ;then')
+    (target / "common.sh").write_text(text)
+    old = json.loads((target / containers.MARKER).read_text())
+    old["relocation"]["wrapper_policy_version"] = 1
+    old["files"] = containers.files(target)
+    old["container_id"] = digest({k: v for k, v in old.items() if k != "container_id"})
+    write_json(target / containers.MARKER, old)
+    upgraded = containers.relocate(source, target)
+    assert upgraded["relocation"]["wrapper_policy_version"] == 2
+    assert (target / "env.sqfs").read_bytes() == (source / "env.sqfs").read_bytes()
+    assert '&& [[ -e "$INSTALLATION_PATH" ]]' in (target / "common.sh").read_text()
+
+
 @pytest.fixture
 def packed(isolated_output, monkeypatch):
     monkeypatch.setenv("SLURM_JOB_ID", "synthetic-build")

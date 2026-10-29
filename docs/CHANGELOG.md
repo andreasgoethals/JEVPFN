@@ -2,6 +2,12 @@
 
 ## 29-10-2026
 
+- Live CPU tests passed Slurm accounting/scheduling, two-node Lustre locks and the
+  synthetic/data checks. Diagnose Tykky's guard assuming every enclosing container
+  is its own. Correct that guard only in checksum-verified native/temporary wrapper
+  copies, version their relocation policy, and preserve source image seals. Test
+  the real monitored model launch through a private scratch copy before cutover.
+
 - Diagnose the CPU image's differing self-view on VSC: Tykky masks bin with its
   in-image executables. Preserve full byte/link verification using an additional
   read-only unmasked host bind; use that verified view when copying the CPU image

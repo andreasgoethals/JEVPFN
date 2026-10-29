@@ -15,7 +15,18 @@ verified cutover, final local/VSC output reset, full 0A, evidence review/accepta
 open-weight feature creation. Full Jev extraction waits for the owner. Read-only SSH
 at 16:44 found JEVPFN idle, PROJECT 538.3G/1T and 45,347 files, GPFS scratch 8.634G/500G.
 The existing control Python is 3.12.15. Its package versions are frozen in
-experiment_0/control_runtime.yaml. Build/test results remain pending until recorded.
+experiment_0/control_runtime.yaml. CPU image build 62468642 passed (27m02s), with sealed ID
+f04a2aef749aea1e56a397289aab237465a6f9dbc4cd6a8494d500bf305a2b7d.
+Read-only upload validation 62468736 passed all 18 members; none matched the old
+installed file bytes, so installation remains required. Local question audit passed
+18 datasets, 1,698,127 inputs and 3,294,340 links. Control test 62468965 passed Slurm
+accounting/scheduling, two-node Lustre locks and CPU/data contracts; its overall
+status failed because the monitored model wrapper rejects another enclosing image.
+Earlier self-integrity failure was Tykky masking bin: preserve the read-only
+/JEVPFN_CONTROL_HOST bind and verify all original bytes there. The native wrapper
+relocation now has policy version 2, recognizing its own installation prefix before
+assuming it is already inside its target image. Original PROJECT GPU image seals
+remain unchanged. Current cutover acceptance is still pending launch validation.
 
 ## Current scope and direct access, 29 October
 

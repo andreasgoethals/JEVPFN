@@ -23,6 +23,7 @@ from src.utils import paths
 from src.utils.serialization import digest, file_sha256, write_json
 
 MARKER = "_JEVPFN_CONTAINER.json"
+WRAPPER_POLICY_VERSION = 2
 PREDICTORS = (
     "catboost",
     "tabpfn_3_5",
@@ -220,6 +221,7 @@ def relocate(source, destination, *, source_view=None):
         raise ValueError("Source container fingerprint differs from its seal")
     copied = json.loads((destination / MARKER).read_text(encoding="utf-8"))
     previous = copied.get("relocation", {})
+    upgrade = False
     if previous.get("source_container_id") == manifest["container_id"]:
         if (
             copied.get("container_id")
@@ -227,12 +229,15 @@ def relocate(source, destination, *, source_view=None):
             and copied.get("files") == files(destination)
             and previous.get("destination") == str(destination)
         ):
-            return copied
-        raise ValueError("Previously relocated container has changed")
-    if copied != manifest:
+            if previous.get("wrapper_policy_version") == WRAPPER_POLICY_VERSION:
+                return copied
+            upgrade = True
+        else:
+            raise ValueError("Previously relocated container has changed")
+    if not upgrade and copied != manifest:
         raise ValueError("Destination is not the unmodified copied source seal")
     # Check copied bytes before rewriting links that still point inside source.
-    expected = manifest["files"]
+    expected = copied["files"] if upgrade else manifest["files"]
     actual = {}
     for path in sorted(destination.rglob("*")):
         if path.name in {MARKER, "retired_source.json"}:
@@ -283,6 +288,13 @@ def relocate(source, destination, *, source_view=None):
                 raise ValueError("Reserved relocation placeholder in wrapper")
             edited = text.replace(str(image_root), protected) if image_root else text
             edited = edited.replace(old, new)
+            if path.name == "common.sh":
+                guard = "if  grep -q 'singularity/mnt/session\\|apptainer/mnt/session' /proc/self/mountinfo ;then"
+                nested = "if  grep -q 'singularity/mnt/session\\|apptainer/mnt/session' /proc/self/mountinfo && [[ -e \"$INSTALLATION_PATH\" ]]; then"
+                if guard in edited:
+                    edited = edited.replace(guard, nested)
+                elif "_CW_IN_CONTAINER" in edited and nested not in edited:
+                    raise ValueError("Tykky container guard changed; review before enabling nested launch")
             if image_root:
                 edited = edited.replace(protected, str(image_root))
             if edited != text:
@@ -295,8 +307,9 @@ def relocate(source, destination, *, source_view=None):
             "source_container_id": manifest["container_id"],
             "source": str(source),
             "destination": str(destination),
-            "rewritten_host_files": rewritten,
+            "rewritten_host_files": sorted(set(previous.get("rewritten_host_files", [])) | set(rewritten)),
             "image_internal_prefix_preserved": image_root,
+            "wrapper_policy_version": WRAPPER_POLICY_VERSION,
         },
     }
     result["container_id"] = digest({k: v for k, v in result.items() if k != "container_id"})

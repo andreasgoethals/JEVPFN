@@ -48,6 +48,38 @@ def child_command(command):
     return result
 
 
+def nested_model_probe(root):
+    import shutil
+    import tempfile
+
+    from src.cluster.containers import relocate
+
+    source = root / "containers/blackwell-cu130/cloudflare"
+    with tempfile.TemporaryDirectory(
+        prefix="jevpfn-control-launch-", dir=os.environ["VSC_SCRATCH_LUSTRE1"]
+    ) as temp:
+        target = Path(temp) / "cloudflare"
+        shutil.copytree(source, target, symlinks=True)
+        relocate(source, target)
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "src.cluster.monitor",
+                "--",
+                str(target / "bin/python"),
+                "-I",
+                "-c",
+                "import sys; assert sys.version_info[:2]==(3,12); print('NESTED_IMAGE_PASSED')",
+            ],
+            env=child_environment(),
+            text=True,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+
+
 def integration_test():
     from src.utils import paths
     from src.utils.serialization import write_json
@@ -88,17 +120,21 @@ def integration_test():
     ]
     results = []
     for command in commands:
-        run = subprocess.run(
-            command,
-            env=child_environment(),
-            text=True,
-            capture_output=True,
-            timeout=120,
-            check=False,
+        run = (
+            nested_model_probe(root)
+            if "src.cluster.monitor" in command
+            else subprocess.run(
+                command,
+                env=child_environment(),
+                text=True,
+                capture_output=True,
+                timeout=120,
+                check=False,
+            )
         )
         results.append(
             dict(
-                command=command,
+                command=run.args,
                 returncode=run.returncode,
                 stdout=run.stdout[-4000:],
                 stderr=run.stderr[-2000:],
