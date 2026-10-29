@@ -48,6 +48,24 @@ def test_project_and_data_roundtrip(tmp_path, monkeypatch):
     assert all(item["status"] == "reused" for item in again["outputs"])
 
 
+def test_compact_backup_omits_only_rebuildable_counts_and_keeps_responses(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    cache(paths.dataset_cache_path("fixture"), request("liquid"))
+    counts = paths.token_audit_dir() / "liquid_counts.sqlite3"
+    counts.parent.mkdir(parents=True)
+    # Not opened as SQLite when explicitly omitted.
+    counts.write_bytes(b"rebuildable token database")
+    evidence = paths.manifests_dir("experiment_0") / "before_extraction/tokens_liquid.json"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text('{"status":"token evidence"}')
+    with zipfile.ZipFile(export_bundle(include_token_counts=False)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    assert any(r["kind"] == "cache" for r in manifest["files"])
+    assert any(r["path"].endswith("tokens_liquid.json") for r in manifest["files"])
+    assert not any("token_audit/" in r["path"] for r in manifest["files"])
+    assert "rebuildable merged token counts" in manifest["omitted"]
+
+
 @pytest.mark.parametrize(
     "path,body,sha",
     [

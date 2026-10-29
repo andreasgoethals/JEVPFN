@@ -39,7 +39,7 @@ def _safe_relative(value):
     return path
 
 
-def export_bundle() -> Path:
+def export_bundle(*, include_token_counts=True) -> Path:
     """Run after writers finish. Bundle is large, so it always lives on PROJECT on VSC."""
     if paths.on_vsc():
         from src.cluster.preflight import storage_policy_failures
@@ -105,6 +105,8 @@ def export_bundle() -> Path:
                         continue
                     if "token_audit" in relative.parts and "shards" in relative.parts:
                         continue  # Rebuildable CPU restart files; merged counts are exported.
+                    if not include_token_counts and "token_audit" in relative.parts:
+                        continue  # Keep compact token receipts, omit reproducible count databases.
                     # Only numbered research phases; generated local notebook reports stay local.
                     if not relative.parts or relative.parts[0] not in {
                         paths.phase_folder(p)
@@ -142,6 +144,7 @@ def export_bundle() -> Path:
                     "raw datasets",
                     "prepared inputs",
                     "token audit restart partitions",
+                    *([] if include_token_counts else ["rebuildable merged token counts"]),
                     "credentials",
                 ],
             }
@@ -356,12 +359,14 @@ def import_bundle(bundle: Path) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("export")
+    exporter = sub.add_parser("export")
+    exporter.add_argument("--omit-token-counts", action="store_true",
+                          help="Back up responses, features and reports without rebuildable token databases")
     importer = sub.add_parser("import")
     importer.add_argument("bundle", type=Path)
     args = parser.parse_args()
     if args.command == "export":
-        print(export_bundle(), flush=True)
+        print(export_bundle(include_token_counts=not args.omit_token_counts), flush=True)
     else:
         print(json.dumps(import_bundle(args.bundle), indent=2), flush=True)
 

@@ -8,6 +8,7 @@ protocol bounds storage. Jev and all predictive benchmarks are excluded.
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
 
@@ -150,18 +151,26 @@ def run(*, execute=False):
     def submit(step):
         step["status"] = "starting"
         save()
-        result = subprocess.run(
-            step["command"],
-            cwd=paths.REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=True,
-        )
-        value = result.stdout.strip().split(";")[0]
-        if not value.isdigit():
+        try:
+            result = subprocess.run(
+                step["command"], cwd=paths.REPO_ROOT, capture_output=True,
+                text=True, timeout=60, check=True,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            step["submission_diagnostics"] = {
+                "error_type": type(exc).__name__,
+                **{key: str(getattr(exc, key, None) or "")[-4096:] for key in ("stdout", "stderr")},
+            }
+            save()  # An uncertain submission stays 'starting'; never resubmit it blindly.
+            raise
+        step["submission_diagnostics"] = {
+            key: str(getattr(result, key, None) or "")[-4096:] for key in ("stdout", "stderr")
+        }
+        save()
+        value = result.stdout.strip()
+        if not re.fullmatch(r"[0-9]+(?:;" + step["cluster"] + r")?", value):
             raise ValueError("Ambiguous sbatch receipt; inspect accounting")
-        step.update(job_id=value, status="submitted")
+        step.update(job_id=value.split(";")[0], status="submitted")
         save()
 
     report["summary"] = advance(

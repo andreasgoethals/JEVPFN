@@ -31,7 +31,11 @@ and the PROJECT control image is now selected by its persistent cutover receipt.
 Input install 62470733 failed before replacement because --noheader also hides
 Slurm cluster labels. Maintenance now queries both clusters separately, exempting
 only its exact current allocation. Native B200 control validation and old-prefix
-retirement are the remaining migration gates.
+retirement are the remaining migration gates. Input install 62470782 passed (2m25s),
+replacing all eighteen files with the independently validated upload. A queued
+dependent consumer correctly blocks installation too; submit staging only after
+the globally quiescent installer finishes. Local suite: 1,144 passed, 25 platform/
+optional skips; compact-backup and uncertain full-campaign submission checks also pass.
 
 ## Current scope and direct access, 29 October
 

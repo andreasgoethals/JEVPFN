@@ -74,9 +74,10 @@ Mindwell B200. CPU staging prepares per-runtime native GPFS scratch working sets
 Lustre remains authoritative. Use `JEVPFN_PROJECT_ROOT` or `VSC_PROJECT_ROOT` for the allocated
 shared root; legacy `JEVPFN_STAGING_ROOT` remains an explicit working-set override so B200
 jobs cannot accidentally read cross-mounted PROJECT. Never silently fall back to DATA.
-The existing DATA control Conda environment is a documented migration exception, not the
-desired layout. Recreate and verify a PROJECT CPU container before a deliberate idle cutover;
-do not move/retire the existing environment automatically. Scratch is temporary: retain failed
+The CPU controller uses a versioned PROJECT image selected by control.active.json.
+An old DATA prefix may remain only until the recorded CPU and native B200 migration
+gates pass. Retirement requires the owner's authorization and an idle checkout; preserve
+the shared Miniconda installation and other projects. Scratch is temporary: retain failed
 or resumable work until verified publication and explicit scoped retirement; never wipe shared
 scratch. Check byte/file quotas and keep immutable assets needed by active jobs.
 Separate blackwell-cu130 containers, staged-input receipts,

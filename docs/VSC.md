@@ -35,7 +35,7 @@ a checkout consumed by active or queued jobs; keep recovery state until it is pu
 | Role | Location |
 |---|---|
 | Actual Git checkout including `.git`, specs, small logs/manifests | `$VSC_DATA/JEVPFN` |
-| Legacy control environment awaiting verified replacement | `$VSC_DATA/conda_envs/JEVPFN` |
+| CPU controller and its immutable dependency image | `PROJECT/JEVPFN/containers/control-v1` |
 | Authoritative raw data, prepared questions, weights, containers, features, predictions and large output | `/lustre1/project/stg_00211/JEVPFN` |
 | Active B200 working set, isolated by runtime | `$VSC_SCRATCH_GPFS1/jevpfn-work/<runtime>/JEVPFN` |
 | Local notebooks and downloaded/merged results | Local repository |
@@ -47,13 +47,12 @@ including release jobs. Direct Slurm calls must likewise pass their root argumen
 export option; arbitrary login-shell exports alone are not sufficient. No large-output fallback
 to DATA is allowed. Moving to another allocation is a reviewed migration, not an alias edit.
 
-All new cluster dependencies must be immutable containers on PROJECT, with temporary
-build files on scratch. The existing DATA control environment is still used by CPU jobs
-and container verification. Before retiring it: record its package versions, recreate
-those dependencies in a versioned PROJECT CPU image, verify CPU/question/token/storage
-and container-control behavior through Slurm, then cut over only with no consumers.
-No environment migration or retirement was performed in this update. Model containers
-already follow the policy. Retain old images only while a recorded run needs them.
+Cluster dependencies use immutable containers on PROJECT, with temporary build files
+on scratch. The CPU image was recreated from recorded package versions and activated
+after job 62469013 passed CPU/data, nested-launch and two-node storage tests. The old
+DATA prefix remains protected until the separate native B200 migration test passes;
+its guarded retirement preserves shared Miniconda and all other environments.
+Model containers follow the same policy. Retain old images only while a recorded run needs them.
 
 Mindwell B200 is the default GPU route. It uses native GPFS scratch; **no GPFS
 project allocation is required**. wICE CPU jobs stage/download/build/count on
@@ -129,7 +128,11 @@ cutover receipt embeds the reports, so a later deliberate output reset preserves
 the image's installation evidence. Normal activation then verifies the selected
 image and fails on corruption. B200 staging includes a checksum-verified native
 copy of this small CPU image alongside its model image, within the same quota budget.
-The old control environment is retained until cutover validation is complete.
+The old control environment is retained until cutover validation is complete. After
+native staging, `control_gpu_test.slurm` verifies both the native CPU image and a
+monitored model-container CUDA kernel on B200. Only a matching pass permits
+`python -m src.cluster.control_runtime retire-legacy --test-job-id JOBID`; this
+removes the exact DATA/conda_envs/JEVPFN prefix and records evidence outside output.
 
 Question ZIP installation has `input_install.slurm`; it validates on a CPU node,
 ignores only its own job in the quiescence check and refuses all other JEVPFN consumers.
@@ -762,6 +765,9 @@ weights or environments. Import verifies paths/checksums and transactionally mer
 compatible databases; conflicting records stop. Do not overwrite local caches with
 an unvalidated folder copy. All notebooks run locally and save executed outputs,
 paper-sized PDF figures, `figures/Captions.md` and the complete `All Results.md`.
+For a smaller independent response/feature backup, use `export --omit-token-counts`.
+It retains cache databases, predictions and compact evidence while omitting only
+rebuildable detailed token databases. The default export still includes merged counts.
 
 ## Accepted open-weight feature campaign
 

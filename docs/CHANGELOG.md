@@ -2,6 +2,11 @@
 
 ## 29-10-2026
 
+- Add compact independent backup export that retains responses/features/evidence and
+  optionally omits rebuildable token databases. Preserve complete submission diagnostics
+  and reject unknown cluster receipts in the accepted full feature launcher; an uncertain
+  submission cannot trigger an automatic duplicate allocation.
+
 - CPU control image passed integration, nested model launch, two-node locks and data
   contracts in job 62469013; activate its persistent cutover receipt. Add a separate
   native B200 migration test and guarded retirement of only the old DATA environment.

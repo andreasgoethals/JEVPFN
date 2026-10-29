@@ -34,3 +34,41 @@ def test_dataset_partitioning_cannot_shrink_the_acceptance_pilot():
 
     with pytest.raises(ValueError, match="pilots cover all datasets"):
         run("liquid", dataset_id="MUL_TEXT_WINE_REVIEW")
+
+
+def test_ambiguous_submission_retains_diagnostics_and_cannot_duplicate(isolated_output, monkeypatch):
+    import json
+    import subprocess
+
+    from src.cluster import feature_campaign as campaign
+    from src.data import text_embeddings
+    from src.utils import paths
+
+    settings = load_yaml("experiment_0/scheduling")
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.setattr(paths, "on_vsc", lambda: True)
+    monkeypatch.setattr(campaign, "check_if_present", lambda: {"frozen": True})
+    monkeypatch.setattr(campaign, "runtime_pins", lambda: {})
+    monkeypatch.setattr(campaign, "reviewed_acceptance", lambda *a, **k: {})
+    monkeypatch.setattr(campaign, "require_idle_vsc", lambda: None)
+    monkeypatch.setattr(text_embeddings, "encoder_config", lambda _: {"enabled": True})
+    monkeypatch.setattr(campaign, "plan", lambda: [dict(name="fixture", cluster="wice", command=["sbatch"], depends_on=[])])
+    monkeypatch.setattr(campaign, "load_yaml", lambda name: settings if name.endswith("scheduling") else
+                        {"models": {"e5_small_v2": {}}, "full_feature_creation_enabled": True,
+                         "accepted_before_extraction_manifests": dict.fromkeys(SELF_HOSTED, "reviewed.json")})
+    calls = []
+
+    def uncertain(command, **kwargs):
+        calls.append(command)
+        raise subprocess.TimeoutExpired(command, 60, stderr="scheduler timed out")
+
+    monkeypatch.setattr(campaign.subprocess, "run", uncertain)
+    with pytest.raises(subprocess.TimeoutExpired):
+        campaign.run(execute=True)
+    receipt = paths.manifests_dir("feature_creation") / "open_weight_campaign.json"
+    step = json.loads(receipt.read_text())["steps"][0]
+    assert step["status"] == "starting"
+    assert step["submission_diagnostics"]["stderr"] == "scheduler timed out"
+    with pytest.raises(ValueError, match="ambiguous"):
+        campaign.run(execute=True)
+    assert len(calls) == 1
