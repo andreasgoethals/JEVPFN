@@ -250,7 +250,7 @@ def test_gpu_memory_profiles_fit_b200_and_token_job_matches_four_cores():
                 if line.startswith("#SBATCH --mem=")
             )
             assert memory.endswith("M") and int(memory[:-1]) <= 194400
-    assert gpu_jobs == 7
+    assert gpu_jobs == 8
     assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
 
 
@@ -282,7 +282,7 @@ def test_all_monitored_jobs_separate_host_monitor_from_workload_interpreter():
             )
             assert '-- "${JEVPFN_PYTHON:?}" -m ' in call
             monitored.append(script.name)
-    assert len(monitored) == 8
+    assert len(monitored) == 9
 
 
 def test_perplexity_requirements_guard_runs_before_packages_exist(tmp_path):

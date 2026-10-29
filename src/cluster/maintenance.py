@@ -15,31 +15,34 @@ def require_idle_vsc(*, allow_current=False):
     if failures:
         raise ValueError("; ".join(failures))
     # Check both clusters; unrelated jobs such as CreditPFN do not block maintenance.
-    listing = subprocess.check_output(
-        ["squeue", "--me", "--clusters=wice,mindwell", "--noheader", "--format=%i|%j|%Z"],
-        text=True,
-        timeout=30,
-    )
     checkout = paths.REPO_ROOT.resolve()
     active = []
-    cluster = None
-    for line in listing.splitlines():
-        if line.startswith("CLUSTER:"):
-            cluster = line.partition(":")[2].strip()
-            continue
-        if not line.strip():
-            continue
-        parts = line.strip().split("|", 2)
-        if len(parts) != 3:
-            raise ValueError("Cannot interpret the scheduler listing; maintenance refused")
-        job, name, directory = (p.strip() for p in parts)
-        if allow_current and job == os.environ.get("SLURM_JOB_ID") and cluster == os.environ.get("SLURM_CLUSTER_NAME"):
-            continue  # Explicit single maintenance allocation; all other consumers still block it.
-        in_checkout = directory.startswith("/") and Path(directory).resolve().is_relative_to(
-            checkout
+    # --noheader suppresses federation cluster labels too. Query separately so an
+    # equal numeric ID on another cluster cannot be mistaken for this allocation.
+    for cluster in ("wice", "mindwell"):
+        listing = subprocess.check_output(
+            ["squeue", "--me", "--clusters=" + cluster, "--noheader", "--format=%i|%j|%Z"],
+            text=True,
+            timeout=30,
         )
-        if name.lower().startswith("jevpfn") or in_checkout:
-            active.append(job)
+        for line in listing.splitlines():
+            if not line.strip() or line.startswith("CLUSTER:"):
+                continue
+            parts = line.strip().split("|", 2)
+            if len(parts) != 3:
+                raise ValueError("Cannot interpret the scheduler listing; maintenance refused")
+            job, name, directory = (p.strip() for p in parts)
+            if (
+                allow_current
+                and job == os.environ.get("SLURM_JOB_ID")
+                and cluster == os.environ.get("SLURM_CLUSTER_NAME")
+            ):
+                continue  # Only the exact maintenance allocation is exempt.
+            in_checkout = directory.startswith("/") and Path(directory).resolve().is_relative_to(
+                checkout
+            )
+            if name.lower().startswith("jevpfn") or in_checkout:
+                active.append(cluster + ":" + job)
     if active:
         raise RuntimeError(
             "Wait for queued/running JEVPFN jobs before maintenance: " + ", ".join(active)

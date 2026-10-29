@@ -217,7 +217,9 @@ def relocate(source, destination, *, source_view=None):
         raise ValueError("Only the CPU control image has an alternate host view")
     if manifest.get("container_id") != digest(
         {k: v for k, v in manifest.items() if k != "container_id"}
-    ) or manifest.get("files") != (files(view, link_root=source) if source_view is not None else files(source)):
+    ) or manifest.get("files") != (
+        files(view, link_root=source) if source_view is not None else files(source)
+    ):
         raise ValueError("Source container fingerprint differs from its seal")
     copied = json.loads((destination / MARKER).read_text(encoding="utf-8"))
     previous = copied.get("relocation", {})
@@ -294,7 +296,9 @@ def relocate(source, destination, *, source_view=None):
                 if guard in edited:
                     edited = edited.replace(guard, nested)
                 elif "_CW_IN_CONTAINER" in edited and nested not in edited:
-                    raise ValueError("Tykky container guard changed; review before enabling nested launch")
+                    raise ValueError(
+                        "Tykky container guard changed; review before enabling nested launch"
+                    )
             if image_root:
                 edited = edited.replace(protected, str(image_root))
             if edited != text:
@@ -307,7 +311,9 @@ def relocate(source, destination, *, source_view=None):
             "source_container_id": manifest["container_id"],
             "source": str(source),
             "destination": str(destination),
-            "rewritten_host_files": sorted(set(previous.get("rewritten_host_files", [])) | set(rewritten)),
+            "rewritten_host_files": sorted(
+                set(previous.get("rewritten_host_files", [])) | set(rewritten)
+            ),
             "image_internal_prefix_preserved": image_root,
             "wrapper_policy_version": WRAPPER_POLICY_VERSION,
         },

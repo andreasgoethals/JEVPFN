@@ -2,6 +2,12 @@
 
 ## 29-10-2026
 
+- CPU control image passed integration, nested model launch, two-node locks and data
+  contracts in job 62469013; activate its persistent cutover receipt. Add a separate
+  native B200 migration test and guarded retirement of only the old DATA environment.
+  Fix maintenance's current-job exemption: Slurm suppresses cluster labels under
+  --noheader, so query each cluster explicitly instead of inferring those labels.
+
 - Live CPU tests passed Slurm accounting/scheduling, two-node Lustre locks and the
   synthetic/data checks. Diagnose Tykky's guard assuming every enclosing container
   is its own. Correct that guard only in checksum-verified native/temporary wrapper

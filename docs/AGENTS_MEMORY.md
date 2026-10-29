@@ -26,7 +26,12 @@ Earlier self-integrity failure was Tykky masking bin: preserve the read-only
 /JEVPFN_CONTROL_HOST bind and verify all original bytes there. The native wrapper
 relocation now has policy version 2, recognizing its own installation prefix before
 assuming it is already inside its target image. Original PROJECT GPU image seals
-remain unchanged. Current cutover acceptance is still pending launch validation.
+remain unchanged. Job 62469013 passed all integration/storage/data checks (3m44s),
+and the PROJECT control image is now selected by its persistent cutover receipt.
+Input install 62470733 failed before replacement because --noheader also hides
+Slurm cluster labels. Maintenance now queries both clusters separately, exempting
+only its exact current allocation. Native B200 control validation and old-prefix
+retirement are the remaining migration gates.
 
 ## Current scope and direct access, 29 October
 

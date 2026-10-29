@@ -269,6 +269,83 @@ def activate(job_id):
     return manifest
 
 
+def gpu_test():
+    """Validate a native controller/model launch before retiring its old bootstrap."""
+    from src.cluster.runtime_profiles import gpu_check
+    from src.utils import paths
+    from src.utils.serialization import write_json
+
+    image = Path(os.environ["JEVPFN_CONTROL_IMAGE"])
+    if os.environ.get("SLURM_CLUSTER_NAME") != "mindwell" or "gpfs" not in str(image):
+        raise ValueError("Migration GPU test requires the native Mindwell working set")
+    control = verify(image)
+    source_id = control.get("relocation", {}).get("source_container_id")
+    if not source_id:
+        raise ValueError("Native controller must identify its verified durable source")
+    result = dict(
+        status="control_b200_passed",
+        container_id=control["container_id"],
+        source_container_id=source_id,
+        job_id=os.environ["SLURM_JOB_ID"],
+        control_image=str(image),
+        model_python=sys.executable,
+        gpu=gpu_check(),
+    )
+    write_json(
+        paths.manifests_dir("experiment_0")
+        / "before_extraction"
+        / ("control_gpu_" + result["job_id"] + ".json"),
+        result,
+    )
+    return result
+
+
+def retire_legacy(job_id):
+    """Retire only this project's recorded DATA bootstrap after live GPU verification."""
+    import shutil
+
+    from src.cluster.maintenance import reject_links, require_idle_vsc
+    from src.utils import paths
+    from src.utils.serialization import write_json
+
+    require_idle_vsc()
+    root = paths.checkpoints_dir().parent
+    manifest = verify(root / "containers" / LEAF, active=root / "containers/control.active.json")
+    evidence = (
+        paths.manifests_dir("experiment_0")
+        / "before_extraction"
+        / ("control_gpu_" + job_id + ".json")
+    )
+    report = json.loads(evidence.read_text(encoding="utf-8"))
+    if (
+        report.get("status") != "control_b200_passed"
+        or report.get("job_id") != job_id
+        or report.get("source_container_id") != manifest["container_id"]
+        or report.get("gpu", {}).get("basic_kernel_check") != "passed"
+    ):
+        raise ValueError("A matching real B200 control migration test is required")
+    data = Path(os.environ["VSC_DATA"]).resolve(strict=True)
+    target = reject_links(data / "conda_envs/JEVPFN")
+    if target.resolve() != target or not target.is_relative_to(data / "conda_envs"):
+        raise ValueError("Legacy environment escaped its exact DATA destination")
+    if target.exists() and not (target / "conda-meta/history").is_file():
+        raise ValueError("The expected legacy Conda environment is not identifiable")
+    receipt = root / "containers/control.legacy-retired.json"
+    result = dict(
+        status="legacy_control_retired",
+        path=str(target),
+        container_id=manifest["container_id"],
+        gpu_evidence=report,
+        preserved=["shared miniconda", "other environments", "data", "weights", "containers"],
+    )
+    # Acceptance is recorded outside output before deleting only the exact old prefix.
+    write_json(receipt, {**result, "status": "retiring_legacy_control"})
+    if target.exists():
+        shutil.rmtree(target)
+    write_json(receipt, result)
+    return result
+
+
 def seal(folder):
     from datetime import UTC, datetime
 
@@ -325,20 +402,30 @@ def seal(folder):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("verify", "seal", "test", "activate"))
+    parser.add_argument(
+        "action", choices=("verify", "seal", "test", "gpu-test", "activate", "retire-legacy")
+    )
     parser.add_argument("folder", type=Path, nargs="?")
     parser.add_argument("--active", type=Path)
     parser.add_argument("--test-job-id")
     args = parser.parse_args()
+    if args.action in {"activate", "retire-legacy"} and not args.test_job_id:
+        parser.error("This action requires --test-job-id")
     result = (
-        activate(args.test_job_id)
-        if args.action == "activate"
+        gpu_test()
+        if args.action == "gpu-test"
+        else retire_legacy(args.test_job_id)
+        if args.action == "retire-legacy"
         else (
-            integration_test()
-            if args.action == "test"
-            else verify(args.folder, active=args.active)
-            if args.action == "verify"
-            else seal(args.folder)
+            activate(args.test_job_id)
+            if args.action == "activate"
+            else (
+                integration_test()
+                if args.action == "test"
+                else verify(args.folder, active=args.active)
+                if args.action == "verify"
+                else seal(args.folder)
+            )
         )
     )
     print(result["container_id"])
