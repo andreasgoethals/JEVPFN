@@ -90,4 +90,8 @@ def isolated_output(tmp_path, monkeypatch, _isolate_routing_environment):
     monkeypatch.setenv("VSC_DATA", str(tmp_path / "vsc_data"))
     monkeypatch.setenv(paths.STAGING_ENV_VARS[0], str(tmp_path / "staging"))
     monkeypatch.setenv("JEVPFN_LOCAL_STORAGE_ROOT", str(tmp_path / "local"))
+    # Tests may switch this fixture from VSC to local mode. Keep their compact
+    # manifests local too, rather than reading the owner's real paid-call ledger.
+    vsc_outputs = paths.outputs_dir
+    monkeypatch.setattr(paths, "outputs_dir", lambda: vsc_outputs() if paths.on_vsc() else paths.notebook_outputs_dir())
     return tmp_path

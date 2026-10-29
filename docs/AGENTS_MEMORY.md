@@ -65,6 +65,10 @@ The interactive CPU route hit QOSMaxCpuPerUserLimit. A recorded pending-job rero
 batch ran successfully through the tests. Future CPU preflight defaults to batch with
 three cores and partition-default memory (3400 MiB/core verified live), avoiding Slurm's
 implicit expansion of the previous two-core/8 GiB request. A final corrected 0A is still required.
+The broader local run exposed two cleanup-fixture failures after real diagnostic rounds
+existed: switching isolated_output to local mode still read real compact output. Keep
+its local manifests in its temporary notebook-output root as well. Eighty focused
+cleanup/ledger/path tests passed; no production route or paid ledger was bypassed.
 
 ## Current scope and direct access, 29 October
 

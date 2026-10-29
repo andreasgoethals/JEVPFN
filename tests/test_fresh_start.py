@@ -182,6 +182,12 @@ def test_local_reset_cannot_bypass_vsc_checks(isolated_output):
         fresh_start.run(local=True, apply=True, writers_stopped=True)
 
 
+def test_local_fixture_cannot_read_the_owners_real_diagnostic_ledgers(isolated_output, monkeypatch):
+    monkeypatch.delenv("VSC_DATA")
+    assert paths.manifests_dir("experiment_0").is_relative_to(isolated_output)
+    assert paths.jev_cache_path().is_relative_to(isolated_output)
+
+
 @pytest.mark.parametrize("local", [False, True])
 @pytest.mark.parametrize("include_archives", [False, True])
 def test_delete_cleans_only_output_and_explicit_archives(

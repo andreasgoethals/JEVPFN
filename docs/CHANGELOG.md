@@ -2,6 +2,9 @@
 
 ## 29-10-2026
 
+- Keep local-mode synthetic cleanup manifests inside their temporary test root, so
+  tests cannot read the owner's real diagnostic ledgers after a live API round.
+
 - Fix Linux activation-test isolation by selecting its synthetic legacy prefix explicitly;
   clear stale interpreter pointers before a rejected control-image activation. Route CPU
   preflight to batch with three cores/default memory after verifying the live partition,
