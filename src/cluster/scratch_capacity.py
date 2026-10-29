@@ -179,6 +179,15 @@ def release(runtime, *, apply=False):
                 raise ValueError(f"Missing durable input tree; preserve scratch: {source}")
             for copied in target.rglob("*"):
                 relative = copied.relative_to(target)
+                # Transformers creates package initializers and copies publisher Python
+                # into HF_HOME/modules at runtime. These are not original checkpoint
+                # assets; only this exact cache location and Python suffixes are exempt.
+                if (
+                    copied.relative_to(work).parts[:3] == ("checkpoints", "huggingface", "modules")
+                    and copied.suffix in {".py", ".pyc"}
+                    and not copied.is_symlink()
+                ):
+                    continue
                 if any(
                     p in {".cache", "__pycache__"} or p.startswith(".stage-")
                     for p in relative.parts

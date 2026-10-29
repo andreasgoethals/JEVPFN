@@ -104,7 +104,9 @@ Both jobs write `output_JEVPFN/3. experiment_0/logs/jevpfn-scratch-release_<jobi
 Use a runtime name instead of `all` for a single working set. The helper checks
 workspace identity, authoritative source files, queued/running consumers and
 an exclusive workspace lease. Unknown scheduler state refuses deletion. It never
-cleans the scratch root or other projects. Do not submit new consumers during manual
+cleans the scratch root or other projects. Transformers-generated .py/.pyc import-cache
+files under checkpoints/huggingface/modules need no durable counterpart; checkpoint
+source files and weights outside that narrow exception remain protected. Do not submit new consumers during manual
 release. Existing logs are retained; this is storage recovery, not a campaign reset.
 
 A released runtime must be staged again before any GPU work. Setup/frozen 0A handle
@@ -298,8 +300,9 @@ and omit `--restart`; the `--all` wrapper would select a
 different provider list. The final clean 0A campaign still tests all providers/encoders.
 
 The 29 October Decision3 preparation completed in 7m39s and all ten partitions passed.
-Merge 62463241 was still running in the downloaded snapshot; it was verifying partition
-contents, not re-tokenizing inputs. Leave it running. Liquid d1-2B's B200 contract and
+Merge 62463241 subsequently completed 0:0 in 2h47m55s. Its verified counts are reusable.
+The first cleanup preview stopped on a generated Transformers import cache; the narrow
+check is corrected, and preview/apply must be retried. No cleanup was applied. Liquid d1-2B's B200 contract and
 18-dataset pilot passed. TabSTAR's stage 62463463 and container 62463466 succeeded;
 scratch stage 62463487 failed on the personal GPFS byte quota. Its storage/GPU tests
 were not submitted. Recover space using the section below after active JEVPFN jobs finish.

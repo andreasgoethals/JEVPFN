@@ -274,3 +274,37 @@ def test_filesystem_capacity_guard_is_independent_of_quota_budget(roots, monkeyp
     monkeypatch.setattr(cap.shutil, "disk_usage", lambda p: SimpleNamespace(free=0))
     with pytest.raises(OSError, match="filesystem"):
         cap.check_capacity(work, {}, durable / "containers/blackwell-cu130/intern")
+
+
+@pytest.mark.parametrize("filename", ["__init__.py", "modeling_decision.py", "module.pyc"])
+def test_generated_hf_module_cache_needs_no_durable_copy(roots, filename):
+    durable, work = roots
+    copied_assets(durable, work)
+    generated = work / "checkpoints/huggingface/modules/transformers_modules/decision3" / filename
+    generated.parent.mkdir(parents=True)
+    generated.write_bytes(b"generated import cache")
+    assert cap.release("intern")["status"] == "preview"
+    assert generated.exists()
+    assert cap.release("intern", apply=True)["applied"]
+    assert not generated.exists()
+    assert (durable / "checkpoints/model.bin").exists()
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "checkpoints/huggingface/modules/model.safetensors",
+        "checkpoints/decision_models/intern/modeling_decision.py",
+        "data/raw/huggingface/modules/__init__.py",
+    ],
+)
+def test_hf_cache_exception_does_not_bypass_original_asset_checks(roots, relative):
+    durable, work = roots
+    copied_assets(durable, work)
+    original = work / relative
+    original.parent.mkdir(parents=True, exist_ok=True)
+    original.write_text("only scratch copy")
+    with pytest.raises(ValueError, match="Missing durable input file"):
+        cap.release("intern", apply=True)
+    assert original.exists()
+    assert (work / "checkpoints/model.bin").exists()

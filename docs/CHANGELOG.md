@@ -2,6 +2,13 @@
 
 ## 29-10-2026
 
+- Correct scratch-release preview rejecting runtime-generated Transformers Python import
+  caches as missing durable assets. Exempt only non-symlink .py/.pyc files under the exact
+  HF_HOME/modules cache, preserving checks for weights and original checkpoint source.
+  Add regression coverage for preview/apply and lookalike/weight paths. Record Decision3's
+  completed token merge and the safely stopped preview; no remote deletion was performed.
+  Validation: 1,151 local tests passed, 25 optional/platform skips; Ruff and format checks passed.
+
 - Bound GPFS working-set residency to two runtimes through their final test consumer,
   publish results and release copied inputs/images automatically. Add explicit preview/apply
   CPU cleanup, queue/lease/path guards and conservative application/personal byte budgets.

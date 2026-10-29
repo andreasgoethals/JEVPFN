@@ -8,10 +8,12 @@ are excluded from experiments for text burden and 114-class feature size.
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
 The 29 October download confirms Liquid d1-2B passed its B200 contracts and its
 18-dataset pilot (414 new requests, 36 reused, zero failures). Decision3's corrected
-preparation finished in 7m39s; all ten partitions passed and its strict merge was still
-running at the downloaded snapshot. TabSTAR's weights and container succeeded, but
+preparation finished in 7m39s; all ten partitions passed and merge 62463241
+completed successfully in 2h47m55s (owner's 12:14 accounting output). TabSTAR's weights and container succeeded, but
 GPFS staging failed because personal scratch reached 499.8/500 GiB. Its GPU test
-was not submitted. Keep active VSC checkouts unchanged.
+was not submitted. The first scratch-cleanup preview stopped on a generated Transformers
+Python import cache; that narrow check is now corrected. No cleanup was applied.
+Keep active VSC checkouts unchanged.
 The earlier nine decision runtimes and three encoder contracts have bounded B200
 passes. Decision3 and TabSTAR still need their remaining live tests. Setup and frozen
 0A now limit resident GPFS working sets to two, publish results and release copied

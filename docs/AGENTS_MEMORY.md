@@ -54,13 +54,19 @@ Downloads/output_JEVPFN.zip modified 29 October 10:23:37, 2,821,081 bytes:
   across 18 datasets with 414 new requests, 36 reused and zero failures.
 - Decision3 CPU 62463095, Lustre 62463096 and stage 62463097 passed. Preparation
   62463103 completed in 458.8 seconds; all ten partitions 62463120–62463129 passed.
-  Merge 62463241 was RUNNING at the owner's 10:24 snapshot, making measured progress
-  through checksum/input verification. Its B200 contracts/pilot remain unverified.
-  The watcher disconnected, so submitted work continues but descendants need a resumed
-  watcher. Keep it paused while GPFS is full; do not pull while the merge is active.
+  Merge 62463241 subsequently COMPLETED 0:0 in 2h47m55s, confirmed by the owner's
+  12:14 accounting output. Its B200 contracts/pilot remain unverified. The earlier
+  watcher disconnected; keep it stopped while recovering GPFS capacity.
 - TabSTAR stage 62463463 and sealed blackwell container 62463466 succeeded. Scratch
   stage 62463487 failed with Errno 122 while copying prepared questions. The subsequent
   GPFS storage and predictor jobs were not submitted. No rebuild is indicated.
+- At 12:16, aa57248's cleanup preview stopped at Decision3's runtime-generated
+  checkpoints/huggingface/modules/transformers_modules/decision3/__init__.py.
+  Every printed result was preview/applied=false; set-e stopped before the apply job.
+  No scratch files were deleted. Transformers creates Python import-cache files under
+  HF_HOME/modules; release now exempts only non-symlink .py/.pyc files at that exact
+  location. Original checkpoint code and weights still require durable counterparts.
+  The owner must pull the correction while idle and retry preview/apply.
 These receipts are setup evidence from their recorded source revisions, not acceptance
 of the new storage lifecycle or a full frozen 0A campaign. No remote jobs, deletion,
 model downloads or paid calls were executed during this local repair.
@@ -162,7 +168,7 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-The 29 October storage update passed 1,144 local tests with 25 skips for optional
+The 29 October import-cache cleanup correction passed 1,151 local tests with 25 skips for optional
 staged assets/Torch or POSIX-only behavior. Ruff, dependency, Bash syntax and diff
 checks passed. New tests cover input-copy release, preserved mutable queues, failed
 publication, queued consumers, capacity budgets, bounded graph residency and cleanup
@@ -277,8 +283,9 @@ do not establish the new Transformers 5.19/B200 runtime or full-dataset acceptan
   not inherited automatically. Verify the interpreter, not the Conda prompt.
 - Raw inputs need reads; installation needs writes. Fix only a confirmed owner's
   exact blocked directory, never recursively alter ACLs.
-- Cleanup rejects links/mount escapes and touches output only. Windows attribute
-  recovery must not change POSIX ACLs. Never recursively remove empty data folders.
+- Output cleanup rejects links/mount escapes and touches output only. The separate
+  scratch-release helper removes verified working copies as described above. Windows
+  attribute recovery must not change POSIX ACLs. Never recursively remove empty data folders.
 - Notebooks need atomic writes/shared locks, real kernels, partial-output recovery
   and protection against concurrent user edits.
 - Empty text is a separate overlap cohort. Repetition across row folds is an
