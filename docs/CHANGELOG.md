@@ -2,6 +2,11 @@
 
 ## 29-10-2026
 
+- Probe original model images through a host step in the existing allocation when
+  the CPU controller encloses the build. Keep monitored relocated runtime launches
+  separate. Use owned native per-job scratch caches and a guarded exit cleanup,
+  preserving failed job status, persistent weights and recovery workspaces.
+
 - Keep local-mode synthetic cleanup manifests inside their temporary test root, so
   tests cannot read the owner's real diagnostic ledgers after a live API round.
 

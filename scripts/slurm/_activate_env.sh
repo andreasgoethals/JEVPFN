@@ -1,5 +1,5 @@
 #!/bin/bash
-# Follow CreditPFN's Conda activation and interpreter verification, with a separate env.
+# Activate the verified runtime and enforce allocation, storage and frozen-source checks.
 set -euo pipefail
 case "${SLURM_JOB_PARTITION:-}" in
     gpu|gpu_a100*)
@@ -19,13 +19,19 @@ export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export NUMEXPR_NUM_THREADS="$OMP_NUM_THREADS"
 export BLIS_NUM_THREADS="$OMP_NUM_THREADS"
 export OMP_MAX_ACTIVE_LEVELS=1
-# Compiler/runtime caches can also be large. Prefer disposable scratch, then PROJECT;
-# never use the small personal DATA allocation as a fallback for these caches.
-JEVPFN_RUNTIME_ROOT="${VSC_SCRATCH_NODE:-${VSC_SCRATCH:-}}"
-if [[ -z "$JEVPFN_RUNTIME_ROOT" ]]; then
-    JEVPFN_RUNTIME_ROOT="$(python -c 'from src.utils.paths import large_outputs_dir; print(large_outputs_dir() / "runtime_cache")')"
-fi
-export XDG_CACHE_HOME="$JEVPFN_RUNTIME_ROOT/jevpfn-runtime-${SLURM_JOB_ID:-setup}"
+# Rebuildable compiler/plot caches use the allocation's native scratch, not a
+# cross-mounted generic VSC_SCRATCH or persistent PROJECT fallback.
+XDG_CACHE_HOME="$(/usr/bin/python3 -I src/cluster/runtime_cache.py create)"
+export XDG_CACHE_HOME
+jevpfn_cleanup_runtime_cache() {
+    local result=$?
+    trap - EXIT
+    if ! /usr/bin/python3 -I "$VSC_DATA/JEVPFN/src/cluster/runtime_cache.py" cleanup "$XDG_CACHE_HOME"; then
+        if [[ "$result" == 0 ]]; then result=1; fi
+    fi
+    exit "$result"
+}
+trap jevpfn_cleanup_runtime_cache EXIT
 export MPLCONFIGDIR="$XDG_CACHE_HOME/matplotlib"
 # Every model's durable weights belong on project storage, including HF/Torch downloads.
 export TORCH_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("torch"))')"

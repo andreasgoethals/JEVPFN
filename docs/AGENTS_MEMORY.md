@@ -69,6 +69,14 @@ The broader local run exposed two cleanup-fixture failures after real diagnostic
 existed: switching isolated_output to local mode still read real compact output. Keep
 its local manifests in its temporary notebook-output root as well. Eighty focused
 cleanup/ledger/path tests passed; no production route or paid ledger was bypassed.
+The corrected local suite then passed 1,150 tests with 25 skips. Model-build probing
+now starts original wrappers through the existing allocation's host Slurm step;
+the CPU integration job tests this separately from relocated monitored launches.
+Disposable compiler/plot caches use marked native per-job scratch leaves and an
+exit cleanup that preserves a failing job's status. These last operational paths
+require the new live control test before the next final reset/freeze.
+Final local validation of those paths: 1,154 passed, 25 platform/optional skips;
+Ruff and the changed Bash scripts' syntax checks passed.
 
 ## Current scope and direct access, 29 October
 
@@ -79,6 +87,8 @@ baseline without instruction. The primary grid remains 3,996/2,268/54 configurat
 
 TEMPLATE.md matched the canonical `0. Template/docs/TEMPLATE.md` byte-for-byte,
 SHA256 285c7c321b2cd52d8d415e30f41fe775ceb47113f39007c2490fdb0ec23fc8d8.
+After the later canonical synchronization, the current byte-identical copies have
+SHA256 0ed244c16cab8ea86afab5ed90eea36eef3a9e218314c38538e227e4f009fd3c.
 Manual shared Windows-agent access worked without renewal. Native ssh.exe, `-F none
 -T`, BatchMode, host-key checks, bounded timeout and an LF script on stdin preserved
 stdout and a deliberate exit 7. This gateway dropped separate remote stderr;

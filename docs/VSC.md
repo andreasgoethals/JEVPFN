@@ -127,6 +127,14 @@ suite. Host Slurm/Apptainer clients, plugins/config and Munge library are bound 
 the CPU image; installed Python dependencies stay in its SquashFS. Nested launches
 clear the parent image's Conda stack and automatic bind list.
 
+Newly built, original model wrappers are probed through an overlapping host Slurm
+step in the existing allocation; their immutable wrappers are not changed to work
+inside the CPU image. The integration test covers both this build-probe route and
+the relocated, monitored runtime route. Rebuildable compiler/plot caches use a
+marked per-job native scratch leaf (node-local when available), removed by the
+job's exit hook. A cache-cleanup failure cannot hide the original job failure;
+weights, response queues and recovery workspaces are outside this disposable leaf.
+
 `python -m src.cluster.control_runtime activate --test-job-id JOBID` requires all
 three successful reports from the same job and an idle checkout. Its persistent
 cutover receipt embeds the reports, so a later deliberate output reset preserves

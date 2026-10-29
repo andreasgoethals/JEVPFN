@@ -48,6 +48,30 @@ def child_command(command):
     return result
 
 
+def host_step_command(command):
+    """Probe an original model wrapper through the allocation's host, outside this image.
+
+    New model images have not yet been relocated/resealed for nested execution.
+    An explicit overlapping Slurm step starts their unchanged wrapper on the host;
+    it never requests a new allocation or runs a build probe on a login node.
+    """
+    import socket
+
+    result = list(command)
+    image = os.environ.get("JEVPFN_CONTROL_IMAGE")
+    if (not image or Path(sys.executable) != Path(image) / "bin/python"
+            or not result or Path(result[0]) == Path(image) / "bin/python"):
+        return result
+    if not os.environ.get("SLURM_JOB_ID"):
+        raise RuntimeError("Model-image probes from the CPU controller require a Slurm allocation")
+    cores = os.environ.get("SLURM_CPUS_PER_TASK", "1")
+    if not cores.isdecimal() or int(cores) < 1:
+        raise ValueError("Invalid CPU budget for the model-image probe")
+    return ["srun", "--overlap", "--exact", "--nodes=1", "--ntasks=1",
+            "--cpus-per-task=" + cores, "--export=ALL",
+            "--nodelist=" + os.environ.get("SLURMD_NODENAME", socket.gethostname()), *result]
+
+
 def nested_model_probe(root):
     import shutil
     import tempfile
@@ -117,6 +141,9 @@ def integration_test():
             "-c",
             "import sys; assert sys.version_info[:2]==(3,12); print('NESTED_IMAGE_PASSED')",
         ],
+        [sys.executable, "-I", "-c",
+         "from src.cluster.containers import probe; import sys; print(probe(sys.argv[1]))",
+         str(root / "containers/blackwell-cu130/cloudflare/bin/python")],
     ]
     results = []
     for command in commands:

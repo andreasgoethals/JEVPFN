@@ -1,5 +1,5 @@
 #!/bin/bash
-# Select a sealed compact runtime when available; retain native Conda for CPU/custom envs.
+# Select sealed model/CPU images; retain the explicit legacy route for custom prefixes.
 JEVPFN_REQUESTED_ENV="${JEVPFN_CONDA_ENV:-JEVPFN}"
 JEVPFN_RUNTIME_NAME="${JEVPFN_REQUESTED_ENV##*/}"
 if [[ "$JEVPFN_RUNTIME_NAME" == tabstar-v1p1 ]]; then JEVPFN_RUNTIME_NAME=tabstar; fi
@@ -29,7 +29,7 @@ case "$JEVPFN_RUNTIME_NAME" in
             source scripts/activate_conda.sh || return
             JEVPFN_RUNTIME_EXPORTS="$("${JEVPFN_PYTHON:?}" -m src.cluster.containers verify "$JEVPFN_RUNTIME_NAME" --shell)" || return
             eval "$JEVPFN_RUNTIME_EXPORTS"
-            # Monitor on the host: NVML/global Slurm GPU IDs need not share the image's view.
+            # Keep telemetry in the CPU controller, separate from the model interpreter.
             export JEVPFN_MONITOR_PYTHON="$JEVPFN_PYTHON"
             export JEVPFN_NVIDIA_SMI="$(type -P nvidia-smi || true)"
             export JEVPFN_CONDA_ENV="$JEVPFN_REQUESTED_ENV"

@@ -51,6 +51,26 @@ def test_controller_reuses_its_interpreter_but_preserves_model_wrapper(monkeypat
     assert control.child_command(model) == model
 
 
+def test_original_model_build_probe_uses_existing_host_allocation_only(monkeypatch):
+    image = "/project/JEVPFN/containers/control-v1"
+    monkeypatch.setenv("JEVPFN_CONTROL_IMAGE", image)
+    monkeypatch.setattr(control.sys, "executable", image + "/bin/python")
+    model = ["/project/JEVPFN/containers/blackwell-cu130/new-model/bin/python", "-I", "-c", "probe"]
+    with pytest.raises(RuntimeError, match="Slurm allocation"):
+        control.host_step_command(model)
+    monkeypatch.setenv("SLURM_JOB_ID", "123")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "4")
+    monkeypatch.setenv("SLURMD_NODENAME", "node1")
+    command = control.host_step_command(model)
+    assert command[0] == "srun" and "--overlap" in command and "--export=ALL" in command
+    assert "--cpus-per-task=4" in command and "--nodelist=node1" in command
+    assert command[-len(model):] == model
+    own = [image + "/bin/python", "-I", "-c", "own probe"]
+    assert control.host_step_command(own) == own
+    monkeypatch.delenv("JEVPFN_CONTROL_IMAGE")
+    assert control.host_step_command(model) == model
+
+
 def test_integrity_checks_use_the_readonly_unmasked_host_view(tmp_path, monkeypatch):
     source, unmasked = tmp_path / "source", tmp_path / "unmasked"
     source.mkdir()

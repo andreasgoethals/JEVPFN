@@ -105,6 +105,8 @@ def files(folder, *, link_root=None):
 
 
 def probe(python, sentinel=None):
+    from src.cluster.control_runtime import child_environment, host_step_command
+
     code = (
         "import json,sys,os,platform,importlib.metadata as m; from pathlib import Path; "
         "import src; import importlib.util; "
@@ -117,7 +119,8 @@ def probe(python, sentinel=None):
         "packages={d.metadata['Name']:d.version for d in m.distributions() if d.metadata['Name']})))"
     )
     output = subprocess.check_output(
-        [str(python), "-I", "-c", code, str(sentinel or "")], text=True, timeout=180
+        host_step_command([str(python), "-I", "-c", code, str(sentinel or "")]),
+        env=child_environment(), text=True, timeout=180
     )
     records = [
         line.partition("=")[2] for line in output.splitlines() if line.startswith("JEVPFN_RUNTIME=")
