@@ -31,6 +31,7 @@ def runtime_pins():
     )
     patterns = (
         "containers/*/_JEVPFN_CONTAINER.json",
+        "containers/control.active.json",
         "containers/*/*/_JEVPFN_CONTAINER.json",
         "environments/*/JEVPFN_RUNTIME.json",
         "checkpoints/decision_models/*/_JEVPFN_CHECKPOINT.json",

@@ -2,6 +2,13 @@
 
 ## 29-10-2026
 
+- Add a CPU control-container rebuild from the exact recorded Python/package versions,
+  dependency/hash verification using the host standard library, explicit test/cutover
+  activation and nested-image environment isolation. Include the small CPU image in
+  native B200 staging and capacity accounting. The owner authorized Slurm validation,
+  migration, final reset, 0A and accepted open-weight extraction; live results are
+  recorded separately as they complete.
+
 - Remove Experiments 4/5, selected-winner combinations and their configs, execution
   branches and notebooks. Preserve main statistical analysis under `7. synthesis`,
   Experiment 0A robustness checks and Experiment 2's PCA variants. Keep the main

@@ -54,7 +54,7 @@ def disposable_paths(work):
     return [reject_links(work / name) for name in relatives if (work / name).exists()]
 
 
-def check_capacity(work, candidates, source_container):
+def check_capacity(work, candidates, source_container, *, additional_containers=()):
     """Check application and personal scratch budgets before the first bulk copy.
 
     Other projects may grow after this check; reserve headroom, never claim a quota
@@ -82,6 +82,9 @@ def check_capacity(work, candidates, source_container):
         for p in source_container.rglob("*")
         if p.is_file() and not p.is_symlink()
     ]
+    for container in additional_containers:
+        sources += [(p, work / "containers/control-v1" / p.relative_to(container))
+                    for p in container.rglob("*") if p.is_file() and not p.is_symlink()]
     growth = sum(
         max(0, source.stat().st_size - (dest.stat().st_size if dest.is_file() else 0))
         for source, dest in sources

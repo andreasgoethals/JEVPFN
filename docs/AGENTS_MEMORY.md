@@ -8,6 +8,15 @@ Owner instruction, 28 October 2026: the assistant may commit and push reviewed J
 changes without asking again. This supersedes the former no-commit/no-push preference.
 Read-only task boundaries still apply; never update a checkout used by active VSC jobs.
 
+## Authorized control migration, 29 October
+
+The owner now authorizes recreating/testing the CPU control image, live Slurm debugging,
+verified cutover, final local/VSC output reset, full 0A, evidence review/acceptance and
+open-weight feature creation. Full Jev extraction waits for the owner. Read-only SSH
+at 16:44 found JEVPFN idle, PROJECT 538.3G/1T and 45,347 files, GPFS scratch 8.634G/500G.
+The existing control Python is 3.12.15. Its package versions are frozen in
+experiment_0/control_runtime.yaml. Build/test results remain pending until recorded.
+
 ## Current scope and direct access, 29 October
 
 Owner removed Experiments 4/5. Only 0A/0B and Experiments 1–3 remain; statistical

@@ -332,7 +332,15 @@ def stage(runtime):
             raise ValueError("Prepared questions are absent from durable storage")
         with staging_environment(durable):
             source_container = containers.container_dir(runtime)
-        check_capacity(work, candidates, source_container)
+        control = durable / "containers/control-v1"
+        control_selected = (durable / "containers/control.active.json").is_file()
+        if control_selected:
+            from src.cluster.control_runtime import verify as verify_control
+
+            verify_control(control)
+            check_capacity(work, candidates, source_container, additional_containers=[control])
+        else:
+            check_capacity(work, candidates, source_container)
         files = {}
         for relative, source in candidates.items():
             destination = work / relative
@@ -375,6 +383,11 @@ def stage(runtime):
         if not target_container.exists():
             shutil.copytree(source_container, target_container, symlinks=True)
         containers.relocate(source_container, target_container)
+        if control_selected:
+            copied_control = work / "containers/control-v1"
+            if not copied_control.exists():
+                shutil.copytree(control, copied_control, symlinks=True)
+            containers.relocate(control, copied_control)
         if runtime in containers.SELF_HOSTED:
             from src.jev.checkpoints import verify_checkpoint
 
@@ -422,7 +435,9 @@ def run(runtime, command):
             or marker.get("status") != "staged_requires_b200_contracts"
         ):
             raise ValueError("Wrong scratch workspace identity")
-        process = subprocess.Popen(command)
+        from src.cluster.control_runtime import child_environment
+
+        process = subprocess.Popen(command, env=child_environment())
         stopped = threading.Event()
         publication_errors = []
 
