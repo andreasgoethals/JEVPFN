@@ -24,4 +24,6 @@ if [[ "$JEVPFN_PROVIDER" == perplexity && "${SLURM_MEM_PER_NODE:-0}" -lt 112000 
 fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.jev.self_hosted --provider "$JEVPFN_PROVIDER" --execute --full
+JEVPFN_FEATURE_ARGS=(--provider "$JEVPFN_PROVIDER" --execute --full)
+if [[ -n "${4:-}" ]]; then JEVPFN_FEATURE_ARGS+=(--dataset "$4"); fi
+jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.jev.self_hosted "${JEVPFN_FEATURE_ARGS[@]}"

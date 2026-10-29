@@ -762,3 +762,20 @@ weights or environments. Import verifies paths/checksums and transactionally mer
 compatible databases; conflicting records stop. Do not overwrite local caches with
 an unvalidated folder copy. All notebooks run locally and save executed outputs,
 paper-sized PDF figures, `figures/Captions.md` and the complete `All Results.md`.
+
+## Accepted open-weight feature campaign
+
+After successful frozen 0A review, finish that validation stage explicitly. Enable
+the reviewed full-extraction switches and exact provider acceptance paths, enable
+the three frozen encoders, and freeze the extraction configuration.
+`python -m src.cluster.feature_campaign` previews the graph; `--execute --watch`
+resumes its recorded Slurm jobs. It contains 198 decision/dataset GPU allocations,
+three full-dataset encoder allocations and eleven stage/release pairs. Each
+decision runtime permits two concurrent dataset jobs; at most two working sets
+remain resident. These execution partitions preserve every selected row/input.
+No Jev API call or downstream predictor is launched. Release publishes committed
+results even after a failed consumer and preserves mutable recovery stores.
+
+The final successful job graph still requires complete-artifact validation; it is
+not Experiment 0B acceptance. Each dataset's full probabilities/responses, numeric
+features, measured timings and hardware/job identities remain available.

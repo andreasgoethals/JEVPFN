@@ -14,6 +14,7 @@ import threading
 import time
 from contextlib import suppress
 
+from src.cluster.control_runtime import child_command, child_environment
 from src.utils import paths
 from src.utils.serialization import write_json
 
@@ -126,7 +127,7 @@ def run(command, *, interval=10):
     signal.signal(signal.SIGTERM, terminate)
     try:
         print(f"GPU telemetry -> {target}", flush=True)
-        child = subprocess.Popen(command)
+        child = subprocess.Popen(child_command(command), env=child_environment())
         code = child.wait()
         return code if code >= 0 else 128 - code
     finally:

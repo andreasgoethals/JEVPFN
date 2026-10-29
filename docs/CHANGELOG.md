@@ -2,6 +2,9 @@
 
 ## 29-10-2026
 
+- Add a bounded accepted open-weight feature campaign: one dataset per GPU job, two
+  concurrent jobs per resident decision runtime, two resident workspaces, and three
+  frozen encoder branches. Jev and predictive benchmarks remain excluded.
 - Add a CPU control-container rebuild from the exact recorded Python/package versions,
   dependency/hash verification using the host standard library, explicit test/cutover
   activation and nested-image environment isolation. Include the small CPU image in

@@ -435,9 +435,9 @@ def run(runtime, command):
             or marker.get("status") != "staged_requires_b200_contracts"
         ):
             raise ValueError("Wrong scratch workspace identity")
-        from src.cluster.control_runtime import child_environment
+        from src.cluster.control_runtime import child_command, child_environment
 
-        process = subprocess.Popen(command, env=child_environment())
+        process = subprocess.Popen(child_command(command), env=child_environment())
         stopped = threading.Event()
         publication_errors = []
 

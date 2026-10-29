@@ -508,7 +508,9 @@ def pilot_numbers(source, counts, dataset_id):
     return numbers
 
 
-def run(provider, *, execute=False, full=False, continue_on_error=False, retry_failed=False):
+def run(provider, *, execute=False, full=False, continue_on_error=False, retry_failed=False, dataset_id=None):
+    if dataset_id is not None and not full:
+        raise ValueError("Dataset partitioning is for accepted full extraction; pilots cover all datasets")
     cfg = load_yaml("experiment_0/self_hosted")
     if not execute or cfg["enabled"] is not True:
         raise RuntimeError("GPU pilot is disabled; explicitly enable its config and pass --execute")
@@ -532,6 +534,10 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
     inputs = selected_inputs()
     if {i["dataset_id"] for i in inputs} != {i["dataset_id"] for i in evidence["datasets"]}:
         raise ValueError("Token evidence differs from the selected 18 datasets")
+    if dataset_id is not None:
+        inputs = [item for item in inputs if item["dataset_id"] == dataset_id]
+        if not inputs:
+            raise ValueError("Dataset is outside the selected benchmark")
     selection = {
         i["dataset_id"]: None
         if full
@@ -705,6 +711,7 @@ def main():
     parser.add_argument("--provider", choices=SELF_HOSTED, default="liquid")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--full", action="store_true")
+    parser.add_argument("--dataset", help="One selected dataset per full extraction allocation")
     parser.add_argument(
         "--continue-on-error",
         action="store_true",
@@ -727,6 +734,7 @@ def main():
         full=args.full,
         continue_on_error=args.continue_on_error,
         retry_failed=args.retry_failed,
+        dataset_id=args.dataset,
     )
     return int(report["status"] != "completed_requires_review")
 

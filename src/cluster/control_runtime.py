@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 MARKER = "_JEVPFN_CONTAINER.json"
@@ -26,6 +27,15 @@ def child_environment():
             "SINGULARITY_BIND",
         }:
             result.pop(key)
+    return result
+
+
+def child_command(command):
+    """Reuse the current CPU interpreter rather than nesting the same CPU image again."""
+    result = list(command)
+    image = os.environ.get("JEVPFN_CONTROL_IMAGE")
+    if image and result and Path(result[0]) == Path(image) / "bin/python":
+        result[0] = sys.executable
     return result
 
 
@@ -57,6 +67,10 @@ def integration_test():
             "--format=JobID,State",
         ],
         [
+            sys.executable,
+            "-m",
+            "src.cluster.monitor",
+            "--",
             str(root / "containers/blackwell-cu130/cloudflare/bin/python"),
             "-I",
             "-c",

@@ -38,6 +38,14 @@ def test_nested_child_preserves_allocation_and_clears_parent_container_state(mon
     assert control.os.environ["CONDA_PREFIX"] == "parent-only"
 
 
+def test_controller_reuses_its_interpreter_but_preserves_model_wrapper(monkeypatch):
+    monkeypatch.setenv("JEVPFN_CONTROL_IMAGE", "/project/JEVPFN/containers/control-v1")
+    command = ["/project/JEVPFN/containers/control-v1/bin/python", "-m", "src.cluster.monitor"]
+    assert control.child_command(command) == [control.sys.executable, "-m", "src.cluster.monitor"]
+    model = ["/gpfs/work/containers/liquid/bin/python", "-m", "src.jev.self_hosted"]
+    assert control.child_command(model) == model
+
+
 def test_install_allocation_can_ignore_only_its_own_cluster_job(isolated_output, monkeypatch):
     from src.cluster import maintenance
 
