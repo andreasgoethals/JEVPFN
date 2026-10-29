@@ -6,19 +6,16 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 29 October download confirms Liquid d1-2B passed its B200 contracts and its
-18-dataset pilot (414 new requests, 36 reused, zero failures). Decision3's corrected
-preparation finished in 7m39s; all ten partitions passed and merge 62463241
-completed successfully in 2h47m55s (owner's 12:14 accounting output). TabSTAR's weights and container succeeded, but
-GPFS staging failed because personal scratch reached 499.8/500 GiB. Its GPU test
-was not submitted. The first scratch-cleanup preview stopped on a generated Transformers
-Python import cache; that narrow check is now corrected. No cleanup was applied.
-Keep active VSC checkouts unchanged.
-The earlier nine decision runtimes and three encoder contracts have bounded B200
-passes. Decision3 and TabSTAR still need their remaining live tests. Setup and frozen
-0A now limit resident GPFS working sets to two, publish results and release copied
-inputs/images after each runtime's last consumer. Use the safe release commands in
-[VSC](docs/VSC.md) to recover space before resuming; preserve completed evidence.
+The 29 October 14:47 download confirms all eleven open-weight decision runtimes
+have bounded B200 contract/pilot evidence, including Decision3 (26 checks; 414 new
+pilot requests, 36 reused, zero failures). TabSTAR v1.1 passed 16 predictor fixtures
+and resume checks; full-dataset profiling remains for 0B. Three encoder contracts also
+have bounded B200 passes. Scratch release succeeded, with personal GPFS usage at
+8.66/500 GiB after the tests; durable weights/images and results remain preserved.
+These runs used the recorded pre-notebook-review source, not the final frozen revision.
+Setup and frozen 0A limit resident working sets to two and publish/release copied
+inputs after their last consumer. The new bounded parallel lifecycle still needs the
+fresh full-campaign run. Keep active VSC checkouts unchanged. See [VSC](docs/VSC.md).
 Token audits use ten independent CPU partitions per provider and a strict merge, reusing
 matching committed counts. Bounded B200 passes do not certify full-dataset extraction
 or final acceptance. Source identities are recorded; the final frozen run repeats all gates.

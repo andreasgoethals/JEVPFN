@@ -90,6 +90,8 @@ def effect_matrix_figures(paired, phase="experiment_1"):
         effects = _dataset_effects(sub, keys, task, direction)
         if effects.empty:
             continue
+        if effects.duplicated(row_keys + ["feature_set", "model_id", "dataset_id"]).any():
+            raise ValueError("Multiple arms/splits for one dataset in an effect cell; select one campaign")
         cells = effects.groupby(row_keys + ["feature_set", "model_id"], dropna=False).agg(
             effect=("effect", "mean"), wins=("effect", lambda v: (v > 0).sum()),
             n=("effect", "size")).reset_index()

@@ -173,7 +173,9 @@ def request_composition(prepared):
                         canonical_json(payload_from_text(entry, recipe["question_variant"], empty))
                     )
                 mode = "per_column" if len(fields) == 1 else "joint"
-                values[mode][0].append(sum(len(str(v)) for v in text.values()))
+                # Compare like with like: quotes, newlines and backslashes are escaped
+                # in the JSON context too. Subtract the two empty-string quotes.
+                values[mode][0].append(sum(len(canonical_json(v)) - 2 for v in text.values()))
                 values[mode][1].append(context[fields])
         for mode, (text_chars, context_chars) in values.items():
             if not text_chars:

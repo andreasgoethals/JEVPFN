@@ -45,31 +45,36 @@ Setup/frozen 0A now bound staging-to-release residency to two workspaces, with a
 200 GiB JEVPFN budget and 20 GiB personal headroom. Release publishes results then
 removes copied inputs/images, preserving mutable queues/features/predictions and all
 durable assets. Failed publication blocks new stages. Predictor staging omits decision
-token databases. Live release and bounded graph execution still need VSC validation.
+token databases. Manual live release passed; the bounded full graph still needs VSC validation.
 
 ## Latest downloaded VSC evidence
 
-Downloads/output_JEVPFN.zip modified 29 October 10:23:37, 2,821,081 bytes:
-- Liquid d1-2B contract 11748961 passed 26 checks on B200. Pilot 11750830 completed
-  across 18 datasets with 414 new requests, 36 reused and zero failures.
-- Decision3 CPU 62463095, Lustre 62463096 and stage 62463097 passed. Preparation
-  62463103 completed in 458.8 seconds; all ten partitions 62463120–62463129 passed.
-  Merge 62463241 subsequently COMPLETED 0:0 in 2h47m55s, confirmed by the owner's
-  12:14 accounting output. Its B200 contracts/pilot remain unverified. The earlier
-  watcher disconnected; keep it stopped while recovering GPFS capacity.
-- TabSTAR stage 62463463 and sealed blackwell container 62463466 succeeded. Scratch
-  stage 62463487 failed with Errno 122 while copying prepared questions. The subsequent
-  GPFS storage and predictor jobs were not submitted. No rebuild is indicated.
-- At 12:16, aa57248's cleanup preview stopped at Decision3's runtime-generated
-  checkpoints/huggingface/modules/transformers_modules/decision3/__init__.py.
-  Every printed result was preview/applied=false; set-e stopped before the apply job.
-  No scratch files were deleted. Transformers creates Python import-cache files under
-  HF_HOME/modules; release now exempts only non-symlink .py/.pyc files at that exact
-  location. Original checkpoint code and weights still require durable counterparts.
-  The owner must pull the correction while idle and retry preview/apply.
-These receipts are setup evidence from their recorded source revisions, not acceptance
-of the new storage lifecycle or a full frozen 0A campaign. No remote jobs, deletion,
-model downloads or paid calls were executed during this local repair.
+Downloads/output_JEVPFN.zip modified 29 October 14:47:58, 3,000,218 bytes:
+- CPU 62465912 passed dataset/question checks and its contract suite.
+- Decision3 GPFS 11751621 passed; B200 contract 11751677 passed all 26 checks
+  (124.9 seconds). Pilot 11751721 covered 18 datasets: 414 new, 36 reused,
+  zero failed requests. Token merge 62463241 had already passed in 2h47m55s.
+- TabSTAR GPFS 11751766 passed; predictor 11751786 passed 16 fixtures: binary,
+  3/30-class multiclass and regression, each with original text and three augmentation
+  modes. Resume without refitting passed; full_dataset_profile=false.
+- Cleanup now applied successfully for all existing runtimes, followed by successful
+  Decision3/TabSTAR restaging and release (62466455 and 62466583). Personal GPFS
+  was 8.66/500 GiB at 14:11, versus 499.8 before recovery. Durable assets and mutable
+  results were retained. No inference bug appears in these new logs.
+- Decision3 uses correct but slower reference kernels when causal_conv1d and
+  flash-linear-attention are absent. No dependency change was made. Pilot GPU
+  telemetry averaged 36% (peak 100%); a bounded test is not a throughput benchmark.
+- Decision3 real-input diagnostics changed the multiclass top answer after an embedded
+  instruction. This is a recorded sensitivity, not proof of invariant interpretation.
+Local review of f359d40 retained its notebook redesign but fixed empty-cache reporting,
+duplicate dataset counting across arms/splits, lifetime-cache provenance labels and
+serialized text-length accounting. Request length does not establish information content.
+Validation: 1,153 passed, 25 skipped; Ruff passed; 13 notebooks and 15 figures checked.
+
+All these receipts share source identity dc721879d9e6bd1705509b198d9c6c52585542d365feb5d30fca8b99d7b61147
+and precede Claude's f359d40 notebook changes and this review. They establish setup
+compatibility, not a fresh frozen 0A. The new two-workspace graph still needs a full
+campaign validation. No remote jobs, deletion, downloads or paid calls were run here.
 
 The preceding full setup ended with 174 completed, one failed and one blocked job.
 The table below is historical evidence from that campaign, not current-source acceptance.
@@ -115,7 +120,7 @@ lookup index resolved the five merge timeouts. GPFS BSD flock allowed simultaneo
 owners; POSIX record locking has real two-node GPFS/Lustre passes. Perplexity staging
 now preserves source/uv.lock; Tykky sealing/relocation normalize links identically.
 Compact images addressed the former ~111k-file environment problem. H100 evidence is
-historical; current receipts demonstrate bounded B200 inference for ten decision
+historical; current receipts demonstrate bounded B200 inference for eleven decision
 models and three encoders.
 
 ## Jev and permanent accounting

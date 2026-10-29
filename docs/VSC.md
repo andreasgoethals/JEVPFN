@@ -299,15 +299,13 @@ GPFS/B200 descendants. After a disconnect, use `--provider decision3 --provider 
 and omit `--restart`; the `--all` wrapper would select a
 different provider list. The final clean 0A campaign still tests all providers/encoders.
 
-The 29 October Decision3 preparation completed in 7m39s and all ten partitions passed.
-Merge 62463241 subsequently completed 0:0 in 2h47m55s. Its verified counts are reusable.
-The first cleanup preview stopped on a generated Transformers import cache; the narrow
-check is corrected, and preview/apply must be retried. No cleanup was applied. Liquid d1-2B's B200 contract and
-18-dataset pilot passed. TabSTAR's stage 62463463 and container 62463466 succeeded;
-scratch stage 62463487 failed on the personal GPFS byte quota. Its storage/GPU tests
-were not submitted. Recover space using the section below after active JEVPFN jobs finish.
-A changed setup graph requires an idle `--restart`; it retains prior receipts and reuses
-valid assets/counts. After a disconnect on the same source/graph, omit `--restart`.
+The 29 October 14:47 download confirms Decision3 token merge, B200 contracts and
+18-dataset pilot passed, and TabSTAR's GPFS/predictor fixtures passed. Scratch release
+also passed and personal GPFS fell to 8.66/500 GiB. No rebuild or repeated manual
+Decision3/TabSTAR setup chain is required. These are pre-freeze setup receipts;
+proceed to the clean campaign below once local review/tests finish. The full bounded
+workspace graph and frozen-source acceptance still need that campaign.
+
 
 The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
 mismatch: Tykky writes image paths containing `bin//python`, while the seal used the
@@ -500,7 +498,7 @@ VSC CPU environment:
 ```
 
 0A reruns CPU/question/data checks, two-node storage contracts and exact token
-counts, stages fresh native working sets, then runs all ten decision runtimes and
+counts, stages fresh native working sets, then runs all eleven decision runtimes and
 three encoders on B200. Each decision pilot follows its own contract. Local 0A
 checks Jev interfaces/robustness and the configured real-dataset pilot. Omitting
 `--dataset-pilot` leaves local acceptance incomplete. Receipts are in DATA/local

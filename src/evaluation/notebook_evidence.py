@@ -187,10 +187,11 @@ def measured_jev_usage(cache_folder=None):
 
 
 def pilot_decision_outputs(cache_folder=None):
-    """Decode the verified diagnostic responses stored locally; never a feature artifact.
+    """Decode the lifetime response cache; never imply pilot/campaign membership.
 
     Uses the production decoder, so a response that fails validation is counted, not
-    plotted. Returns one row per provider and unique request. No target is read.
+    plotted. Returns one row per cached payload/settings identity. This can include
+    historical questions, model settings and production responses. No target is read.
     """
     from src.jev.provider import response_features
     from src.jev.requests import IntendedRequest
@@ -223,6 +224,7 @@ def pilot_decision_outputs(cache_folder=None):
                     "dataset": task["dataset"],
                     "task_type": task["task_type"],
                     "provider": json.loads(settings_json).get("provider", "jev"),
+                    "settings_sha256": digest(json.loads(settings_json)),
                     "input": digest(payload),
                     "text_fields": len(payload["state"]["text"]),
                 }
@@ -238,7 +240,11 @@ def pilot_decision_outputs(cache_folder=None):
                     row["value"] = features["expected_direction"]
                     row["no_evidence_probability"] = features["p_4"]
                 rows.append(row)
-    table = pd.DataFrame(rows)
+    table = pd.DataFrame(rows, columns=[
+        "dataset_id", "dataset", "task_type", "provider", "settings_sha256", "input",
+        "text_fields", "value", "top_class", "top_probability", "class_probabilities",
+        "no_evidence_probability",
+    ])
     table.attrs["invalid_responses"] = invalid
     return table
 

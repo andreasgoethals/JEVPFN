@@ -246,10 +246,10 @@ def pilot_output_figures(table):
     fig.legend(handles=handles, loc="outside upper center", ncols=len(handles), fontsize=7,
                frameon=False)
     yield fig, "pilot_decision_outputs", (
-        "Main decision features returned for every verified label-blind pilot request stored "
-        "locally, one point per unique request; providers are offset vertically. Requests are "
-        "real prepared inputs (per-column and joint) drawn deterministically, not a random "
-        "sample, and no target values are read. Responses that fail the production decoder "
-        f"({table.attrs.get('invalid_responses', 0)} here) are excluded. Spread within a dataset "
-        "shows whether a feature varies across texts; it is not evidence of predictive value."
+        "Decision features decoded from the local lifetime response cache, one point per "
+        "payload/settings identity; providers are offset vertically. Historical question and "
+        "runtime versions may coexist; this is not a matched pilot or current-campaign sample. "
+        "No target values are read. Responses that fail the production decoder "
+        f"({table.attrs.get('invalid_responses', 0)} here) are excluded. Spread can reflect text "
+        "or request-version differences; it is not evidence of predictive value or calibration."
     )

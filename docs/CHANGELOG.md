@@ -2,6 +2,16 @@
 
 ## 29-10-2026
 
+- Verify the new Decision3/TabSTAR B200 receipts and successful scratch release; update
+  operational status without treating setup passes as frozen-campaign acceptance.
+  Review the notebook redesign: keep empty response caches reportable; label cached
+  responses as lifetime evidence, preserving settings identities; reject duplicate
+  dataset arms/splits in headline effect cells. Count escaped JSON text consistently
+  and remove the unsupported inference from request length to predictive information.
+  Validation: 1,153 tests passed, 25 optional/platform skips; Ruff passed. All 13
+  discovered notebooks ran; 15 PDFs rendered and visually inspected. The earlier
+  review reported 14 notebooks, but the actual runnable inventory contains 13.
+
 - Rework notebook figures around the study questions. One dataset order, task-coloured
   labels and task-group rules on every dataset axis (`src/visualize/layout.py`); fixed colour
   meanings for task, mode, family and provider. Exploration: one-page overview, combined

@@ -213,3 +213,26 @@ def test_regression_plot_effect_is_invariant_to_target_units_and_refuses_zero_re
     effects = _dataset_effects(pd.DataFrame(rows), ["dataset_id"], "regression", -1)
     assert set(effects.dataset_id) == {"small_units", "large_units"}
     assert np.allclose(effects.effect, 10)
+
+
+def test_empty_response_cache_remains_reportable(tmp_path):
+    from src.visualize.research import pilot_output_figures
+
+    table = evidence.pilot_decision_outputs(tmp_path)
+    summary = table.groupby(["provider", "settings_sha256", "task_type"]).value.describe()
+    assert summary.empty
+    assert table.attrs["invalid_responses"] == 0
+    assert list(pilot_output_figures(table)) == []
+
+
+def test_effect_matrix_rejects_counting_a_dataset_twice():
+    from src.visualize.paired import effect_matrix_figures
+
+    rows = [{"phase": "experiment_1", "task_type": "binary_classification",
+             "metric": "roc_auc", "model_id": "catboost", "reference": "non_text",
+             "feature_set": "non_text_plus_joint", "provider": "jev",
+             "dataset_id": "same_dataset", "split_id": split, "arm_id": split,
+             "outer_fold": fold, "difference": 0.1}
+            for split in ("old", "new") for fold in range(5)]
+    with pytest.raises(ValueError, match="select one campaign"):
+        list(effect_matrix_figures(pd.DataFrame(rows)))

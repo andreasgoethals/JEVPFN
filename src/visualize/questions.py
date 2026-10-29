@@ -58,7 +58,8 @@ def request_composition_figure(table):
         "options, as canonical JSON) and of the row text, for requests with one named field and "
         "for joint requests with two or more fields; joint requests that contain a single "
         "available field equal a single-field request and are counted there. Right: "
-        "distribution of the row-text share of each request. Lengths are characters/4; exact "
+        "distribution of the row-text share of each request, including JSON escaping. "
+        "Lengths are serialized characters/4, not information content; exact "
         "per-provider counts, which also include native prompt framing, come from the "
         "Experiment 0 token audit.",
     )
