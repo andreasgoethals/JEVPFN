@@ -13,7 +13,7 @@
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_CONTROL_TEST=1 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_PHASE=experiment_0
+export JEVPFN_CONTROL_TEST=1 JEVPFN_CONTROL_LEGACY=0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_PHASE=experiment_0
 export JEVPFN_STAGING_ROOT="${JEVPFN_PROJECT_ROOT:-/lustre1/project/stg_00211}"
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.control_runtime test
