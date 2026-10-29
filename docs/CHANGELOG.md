@@ -2,6 +2,19 @@
 
 ## 29-10-2026
 
+- Rework notebook figures around the study questions. One dataset order, task-coloured
+  labels and task-group rules on every dataset axis (`src/visualize/layout.py`); fixed colour
+  meanings for task, mode, family and provider. Exploration: one-page overview, combined
+  field profile, volume/reuse figure and longest columns against encoder/decision windows.
+  Input design: one request/feature-arm schematic and a compact rubric. Question preparation:
+  measured request composition (row text is often under 10% of a request). Feature creation:
+  per-mode workload with Jev cost range, and one predictor-width figure for all arms.
+  0A: decoded pilot outputs per dataset/provider. Experiments 1/2: headline effect matrices.
+  Removed redundant, operational and table-as-figure plots, including a schematic wrongly
+  stating that embeddings encode column names. Fixed mojibake written into Captions.md
+  and a Liquid test reading pyproject.toml with the Windows default encoding. All 14
+  notebooks executed; every saved PDF was inspected. Validation: 1,151 passed, 25 skips; Ruff passed.
+
 - Correct scratch-release preview rejecting runtime-generated Transformers Python import
   caches as missing durable assets. Exempt only non-symlink .py/.pyc files under the exact
   HF_HOME/modules cache, preserving checks for weights and original checkpoint source.

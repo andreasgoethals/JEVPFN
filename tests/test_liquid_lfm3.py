@@ -62,13 +62,13 @@ def test_publisher_lead_is_read_without_executing_torch_source(tmp_path):
 def test_new_container_avoids_conflicting_historical_tokenizer_extra():
     import tomllib
 
-    deps = tomllib.loads((paths.REPO_ROOT / "pyproject.toml").read_text())["project"]["optional-dependencies"]
+    deps = tomllib.loads((paths.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
     assert "transformers==5.19.0" in deps["liquid-lfm3"]
     assert "tokenizers==0.23.3" in deps["liquid-lfm3"]
-    script = (paths.REPO_ROOT / "scripts/build_decision_container.sh").read_text()
+    script = (paths.REPO_ROOT / "scripts/build_decision_container.sh").read_text(encoding="utf-8")
     branch = script.split("elif provider in {'tabstar', 'liquid_lfm3'}:")[1].split("\nelse:")[0]
     assert "token-audit" not in branch and ".[dev,{extra}]" in branch
-    audit = (paths.REPO_ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+    audit = (paths.REPO_ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text(encoding="utf-8")
     assert 'if [[ "${2:-}" == liquid_lfm3 ]]' in audit
     assert "source scripts/activate_runtime.sh" in audit
 

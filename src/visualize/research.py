@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.utils.config import load_yaml
-from src.visualize import style
+from src.visualize import layout, style
 from src.visualize.decision_comparison import LABELS
 
 VARIANTS = {
@@ -19,37 +19,6 @@ VARIANTS = {
 }
 ENCODER_LABELS = {"e5_small_v2": "E5-small-v2", "e5_large_v2": "E5-large-v2",
                   "qwen3_embedding_0_6b": "Qwen3-Embedding-0.6B"}
-
-
-def representation_families_figure():
-    fig, axes = plt.subplots(3, 1, figsize=style.METHOD_MAP_SIZE)
-    rows = [
-        ("Decision features", "Text + fixed task definition", "Frozen decision model",
-         "Compact probabilities / direction", "Target meaning enters; row labels do not."),
-        ("Embedding features", "Text + column name", "Frozen E5 / Qwen encoder",
-         "Training-only PCA, then predictor", "Weights stay fixed; PCA uses training rows only."),
-        ("Original-text systems", "Text + non-text features", "TabSTAR / ConTextTab / AG-MM",
-         "Prediction with the complete system", "Representation and predictor change together."),
-    ]
-    for ax, row, color in zip(axes, rows, style.METHOD_COLORS):
-        ax.set_axis_off()
-        ax.set(xlim=(0, 1), ylim=(0, 1))
-        ax.text(0, 0.98, row[0], va="top", weight="bold", color=color)
-        for x, label in zip((0.16, 0.5, 0.84), row[1:4]):
-            ax.text(x, 0.53, fill(label, 24), ha="center", va="center", fontsize=8,
-                    bbox={"boxstyle": "round,pad=0.4", "facecolor": style.BACKGROUND_COLOR,
-                          "edgecolor": color})
-        for start, end in ((0.32, 0.35), (0.65, 0.69)):
-            ax.annotate("", xy=(end, 0.53), xytext=(start, 0.53),
-                        arrowprops={"arrowstyle": "->", "color": color})
-        ax.text(0.5, 0.04, row[4], ha="center", fontsize=7)
-    return fig, "representation_families", (
-        "Three representation families in Experiments 1–3. The first two augment the same six "
-        "predictors and retain the original non-text features. Decision models receive documentary "
-        "target meanings but no row targets; frozen encoders receive text without those task "
-        "definitions. Original-text systems are separate system references. This diagram describes "
-        "the interventions, not observed performance or supervised encoder fine-tuning."
-    )
 
 
 def study_grid_figure(grid):
@@ -102,7 +71,7 @@ def runtime_evidence_figure(table):
     titles = ["Pinned\nconfig", "Staged\nreceipt", "Full-bank\ntokens", "API/GPU\ncontract", "Human\nreview"]
     labels = {"observed": "Seen", "review": "Review", "failed": "Failed", "unknown": "?",
               "not_applicable": "—"}
-    fig, ax = plt.subplots(figsize=style.EVIDENCE_MATRIX_SIZE)
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 0.75 + 0.22 * len(table))))
     ax.set_axis_off()
     contents = [[LABELS.get(r.model_id, ENCODER_LABELS.get(r.model_id, r.model_id)),
                  *[labels[getattr(r, key)] for key in columns], r.complete_feature_datasets]
@@ -110,7 +79,7 @@ def runtime_evidence_figure(table):
     cells = ax.table(cellText=contents,
                      colLabels=["Runtime", *titles, "Complete datasets\nseparate · joint"],
                      colWidths=[0.27, 0.085, 0.09, 0.10, 0.105, 0.085, 0.265],
-                     bbox=[0, 0.12, 1, 0.86], cellLoc="center")
+                     bbox=[0, 0.07, 1, 0.93], cellLoc="center")
     cells.auto_set_font_size(False)
     cells.set_fontsize(7)
     for (row, col), cell in cells.get_celld().items():
@@ -121,9 +90,8 @@ def runtime_evidence_figure(table):
             cell.set_facecolor(style.EVIDENCE_COLORS[table.iloc[row - 1][columns[col - 1]]])
         if col == 0:
             cell.get_text().set_ha("left")
-    ax.text(0, 0.045, "Seen = receipt available locally; ? = no local evidence, not a model failure.",
+    ax.text(0, 0.0, "Seen = receipt available locally; ? = no local evidence, not a model failure.",
             transform=ax.transAxes, fontsize=7)
-    ax.set_title("Local evidence inventory · bounded tests ≠ full extraction", pad=10)
     return fig, "runtime_evidence", (
         "Selected decision extractors and frozen encoders, using locally available manifests "
         "at notebook execution. A staged receipt is not a rehash of weights. Full-bank counts "
@@ -136,121 +104,152 @@ def runtime_evidence_figure(table):
 
 
 def prompt_sensitivity_figures(table):
+    """One row: distribution change per task, then the regression direction change."""
     if table.empty:
         return
+    from matplotlib.lines import Line2D
+
     from src.data.loaders import load_catalog
 
     names = {entry["id"]: entry["name"] for entry in load_catalog()["datasets"]}
+    tasks = {"BIN_": "binary_classification", "MUL_": "multiclass_classification",
+             "REG_": "regression"}
     for (provider, identity), frame in table.groupby(["provider", "source_sha256"], sort=False):
-        fig, axes = plt.subplots(2, 3, figsize=style.PROMPT_SENSITIVITY_SIZE,
-                                  gridspec_kw={"height_ratios": [1.5, 1]})
         datasets = frame.dataset_id.drop_duplicates().tolist()
-        for index, (ax, dataset) in enumerate(zip(axes[0], datasets)):
+        fig, axes = plt.subplots(1, len(datasets) + 1, figsize=(style.WIDTH_FULL, 2.3),
+                                 sharey=True)
+        rows = list(VARIANTS)
+        for ax, dataset in zip(axes, datasets):
             part = frame[frame.dataset_id.eq(dataset) & frame.variant.ne("base")]
-            y = [list(VARIANTS).index(v) for v in part.variant]
-            ax.hlines(y, 0, part.total_variation_from_base, color=style.GRID_COLOR)
-            for pos, row in zip(y, part.itertuples()):
-                ax.scatter(row.total_variation_from_base, pos, marker="o" if row.same_top_option else "X",
-                           color=style.MEDIAN_COLOR if row.same_top_option else style.P95_COLOR, s=25)
-            ax.set_yticks(range(len(VARIANTS)), list(VARIANTS.values()), fontsize=7)
-            ax.set_ylim(len(VARIANTS) - 0.5, -0.5)
-            for pos, variant in enumerate(VARIANTS):
+            task = tasks[dataset[:4]]
+            positions = [rows.index(v) for v in part.variant]
+            ax.hlines(positions, 0, part.total_variation_from_base, color=style.GRID_COLOR,
+                      linewidth=2)
+            for pos, row in zip(positions, part.itertuples()):
+                ax.scatter(row.total_variation_from_base, pos, s=24, zorder=3,
+                           marker="o" if row.same_top_option else "X",
+                           color=style.TASK_COLORS[task])
+            for pos, variant in enumerate(rows):
                 if variant not in set(part.variant):
-                    ax.text(0.04, pos, "n/a", fontsize=7, color=style.REMOVED_COLOR, va="center")
+                    ax.text(0.03, pos, "n/a", fontsize=6.5, color=style.REMOVED_COLOR,
+                            va="center")
             ax.set(xlim=(-0.03, 1.03), xlabel="Total variation")
-            task = ("Binary" if dataset.startswith("BIN_") else "Multiclass"
-                    if dataset.startswith("MUL_") else "Regression")
-            ax.set_title(task + "\n" + fill(names.get(dataset, dataset), 20), fontsize=8)
-            if index:
-                ax.tick_params(axis="y", labelleft=False)
-        for ax in axes[1]:
-            ax.set_axis_off()
-        axes[1, 0].text(0, 0.82, "One selected real input per task\nCircle: same top option\nCross: changed top option",
-                         fontsize=7, va="top", transform=axes[1, 0].transAxes)
-        reg = frame[frame.expected_direction_change.notna() & frame.variant.ne("base")]
-        ax = axes[1, 1]
-        ax.set_axis_on()
+            ax.set_title(f"{fill(names.get(dataset, dataset), 22)}", fontsize=7.5,
+                         color=style.TASK_COLORS[task])
+            layout.light_grid(ax)
+        ax = axes[-1]
+        regression = frame[frame.expected_direction_change.notna() & frame.variant.ne("base")]
+        positions = [rows.index(v) for v in regression.variant]
         ax.axvline(0, color=style.GRID_COLOR)
-        ax.scatter(reg.expected_direction_change, range(len(reg)), color=style.TOTAL_COLOR,
-                   s=style.AUDIT_MARKER_SIZE)
-        ax.set_yticks(range(len(reg)), [VARIANTS[v] for v in reg.variant], fontsize=7)
-        ax.invert_yaxis()
-        ax.set_xlabel("Direction change (rubric units)", fontsize=7)
-        ax.set_title("Regression only", fontsize=8)
-        axes[1, 2].text(0, 0.82, "Selected probes only.\nNo target labels used.\nNo population flip rate.",
-                         fontsize=7, va="top", transform=axes[1, 2].transAxes)
-        fig.suptitle(f"{LABELS[provider]} · real-text sensitivity · {str(frame.created_utc.iloc[0])[:10]}")
+        ax.hlines(positions, 0, regression.expected_direction_change, color=style.GRID_COLOR,
+                  linewidth=2)
+        ax.scatter(regression.expected_direction_change, positions, s=24, zorder=3,
+                   color=style.TASK_COLORS["regression"])
+        bound = max(0.1, float(regression.expected_direction_change.abs().max()) * 1.3)
+        ax.set(xlim=(-bound, bound), xlabel="Δ expected direction")
+        ax.set_title("Regression direction", fontsize=7.5, color=style.TASK_COLORS["regression"])
+        layout.light_grid(ax)
+        axes[0].set_yticks(range(len(rows)), list(VARIANTS.values()), fontsize=7)
+        axes[0].set_ylim(len(rows) - 0.5, -0.5)
+        axes[0].tick_params(axis="y", length=0)
+        handles = [Line2D([], [], linestyle="none", marker="o", markersize=4,
+                          color=style.MEDIAN_COLOR, label="Same top option"),
+                   Line2D([], [], linestyle="none", marker="X", markersize=5,
+                          color=style.MEDIAN_COLOR, label="Changed top option")]
+        fig.legend(handles=handles, loc="outside upper center", ncols=2, fontsize=7,
+                   frameon=False)
         yield fig, f"prompt_sensitivity_{provider}_{identity[:8]}", (
-            "Changes from each fixed real-text baseline under the listed interventions. Total "
-            "variation compares aligned full probability vectors (0 identical, 1 disjoint); crosses "
-            "mark changed top options. The lower panel reports regression expected-direction "
-            "change in rubric units. Each task has one deterministically selected input, not a "
-            "representative sample. Rows align across tasks; n/a marks inapplicable variants. "
-            "Reversed options apply to multiclass only. Full dataset/row "
-            f"and source identity are retained in the report; receipt SHA-256 starts {identity[:12]}. "
-            "A changed output alone is not proof of an incorrect answer or semantic equivalence."
+            f"{LABELS[provider]} outputs on one deterministically selected real input per task, "
+            f"recorded {str(frame.created_utc.iloc[0])[:10]}, under four interventions that should "
+            "not change the answer. Total variation compares the aligned probability vector with "
+            "the unmodified request (0 identical, 1 disjoint); option reversal applies only to "
+            "multiclass and is mapped back to semantic classes. The right panel gives the change "
+            "in regression expected direction (rubric units). Selected probes are not a population "
+            f"estimate; receipt SHA-256 {identity[:12]}."
         )
 
 
 def regression_information_figures(cases):
+    """Full nine-level distributions, with their expectation and variance beside each row."""
     if cases.empty:
         return
+    from matplotlib.colors import LinearSegmentedColormap
+
+    cmap = LinearSegmentedColormap.from_list(
+        "probability", [style.BACKGROUND_COLOR, style.TASK_COLORS["regression"]])
     for (provider, identity), part in cases.groupby(["provider", "source_sha256"], sort=False):
-        fig, axes = plt.subplots(1, 2, figsize=style.REGRESSION_CASE_SIZE,
-                                  gridspec_kw={"width_ratios": [1, 1.5]})
         variants = [p.split("__")[-1] for p in part.probe]
-        for i, row in enumerate(part.itertuples()):
-            axes[0].scatter(row.mean, row.variance, color=style.MEDIAN_COLOR,
-                            marker=["o", "s", "^", "D"][i % 4], s=25,
-                            label="Original" if variants[i] == "base" else VARIANTS[variants[i]])
-        span = max(float(part["mean"].max() - part["mean"].min()), 0.1)
-        axes[0].set(xlabel="Expected direction", ylabel="Variance (rubric units²)",
-                    xlim=(part["mean"].min() - span * 0.3, part["mean"].max() + span * 0.3),
-                    ylim=(0, max(part.variance.max() * 1.25, 0.1)))
-        fig.legend(*axes[0].get_legend_handles_labels(), loc="outside lower center", ncols=2,
-                   fontsize=7)
-        image = axes[1].imshow(np.array(part.probabilities.tolist()), cmap=style.OVERVIEW_CMAP,
-                               vmin=0, vmax=1, aspect="auto")
-        axes[1].set_xticks(range(9), [f"{r:+d}" for r in range(-4, 5)], fontsize=7)
-        axes[1].set_yticks(range(len(part)), ["Original" if v == "base" else VARIANTS[v] for v in variants], fontsize=7)
-        axes[1].set_xlabel("Directional evidence level")
-        for (i, j), value in np.ndenumerate(np.array(part.probabilities.tolist())):
+        values = np.array(part.probabilities.tolist())
+        fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 0.75 + 0.36 * len(part)))
+        ax.imshow(values, cmap=cmap, vmin=0, vmax=1, aspect="auto")
+        for (i, j), value in np.ndenumerate(values):
             if value >= 0.01:
-                axes[1].text(j, i, f"{value:.2f}", ha="center", va="center", fontsize=7,
-                             color=style.BACKGROUND_COLOR if value >= 0.6 else style.TEXT_COLOR)
-        fig.colorbar(image, ax=axes[1], label="Probability", shrink=0.75)
-        fig.suptitle(f"{LABELS[provider]} · retained regression distributions")
+                ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize=6.5,
+                        color=style.BACKGROUND_COLOR if value >= 0.6 else style.TEXT_COLOR)
+        for i, row in enumerate(part.itertuples()):
+            ax.text(9.1, i, f"E = {row.mean:+.2f}   Var = {row.variance:.2f}", va="center",
+                    fontsize=6.5)
+        ax.set_xticks(range(9), [f"{r:+d}" if r else "0" for r in range(-4, 5)], fontsize=7)
+        ax.set_yticks(range(len(part)),
+                      ["Original" if v == "base" else VARIANTS[v] for v in variants], fontsize=7)
+        ax.set_xlim(-0.5, 8.5)
+        ax.tick_params(length=0)
+        ax.set_xlabel("Directional evidence level")
         yield fig, f"regression_information_{provider}_{identity[:8]}", (
-            "Expected direction and directional variance (left) and the complete nine-level "
-            "probability vectors (right) for the same real regression input and its diagnostic "
-            "variants. Probabilities come from the saved receipt, not synthetic examples. "
-            "The left axes zoom to these observed cases. A near-zero expectation does not "
-            "determine the full distribution; neither axis "
-            "is in target units. These cases do not establish a population uncertainty pattern "
-            "or calibrated target probabilities."
+            f"Complete nine-level {LABELS[provider]} distributions for the selected real "
+            "regression input and its diagnostic variants, with the probability-weighted mean "
+            "(E, the main feature) and variance in rubric units. Probabilities below 0.01 are not "
+            "printed. Levels are evidence strengths, not target units; these cases do not "
+            "establish a population pattern or calibration."
         )
 
 
-def measured_usage_figure(usage):
-    if usage.empty:
+def pilot_output_figures(table):
+    """Label-blind pilot outputs: the spread of each main feature within every dataset."""
+    if table.empty:
         return
-    from src.data.loaders import load_catalog
+    from matplotlib.lines import Line2D
 
-    catalog = {entry["id"]: entry["name"] for entry in load_catalog()["datasets"]}
-    names = [catalog[r.dataset_id] for r in usage.itertuples()]
-    fig, ax = plt.subplots(figsize=style.DASHBOARD_SIZE)
-    y = np.arange(len(usage))
-    bars = ax.barh(y, usage.reported_input_tokens / 1000, color=style.MEDIAN_COLOR)
-    ax.set_yticks(y, [fill(n, 25) for n in names], fontsize=7)
-    ax.invert_yaxis()
-    ax.bar_label(bars, labels=[f"{n} jobs" for n in usage.stored_jobs], padding=3, fontsize=7)
-    ax.set_xlim(0, usage.reported_input_tokens.max() / 1000 * 1.3)
-    ax.set_xlabel("Reported input tokens in stored Jev jobs (thousands)")
-    ax.set_title(f"Measured diagnostic usage · recorded charges ${usage.recorded_charges_usd.sum():.6f}")
-    yield fig, "measured_jev_diagnostic_usage", (
-        "Cumulative input tokens from local Jev extraction-job records, grouped by dataset; "
-        "annotations count distinct stored jobs, including resumed jobs once. Reported charges "
-        "are retained cumulative accounting, separate from reservations. Earlier ambiguous "
-        "attempts may lack usage; synthetic/control receipts are outside this dataset-cache view. "
-        "This deterministic pilot is not a representative full-extraction cost estimate."
+    tasks = [t for t in layout.TASK_ORDER if t in set(table.task_type)]
+    providers = [p for p in LABELS if p in set(table.provider)]
+    datasets = {t: list(dict.fromkeys(table.loc[table.task_type.eq(t), "dataset"]))
+                for t in tasks}
+    fig, axes = plt.subplots(len(tasks), 1, figsize=(style.WIDTH_FULL, 4.7),
+                             gridspec_kw={"height_ratios": [len(datasets[t]) + 1.3 for t in tasks]})
+    axes = np.atleast_1d(axes)
+    spec = {
+        "binary_classification": ((-0.02, 1.02), "Binary: probability that the text supports the positive class"),
+        "multiclass_classification": ((-0.02, 1.02), "Multiclass: normalized entropy of the class probabilities (0 = one class)"),
+        "regression": ((-4.1, 4.1), "Regression: expected direction (rubric levels −4 … +4)"),
+    }
+    offsets = dict(zip(providers, np.linspace(-0.22, 0.22, len(providers)) if len(providers) > 1
+                       else [0.0]))
+    for ax, task in zip(axes, tasks):
+        names = datasets[task]
+        part = table[table.task_type.eq(task)]
+        for provider in providers:
+            rows = part[part.provider.eq(provider)]
+            y = rows.dataset.map({n: i for i, n in enumerate(names)}) + offsets[provider]
+            ax.scatter(rows.value, y, s=9 if provider == "jev" else 16, linewidths=0,
+                       alpha=0.75, color=style.DECISION_COLORS[provider],
+                       marker="o" if provider == "jev" else "D", zorder=3)
+        ax.set_xlim(*spec[task][0])
+        ax.set_xlabel(spec[task][1], fontsize=7)
+        if task == "regression":
+            ax.axvline(0, color=style.GRID_COLOR, linewidth=1)
+        layout.light_grid(ax)
+        layout.dataset_axis(ax, names, [task] * len(names), fontsize=7, separators=False)
+    counts = table.groupby("provider").size()
+    handles = [Line2D([], [], linestyle="none", marker="o" if p == "jev" else "D", markersize=4,
+                      color=style.DECISION_COLORS[p], label=f"{LABELS[p]} (n = {counts[p]})")
+               for p in providers]
+    fig.legend(handles=handles, loc="outside upper center", ncols=len(handles), fontsize=7,
+               frameon=False)
+    yield fig, "pilot_decision_outputs", (
+        "Main decision features returned for every verified label-blind pilot request stored "
+        "locally, one point per unique request; providers are offset vertically. Requests are "
+        "real prepared inputs (per-column and joint) drawn deterministically, not a random "
+        "sample, and no target values are read. Responses that fail the production decoder "
+        f"({table.attrs.get('invalid_responses', 0)} here) are excluded. Spread within a dataset "
+        "shows whether a feature varies across texts; it is not evidence of predictive value."
     )

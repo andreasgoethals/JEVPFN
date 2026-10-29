@@ -1,271 +1,175 @@
-"""Visual explanations and measured feature-build dimensions; no invented Jev outputs."""
+"""Request/feature design schematic and planned predictor-input widths; no model outputs."""
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import FuncFormatter
+from matplotlib.lines import Line2D
 
-from src.visualize import style
-
-MODE_LABELS = {"per_column": "Per-column", "joint": "Joint", "per_column_and_joint": "Both"}
+from src.visualize import layout, style
 
 
-def pca_width_figure(table):
-    """Absolute model-input widths; axes/labels remain outside the cells."""
-    columns = [
-        "per_column_32",
-        "joint_256",
-        "joint_128",
-        "joint_64",
-        "joint_32",
-        "joint_16",
-        "joint_8",
+def predictor_width_figure(plan, summary):
+    """Predictor input columns of every Experiment 1/2 arm, per dataset, on one log axis.
+
+    Widths are identical across the twelve extractors and across the three encoders, so one
+    representative of each is drawn. The figure shows planned columns, not fitted rank.
+    """
+    order = layout.ordered(summary[["dataset_id", "dataset", "task_type"]])
+    rows = plan[plan.model.eq("catboost")]
+    decision = rows[rows.phase.eq("experiment_1")]
+    decision = decision[decision.provider.isna() | decision.provider.eq("jev")]
+    embedding = rows[rows.phase.eq("experiment_2") & rows.encoder.eq("e5_small_v2")]
+    width = {key: frame.set_index("dataset_id").predictor_columns
+             for key, frame in decision.groupby("feature_set")}
+    joint = embedding[embedding.pca_scope.eq("joint")].pivot(
+        index="dataset_id", columns="pca_components", values="predictor_columns")
+    separate = embedding[embedding.pca_scope.eq("per_column")].set_index("dataset_id") \
+        .predictor_columns
+    limit = 500
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 4.0))
+    y = np.arange(len(order))
+    ids = order.dataset_id
+    family = style.FAMILY_COLORS["experiment_2"]
+    ax.hlines(y, joint.reindex(ids).min(axis=1), joint.reindex(ids).max(axis=1),
+              color=family, linewidth=2.4, alpha=0.35, zorder=1)
+    for components in joint.columns:
+        ax.scatter(joint.reindex(ids)[components], y, marker="|", s=26, color=family, zorder=2)
+    ax.scatter(separate.reindex(ids), y, marker="s", s=16, color=family, zorder=3)
+    ax.scatter(width["non_text"].reindex(ids), y, s=16, color=style.QUANTITY_COLOR, zorder=4)
+    offsets = {"non_text_plus_joint": "joint", "non_text_plus_per_column": "per_column",
+               "non_text_plus_both": "both"}
+    for feature_set, mode in offsets.items():
+        ax.scatter(width[feature_set].reindex(ids), y, s=16, marker="D",
+                   color=style.MODE_COLORS[mode], zorder=5, linewidths=0)
+    ax.axvline(limit, color=style.WINDOW_COLOR, linestyle=(0, (3, 2)), linewidth=0.8)
+    ax.text(limit * 1.05, 0.02, "Kumo recipe limit · 500", rotation=90, ha="left", va="bottom",
+            fontsize=6, color=style.WINDOW_COLOR, transform=ax.get_xaxis_transform())
+    ax.set_xscale("log")
+    ax.set_xticks([1, 3, 10, 30, 100, 300, 1000], ["1", "3", "10", "30", "100", "300", "1,000"])
+    ax.set_xlim(0.8, 1100)
+    ax.set_xlabel("Predictor input columns (log scale)")
+    layout.light_grid(ax)
+    layout.dataset_axis(ax, list(order.dataset), order.task_type, fontsize=7)
+    handles = [
+        Line2D([], [], linestyle="none", marker="o", markersize=4, color=style.QUANTITY_COLOR,
+               label="Non-text"),
+        *[Line2D([], [], linestyle="none", marker="D", markersize=3.5,
+                 color=style.MODE_COLORS[m], label=f"+ {label}")
+          for m, label in (("joint", "joint"), ("per_column", "per-column"), ("both", "both"))],
+        Line2D([], [], linestyle="none", marker="s", markersize=4, color=family,
+               label="+ embedding, per-column PCA32"),
+        Line2D([], [], color=family, marker="|", markersize=6, linewidth=2.4, alpha=0.6,
+               label="+ embedding, joint PCA 8–256"),
     ]
-    values = table[columns].to_numpy()
-    fig, ax = plt.subplots(figsize=style.figsize(ratio=1.3))
-    from matplotlib.colors import LinearSegmentedColormap
-
-    cmap = LinearSegmentedColormap.from_list("widths", [style.BACKGROUND_COLOR, style.MEDIAN_COLOR])
-    ax.imshow(values, cmap=cmap, vmin=0, vmax=500, aspect="auto")
-    ax.set_xticks(
-        range(7),
-        [
-            "Per-col.\n32",
-            "Joint\n256",
-            "Joint\n128",
-            "Joint\n64",
-            "Joint\n32",
-            "Joint\n16",
-            "Joint\n8",
-        ],
-        fontsize=7,
-    )
-    ax.set_yticks(range(len(table)), table.dataset, fontsize=7)
-    ax.tick_params(length=0)
-    for (i, j), value in np.ndenumerate(values):
-        ax.text(
-            j,
-            i,
-            str(value),
-            ha="center",
-            va="center",
-            fontsize=7,
-            color=style.BACKGROUND_COLOR if value > 300 else style.TEXT_COLOR,
-        )
-    ax.set_title("Total predictor input columns", fontsize=10)
+    fig.legend(handles=handles, loc="outside upper center", ncols=3, fontsize=7, frameon=False)
     return (
         fig,
-        "pca_widths",
-        (
-            "Experiment 2 column counts, identical for all three encoders. Each cell includes "
-            "all original non-text columns, the PCA components and one missing-text indicator "
-            "per text column. Darker cells have more columns on a fixed 0–500 scale. "
-            "Kumo may additionally encode high-cardinality categorical counts; runtime checks "
-            "refuse silent feature removal. Decision features are not included in Experiment 2."
-        ),
+        "predictor_input_widths",
+        "Planned number of predictor input columns for each Experiment 1 and Experiment 2 arm. "
+        "Augmented arms add one missing-text flag per text column to the non-text columns. "
+        "Decision widths are the same for all twelve extractors (1 feature per request for "
+        "binary and regression, K for multiclass) and embedding widths the same for all three "
+        "encoders; ticks on the joint-PCA bar mark 8, 16, 32, 64, 128 and 256 components. Arms "
+        "wider than 500 columns are excluded for Kumo rather than silently reduced.",
     )
 
 
-def benchmark_configurations_figure(table):
-    """Binary design matrix: no performance measurements or invented results."""
-    from matplotlib.colors import ListedColormap
+def _box(ax, x, y, w, h, color, *, fill=None, lw=0.9):
+    from matplotlib.patches import FancyBboxPatch
 
-    columns = ["Non-text", "Embedding / PCA", "Joint", "Per-column"]
-    values = table[columns].to_numpy(dtype=int)
-    fig, ax = plt.subplots(figsize=style.COMPACT_TABLE_SIZE)
-    ax.imshow(
-        values,
-        cmap=ListedColormap([style.BACKGROUND_COLOR, style.MEDIAN_COLOR]),
-        vmin=0,
-        vmax=1,
-        aspect="auto",
-    )
-    ax.set_xticks(range(len(columns)), columns)
-    ax.set_yticks(range(len(table)), table.configuration)
-    ax.set_xticks(np.arange(-0.5, len(columns), 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, len(table), 1), minor=True)
-    ax.grid(which="minor", color=style.GRID_COLOR, linewidth=1)
-    ax.grid(which="major", visible=False)
-    ax.tick_params(which="both", length=0)
-    for (i, j), included in np.ndenumerate(values):
-        ax.text(
-            j,
-            i,
-            "Yes" if included else "–",
-            ha="center",
-            va="center",
-            color=style.BACKGROUND_COLOR if included else style.TEXT_COLOR,
-        )
-    ax.axhline(3.5, color=style.TEXT_COLOR, linewidth=1.5)
-    ax.set_title("Feature families in Experiments 1 and 2")
-    return (
-        fig,
-        "benchmark_feature_configurations",
-        (
-            "Feature inclusion for the six fixed predictors. The first four rows belong to "
-            "Experiment 1; the last row belongs to Experiment 2, repeated for each encoder and "
-            "per-column PCA32 or joint PCA256/128/64/32/16/8. PCA is fitted on CPU using only training partitions. Non-text includes "
-            "numerical and categorical columns. Joint and per-column decision features use one "
-            "extractor at a time; all twelve extractors are included. The Experiment 1 non-text "
-            "baseline is shared across extractors (108 configurations); it is not refitted for "
-            "every encoder or PCA setting. Experiment 3 uses original text. "
-            "Winner-selected combinations belong only to exploratory Experiment 5."
-        ),
-    )
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.004,rounding_size=0.012",
+                                facecolor=fill or style.BACKGROUND_COLOR, edgecolor=color,
+                                linewidth=lw, transform=ax.transAxes))
+
+
+def _arrow(ax, start, end):
+    ax.annotate("", xy=end, xytext=start, xycoords="axes fraction",
+                arrowprops={"arrowstyle": "-|>", "color": style.TOTAL_COLOR, "lw": 0.9,
+                            "mutation_scale": 8})
 
 
 def input_design_figure():
-    fig, ax = plt.subplots(figsize=style.COMPACT_FLOW_SIZE)
+    """What one request contains, what it returns, and how blocks enter each predictor arm."""
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 4.3))
     ax.set_axis_off()
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    boxes = [
-        (0.14, 0.80, "Text column A", style.MODE_COLORS["per_column"]),
-        (0.14, 0.55, "Text column B", style.MODE_COLORS["per_column"]),
-        (0.14, 0.30, "A + B text", style.MODE_COLORS["joint"]),
-        (0.50, 0.80, "Model reads\nquestion + text A", style.MODE_COLORS["per_column"]),
-        (0.50, 0.55, "Model reads\nquestion + text B", style.MODE_COLORS["per_column"]),
-        (0.50, 0.30, "Model reads\nquestion + A + B", style.MODE_COLORS["joint"]),
-        (0.86, 0.80, "A features", style.MODE_COLORS["per_column"]),
-        (0.86, 0.55, "B features", style.MODE_COLORS["per_column"]),
-        (0.86, 0.30, "Joint features", style.MODE_COLORS["joint"]),
+    ink, faint = style.TOTAL_COLOR, style.FAINT_COLOR
+    per, joint = style.MODE_COLORS["per_column"], style.MODE_COLORS["joint"]
+    ax.text(0, 1, "a  One decision request", weight="bold", fontsize=8, va="top",
+            transform=ax.transAxes)
+    _box(ax, 0.005, 0.505, 0.40, 0.43, ink)
+    lines = [
+        ("Task", "dataset, target meaning, observation unit"),
+        ("Question", "fixed wording per task type"),
+        ("Options", "documented class meanings, or the\nnine-level direction rubric (−4 … +4)"),
+        ("Text", "one named column (per-column) or all\navailable columns together (joint)"),
     ]
-    for x, y, text, color in boxes:
-        ax.text(
-            x,
-            y,
-            text,
-            ha="center",
-            va="center",
-            fontsize=8,
-            bbox={
-                "boxstyle": "round,pad=0.5",
-                "facecolor": style.BACKGROUND_COLOR,
-                "edgecolor": color,
-            },
-        )
-    for y in (0.80, 0.55, 0.30):
-        for start, end in ((0.26, 0.36), (0.65, 0.76)):
-            ax.annotate(
-                "",
-                xy=(end, y),
-                xytext=(start, y),
-                arrowprops={"arrowstyle": "->", "color": style.TOTAL_COLOR},
-            )
-    ax.set_title("Separate and joint text inputs")
-    ax.text(
-        0.5,
-        0.02,
-        "Shared task metadata; no non-text features or row targets.\nOutputs per input: one binary probability, K class probabilities, or one direction score.",
-        ha="center",
-        fontsize=7,
-    )
+    y = 0.905
+    for head, body in lines:
+        ax.text(0.02, y, head, weight="bold", fontsize=7, va="top", transform=ax.transAxes)
+        ax.text(0.10, y, body, fontsize=7, va="top", transform=ax.transAxes, linespacing=1.15)
+        y -= 0.07 if "\n" not in body else 0.105
+    ax.text(0.02, 0.528, "Never sent: non-text values, row targets, class frequencies",
+            fontsize=6.5, color=style.DIRECTION_COLORS["higher"], transform=ax.transAxes)
+    _arrow(ax, (0.41, 0.72), (0.455, 0.72))
+    _box(ax, 0.46, 0.62, 0.15, 0.20, ink, fill=faint)
+    ax.text(0.535, 0.72, "Frozen decision\nmodel\n(12 extractors,\nno generation)",
+            ha="center", va="center", fontsize=7, transform=ax.transAxes)
+    _arrow(ax, (0.615, 0.72), (0.66, 0.72))
+    _box(ax, 0.665, 0.505, 0.33, 0.43, ink)
+    ax.text(0.68, 0.905, "Features per request", weight="bold", fontsize=7, va="top",
+            transform=ax.transAxes)
+    outputs = [
+        ("Binary", "1", "p(positive class)"),
+        ("Multiclass", "K", "class probabilities,\nfixed class order"),
+        ("Regression", "1", "expected direction;\nnine probabilities kept"),
+    ]
+    y = 0.82
+    for task, width, body in outputs:
+        key = {"Binary": "binary_classification", "Multiclass": "multiclass_classification",
+               "Regression": "regression"}[task]
+        ax.text(0.68, y, task, fontsize=7, va="top", color=style.TASK_COLORS[key],
+                weight="bold", transform=ax.transAxes)
+        ax.text(0.785, y, width, fontsize=7, va="top", weight="bold", transform=ax.transAxes)
+        ax.text(0.81, y, body, fontsize=6.8, va="top", transform=ax.transAxes)
+        y -= 0.075 if "\n" not in body else 0.11
+    ax.text(0, 0.46, "b  Predictor input for a row with T = 2 text columns (f features per request)",
+            weight="bold", fontsize=8, va="top", transform=ax.transAxes)
+    arms = [
+        ("Non-text baseline", [("non-text columns", 0.34, style.MISSING_COLOR)]),
+        ("+ joint", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
+                     ("joint · f", 0.09, joint)]),
+        ("+ per-column", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
+                          ("A · f", 0.09, per), ("B · f", 0.09, per)]),
+        ("+ both", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
+                    ("A · f", 0.09, per), ("B · f", 0.09, per), ("joint · f", 0.09, joint)]),
+        ("+ frozen embedding", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
+                                ("training-only PCA of E5/Qwen vectors", 0.27,
+                                 style.FAMILY_COLORS["experiment_2"])]),
+    ]
+    for i, (name, blocks) in enumerate(arms):
+        top = 0.385 - i * 0.075
+        ax.text(0.16, top - 0.027, name, ha="right", va="center", fontsize=7,
+                transform=ax.transAxes)
+        x = 0.175
+        for label, width, color in blocks:
+            light = color in (faint, style.MISSING_COLOR)
+            ax.add_patch(plt.Rectangle((x, top - 0.054), width - 0.004, 0.054, color=color,
+                                       transform=ax.transAxes, linewidth=0))
+            ax.text(x + width / 2, top - 0.027, label, ha="center", va="center", fontsize=6.3,
+                    color=style.TEXT_COLOR if light else style.BACKGROUND_COLOR,
+                    transform=ax.transAxes)
+            x += width
+        ax.text(0.99, top - 0.027, ("Experiment 2" if "embedding" in name else "Experiment 1"),
+                ha="right", va="center", fontsize=6.3, color=ink, transform=ax.transAxes)
     return (
         fig,
-        "per_column_and_joint_inputs",
-        (
-            "Conceptual request construction for a row with two nonempty text columns. Two separate "
-            "inputs and one joint input use the same deterministic task question. Each distinct complete "
-            "request is cached once. This diagram shows the design, not executed API calls or outputs."
-        ),
+        "request_and_feature_design",
+        "(a) Contents of one provider-neutral decision request and the numeric features it "
+        "returns. Every extractor receives the same task context, question, options and named "
+        "text; adapters differ only in native prompt framing and readout. (b) Column blocks "
+        "entering the six fixed predictors for a row with two text columns. Flags mark missing "
+        "text and are shared by every augmented arm; f is 1 for binary and regression and K for "
+        "multiclass. Identical requests are answered once and reused across rows. With a single "
+        "text column the joint block equals the per-column block and is included once.",
     )
 
 
-def request_counts_figure(summary):
-    before = [
-        summary.per_column_nonempty_inputs.sum(),
-        summary.joint_nonempty_inputs.sum(),
-        summary.combined_nonempty_inputs.sum(),
-    ]
-    after = [
-        summary.per_column_unique_inputs.sum(),
-        summary.joint_unique_inputs.sum(),
-        summary.combined_unique_inputs.sum(),
-    ]
-    fig, ax = plt.subplots(figsize=style.figsize())
-    x = np.arange(3)
-    ax.bar(x - 0.2, before, width=0.4, color=style.P95_COLOR, label="Nonempty slots")
-    ax.bar(x + 0.2, after, width=0.4, color=style.MEDIAN_COLOR, label="Unique requests")
-    for i, (total, unique) in enumerate(zip(before, after)):
-        ax.text(
-            i,
-            total,
-            f"{total - unique:,} avoided\n({100 * (total - unique) / total:.1f}%)",
-            ha="center",
-            va="bottom",
-        )
-    ax.set_xticks(x, ["Per-column", "Joint", "Both (shared cache)"])
-    ax.set_ylabel("Request slots / unique requests")
-    ax.set_ylim(0, max(before) * 1.3)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x / 1e6:g}M"))
-    ax.legend(loc="upper left")
-    return (
-        fig,
-        "requests_before_and_after_reuse",
-        (
-            f"Nonempty request slots and distinct complete inputs across the {len(summary)} inspected text datasets. "
-            "Labels show avoided calls in absolute counts and percentages. Both modes use a shared "
-            "cache, including single-available-field overlap; the three alternatives must not be added."
-        ),
-    )
-
-
-def feature_dimensions_figure(plan):
-    fig, axes = plt.subplots(1, 2, figsize=style.DASHBOARD_SIZE, sharey=True)
-    datasets = plan.dataset.drop_duplicates().tolist()
-    for mode, offset, color in [
-        ("per_column", -0.17, style.MODE_COLORS["per_column"]),
-        ("joint", 0.17, style.MODE_COLORS["joint"]),
-    ]:
-        table = plan[plan["mode"] == mode].set_index("dataset").loc[datasets]
-        for ax, col in zip(axes, ["main_numeric_columns", "retained_numeric_columns"]):
-            ax.barh(
-                np.arange(len(table)) + offset,
-                table[col],
-                height=0.32,
-                color=color,
-                label=MODE_LABELS[mode],
-            )
-    axes[0].set_yticks(range(len(datasets)), datasets)
-    axes[0].invert_yaxis()
-    axes[0].set_xlabel("Numeric columns in the agreed main view")
-    axes[1].set_xlabel("Numeric columns retained in the cached table")
-    axes[0].legend(loc="lower right")
-    return (
-        fig,
-        "numeric_feature_dimensions",
-        (
-            "Planned numeric column counts for per-column and joint tables. Compact views use one "
-            "binary probability, K multiclass probabilities, or one expected regression direction per "
-            "input. Retained views additionally keep Choice confidence, or all nine Score probabilities "
-            "and confidence. These are schema dimensions, not generated features or API request counts."
-        ),
-    )
-
-
-def workload_figure(totals):
-    """One axis for token sensitivity; costs label the same bars, not a duplicate panel."""
-    fig, ax = plt.subplots(figsize=style.COMPACT_TABLE_SIZE)
-    tokens = totals.wire_tokens_combined_approx / 1e6
-    bars = ax.barh(
-        [f"{n:g} chars/token" for n in totals.characters_per_token],
-        tokens,
-        color=style.MEDIAN_COLOR,
-    )
-    labels = [
-        f"{v:,.1f}M tokens" + (f" · ${cost:,.2f}" if np.isfinite(cost) else "")
-        for v, cost in zip(tokens, totals.cost_usd.fillna(np.nan))
-    ]
-    ax.bar_label(bars, labels=labels, padding=4)
-    ax.set_xlim(0, tokens.max() * 1.55)
-    ax.set_xlabel("Approximate input tokens (millions)")
-    ax.set_title("Jev cost scenarios · separate and joint text")
-    return (
-        fig,
-        "deduplicated_budget",
-        (
-            "Character-based input-token scenarios for both representations after exact reuse. "
-            "Each bar is labelled with its token volume and configured-price cost. These are "
-            "alternative estimates, not additive workloads or provider billing measurements. "
-            "Metadata and question text are included; unknown billing overhead and retries are excluded."
-        ),
-    )

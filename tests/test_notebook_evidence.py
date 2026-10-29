@@ -145,7 +145,7 @@ def test_paired_plot_requires_five_defined_differences_per_dataset():
                          "outer_fold": fold,
                          "difference": 0.2 if dataset == "complete" else None})
     fig, _, caption = next(paired_effect_figures(pd.DataFrame(rows)))
-    assert "1 available datasets" in fig._suptitle.get_text()
+    assert "· 1 dataset ·" in fig._suptitle.get_text()
     assert "five defined" in caption and "confidence interval" in caption
     plt.close(fig)
 

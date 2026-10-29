@@ -186,6 +186,63 @@ def measured_jev_usage(cache_folder=None):
     return pd.DataFrame(rows)
 
 
+def pilot_decision_outputs(cache_folder=None):
+    """Decode the verified diagnostic responses stored locally; never a feature artifact.
+
+    Uses the production decoder, so a response that fails validation is counted, not
+    plotted. Returns one row per provider and unique request. No target is read.
+    """
+    from src.jev.provider import response_features
+    from src.jev.requests import IntendedRequest
+    from src.utils.serialization import digest
+
+    rows, invalid = [], 0
+    for path in sorted((cache_folder or paths.jev_cache_path()).glob("*.sqlite3")):
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if "responses" not in tables:
+                continue
+            for payload_json, settings_json, response_json in db.execute(
+                "SELECT payload_json,settings_json,response_json FROM responses "
+                "WHERE kind='verified_response'"
+            ):
+                try:
+                    features = response_features(
+                        IntendedRequest(payload_json, settings_json, "{}"), json.loads(response_json)
+                    )
+                except Exception:
+                    invalid += 1
+                    continue
+                payload = json.loads(payload_json)
+                task = payload["state"]["task"]
+                probabilities = np.array(
+                    [v for k, v in features.items() if k.startswith("p_") and k != "p_positive"]
+                )
+                row = {
+                    "dataset_id": path.stem,
+                    "dataset": task["dataset"],
+                    "task_type": task["task_type"],
+                    "provider": json.loads(settings_json).get("provider", "jev"),
+                    "input": digest(payload),
+                    "text_fields": len(payload["state"]["text"]),
+                }
+                if task["task_type"] == "binary_classification":
+                    row["value"] = features["p_positive"]
+                elif task["task_type"] == "multiclass_classification":
+                    safe = np.clip(probabilities, np.finfo(float).tiny, 1)
+                    row["value"] = float(-(probabilities * np.log(safe)).sum() / np.log(len(safe)))
+                    row["top_class"] = int(np.argmax(probabilities))
+                    row["top_probability"] = float(probabilities.max())
+                    row["class_probabilities"] = probabilities.tolist()
+                else:
+                    row["value"] = features["expected_direction"]
+                    row["no_evidence_probability"] = features["p_4"]
+                rows.append(row)
+    table = pd.DataFrame(rows)
+    table.attrs["invalid_responses"] = invalid
+    return table
+
+
 def saved_pca_diagnostics(folds):
     """Extract outer-training diagnostics; remove reuse across predictors/metric rows.
 

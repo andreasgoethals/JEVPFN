@@ -139,6 +139,62 @@ def preparation_tables(bank):
     }
 
 
+def request_composition(prepared):
+    """How much of each unique provider-neutral request is row text versus fixed context.
+
+    Reads the active saved inputs only. Context is the canonical JSON of the payload with
+    every present text value emptied; it depends only on which named fields are present.
+    Character counts approximate, but do not replace, the exact per-provider token audit.
+    """
+    import sqlite3
+    from contextlib import closing
+    from pathlib import Path
+
+    import numpy as np
+
+    from src.jev.inputs import _read_set
+    from src.jev.question_bank import payload_from_text
+    from src.utils.serialization import canonical_json
+
+    rows = []
+    for summary in prepared:
+        uri = Path(summary["path"]).resolve().as_uri() + "?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as db:
+            identity, recipe, _, entry = _read_set(db, summary["input_set_id"])
+            context, values = {}, {"per_column": ([], []), "joint": ([], [])}
+            for (text_json,) in db.execute(
+                "SELECT text_json FROM unique_inputs WHERE input_set_id=?", (identity,)
+            ):
+                text = json.loads(text_json)
+                fields = tuple(sorted(text))
+                if fields not in context:
+                    empty = {name: "" for name in fields}
+                    context[fields] = len(
+                        canonical_json(payload_from_text(entry, recipe["question_variant"], empty))
+                    )
+                mode = "per_column" if len(fields) == 1 else "joint"
+                values[mode][0].append(sum(len(str(v)) for v in text.values()))
+                values[mode][1].append(context[fields])
+        for mode, (text_chars, context_chars) in values.items():
+            if not text_chars:
+                continue
+            text_chars, context_chars = np.array(text_chars), np.array(context_chars)
+            share = 100 * text_chars / (text_chars + context_chars)
+            rows.append(
+                {
+                    "dataset_id": summary["dataset_id"],
+                    "dataset": summary["dataset"],
+                    "mode": mode,
+                    "requests": len(text_chars),
+                    "context_characters_median": float(np.median(context_chars)),
+                    "text_characters_median": float(np.median(text_chars)),
+                    **{f"text_share_p{q:02d}": float(np.percentile(share, q))
+                       for q in (10, 25, 50, 75, 90)},
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

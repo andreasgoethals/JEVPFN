@@ -5,6 +5,7 @@ import numpy as np
 
 from src.visualize import style
 from src.visualize.decision_comparison import LABELS
+from src.visualize.layout import TASK_LABELS
 from src.visualize.paired import METRIC_VIEWS, MODES, _dataset_effects
 from src.visualize.research import ENCODER_LABELS
 
@@ -40,7 +41,8 @@ def direct_comparison_figures(contrasts):
                 ax.set_yticks(range(len(providers)), [LABELS[p] for p in providers])
                 ax.tick_params(axis="both", labelsize=7, length=0)
             fig.colorbar(artist, ax=list(axes), shrink=0.75, label=unit.replace("augmented", "decision").replace("reference", "embedding"))
-            fig.suptitle(f"{model} · {task.split('_')[0]}\nDecision features versus {ENCODER_LABELS[encoder]}", fontsize=9)
+            fig.suptitle(f"{style.PREDICTOR_LABELS[model]} · {TASK_LABELS[task]} · decision features "
+                         f"versus {ENCODER_LABELS[encoder]}", fontsize=9)
             yield fig, f"direct_{model}_{task}_{encoder}", (
                 "Each cell compares decision features with the named frozen embedding recipe in the same predictor, "
                 "dataset, checkpoint and CV split. Positive values favor decision features. J denotes joint PCA "
@@ -74,7 +76,8 @@ def control_figures(paired):
                 ax.set_ylim(len(selected)-0.5, -0.5)
                 ax.axvline(0, color=style.GRID_COLOR)
                 ax.set_xlabel(unit)
-                ax.set_title(f"{model} · {task.split('_')[0]} · controls versus non-text")
+                ax.set_title(f"{style.PREDICTOR_LABELS[model]} · {TASK_LABELS[task]} · controls versus "
+                             "non-text", fontsize=9)
                 yield fig, f"controls_{model}_{task}_{page}", (
                     "Prespecified controls compared with the same predictor using non-text columns. Points are "
                     "dataset means of five defined paired fold differences; diamonds average the available dataset "
@@ -115,7 +118,8 @@ def overlap_figures(paired):
             from matplotlib.lines import Line2D
             fig.legend([Line2D([], [], linestyle="none", marker=style.COHORT_MARKERS[c], color=style.COHORT_COLORS[c]) for c in cohort_values],
                        [c.replace("_", " ") for c in cohort_values], loc="outside lower center", ncol=2, fontsize=7)
-            fig.suptitle(f"{model} · {task.split('_')[0]} · text overlap", fontsize=9)
+            fig.suptitle(f"{style.PREDICTOR_LABELS[model]} · {TASK_LABELS[task]} · seen and unseen text",
+                         fontsize=9)
             yield fig, f"overlap_{model}_{task}", (
                 "Conditional effects on unchanged outer-test predictions, relative to the same predictor's non-text "
                 "arm. Cohort membership uses text and the shared training split only; thresholds remain those "

@@ -3,7 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.visualize import style
+from src.visualize import layout, style
 from src.visualize.decision_comparison import LABELS
 from src.visualize.research import ENCODER_LABELS
 
@@ -15,6 +15,15 @@ METRIC_VIEWS = {
 }
 MODES = {"non_text_plus_joint": "Joint", "non_text_plus_per_column": "Per-column",
          "non_text_plus_both": "Both"}
+MODE_KEYS = {"non_text_plus_joint": "joint", "non_text_plus_per_column": "per_column",
+             "non_text_plus_both": "both"}
+REFERENCE_LABELS = {
+    "non_text": "non-text",
+    "non_text_plus_presence": "non-text + missing-text flags",
+    "frozen_e5": "frozen embedding alone",
+    "same_decision_features_without_e5": "same decision features alone",
+    "original_text_without_decision_features": "original text alone",
+}
 JOINT_WIDTHS = (8, 16, 32, 64, 128, 256)
 
 
@@ -35,6 +44,91 @@ def _dataset_effects(group, keys, task, direction):
                         & np.isfinite(result.reference_mean)].copy()
         result["effect"] *= 100 / result.reference_mean
     return result
+
+
+def _effect_grid(ax, values, wins, counts, limit, cmap):
+    ax.imshow(np.ma.masked_invalid(values), cmap=cmap, vmin=-limit, vmax=limit, aspect="auto")
+    for (i, j), n in np.ndenumerate(counts):
+        if n:
+            dark = abs(values[i, j]) > 0.6 * limit
+            ax.text(j, i, f"{wins[i, j]:.0f}/{n:.0f}", ha="center", va="center", fontsize=5.8,
+                    color=style.BACKGROUND_COLOR if dark else style.TEXT_COLOR)
+    ax.tick_params(length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
+def effect_matrix_figures(paired, phase="experiment_1"):
+    """Headline view: every recipe × predictor, against the prespecified non-text reference.
+
+    Colour is the mean over datasets of the five-fold mean paired difference; the text gives
+    datasets with a positive effect over datasets with five defined folds. No recipe is ranked.
+    """
+    if paired.empty:
+        return
+    cmap = plt.get_cmap(style.EFFECT_CMAP).with_extremes(bad=style.FAINT_COLOR)
+    models = list(style.MAIN_PREDICTORS)
+    short = {m: style.PREDICTOR_LABELS[m].split(" ")[0].split("/")[0] for m in models}
+    for task, (metric, direction, unit) in METRIC_VIEWS.items():
+        sub = paired[paired.phase.eq(phase) & paired.task_type.eq(task) & paired.metric.eq(metric)
+                     & paired.reference.eq("non_text") & paired.model_id.isin(models)]
+        if phase == "experiment_1":
+            sub = sub[sub.feature_set.isin(MODES) & sub.provider.isin(LABELS)]
+            rows = [p for p in LABELS if p in set(sub.provider)]
+            row_keys, panels = ["provider"], list(MODES)
+            row_labels = [LABELS[p] for p in rows]
+        else:
+            sub = sub[sub.encoder.notna()]
+            recipes = [("per_column", 32), *[("joint", w) for w in sorted(JOINT_WIDTHS, reverse=True)]]
+            rows = [(e, s, c) for e in ENCODER_LABELS for s, c in recipes]
+            row_keys, panels = ["encoder", "pca_scope", "pca_components"], [None]
+            row_labels = [f"{ENCODER_LABELS[e]} · {'P' if s == 'per_column' else 'J'}{c}"
+                          for e, s, c in rows]
+        if sub.empty:
+            continue
+        keys = row_keys + ["feature_set", "model_id", "dataset_id", "split_id", "arm_id"]
+        effects = _dataset_effects(sub, keys, task, direction)
+        if effects.empty:
+            continue
+        cells = effects.groupby(row_keys + ["feature_set", "model_id"], dropna=False).agg(
+            effect=("effect", "mean"), wins=("effect", lambda v: (v > 0).sum()),
+            n=("effect", "size")).reset_index()
+        limit = max(float(np.nanpercentile(np.abs(cells.effect), 95)), 1e-4)
+        fig, axes = plt.subplots(1, len(panels), figsize=(style.WIDTH_FULL, min(
+            style.MAX_HEIGHT, 1.1 + 0.2 * len(rows))), sharey=True, squeeze=False)
+        for ax, panel in zip(axes[0], panels):
+            part = cells if panel is None else cells[cells.feature_set.eq(panel)]
+            shape = (len(rows), len(models))
+            values, wins, counts = np.full(shape, np.nan), np.zeros(shape), np.zeros(shape)
+            for record in part.itertuples():
+                key = tuple(getattr(record, k) for k in row_keys)
+                key = key[0] if len(key) == 1 else (key[0], key[1], int(key[2]))
+                if key in rows and record.model_id in models:
+                    i, j = rows.index(key), models.index(record.model_id)
+                    values[i, j], wins[i, j], counts[i, j] = record.effect, record.wins, record.n
+            _effect_grid(ax, values, wins, counts, limit, cmap)
+            ax.set_xticks(range(len(models)), [short[m] for m in models], rotation=90, fontsize=6.5)
+            if panel is not None:
+                ax.set_title(MODES[panel], fontsize=8, color=style.MODE_COLORS[MODE_KEYS[panel]])
+            if phase != "experiment_1":
+                for boundary in range(len(recipes), len(rows), len(recipes)):
+                    ax.axhline(boundary - 0.5, color=style.BACKGROUND_COLOR, linewidth=2)
+        axes[0, 0].set_yticks(range(len(rows)), row_labels, fontsize=6.5)
+        mappable = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(-limit, limit))
+        fig.colorbar(mappable, ax=list(axes[0]), shrink=0.8, pad=0.02,
+                     label=f"{unit} (mean over datasets)")
+        family = "decision features" if phase == "experiment_1" else "frozen embeddings"
+        yield fig, f"effect_matrix_{phase}_{task}", (
+            f"{layout.TASK_LABELS[task]} datasets: effect of adding {family} to each fixed "
+            "predictor, relative to the same predictor on non-text columns, dataset and outer "
+            "folds held fixed. Colour is the unweighted mean over datasets of the five-fold mean "
+            "paired difference in the prespecified endpoint; text gives the datasets with a "
+            "positive difference over those with five defined folds. Grey cells lack complete "
+            "evidence. The colour scale is symmetric and clipped at the 95th percentile of "
+            "|effect|. Descriptive; no recipe is selected and fold spread is not uncertainty."
+            + (" J = joint PCA total width, P32 = 32 components per text column."
+               if phase != "experiment_1" else "")
+        )
 
 
 def paired_effect_figures(paired):
@@ -59,14 +153,15 @@ def paired_effect_figures(paired):
             bound = max(float(means.effect.abs().max()) * 1.15, 0.001)
             for ax, (mode, label) in zip(axes, MODES.items()):
                 ax.axvline(0, color=style.GRID_COLOR)
+                color = style.MODE_COLORS[MODE_KEYS[mode]]
                 for pos, provider in enumerate(providers):
                     values = means.loc[means.provider.eq(provider) & means.feature_set.eq(mode), "effect"]
                     if values.empty:
                         continue
                     offsets = np.linspace(-0.15, 0.15, len(values))
-                    ax.scatter(values, pos + offsets, color=style.MEDIAN_COLOR, alpha=0.35, s=10)
-                    ax.scatter(values.mean(), pos, color=style.P95_COLOR, marker="D", s=25)
-                ax.set_title(label)
+                    ax.scatter(values, pos + offsets, color=color, alpha=0.3, s=10, linewidths=0)
+                    ax.scatter(values.mean(), pos, color=color, marker="D", s=22, zorder=3)
+                ax.set_title(label, color=color)
                 ax.set_xlabel(unit, fontsize=7)
                 ax.set_xlim(-bound, bound)
                 ax.set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=7)
@@ -74,7 +169,9 @@ def paired_effect_figures(paired):
                 ax.tick_params(axis="x", labelsize=7)
             axes[0].invert_yaxis()
             n = means.dataset_id.nunique()
-            fig.suptitle(f"{model} · {task.split('_')[0]} · {n} available datasets\nReference: {reference}", fontsize=9)
+            fig.suptitle(f"{style.PREDICTOR_LABELS[model]} · {layout.TASK_LABELS[task]} · {n} "
+                         f"dataset{'s' if n != 1 else ''}"
+                         f" · reference: {REFERENCE_LABELS.get(reference, reference)}", fontsize=9)
             yield fig, f"paired_{model}_{task}_{reference}", (
                 "Paired representation effects within the same predictor and named reference. "
                 "Small points are per-dataset averages of five defined paired outer-fold differences; "
@@ -134,7 +231,8 @@ def embedding_effect_figures(paired):
                              transform=axes[0].transAxes, ha="center", fontsize=8)
             axes[1].set_xticks(range(3), ["Small\nE5", "Large\nE5", "Qwen"], fontsize=7)
             axes[1].set_title("Per-column PCA32", fontsize=8)
-            fig.suptitle(f"{model} · {task.split('_')[0]} · embedding effects\nReference: {reference}", fontsize=9)
+            fig.suptitle(f"{style.PREDICTOR_LABELS[model]} · {layout.TASK_LABELS[task]} · frozen embeddings"
+                         f" · reference: {REFERENCE_LABELS.get(reference, reference)}", fontsize=9)
             yield fig, f"embedding_effect_{model}_{task}_{reference}", (
                 "Paired frozen-embedding effects within a fixed predictor. Each joint curve "
                 "uses only dataset/split pairs with five defined paired folds at all six joint "
