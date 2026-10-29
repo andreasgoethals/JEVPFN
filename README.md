@@ -6,16 +6,17 @@ extraction/evaluation. Zomato Restaurants and Spotify Genres remain in explorati
 are excluded from experiments for text burden and 114-class feature size.
 
 **Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The latest 28 October download confirms CPU/storage checks passed. Decision3's saved-token
-preparation exceeded its two-hour limit; the startup check now avoids a redundant full
-token-blob scan and logs its stages, while the merge retains full content verification.
-Liquid d1-2B's download, container, exact counts and native GPFS storage checks passed;
-its B200 test was still queued at 14:57. Keep active VSC checkouts unchanged.
-The preceding campaign completed 174/176 steps: ten exact-token audits, nine B200 decision
-contracts/pilots and three encoder contracts passed. Decision3's corrected device argument
-still needs live inference testing. Liquid d1-2B needs its B200 contract and dataset pilot;
-TabSTAR v1.1 needs its interrupted checkpoint transfer and runtime tests completed.
-Use the targeted commands in [VSC](docs/VSC.md) and preserve completed work.
+The 29 October download confirms Liquid d1-2B passed its B200 contracts and its
+18-dataset pilot (414 new requests, 36 reused, zero failures). Decision3's corrected
+preparation finished in 7m39s; all ten partitions passed and its strict merge was still
+running at the downloaded snapshot. TabSTAR's weights and container succeeded, but
+GPFS staging failed because personal scratch reached 499.8/500 GiB. Its GPU test
+was not submitted. Keep active VSC checkouts unchanged.
+The earlier nine decision runtimes and three encoder contracts have bounded B200
+passes. Decision3 and TabSTAR still need their remaining live tests. Setup and frozen
+0A now limit resident GPFS working sets to two, publish results and release copied
+inputs/images after each runtime's last consumer. Use the safe release commands in
+[VSC](docs/VSC.md) to recover space before resuming; preserve completed evidence.
 Token audits use ten independent CPU partitions per provider and a strict merge, reusing
 matching committed counts. Bounded B200 passes do not certify full-dataset extraction
 or final acceptance. Source identities are recorded; the final frozen run repeats all gates.
@@ -28,7 +29,10 @@ containers, count tokens and copy each required working set to native GPFS scrat
 Authoritative inputs, weights and durable results remain on Lustre PROJECT; logs and
 small manifests remain on DATA. Committed feature/prediction databases publish periodically
 and at job exit; predictor staging also restores durable completed folds and predictions
-so a recreated scratch workspace resumes them. Scratch is not a backup. No new
+so a recreated scratch workspace resumes them. A 200 GiB application working-set
+budget and 20 GiB personal headroom check prevent staging all runtimes at once.
+Scratch response queues, embeddings and predictions survive input-copy release.
+Scratch is not a backup. No new
 GPFS project allocation is required. Existing H100 images remain preserved; all A100
 routes are excluded. See [VSC](docs/VSC.md).
 

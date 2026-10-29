@@ -1,6 +1,6 @@
 # Current operational evidence
 
-Updated 28 October 2026. README owns the method, VSC owns commands,
+Updated 29 October 2026. README owns the method, VSC owns commands,
 DATA_SOURCES owns dataset meanings and LITERATURE_REVIEW owns research claims.
 Older details/test counts remain in CHANGELOG/Git. Submission is not completion.
 
@@ -34,43 +34,36 @@ live ownership, H100 partition and checkout paths; CPU and other projects stay.
 Do not update source used by active jobs. No remote cancellation/submission was
 performed during this implementation.
 
-Owner quota report, 26 October 08:44: shared Lustre PROJECT 473.3 GB/1 TB and
-40,313/150,000 files; DATA 55,045/76,800 MB and 528k/10M files; GPFS scratch
-9.537/500 GB. These are dated observations, not current capacity. Compact
-containers addressed the previous ~111k-file native-environment problem.
-Never delete working images or other projects to make space.
+Owner quota report, 29 October 10:24: Lustre PROJECT 628 GB/1 TB and 46,067 files;
+DATA 56,234/76,800 MB; personal GPFS scratch 499.8/500 GB. JEVPFN working copies
+used 416 GB, CreditICL 84 GB. Containerization fixed the earlier inode problem,
+but retaining every runtime's byte-heavy working set exhausted scratch space.
+Do not touch other projects. Native GPFS I/O remains required by the VSC Library
+STORAGE guide at pin 1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87, rechecked 29 October.
+
+Setup/frozen 0A now bound staging-to-release residency to two workspaces, with a
+200 GiB JEVPFN budget and 20 GiB personal headroom. Release publishes results then
+removes copied inputs/images, preserving mutable queues/features/predictions and all
+durable assets. Failed publication blocks new stages. Predictor staging omits decision
+token databases. Live release and bounded graph execution still need VSC validation.
 
 ## Latest downloaded VSC evidence
 
-Latest inspected Downloads/output_JEVPFN.zip, modified 28 October 2026 14:54:46,
-2,683,955 bytes, 1,405 members. Targeted Decision3/Liquid d1-2B graph: 19 completed,
-one failed, 15 blocked, one submitted and one pending. CPU 62456535, Lustre 62456536
-and both checkpoint stages passed. Decision3 preparation 62456544 timed out after
-two hours; its ten partitions, merge, scratch/storage, GPU test and pilot were blocked.
-Earlier preparation 62452632 did complete, reporting 1,698,127 reusable inputs.
-The timeout therefore does not mean those counts were lost or need retokenizing.
-
-Liquid d1-2B stage 62456538, container 62456545, preparation 62456625, all ten token
-partitions, merge 62456814, scratch 62456843 and GPFS storage 11748950 passed.
-Its exact audit covers 18 datasets, 1,698,127 inputs and 710,490,406 tokens; maximum
-3,044 tokens, zero overflow. The merge summary's short duration is not total audit time.
-Owner's 14:57 accounting/queue output confirms B200 contract 11748961 was PENDING
-for Priority; its pilot had not been submitted. Keep this watcher running; no source
-pull, cleanup or duplicate submission while it or its descendant can still run.
-
-The preparation timeout log had no intermediate stages, so it cannot locate the
-exact stall. Code inspection found a whole-database quick_check (including token blobs)
-and a coverage join that could read blob-bearing pages in older caches. Preparation now
-checks the identity/count tables, ensures/analyzes a compact key index, uses a bounded
-256 MiB SQLite cache and logs elapsed phases. Full per-input/blob checks remain in
-the strict merge before GPU acceptance. No question, tokenizer, counter identity or
-saved token contents change. Actual Lustre runtime improvement still needs a rerun.
-After Liquid's queued test and pilot finish, an idle targeted Decision3 restart reuses
-assets/counts. Do not delete output to troubleshoot this failure.
-Local validation: 1,127 tests passed, 25 skips for unavailable staged assets/Torch or
-POSIX-only behavior. Focused token tests passed 33/33, including recovery and corrupt
-content rejection; Ruff, formatting, dependencies and diff checks passed. No remote
-jobs, paid calls, model downloads or output cleanup were performed for this fix.
+Downloads/output_JEVPFN.zip modified 29 October 10:23:37, 2,821,081 bytes:
+- Liquid d1-2B contract 11748961 passed 26 checks on B200. Pilot 11750830 completed
+  across 18 datasets with 414 new requests, 36 reused and zero failures.
+- Decision3 CPU 62463095, Lustre 62463096 and stage 62463097 passed. Preparation
+  62463103 completed in 458.8 seconds; all ten partitions 62463120–62463129 passed.
+  Merge 62463241 was RUNNING at the owner's 10:24 snapshot, making measured progress
+  through checksum/input verification. Its B200 contracts/pilot remain unverified.
+  The watcher disconnected, so submitted work continues but descendants need a resumed
+  watcher. Keep it paused while GPFS is full; do not pull while the merge is active.
+- TabSTAR stage 62463463 and sealed blackwell container 62463466 succeeded. Scratch
+  stage 62463487 failed with Errno 122 while copying prepared questions. The subsequent
+  GPFS storage and predictor jobs were not submitted. No rebuild is indicated.
+These receipts are setup evidence from their recorded source revisions, not acceptance
+of the new storage lifecycle or a full frozen 0A campaign. No remote jobs, deletion,
+model downloads or paid calls were executed during this local repair.
 
 The preceding full setup ended with 174 completed, one failed and one blocked job.
 The table below is historical evidence from that campaign, not current-source acceptance.
@@ -116,7 +109,7 @@ lookup index resolved the five merge timeouts. GPFS BSD flock allowed simultaneo
 owners; POSIX record locking has real two-node GPFS/Lustre passes. Perplexity staging
 now preserves source/uv.lock; Tykky sealing/relocation normalize links identically.
 Compact images addressed the former ~111k-file environment problem. H100 evidence is
-historical; current receipts demonstrate bounded B200 inference for nine decision
+historical; current receipts demonstrate bounded B200 inference for ten decision
 models and three encoders.
 
 ## Jev and permanent accounting
@@ -148,7 +141,7 @@ Question v3 supersedes v2 evidence. Mechanical audit: 665,406 selected rows,
 79,461 empty slots, 1,516,752 reused nonempty slots. All 20 raw datasets remain;
 Spotify/Zomato are excluded from extraction/evaluation. Exact counts differ by tokenizer.
 
-All eleven extractors receive the same canonical task/question/text/class meanings.
+All twelve extractors receive the same canonical task/question/text/class meanings.
 Native framing, tokens, attention, readouts and confidence fields differ. Shared
 numeric schema does not imply equal probabilities. Exclude provenance URLs,
 non-text row values and row targets from model text; retain sources separately.
@@ -169,17 +162,13 @@ H2O's 0.801 winning-probability floor is publisher behavior, not measured confid
 
 ## Validation and next gates
 
-The latest 28 October update passed 1,097 local tests in 228.41 seconds,
-with 22 platform/optional-runtime skips. Ruff, dependency and diff checks passed.
-New tests cover Decision3's logical CUDA indices and bounded, cache-preserving
-TabSTAR transport recovery without retrying HTTP rejections. Existing tests exercise
-incomplete/altered partitions, damaged/conflicting saved
-tokens, atomic rollback, bounded/bulk copying and verified partition resume. The
-reviewed tokenization modules and registry remain byte-identical to HEAD; their
-cache identities are unchanged. Library pins were not changed.
-No remote execution, paid calls, cleanup or Git publication occurred in this task.
-Local tests do not establish Decision3 or the new TabSTAR runtime's B200 compatibility.
-Earlier validation counts remain in CHANGELOG.
+The 29 October storage update passed 1,144 local tests with 25 skips for optional
+staged assets/Torch or POSIX-only behavior. Ruff, dependency, Bash syntax and diff
+checks passed. New tests cover input-copy release, preserved mutable queues, failed
+publication, queued consumers, capacity budgets, bounded graph residency and cleanup
+after failed consumers. No remote deletion or jobs were executed locally. Live release
+and the bounded B200 lifecycle remain unverified. Reviewed source changes are authorized
+for Git publication. The tokenizer modules and registry were unchanged.
 
 The current-source review confirmed Claude's completed-fold restoration, SII label/cue
 checks, token-merge validation, failed-semantic-probe propagation, paired representation
@@ -259,7 +248,8 @@ score readout preserves the expected-direction design; the publisher's default i
 Its lfm3.py answer-lead registration matters and is read without importing Torch on CPU.
 All full-extraction/evaluation gates remain disabled. Model weights and live B200 tests
 were not run locally. The twelve-extractor grid has 3,996/2,268/54 configurations in
-Experiments 1/2/3; the all-runtime setup has 204 jobs, 193 with all images reusable.
+Experiments 1/2/3; the current all-runtime setup has 215 jobs, 204 with all images reusable
+(including eleven workspace release jobs).
 
 Claude's TabSTAR concern was checked against the pinned publisher source. Epochs were
 selected on TabArena fold 0, not an unspecified suite; documented pretraining filtering

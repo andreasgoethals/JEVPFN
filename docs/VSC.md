@@ -1,8 +1,8 @@
 # VSC operations
 
 Use this guide for execution; use README for the experiment design and
-AGENTS_MEMORY for dated observations. **Nine decision runtimes and three encoders have
-bounded B200 passes; Decision3, Liquid d1-2B and the new TabSTAR runtime still need inference tests.**
+AGENTS_MEMORY for dated observations. **Ten decision runtimes and three encoders have
+bounded B200 passes; Decision3 and the new TabSTAR runtime still need inference tests.**
 Final acceptance requires the complete frozen campaign and review.
 
 ## Storage and hardware
@@ -66,6 +66,53 @@ See its `guides/SLURM.md`, `STORAGE.md`, `SOFTWARE.md` and `CLUSTERS.md`.
 Storage/Slurm guidance for this merge-recovery update was rechecked on 27 October
 at VSC Library `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`, upstream
 `7c04105490d610fee13125c8c70fa4bddd854a88`. The earlier pin records the hardware review.
+
+## Bound and release GPFS working copies
+
+On 29 October, JEVPFN retained 416 GiB across twelve working directories, alongside
+84 GiB from CreditICL. This exhausted the owner's 500 GiB scratch allocation. The
+quota covers all projects; neither total filesystem free space nor spare Lustre quota
+provides additional personal GPFS capacity. Never delete another project's files.
+
+Setup and frozen 0A permit at most two resident runtime working sets. A stage takes
+a slot when submitted and holds it until all consumers are terminal and its release
+job succeeds. Release still runs after a failed consumer, publishes committed results
+first, then removes only copied raw/question inputs, checkpoints, container images and
+CPU token evidence. Fitted PCA artifacts are retained. It preserves scratch response queues,
+embeddings, predictions and diagnostic output as well as every durable Lustre asset
+and DATA log/manifest. A publication conflict preserves the input copies and blocks
+further staging. Cloudflare's release waits for all three encoder tests as well.
+
+The configurable application budget is 200 GiB, with a 500 GiB personal allocation
+and 20 GiB headroom in experiment_0/scheduling.yaml. Staging also reserves temporary
+copy space and checks the other projects' current usage. These are conservative
+pre-copy checks, not a scheduler quota reservation; other jobs can grow afterwards.
+Predictor workspaces no longer copy unrelated decision token databases. Mutable
+result growth remains part of the budget and is never silently deleted to fit it.
+
+After all JEVPFN jobs and watchers stop, pull the reviewed code and run these CPU
+jobs from `$VSC_DATA/JEVPFN`. The first previews exact paths and removable bytes;
+the second publishes results and applies that scoped release:
+
+```bash
+sbatch --wait scripts/slurm/experiment_0_scratch_release.slurm all
+sbatch --wait scripts/slurm/experiment_0_scratch_release.slurm all --apply
+myquota
+```
+
+Both jobs write `output_JEVPFN/3. experiment_0/logs/jevpfn-scratch-release_<jobid>.log`.
+Use a runtime name instead of `all` for a single working set. The helper checks
+workspace identity, authoritative source files, queued/running consumers and
+an exclusive workspace lease. Unknown scheduler state refuses deletion. It never
+cleans the scratch root or other projects. Do not submit new consumers during manual
+release. Existing logs are retained; this is storage recovery, not a campaign reset.
+
+A released runtime must be staged again before any GPU work. Setup/frozen 0A handle
+that automatically. For manual predictor or production batches, run the runtime's
+scratch stage first and its release only after all that runtime's consumers finish;
+keep no more than two such runtime batches resident. Durable checkpoints and sealed
+containers do not need downloading or rebuilding. Full extraction stays disabled
+until acceptance; this storage change does not grant acceptance.
 
 ## Stop only this project's H100 jobs and update
 
@@ -149,13 +196,14 @@ Its CPU partitions wait for its Transformers 5.19 container and run inside that 
 other models retain their existing tokenizer environments. The same question v3 files
 are reused: no grammar or class-vocabulary change accompanies this addition.
 
-The complete setup contains 204 jobs with no reusable containers, or 193 when all eleven
+The complete setup contains 215 jobs with no reusable containers, or 204 when all eleven
 sealed images exist. Containers are verified in their own CPU staging jobs, not hashed
 serially on the login node. Each runtime has its own two-node GPFS storage check; a
 failed model cannot block every other model through a shared staging prerequisite.
 Configuration permits 64 queued/running jobs: at most 40 token partitions, six other CPU
-checks/merges, 12 GPU tests, two downloads, two builds and two transfers. These are resource pools, not artificial
-dependencies between different models. Token audits cannot fill the GPU/build pools.
+checks/merges, 12 GPU tests, two downloads, two builds and one bulk transfer/release. A separate two-workspace residency limit covers staging through the last GPU consumer
+and release, including queue waits; it prevents all providers retaining large GPFS copies.
+CPU token/download/build branches still proceed independently. Token audits cannot fill the GPU/build pools.
 Slurm still decides placement and start times; this does not promise simultaneous starts.
 Cross-cluster dependencies are checked through accounting, not assumed to work
 through Slurm federation. `--watch` polls once per minute and submits ready steps.
@@ -249,16 +297,14 @@ GPFS/B200 descendants. After a disconnect, use `--provider decision3 --provider 
 and omit `--restart`; the `--all` wrapper would select a
 different provider list. The final clean 0A campaign still tests all providers/encoders.
 
-The later 28 October targeted attempt timed out in Decision3's two-hour saved-token
-preparation; Liquid d1-2B's counts/container/storage passed and its B200 contract was
-still queued. Let the existing watcher finish Liquid's contract and dependent pilot.
-Do not pull while either can run. After all JEVPFN jobs are idle, pull the preparation
-fix and use `--provider decision3 --restart --execute --watch` to repeat only that
-provider's chain plus CPU/Lustre prerequisites. Resume this new attempt after a disconnect
-with `--provider decision3 --execute --watch` (no restart). Completed token partitions,
-sealed containers, weights and previous receipts are retained. A new shell must first
-export the roots and source `scripts/activate_conda.sh`; an unset JEVPFN_PYTHON otherwise
-causes Bash's empty-command error before Python starts.
+The 29 October Decision3 preparation completed in 7m39s and all ten partitions passed.
+Merge 62463241 was still running in the downloaded snapshot; it was verifying partition
+contents, not re-tokenizing inputs. Leave it running. Liquid d1-2B's B200 contract and
+18-dataset pilot passed. TabSTAR's stage 62463463 and container 62463466 succeeded;
+scratch stage 62463487 failed on the personal GPFS byte quota. Its storage/GPU tests
+were not submitted. Recover space using the section below after active JEVPFN jobs finish.
+A changed setup graph requires an idle `--restart`; it retains prior receipts and reuses
+valid assets/counts. After a disconnect on the same source/graph, omit `--restart`.
 
 The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
 mismatch: Tykky writes image paths containing `bin//python`, while the seal used the
@@ -299,9 +345,9 @@ every input, partition checksum, compressed token checksum and count before GPU 
 The five added renderers use eight CPUs/27,200 MiB per partition and a 12-hour limit; the
 original five and Liquid d1-2B use two CPUs/6,800 MiB and four hours. Progress logs report throughput at least
 once per minute between batches. Shorter partitions improve parallelism, but queueing, text
-length and I/O prevent a guaranteed tenfold speedup. Frozen 0A contains 181 VSC jobs: eleven recovery checks, 110 token
+length and I/O prevent a guaranteed tenfold speedup. Frozen 0A contains 192 VSC jobs: eleven recovery checks, 110 token
 partitions, eleven merges, CPU checks, one Lustre check, eleven scratch stages, eleven native GPFS checks,
-eleven GPU contracts, eleven bounded pilots and three encoder tests. Setup also downloads/builds.
+eleven GPU contracts, eleven bounded pilots, three encoder tests and eleven workspace releases. Setup also downloads/builds.
 
 To migrate an active monolithic audit, first stop its watching coordinator with Ctrl+C.
 Cancel only its explicitly verified token job IDs, leave container builds running, and wait
@@ -546,11 +592,11 @@ TabSTAR selects v1.1 through package 1.2.2, not the original model interface. It
 classification/regression snapshots and E5 dependency are pinned in the model catalog.
 The CPU stager writes checksummed offline Hugging Face snapshots and aliases, with one
 predictor manifest; it neither loads a model nor modifies tracked configuration.
-The 28 October download records a disconnected public checkpoint transfer, before
-container/GPU tests. Staging now retries transport failures at most three times using
-the same pinned Hub cache; valid downloaded files are reused. HTTP rejections and
-integrity errors are not retried, and incomplete staging never creates an acceptance
-manifest. Rerun the chain below without removing the cache.
+The 29 October download confirms its weights and versioned container are ready.
+The GPFS copy failed on quota; after scoped scratch recovery, resume the final three
+steps below. The first two commands are needed only for a new installation or a
+failed/missing authoritative checkpoint/container. Staging retries transport failures
+at most three times; valid pinned downloads are reused and integrity errors stop.
 Do not mix TabSTAR's Transformers 4.57.6 environment with the decision-tokenizer environment.
 Its new `tabstar-v1p1` container path preserves old images. Once JEVPFN jobs are idle,
 and before a frozen stage, run in the VSC Bash terminal:
@@ -565,6 +611,7 @@ sbatch --wait scripts/slurm/experiment_0_container_build.slurm tabstar new /lust
 sbatch --wait scripts/slurm/experiment_0_scratch_stage.slurm tabstar
 sbatch --wait scripts/slurm/experiment_0_storage_gpfs.slurm tabstar
 sbatch --wait scripts/slurm/experiment_0_predictor.slurm tabstar tabstar
+sbatch --wait scripts/slurm/experiment_0_scratch_release.slurm tabstar --apply
 )
 ```
 

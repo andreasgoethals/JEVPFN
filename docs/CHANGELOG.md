@@ -1,5 +1,16 @@
 # Changelog
 
+## 29-10-2026
+
+- Bound GPFS working-set residency to two runtimes through their final test consumer,
+  publish results and release copied inputs/images automatically. Add explicit preview/apply
+  CPU cleanup, queue/lease/path guards and conservative application/personal byte budgets.
+  Preserve durable assets and mutable scratch queues, features, predictions and diagnostics.
+  Stop copying decision token databases into predictor workspaces. Record Liquid d1-2B's
+  successful B200 contract/pilot, recovered Decision3 preparation and TabSTAR quota failure.
+  Validation: 1,144 passed, 25 optional/platform skips; Ruff, dependencies and shell syntax
+  passed; the final focused storage suite passed 40 tests. Live scoped release and bounded working-set lifecycle still need VSC testing.
+
 ## 28-10-2026
 
 - Narrow saved-token startup verification to identity/count tables and compact prepared-key

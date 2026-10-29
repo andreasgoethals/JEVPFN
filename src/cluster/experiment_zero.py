@@ -122,7 +122,9 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 "command": ["sbatch", "--parsable", *flags, f"scripts/slurm/{script}", *args],
             }
         )
-    return result[:2] + token_steps + result[2:]
+    from src.cluster.workspace_graph import add_releases
+
+    return add_releases(result[:2] + token_steps + result[2:], command_style=True)
 
 
 def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/jev.local"):

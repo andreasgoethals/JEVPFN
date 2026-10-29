@@ -3,6 +3,7 @@
 import json
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from test_cache_merge import cache, request, response
@@ -21,6 +22,11 @@ def roots(tmp_path, monkeypatch):
     monkeypatch.setenv("JEVPFN_DURABLE_ROOT", str(durable))
     monkeypatch.setenv("VSC_SCRATCH_GPFS1", str(scratch))
     monkeypatch.setenv("JEVPFN_RUNTIME_PROFILE", "blackwell-cu130")
+    # Tiny unit fixtures must not depend on a compute node's real /tmp free space.
+    monkeypatch.setattr(stage.shutil, "disk_usage", lambda p: SimpleNamespace(free=10**15))
+    config = tmp_path / "repo/config" / paths.phase_folder("experiment_0") / "scheduling.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_bytes(paths.config_path("experiment_0/scheduling").read_bytes())
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path / "repo")
     return stage.roots("intern")
 
@@ -120,7 +126,10 @@ def test_publisher_lockfiles_are_immutable_assets_not_runtime_locks(tmp_path):
     (folder / "model.safetensors").write_bytes(b"weights")
     (folder / ".cache").mkdir()
     (folder / ".cache/download.lock").write_text("transient")
-    assert {p.name for p in stage._regular_files(folder, immutable_assets=True)} == {"uv.lock", "model.safetensors"}
+    assert {p.name for p in stage._regular_files(folder, immutable_assets=True)} == {
+        "uv.lock",
+        "model.safetensors",
+    }
     assert {p.name for p in stage._regular_files(folder)} == {"model.safetensors"}
 
 

@@ -3,7 +3,8 @@
 Each invocation reconciles recorded jobs and submits ready steps. --watch polls
 once per minute; interruption is safe and the same command resumes. Cross-cluster
 dependencies are checked through accounting, never assumed to be federated.
-No final acceptance is granted and no environment is deleted.
+No final acceptance is granted; durable environments remain. Finished branches
+publish results and release reproducible GPFS input/image copies.
 """
 
 import argparse
@@ -147,7 +148,9 @@ def plan(providers, *, reuse=()):
                     cluster="mindwell",
                 )
             )
-    return steps
+    from src.cluster.workspace_graph import add_releases
+
+    return add_releases(steps)
 
 
 def run(providers, *, execute=False, restart=False):

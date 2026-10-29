@@ -211,13 +211,15 @@ def stage(runtime):
     from src.cluster import containers
     from src.cluster.runtime_profiles import BLACKWELL, selected
     from src.cluster.scheduling import require_cpu_staging
+    from src.cluster.scratch_capacity import capacity_lease, check_capacity
 
     if selected() != BLACKWELL:
         raise ValueError("B200 staging requires JEVPFN_RUNTIME_PROFILE=blackwell-cu130")
 
     durable, work = roots(runtime)
     require_cpu_staging()
-    with workspace_lease(work):
+    with capacity_lease(work), workspace_lease(work):
+        previous = {}
         if (work / MARKER).exists():
             previous = json.loads((work / MARKER).read_text())
             if previous.get("runtime") != runtime or previous.get("durable_root") != str(durable):
@@ -230,7 +232,7 @@ def stage(runtime):
                 "runtime_profile": selected(),
                 "durable_root": str(durable),
                 "status": "staging",
-                "files": {},
+                "files": previous.get("files", {}),
             },
         )
         inputs = ["data/raw", "data/decision_inputs", "data/jev_cache"]
@@ -287,7 +289,7 @@ def stage(runtime):
         inputs += [
             f"output_JEVPFN/{paths.phase_folder(p)}/results/{name}"
             for p, name in (
-                ("experiment_0", "token_audit"),
+                *([("experiment_0", "token_audit")] if runtime in containers.SELF_HOSTED else []),
                 ("experiment_2", "pca"),
                 ("experiment_1", "pca"),
             )
@@ -330,12 +332,7 @@ def stage(runtime):
             raise ValueError("Prepared questions are absent from durable storage")
         with staging_environment(durable):
             source_container = containers.container_dir(runtime)
-        needed = sum(p.stat().st_size for p in candidates.values())
-        needed += sum(p.stat().st_size for p in source_container.rglob("*") if p.is_file())
-        if shutil.disk_usage(work).free < needed + 2 * 1024**3:
-            raise OSError(
-                "Insufficient filesystem capacity for this working set; also check myquota"
-            )
+        check_capacity(work, candidates, source_container)
         files = {}
         for relative, source in candidates.items():
             destination = work / relative

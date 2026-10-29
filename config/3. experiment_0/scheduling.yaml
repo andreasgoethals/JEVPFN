@@ -4,13 +4,18 @@
 # Queued jobs also count. Actual placement/priority remains Slurm's decision.
 max_active_jobs: 64
 token_audit_shards: 10
+# Staging-to-release slots include queued GPU consumers, not just active transfers.
+max_resident_workspaces: 2
+scratch_working_set_gib: 200
+scratch_allocation_gib: 500
+scratch_headroom_gib: 20
 test_pool_limits:
   cpu: 6
   tokens: 40
   gpu: 12
   download: 2
   build: 2
-  transfer: 2
+  transfer: 1  # Serialize bulk copy/release; two resident GPU runtimes can still run together.
 account: lp_verbekelab
 default_gpu_profile: mindwell_b200
 routes: {}
