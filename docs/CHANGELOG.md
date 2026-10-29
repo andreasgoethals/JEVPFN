@@ -2,6 +2,11 @@
 
 ## 29-10-2026
 
+- Verified the corrected CPU controller on VSC in job 62471351: all four launch
+  checks, two-node storage, eighteen datasets and 1,139 CPU contracts passed;
+  the allocation's disposable cache was removed on exit. Full frozen 0A remains
+  the extraction gate, including every provider's real B200 checks.
+
 - Probe original model images through a host step in the existing allocation when
   the CPU controller encloses the build. Keep monitored relocated runtime launches
   separate. Use owned native per-job scratch caches and a guarded exit cleanup,

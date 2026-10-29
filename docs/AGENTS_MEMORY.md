@@ -77,6 +77,14 @@ exit cleanup that preserves a failing job's status. These last operational paths
 require the new live control test before the next final reset/freeze.
 Final local validation of those paths: 1,154 passed, 25 platform/optional skips;
 Ruff and the changed Bash scripts' syntax checks passed.
+The first VSC run ended with 133 completed, one CPU-fixture failure and 58 blocked
+descendants. All eleven exact token audits completed; no GPU branch was accepted
+from that failed campaign. After it became idle, update to 41fb56f and control job
+62471351 passed (4m04s): four controller/host-launch checks, two-node storage,
+all eighteen datasets and 1,139 CPU contracts (36 skips, four notebook deselections).
+The exit hook removed its owned /tmp cache. Quota at 22:56: PROJECT 639.6G/1T and
+46,212 files; DATA 56,878M/76,800M; personal GPFS scratch 16.81G/500G.
+The next reset/freeze repeats final 0A; full extraction is still disabled.
 
 ## Current scope and direct access, 29 October
 
