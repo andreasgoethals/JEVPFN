@@ -6,6 +6,7 @@ remote input files are backed up before replacement. Run with all writers stoppe
 
 import argparse
 import json
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -137,7 +138,10 @@ def pack(destination):
 def install(bundle, *, writers_stopped=False):
     if not writers_stopped:
         raise ValueError("Stop manual writers and jobs, then pass --writers-stopped")
-    require_idle_vsc()
+    if os.environ.get("SLURM_JOB_ID"):
+        require_idle_vsc(allow_current=True)
+    else:
+        require_idle_vsc()
     bundle = paths.require_project_output(Path(bundle))
     expected = bundle.with_suffix(".zip.sha256").read_text().split()[0]
     if file_sha256(bundle) != expected:

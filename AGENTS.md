@@ -32,6 +32,14 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
 - Existing authorization for environment setup persists; verify the actual interpreter and
   do not alter another project's/shared environment without authorization.
 
+## Authorized current run
+
+On 29 October the owner authorized the CPU control-container rebuild/cutover,
+Slurm debugging, verified final local/VSC output reset, fresh 0A, evidence review
+and accepted full open-weight feature creation. Carry this out autonomously within
+JEVPFN; preserve other projects. Full Jev extraction, 0B and benchmarks wait for the
+owner's next stage. Preserve the old CPU environment until the replacement passes.
+
 ## Layout and operations
 
 The active research scope is Experiments 1–3, with prerequisite 0A/0B and a synthesis

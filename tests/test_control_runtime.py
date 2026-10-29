@@ -36,3 +36,18 @@ def test_nested_child_preserves_allocation_and_clears_parent_container_state(mon
     assert env["CUDA_VISIBLE_DEVICES"] == "0" and env["SLURM_JOB_ID"] == "123"
     assert all(key not in env for key in ("CONDA_PREFIX", "CONDA_SHLVL", "_CONDA_ROOT", "_CE_CONDA", "APPTAINER_BIND"))
     assert control.os.environ["CONDA_PREFIX"] == "parent-only"
+
+
+def test_install_allocation_can_ignore_only_its_own_cluster_job(isolated_output, monkeypatch):
+    from src.cluster import maintenance
+
+    monkeypatch.setenv("SLURM_JOB_ID", "123")
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "wice")
+    monkeypatch.setattr(maintenance, "storage_policy_failures", lambda _: [])
+    monkeypatch.setattr(maintenance.subprocess, "check_output", lambda *a, **k:
+                        "CLUSTER: wice\n123|jevpfn-input-install|/JEVPFN\nCLUSTER: mindwell\n456|creditpfn|/other\n")
+    maintenance.require_idle_vsc(allow_current=True)
+    monkeypatch.setattr(maintenance.subprocess, "check_output", lambda *a, **k:
+                        "CLUSTER: wice\n123|jevpfn-input-install|/JEVPFN\nCLUSTER: mindwell\n123|jevpfn-features|/JEVPFN\n")
+    with pytest.raises(RuntimeError, match="123"):
+        maintenance.require_idle_vsc(allow_current=True)

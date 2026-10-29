@@ -108,6 +108,32 @@ Storage/Slurm guidance for this merge-recovery update was rechecked on 27 Octobe
 at VSC Library `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`, upstream
 `7c04105490d610fee13125c8c70fa4bddd854a88`. The earlier pin records the hardware review.
 
+## CPU control container
+
+`experiment_0/control_runtime.yaml` records the exact Python/package versions read
+from the former DATA control environment. `control_build.slurm` recreates these
+inside `PROJECT/JEVPFN/containers/control-v1`, using only temporary Lustre scratch
+for unpacked installation/cache files. It seals image/wrapper hashes and verifies
+package versions, checkout visibility and dependency compatibility.
+
+Before cutover, `control_test.slurm` selects that image explicitly. It tests Slurm
+accounting and scheduling dry-run commands, launching a model image from the CPU
+controller, two-node locking/snapshot behavior, data checks and the synthetic CPU
+suite. Host Slurm/Apptainer clients, plugins/config and Munge library are bound into
+the CPU image; installed Python dependencies stay in its SquashFS. Nested launches
+clear the parent image's Conda stack and automatic bind list.
+
+`python -m src.cluster.control_runtime activate --test-job-id JOBID` requires all
+three successful reports from the same job and an idle checkout. Its persistent
+cutover receipt embeds the reports, so a later deliberate output reset preserves
+the image's installation evidence. Normal activation then verifies the selected
+image and fails on corruption. B200 staging includes a checksum-verified native
+copy of this small CPU image alongside its model image, within the same quota budget.
+The old control environment is retained until cutover validation is complete.
+
+Question ZIP installation has `input_install.slurm`; it validates on a CPU node,
+ignores only its own job in the quiescence check and refuses all other JEVPFN consumers.
+
 ## Bound and release GPFS working copies
 
 On 29 October, JEVPFN retained 416 GiB across twelve working directories, alongside

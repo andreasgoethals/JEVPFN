@@ -7,7 +7,7 @@
 #SBATCH --ntasks=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=6800M
+#SBATCH --mem=3000M
 #SBATCH --time=00:20:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"

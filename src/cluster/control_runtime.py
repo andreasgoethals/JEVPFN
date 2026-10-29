@@ -38,6 +38,17 @@ def integration_test():
     root = Path(os.environ["JEVPFN_STAGING_ROOT"]) / "JEVPFN"
     commands = [
         [
+            "sbatch",
+            "--test-only",
+            "--clusters=wice",
+            "--account=lp_verbekelab",
+            "--partition=batch",
+            "--time=00:01:00",
+            "--cpus-per-task=1",
+            "--mem=1000M",
+            "--wrap=true",
+        ],
+        [
             "sacct",
             "--clusters=wice",
             "-j",
@@ -108,7 +119,7 @@ def image_files(folder):
     return result
 
 
-def verify(folder):
+def verify(folder, *, active=None):
     folder = Path(folder)
     if folder.is_symlink() or not folder.is_dir():
         raise ValueError("CPU image must be a real container directory")
@@ -123,6 +134,67 @@ def verify(folder):
         raise ValueError("CPU control image differs from its sealed identity")
     if not any(name.endswith(".sqfs") for name in manifest["files"]):
         raise ValueError("CPU dependency SquashFS is missing")
+    if active:
+        selected = json.loads(Path(active).read_text(encoding="utf-8"))
+        accepted = selected.get("container_id")
+        if accepted not in {
+            manifest["container_id"],
+            manifest.get("relocation", {}).get("source_container_id"),
+        }:
+            raise ValueError("Active CPU image is different from the reviewed cutover")
+    return manifest
+
+
+def activate(job_id):
+    from src.cluster.maintenance import require_idle_vsc
+    from src.utils import paths
+    from src.utils.serialization import write_json
+
+    require_idle_vsc()
+    root = paths.manifests_dir("experiment_0")
+    before = root / "before_extraction"
+    manifest = verify(paths.checkpoints_dir().parent / "containers" / LEAF)
+    reports = []
+    for files, status in (
+        (before.glob("control_*.json"), "control_integration_passed"),
+        (root.glob("preflight_*.json"), "preflight_passed"),
+        (
+            (before / "storage_contracts").glob("*.json"),
+            "storage_contracts_passed_requires_quota_and_backup_review",
+        ),
+    ):
+        matches = [
+            p
+            for p in files
+            if (d := json.loads(p.read_text(encoding="utf-8"))).get("status") == status
+            and str(d.get("job_id")) == job_id
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                "Cutover requires the successful integration, CPU and storage reports from one job"
+            )
+        reports.append(
+            dict(
+                path=str(matches[0]),
+                sha256=file_hash(matches[0]),
+                report=json.loads(matches[0].read_text(encoding="utf-8")),
+            )
+        )
+    integration = json.loads(Path(reports[0]["path"]).read_text())
+    if integration["container_id"] != manifest["container_id"]:
+        raise ValueError("Control test belongs to another image")
+    target = paths.checkpoints_dir().parent / "containers/control.active.json"
+    if target.exists():
+        raise ValueError("A control cutover is already recorded")
+    write_json(
+        target,
+        dict(
+            container_id=manifest["container_id"],
+            validation_job_id=job_id,
+            evidence=reports,
+            legacy_environment_preserved_at_cutover=True,
+        ),
+    )
     return manifest
 
 
@@ -182,13 +254,21 @@ def seal(folder):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("verify", "seal", "test"))
+    parser.add_argument("action", choices=("verify", "seal", "test", "activate"))
     parser.add_argument("folder", type=Path, nargs="?")
+    parser.add_argument("--active", type=Path)
+    parser.add_argument("--test-job-id")
     args = parser.parse_args()
     result = (
-        integration_test()
-        if args.action == "test"
-        else (verify if args.action == "verify" else seal)(args.folder)
+        activate(args.test_job_id)
+        if args.action == "activate"
+        else (
+            integration_test()
+            if args.action == "test"
+            else verify(args.folder, active=args.active)
+            if args.action == "verify"
+            else seal(args.folder)
+        )
     )
     print(result["container_id"])
 
