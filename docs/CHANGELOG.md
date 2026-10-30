@@ -2,10 +2,21 @@
 
 ## 30-10-2026
 
+- Complete fresh 0A operational review/backup in Slurm, sign eleven open-weight and
+  three encoder acceptances, and configure their explicit full-extraction campaign.
+  Preserve the tested runtimes and question version; Jev and benchmarks remain gated.
+- Require the exact provider identity when selecting token, GPU and pilot acceptance
+  reports. Liquid's filename prefix also matched Liquid LFM3; preserve both successful
+  reports and reject foreign-provider evidence rather than choosing an arbitrary file.
+- Record all 192 VSC 0A steps completed successfully and the finished eighteen-dataset
+  Jev 1.14 prefix validation. Refresh stage/cleanup documentation, explain compact
+  feature storage and preserve the owner's download/import requirement. Final
+  operational acceptance remains distinct from passing bounded tests.
+
 - Fresh local Jev 1.14 0A passed all eight steps: 1,163 tests, exhaustive questions,
   31 live diagnostics and 288 new dataset-pilot responses. Reviewed instruction/order
   sensitivity explicitly; bounded approval does not enable full Jev extraction.
-  Current-source Liquid and Strands B200 contracts also passed; remaining VSC gates continue.
+  Current-source B200 gates subsequently completed in the 192-step frozen VSC campaign.
 
 - Pin new Jev work to 1.14 with model-separated diagnostic ledgers; preserve 1.13
   accounting and responses. Revalidate before the owner-authorized local prefix pilot.

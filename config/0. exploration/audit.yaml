@@ -16,7 +16,7 @@ jev:
   enabled: false  # Guarded transport exists; execution remains disabled in this phase.
   representation: per_column_and_joint
   include_non_text_features: false  # Agreed: Jev sees text only; non-text features go to TabPFN.
-  model: jev-1.14.0  # Official model documentation checked 2026-10-30; no call made.
+  model: jev-1.14.0  # Official model documentation checked 2026-10-30.
   version: 1.14.0
   request_configuration: {}  # No invented provider parameters.
   template_version: directional-v2
@@ -27,7 +27,7 @@ jev:
 cost:
   input_price_per_million: 0.042  # Or JEV_INPUT_PRICE_PER_MILLION; verify before paid calls.
   currency: USD
-  checked_on: '2026-10-12'
+  checked_on: '2026-10-30'
   source: https://docs.typesafe.ai/models
   output_price_per_million: 0.0
   price_must_be_verified_before_calls: true

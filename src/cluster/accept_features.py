@@ -65,7 +65,8 @@ def evidence_for(provider, *, campaign=None):
     token_file, token = choose(
         before.glob(f"tokens_{provider}_*.json"),
         lambda r: (
-            r.get("status") == "counted_all_inputs"
+            r.get("provider") == provider
+            and r.get("status") == "counted_all_inputs"
             and r.get("overflow_unique_inputs") == 0
             and {
                 d["dataset_id"]: (d["input_set_id"], d["input_file_sha256"]) for d in r["datasets"]
@@ -76,7 +77,8 @@ def evidence_for(provider, *, campaign=None):
     gpu_file, gpu = choose(
         (before / "gpu_contracts").glob(f"{provider}_*.json"),
         lambda r: (
-            r.get("status") == "gpu_contracts_passed_requires_review"
+            r.get("provider") == provider
+            and r.get("status") == "gpu_contracts_passed_requires_review"
             and matching(r, provider + "_contracts")
             and r.get("token_audit_id") == token["audit_id"]
             and r.get("runtime_token_count_parity") is True
@@ -92,7 +94,8 @@ def evidence_for(provider, *, campaign=None):
     pilot_file, pilot = choose(
         before.glob(f"{provider}_*.json"),
         lambda r: (
-            r.get("status") == "completed_requires_review"
+            r.get("provider") == provider
+            and r.get("status") == "completed_requires_review"
             and matching(r, provider + "_pilot")
             and r.get("mode") == "pilot"
             and r.get("token_audit_id") == token["audit_id"]

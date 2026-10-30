@@ -20,6 +20,7 @@ def evidence(isolated_output, monkeypatch):
     write_json(
         before / "tokens_liquid_fixed.json",
         {
+            "provider": "liquid",
             "status": "counted_all_inputs",
             "overflow_unique_inputs": 0,
             "audit_id": "token",
@@ -28,6 +29,7 @@ def evidence(isolated_output, monkeypatch):
     )
     identity = {"provider": "liquid", "version": "pin"}
     common = {
+        "provider": "liquid",
         "token_audit_id": "token",
         "settings_sha256": digest(identity),
         "settings": identity,
@@ -210,5 +212,29 @@ def test_explicit_completed_campaign_disambiguates_successful_reruns(evidence, m
 def test_b200_requires_both_active_and_durable_storage_checks(evidence):
     _, before, _ = evidence
     (before / "storage_contracts/gpfs.json").unlink()
+    with pytest.raises(ValueError, match="found 0"):
+        acceptance.evidence_for("liquid")
+
+
+@pytest.mark.parametrize("foreign_provider", ["liquid_lfm3", "intern"])
+def test_provider_name_prefix_or_mislabeled_report_cannot_certify_another_runtime(
+    evidence, foreign_provider
+):
+    _, before, _ = evidence
+    sources = [
+        before / "tokens_liquid_fixed.json",
+        before / "gpu_contracts/liquid_fixed.json",
+        before / "liquid_fixed.json",
+    ]
+    for source in sources:
+        body = json.loads(source.read_text())
+        # Keep every other field identical, including successful counts and settings.
+        # Provider identity must disambiguate even a misleading filename.
+        write_json(source.with_name(source.stem + "_foreign.json"), body | {"provider": foreign_provider})
+    result = acceptance.evidence_for("liquid")
+    assert result["provider"] == "liquid"
+    assert not any("foreign" in item["path"] for item in result["evidence"])
+    for source in sources:
+        source.unlink()
     with pytest.raises(ValueError, match="found 0"):
         acceptance.evidence_for("liquid")

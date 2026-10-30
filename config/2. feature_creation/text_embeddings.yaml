@@ -1,5 +1,5 @@
 # Conventional representation control; no labels, fine-tuning or silent truncation.
-enabled: false
+enabled: true  # Three frozen-encoder 0A contracts reviewed; explicit execution still required.
 model: intfloat/e5-small-v2
 revision: ffb93f3bd4047442299a41ebb6fa998a38507c52
 dimensions: 384

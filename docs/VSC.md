@@ -4,9 +4,11 @@ Use this guide for execution; use README for the experiment design and
 AGENTS_MEMORY for dated observations. Historical bounded B200 checks passed for all eleven
 open-weight decision runtimes, three encoders and TabSTAR. Final acceptance still requires
 one complete frozen campaign; historical setup passes are not current acceptance.
-The current frozen campaign is already running. Preserve its queued inputs, source and
-output; do not repeat a reset or upload while it has consumers. See AGENTS_MEMORY for
-the exact receipt/job IDs. New local Jev validation is a separate revision.
+The frozen VSC 0A campaign completed all 192 steps successfully on 30 October.
+Operational acceptance for all eleven providers and three encoders is signed.
+Preserve that evidence through the extraction handover;
+do not reset successful output at this stage. See AGENTS_MEMORY for exact receipts.
+Local Jev 1.14 validation uses its separately recorded revision.
 
 ## Shared manual access
 
@@ -33,10 +35,17 @@ Read relevant files, logs, quotas and scheduler state directly after that probe.
 alone authorizes no submissions, cancellations, migration or deletion. Do not pull into
 a checkout consumed by active or queued jobs; keep recovery state until it is published.
 
-One temporary 30-minute local monitor follows the current campaign. Its ID is
-`jevpfn-0a-progress`, recorded with owner/source/jobs/completion criteria in compact local
-output. Keep the host/app available. It stays quiet without meaningful change and never
-authenticates, submits or cleans. Pause on expired credentials; remove it once tracked work
+All checkouts use the same main branch. Local/GitHub may advance while an existing
+VSC DATA checkout remains frozen at its recorded older commit for active/queued consumers;
+this does not create another branch. Once those consumers are idle, finish the recorded
+stage, fast-forward the reviewed checkout, verify its commit and run checks relevant to the
+changes before freezing the next stage. Do not force an active checkout to match GitHub.
+
+The completed 0A's temporary monitor `jevpfn-0a-progress` was removed after terminal
+accounting and evidence review; its compact receipt remains in local output. A new
+long-running authorized campaign gets its own scoped monitor and exact job/source
+record. Keep the host/app available; stay quiet without meaningful changes and never
+automate authentication. Pause on expired credentials; remove it once tracked work
 is terminal and evidence assessed. Do not create a duplicate monitor.
 
 ## Storage and hardware
@@ -116,6 +125,32 @@ See its `guides/SLURM.md`, `STORAGE.md`, `SOFTWARE.md` and `CLUSTERS.md`.
 Storage/Slurm guidance for this merge-recovery update was rechecked on 27 October
 at VSC Library `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87`, upstream
 `7c04105490d610fee13125c8c70fa4bddd854a88`. The earlier pin records the hardware review.
+
+## Storage lifecycle exceptions
+
+Authoritative checkpoints and sealed images remain on PROJECT. Mindwell uses temporary
+native GPFS copies because the allocated PROJECT is Lustre; intensive B200 I/O does not
+stream from cross-mounted Lustre. Two resident working sets and the configured byte budget
+bound that duplication. Verify publication and consumers before releasing each copy.
+
+Parallel token partitions are temporarily retained on PROJECT as durable recovery evidence
+through frozen 0A review. They are not GPU inputs: scratch staging excludes the shards
+folder. After merge/coverage/checksum acceptance and confirmation that no recovery/merge
+consumer remains, retain the final per-provider databases and compact receipts; retire
+redundant partition databases under a reviewed cleanup. They are not permanent study results.
+
+Legacy GPU image manifests are included in the current frozen runtime identity, even when
+the B200 profile selects another image. Do not remove them mid-campaign. Review their
+remaining consumers and rollback requirement at an idle stage boundary before retiring them;
+keep the active CPU control image and future-required predictor assets.
+
+Container-build scratch is temporary, not an exception for indefinite retention. The
+30 October audit found 25 old build leaves occupying 28.07 GiB; approved maintenance
+62474729 subsequently verified twelve installed image seals and retired all those leaves.
+The build script seals containers but lacks explicit successful-build workdir
+retirement. Cleanup must be scoped to verified owned leaves, preserve unresolved builds,
+and happen only after the owner's requested cleanup-plan review. Do not modify frozen
+source to add that lifecycle fix while its consumers remain active.
 
 ## CPU control container
 
@@ -211,8 +246,8 @@ until acceptance; this storage change does not grant acceptance.
 
 ## Setup before a future frozen campaign
 
-The current frozen campaign is already running; keep its source and prepared inputs
-unchanged. Once idle, an authorized unfrozen setup uses
+The completed frozen 0A should be retained, not restarted. For a later campaign,
+an authorized idle, unfrozen setup uses
 `bash scripts/test_all.sh --execute --watch`. The graph stages pinned models, builds
 compact PROJECT images, partitions exact-token audits and runs independent CPU/GPU
 contracts and pilots concurrently. Resume saved job IDs; never blindly restart an
@@ -282,16 +317,14 @@ full Jev extraction. Current model/price/context references were checked on 30 O
 
 ## Future authorized reset, question preparation and upload
 
-The reset/upload already preceded the current frozen campaign. Routine housekeeping
+The reset/upload already preceded the completed frozen campaign. Routine housekeeping
 preserves retained results, submissions, backups and recovery state. Use the following
 only for a separately authorized fresh campaign **after** B200 tests, local Jev pilot and CPU-control
 container migration described above, with all
 JEVPFN jobs and manual/notebook writers stopped. Preserve their evidence until the
 cause of every failure is understood. Synchronize the same reviewed source first.
-For the owner's interim clean debugging rerun, use the cleanup commands below after
-jobs stop, then `bash scripts/test_all.sh --execute --watch`. Keep the existing
-audited question files and do not freeze yet. The full regeneration/upload/freeze
-sequence below is for the final campaign after setup works.
+The commands below describe a future explicitly authorized reset, not the next step
+after the successful 0A. The current next step is acceptance and feature creation.
 
 VSC CPU environment, with the durable root and `VSC_SCRATCH_GPFS1` available:
 
@@ -402,7 +435,7 @@ remain resident. These execution partitions preserve every selected row/input.
 No Jev API call or downstream predictor is launched. Release publishes committed
 results even after a failed consumer and preserves mutable recovery stores.
 
-The final successful job graph still requires complete-artifact validation; it is
+The final successful extraction graph still requires complete-artifact validation; it is
 not Experiment 0B acceptance. Each dataset's full probabilities/responses, numeric
 features, measured timings and hardware/job identities remain available.
 
@@ -412,7 +445,8 @@ Between reviewed stages, with no writers, use
 on both machines before changing the next stage's configuration. Record a new
 freeze afterward. Do not delete accepted evidence when moving to the next stage.
 
-Full extraction remains disabled. Enable it only after 0A acceptance:
+The reviewed open-weight and encoder switches are now enabled; Jev and benchmarks
+remain disabled. Activation requirements are:
 
 - Open weights: populate `accepted_before_extraction_manifests` per provider and
   enable `full_feature_creation_enabled` in `config/3. experiment_0/self_hosted.yaml`.
@@ -423,24 +457,24 @@ Full extraction remains disabled. Enable it only after 0A acceptance:
 - Encoders: enable `config/2. feature_creation/text_embeddings.yaml` only after all
   three real encoder contracts pass. Pins/recipes stay in `embedding_models.yaml`.
 
-Create the phase log directory, restage affected idle runtimes after changed inputs,
-and submit accepted workloads. These examples use existing staged B200 workspaces:
+Use the campaign launcher so each native working set is prepared before GPU consumers
+and released after verified publication. It resumes exact submitted job IDs:
 
 ```bash
 mkdir -p "output_JEVPFN/2. feature_creation/logs"
-sbatch scripts/slurm/feature_creation.slurm intern
-sbatch --cpus-per-task=14 --mem=112000M scripts/slurm/feature_creation.slurm perplexity
-sbatch scripts/slurm/embedding_creation.slurm e5_small_v2
+python -m src.cluster.feature_campaign
+python -u -m src.cluster.feature_campaign --execute --watch
 ```
 
-Repeat only for accepted providers/encoders. Perplexity, SII, Kev and Decision3 use
-the larger resource profile. A 24-hour allocation is a resumable segment, not a
+The graph contains only accepted providers/encoders. Perplexity, SII, Kev and Decision3 use
+the larger resource profile. A 48-hour decision allocation is a resumable segment, not a
 completion estimate. Exact duplicates reuse saved outputs; empty text stays missing.
 Do not run duplicate campaigns for the same provider. Review publication receipts
 before downloading or marking a dataset complete.
 
-After all features exist, download/import the VSC bundle locally using the final
-section below. The reverse direction uses closed SQLite snapshots of the local
+After all features exist, the owner has requested automatic download and validated
+local import using the final section below. Preserve the VSC copy as a second copy.
+The reverse direction uses closed SQLite snapshots of the local
 dataset stores, uploaded into a separate PROJECT `uploads/jev_features/` directory;
 never SCP over populated `data/jev_cache/` files. In the idle VSC CPU environment,
 merge each uploaded snapshot transactionally:

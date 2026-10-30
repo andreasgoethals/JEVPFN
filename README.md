@@ -5,12 +5,14 @@ This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18
 extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
 are excluded from experiments for text burden and 114-class feature size.
 
-**Stage: frozen VSC Experiment 0A is running; full extraction and benchmarks are gated.**
-CPU/data/question checks and all eleven tokenizer audits passed. B200 tests must finish
-before review and open-weight extraction. New local Jev work pins **1.14.0**, revalidated
-before the first-100-row pilot; 1.13 results remain historical. Current dated evidence is
-in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md); commands are in [VSC](docs/VSC.md). Never update
-a checkout consumed by queued/running jobs.
+**Stage: VSC 0A accepted; open-weight/encoder extraction is enabled for the reviewed handover.**
+All eleven open-weight decision runtimes, their eighteen-dataset pilots and the three
+embedding encoders passed their bounded checks. Fresh hashes, independent backup,
+quota, throughput and prompt sensitivity were reviewed. Local Jev **1.14.0** 0A and its
+first-100-rows-per-dataset validation also completed; full Jev remains owner-run.
+Current acceptance, extraction and cleanup evidence is in
+[AGENTS_MEMORY](docs/AGENTS_MEMORY.md); execution is in [VSC](docs/VSC.md).
+Never update a checkout consumed by queued/running jobs.
 
 ## Research contract
 
@@ -65,8 +67,8 @@ at 0.801. Preserve and disclose that policy; it is not evidence of target calibr
 Liquid d1-2B (`liquid_lfm3`) is an additional pinned candidate alongside d1-3B;
 its text-only path uses the same question v3 and explicitly requests mean score readout.
 Its separate Transformers 5.19 Blackwell image serves both CPU audits and GPU inference.
-Its bounded B200 contracts and dataset pilot passed during setup. Both Liquid versions still
-need current-source frozen-campaign acceptance.
+Both Liquid versions passed their frozen-campaign B200 contracts and dataset pilots;
+their signed operational acceptances enable the explicit full-extraction campaign.
 
 All twelve adapters preserve the same canonical task metadata, question, named text, class
 meanings and option order. Native framing, token IDs, probability calibration and wire
@@ -257,6 +259,15 @@ not all together in the notebook environment. Full setup/transfer commands are i
 | `output_JEVPFN/All Results.md` | One complete notebook report. |
 | `output_JEVPFN/<number>. phase/{logs,manifests,results}/` | Experiment output, including 0A_local/0A_vsc receipts. |
 | `<phase>/results/evaluation/<dataset>.sqlite3` | All predictions, metrics, timings and resumable fold records; Parquet payloads inside one database. |
+
+Decision stores contain all providers' raw verified responses and immutable numeric
+feature blocks, with compressed Parquet tables inside SQLite. Blocks record original
+row IDs, text groups, questions, provider/checkpoint/settings identities and checksums.
+The joint and per-column blocks yield the three decision representations; combining
+them does not repeat model calls. Embedding stores retain full-dimensional frozen
+vectors; training-fold PCA is prepared later and never fitted on validation/test rows.
+After a completed VSC campaign, export closed snapshots, verify the downloaded bundle
+and transactionally merge it locally. Keep the durable VSC copy; see [transfer](docs/VSC.md#inspect-utilization-and-transfer-results).
 
 On VSC, PROJECT holds large inputs, weights/containers, caches, exact-token databases,
 predictions and large results. DATA holds the actual checkout including `.git`, compact manifests and logs. Installed
