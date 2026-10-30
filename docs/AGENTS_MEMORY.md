@@ -27,10 +27,7 @@ operational acceptances now approve all eleven open-weight providers and three e
 Exact job IDs, report checksums and the monitoring completion record are in
 `3. experiment_0/manifests/progress_monitor.json`.
 
-Local HEAD advanced to e11a351 through a TEMPLATE-only commit. Byte-identical executable
-source/config/runtime pins were verified against the earlier local 0A receipt before its
-local-only stage closure. That closure explicitly records the documentation-only ancestry;
-it does not claim a test at the newer HEAD. Jev 1.14 source c2c72bfd0a49d26e2446f19df0529897fa1ea4efd3e8914add26027afc0a6b8e
+Local Jev 1.14 source c2c72bfd0a49d26e2446f19df0529897fa1ea4efd3e8914add26027afc0a6b8e
 was validated locally at d24b79c: all eight steps in
 0A_local/20261030T081306Z_c9a72019.json passed, including 1,163 tests (25 optional/platform
 skips), 31 live diagnostics and 288 new dataset pilot calls. The bounded review is
@@ -158,9 +155,11 @@ Approved token-part retirement verifies final merged SQLite integrity,
 complete count/prepared-token coverage and idle ownership before removing only redundant
 shards. It preserves their compact receipts, final databases and all accepted evidence.
 The first maintenance scan 62477662 was stopped before retirement because its default
-SQLite cache made the large integrity/coverage scan too slow. Replacement 62477905 retains the
-same integrity/coverage checks with a bounded 256 MiB cache. Inspect
-`storage_cleanup/token_shards_retirement_20261030.json` for its job ID and exact outcome.
+Two read-only whole-database BLOB scans (62477662, 62477905) were stopped before any
+retirement. The scoped check 62477933 verifies count/metadata table integrity, per-dataset
+coverage and every prepared-token key using the compact covering index and a 256 MiB
+cache; the accepted merge already verified prepared payload contents. Inspect
+`storage_cleanup/token_shards_retirement_20261030.json` for its exact outcome.
 
 The final authorized reset already removed local output and 84.2 GB of VSC output before
 the current campaign. It preserved raw/prepared data, caches/accounting, weights and images.
