@@ -177,6 +177,14 @@ DECISION_COLORS = {
     "decision3": "#B56845",
     "nimble": "#797D44",
 }
+DECISION_SHORT = {
+    "jev": "Jev", "liquid": "Liquid-3B", "liquid_lfm3": "Liquid-2B", "perplexity": "Perplexity",
+    "cloudflare": "Clef", "intern": "Intern", "strands": "Strands", "h2o": "H2O", "sii": "SII",
+    "kev": "Kev", "decision3": "D3-turbo", "nimble": "Nimble",
+}
+EVIDENCE_MARKS = {"observed": "#2E7D4F", "failed": "#B03A2E", "unknown": "#FFFFFF",
+                  "not_applicable": "#E6E9EC", "review": "#D8A23A"}
+AGREEMENT_DIVERGING = "RdBu"  # Rank agreement in [-1, 1]; 0 is white.
 COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_PENDING_SIZE = (WIDTH_FULL, 3.6)

@@ -96,7 +96,31 @@ def local_runtime_evidence(inventory=None):
             coverage = f"{counts[0]}/{current.dataset.nunique()} · {counts[1]}/{current.dataset.nunique()}"
         else:
             coverage = "separate encoder store" if embedding else "not assessed here"
+        acceptance = folder / ("accepted_encoders.json" if embedding else
+                               "accepted_jev14_pilot.json" if model_id == "jev" else
+                               f"accepted_{model_id}.json")
+        accepted = _read(acceptance) if acceptance.is_file() else {}
+        robust = (report.get("real_prompt_robustness") or {}).get("structurally_valid")
+        hosted_probes = folder / "jev_dataset_robustness.json"
+        if model_id == "jev" and hosted_probes.is_file():
+            robust = _read(hosted_probes).get("status") == "jev_dataset_robustness_requires_review"
+        semantic = (report.get("semantic_diagnostics") or {}).get("passed")
+        gpu = report.get("gpu") if isinstance(report.get("gpu"), dict) else {}
         rows.append({"model_id": model_id, "model": config["model"], "pin": expected_pin,
+                     "kind": "encoder" if embedding else "hosted" if model_id == "jev" else "open",
+                     "known_answer": "observed" if semantic else "failed" if semantic is False
+                     else "not_applicable" if embedding or model_id == "jev" else "unknown",
+                     "robustness": "observed" if robust else "failed" if robust is False
+                     else "not_applicable" if embedding else "unknown",
+                     "token_audit": "observed" if accepted.get("token_audit_id")
+                     else "not_applicable" if embedding or model_id == "jev" else "unknown",
+                     "accepted": "observed" if accepted.get("accepted") is True else "unknown",
+                     "accepted_utc": accepted.get("reviewed_utc"),
+                     "gpu_name": gpu.get("name"),
+                     "peak_gpu_gb": (report.get("peak_gpu_allocated_bytes") or np.nan) / 1e9,
+                     "load_seconds": report.get("load_seconds", np.nan),
+                     "contract_seconds": report.get("seconds", np.nan),
+                     "live_requests": report.get("live_requests"),
                      "configured": "observed", "staged_receipt": staged,
                      "full_bank_tokens": "observed" if model_id in token_providers else
                      "not_applicable" if embedding or model_id == "jev" else "unknown",
@@ -219,11 +243,13 @@ def pilot_decision_outputs(cache_folder=None):
                 probabilities = np.array(
                     [v for k, v in features.items() if k.startswith("p_") and k != "p_positive"]
                 )
+                settings = json.loads(settings_json)
                 row = {
                     "dataset_id": path.stem,
                     "dataset": task["dataset"],
                     "task_type": task["task_type"],
-                    "provider": json.loads(settings_json).get("provider", "jev"),
+                    "provider": settings.get("provider", "jev"),
+                    "model": settings.get("model"),
                     "settings_sha256": digest(json.loads(settings_json)),
                     "input": digest(payload),
                     "text_fields": len(payload["state"]["text"]),
@@ -241,12 +267,51 @@ def pilot_decision_outputs(cache_folder=None):
                     row["no_evidence_probability"] = features["p_4"]
                 rows.append(row)
     table = pd.DataFrame(rows, columns=[
-        "dataset_id", "dataset", "task_type", "provider", "settings_sha256", "input",
+        "dataset_id", "dataset", "task_type", "provider", "model", "settings_sha256", "input",
         "text_fields", "value", "top_class", "top_probability", "class_probabilities",
         "no_evidence_probability",
     ])
     table.attrs["invalid_responses"] = invalid
     return table
+
+
+def shared_pilot_outputs(pilot):
+    """Inputs answered by every configured extractor at its currently pinned model.
+
+    Historical model versions (for example Jev 1.13) are excluded, and each provider
+    contributes one settings identity per input. Returns the long table restricted to
+    those inputs; agreement and spread are then computed on identical payloads only.
+    """
+    candidates = load_yaml("extractors")["candidates"]
+    current = pilot[pilot.apply(
+        lambda r: r.provider in candidates and r.model == candidates[r.provider]["model"], axis=1)]
+    current = current.drop_duplicates(["provider", "input"])
+    counts = current.groupby("input").provider.nunique()
+    shared = counts[counts.eq(len(candidates))].index
+    result = current[current.input.isin(shared)].copy()
+    result.attrs["providers"] = [p for p in candidates if p in set(result.provider)]
+    return result
+
+
+def pilot_agreement(shared):
+    """Pairwise agreement on identical inputs, per task.
+
+    Binary and regression: Spearman rank correlation of the main scalar feature.
+    Multiclass: share of inputs on which both models put most probability on the same class.
+    """
+    providers = shared.attrs.get("providers") or sorted(shared.provider.unique())
+    result = {}
+    for task, part in shared.groupby("task_type"):
+        column = "top_class" if task == "multiclass_classification" else "value"
+        wide = part.pivot(index="input", columns="provider", values=column).reindex(columns=providers)
+        if task == "multiclass_classification":
+            matrix = pd.DataFrame(
+                [[float((wide[a] == wide[b]).mean()) for b in providers] for a in providers],
+                index=providers, columns=providers)
+        else:
+            matrix = wide.astype(float).corr(method="spearman")
+        result[task] = (matrix, len(wide))
+    return result
 
 
 def saved_pca_diagnostics(folds):

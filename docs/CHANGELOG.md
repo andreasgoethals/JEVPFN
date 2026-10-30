@@ -2,6 +2,16 @@
 
 ## 30-10-2026
 
+- Rework notebook figures around the RQ1–RQ3 story in the paper notes. 0A now shows
+  runtime gates beside measured B200 memory/load/contract time (signed acceptances read),
+  output profiles and pairwise agreement of all twelve decision models on 280 identical
+  pinned-version pilot inputs, and a cross-model robustness matrix. Synthesis opens
+  with a study-design figure; decision-versus-embedding becomes one matrix per task
+  pooled over all 21 recipes (was up to 54 figures). Coverage, native-system and fit-burden
+  views are single pages in the shared dataset order. Removed the redundant multiclass
+  width figure. Every header indexes its figures by question, with the shared colour keys.
+  Validation: all 11 notebooks executed, every PDF inspected; 1,167 passed, 25 skips; Ruff passed.
+
 - Import foreign freeze receipts as content-addressed historical evidence. A VSC
   download cannot activate or replace the laptop's frozen stage, including when the
   laptop is between stages. Preserve the already imported receipt and test both cases.

@@ -144,8 +144,9 @@ def overview_figures(table, characters_per_token=4.0):
         "The 20 core MulTaBench text datasets, grouped by task. Empty cells are null, nonfinite "
         "or whitespace-only. Tokens per text cell exclude empty cells and use "
         f"ceil(characters/{characters_per_token:g}). Distinct texts count exact duplicates within "
-        "a column. Unique requests and reused slots combine per-column and joint inputs. Shading "
-        "ranks each column across the 18 retained datasets (log scale for counts and tokens). "
+        "a column. Unique requests and reused slots combine per-column and joint inputs. Each "
+        "column is shaded on its own min–max scale over the 18 retained datasets (log scale for "
+        "counts and tokens). "
         "Grey rows (Spotify, Zomato) are audited but excluded from extraction and benchmarks."
     )
 

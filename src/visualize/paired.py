@@ -116,6 +116,9 @@ def effect_matrix_figures(paired, phase="experiment_1"):
                 for boundary in range(len(recipes), len(rows), len(recipes)):
                     ax.axhline(boundary - 0.5, color=style.BACKGROUND_COLOR, linewidth=2)
         axes[0, 0].set_yticks(range(len(rows)), row_labels, fontsize=6.5)
+        for tick, row in zip(axes[0, 0].get_yticklabels(), rows):
+            key = row if phase == "experiment_1" else row[0]
+            tick.set_color(style.DECISION_COLORS.get(key, style.EMBEDDING_COLORS.get(key, style.TEXT_COLOR)))
         mappable = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(-limit, limit))
         fig.colorbar(mappable, ax=list(axes[0]), shrink=0.8, pad=0.02,
                      label=f"{unit} (mean over datasets)")
@@ -167,6 +170,8 @@ def paired_effect_figures(paired):
                 ax.set_xlabel(unit, fontsize=7)
                 ax.set_xlim(-bound, bound)
                 ax.set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=7)
+                for tick, provider in zip(ax.get_yticklabels(), providers):
+                    tick.set_color(style.DECISION_COLORS[provider])
                 ax.grid(axis="x", color=style.GRID_COLOR, alpha=0.4)
                 ax.tick_params(axis="x", labelsize=7)
             axes[0].invert_yaxis()

@@ -7,51 +7,70 @@ from src.visualize import style
 from src.visualize.decision_comparison import LABELS
 from src.visualize.layout import TASK_LABELS
 from src.visualize.paired import METRIC_VIEWS, MODES, _dataset_effects
-from src.visualize.research import ENCODER_LABELS
 
 RECIPES = [("joint", n) for n in (8, 16, 32, 64, 128, 256)] + [("per_column", 32)]
 
 
 def direct_comparison_figures(contrasts):
+    """Decision features against all 21 embedding recipes, one page per task.
+
+    Each cell pools every dataset × encoder × PCA recipe with equal weight, so no embedding
+    recipe is selected; per-encoder and per-recipe detail stays in the contrast tables.
+    """
     if contrasts.empty:
         return
+    from src.visualize.paired import MODE_KEYS
+
+    models = list(style.MAIN_PREDICTORS)
+    short = {m: style.PREDICTOR_LABELS[m].split(" ")[0].split("/")[0] for m in models}
+    cmap = plt.get_cmap(style.EFFECT_CMAP).with_extremes(bad=style.FAINT_COLOR)
     for task, (metric, direction, unit) in METRIC_VIEWS.items():
         data = contrasts[contrasts.task_type.eq(task) & contrasts.metric.eq(metric)]
-        for (model, encoder), part in data.groupby(["model_id", "encoder"]):
-            keys = ["provider", "feature_set", "dataset_id", "split_id", "arm_id",
-                    "embedding_arm_id", "pca_scope", "pca_components"]
-            means = _dataset_effects(part, keys, task, direction)
-            if means.empty:
-                continue
-            providers = [p for p in LABELS if p in set(means.provider)]
-            limit = max(float(means.effect.abs().max()), 0.001)
-            fig, axes = plt.subplots(1, 3, figsize=style.DASHBOARD_SIZE, sharey=True)
-            for ax, (mode, label) in zip(axes, MODES.items()):
-                matrix = np.full((len(providers), len(RECIPES)), np.nan)
-                for i, provider in enumerate(providers):
-                    for j, (scope, width) in enumerate(RECIPES):
-                        values = means.loc[means.provider.eq(provider) & means.feature_set.eq(mode)
-                                           & means.pca_scope.eq(scope) & means.pca_components.eq(width), "effect"]
-                        if len(values):
-                            matrix[i, j] = values.mean()
-                cmap = plt.get_cmap(style.EFFECT_CMAP).with_extremes(bad=style.FAINT_COLOR)
-                artist = ax.imshow(np.ma.masked_invalid(matrix), cmap=cmap, vmin=-limit, vmax=limit, aspect="auto")
-                ax.set_title(label)
-                ax.set_xticks(range(7), ["J8", "J16", "J32", "J64", "J128", "J256", "P32"], rotation=90)
-                ax.set_yticks(range(len(providers)), [LABELS[p] for p in providers])
-                ax.tick_params(axis="both", labelsize=7, length=0)
-            fig.colorbar(artist, ax=list(axes), shrink=0.75, label=unit.replace("augmented", "decision").replace("reference", "embedding"))
-            fig.suptitle(f"{style.PREDICTOR_LABELS[model]} · {TASK_LABELS[task]} · decision features "
-                         f"versus {ENCODER_LABELS[encoder]}", fontsize=9)
-            yield fig, f"direct_{model}_{task}_{encoder}", (
-                "Each cell compares decision features with the named frozen embedding recipe in the same predictor, "
-                "dataset, checkpoint and CV split. Positive values favor decision features. J denotes joint PCA "
-                "with that total width; P32 denotes 32 dimensions per text column. Dataset means require five defined "
-                "paired folds; cells average their available dataset means without selecting winners. Gray cells lack "
-                "complete paired evidence. Coverage can differ across cells: the accompanying table retains every "
-                "dataset, recipe and fold. Classification shows AUC differences; regression shows R² differences. "
-                "These are descriptive comparisons, not confidence intervals or a best-model selection."
-            )
+        keys = ["provider", "feature_set", "model_id", "encoder", "pca_scope", "pca_components",
+                "dataset_id", "split_id", "arm_id", "embedding_arm_id"]
+        means = _dataset_effects(data, keys, task, direction) if not data.empty else data
+        if means.empty:
+            continue
+        providers = [p for p in LABELS if p in set(means.provider)]
+        cells = means.groupby(["provider", "feature_set", "model_id"]).agg(
+            effect=("effect", "mean"), wins=("effect", lambda v: float((v > 0).mean())),
+            pairs=("effect", "size"), datasets=("dataset_id", "nunique")).reset_index()
+        limit = max(float(np.nanpercentile(np.abs(cells.effect), 95)), 1e-4)
+        fig, axes = plt.subplots(1, len(MODES), figsize=(style.WIDTH_FULL, min(
+            style.MAX_HEIGHT, 1.1 + 0.2 * len(providers))), sharey=True)
+        for ax, (mode, label) in zip(axes, MODES.items()):
+            values = np.full((len(providers), len(models)), np.nan)
+            shares = np.full_like(values, np.nan)
+            for record in cells[cells.feature_set.eq(mode)].itertuples():
+                if record.model_id in models:
+                    i, j = providers.index(record.provider), models.index(record.model_id)
+                    values[i, j], shares[i, j] = record.effect, record.wins
+            ax.imshow(np.ma.masked_invalid(values), cmap=cmap, vmin=-limit, vmax=limit, aspect="auto")
+            for (i, j), share in np.ndenumerate(shares):
+                if np.isfinite(share):
+                    ax.text(j, i, f"{100 * share:.0f}%", ha="center", va="center", fontsize=5.8,
+                            color=style.BACKGROUND_COLOR if abs(values[i, j]) > 0.6 * limit
+                            else style.TEXT_COLOR)
+            ax.set_title(label, fontsize=8, color=style.MODE_COLORS[MODE_KEYS[mode]])
+            ax.set_xticks(range(len(models)), [short[m] for m in models], rotation=90, fontsize=6.5)
+            ax.tick_params(length=0)
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+        axes[0].set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=6.5)
+        for tick, provider in zip(axes[0].get_yticklabels(), providers):
+            tick.set_color(style.DECISION_COLORS[provider])
+        mappable = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(-limit, limit))
+        fig.colorbar(mappable, ax=list(axes), shrink=0.8, pad=0.02,
+                     label=unit.replace("augmented", "decision").replace("reference", "embedding"))
+        yield fig, f"decision_versus_embedding_{task}", (
+            f"{TASK_LABELS[task]} datasets: decision features against frozen embeddings in the same "
+            "predictor, dataset and outer folds. Colour is the mean paired difference in the "
+            "prespecified endpoint over every dataset and all 21 embedding recipes (3 encoders × 7 "
+            "PCA settings), weighted equally; the percentage is the share of these dataset × recipe "
+            "pairs in which the decision features score higher. Positive favours decision features. "
+            "Pairs need five defined folds; grey cells lack complete evidence. Descriptive, without "
+            "selecting a recipe; the scale is clipped at the 95th percentile of |difference|."
+        )
 
 
 
