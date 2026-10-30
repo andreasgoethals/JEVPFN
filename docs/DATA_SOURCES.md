@@ -1,7 +1,9 @@
 # Data sources and definitions
 
-The frozen MulTaBench data/code release below defines the audit. The current methodology
-and file contracts are in [README](../README.md); execution commands are in [VSC](VSC.md).
+The frozen MulTaBench release below defines the datasets, their text columns and the
+audit. Methodology is in [README](../README.md); execution commands are in [VSC](VSC.md).
+Sections run from provenance and the text definition, through statistics and reuse, to
+dataset selection, question semantics and interpretation caveats.
 
 ## Primary sources and pins
 
@@ -128,6 +130,15 @@ The longest original cell per column is saved under the ignored audit cache `lon
 with dataset/column/`csv:N` identity in audit JSON. Notebook examples show beginning/middle/end
 excerpts, clipped only for display. No extraction truncation policy is implied.
 
+## Extraction and experiment selection
+
+The full exploration retains all 20 core TEXT datasets and both raw releases. Zomato
+Restaurants is removed from feature creation and experiments for its extreme text burden;
+Spotify Genres is removed for its 114-class output dimensionality and associated extraction
+overhead. The common experiment collection therefore has 18 datasets. Selected overview
+figures/tables label both as REMOVED; this does not mean files were deleted. Selection is
+based on input/representation feasibility before comparative predictive results.
+
 ## Dataset issues relevant to the experiment
 
 The pinned collection contains 821,071 rows and 90 official text columns: three binary,
@@ -138,9 +149,9 @@ Official text includes short names, identifiers, URLs and numeric/date-like stri
 Tomatoes has 13 text fields and SciMagojr has 10; some are measurements, not prose. Review
 prediction-time availability and target proxies rather than relabelling features silently.
 Spotify has 114 genre classes; Data Scientist Salary has six interval-labelled classes;
-Wine Review predicts 30 varieties; Mercari predicts log_price. Coded classes need factual metadata verification where their units or meaning are not evident
-from the target name. Fraud=1, toxicity=True and Kickstarter=Successful are the current binary
-orientations; Product Sentiment already has descriptive class names. The source-backed definitions below now make the verified units and meanings explicit.
+Wine Review predicts 30 varieties; Mercari predicts log_price. Binary orientations are
+Fraud=1, toxicity=True and Kickstarter=Successful; Product Sentiment has descriptive class
+names. Units and meanings of coded classes are verified in the source-backed metadata below.
 
 Zomato contributes about three quarters of raw text tokens and has extreme review lengths.
 Some inputs exceed the documented Jev context limit under the approximate token screen.
@@ -156,17 +167,7 @@ Salary 23.78%. Across both modes, 3,985,167 nonempty slots become 2,032,351 dist
 107,235 distinct joint inputs overlap per-column inputs. These are historical all-20-dataset
 counts, not the selected 18-dataset extraction workload. Recompute them if the design changes.
 
-## Extraction and experiment selection
-
-The full exploration retains all 20 core TEXT datasets and both raw releases. Zomato
-Restaurants is removed from feature creation and experiments for its extreme text burden;
-Spotify Genres is removed for its 114-class output dimensionality and associated extraction
-overhead. The common experiment collection therefore has 18 datasets. Selected overview
-figures/tables label both as REMOVED; this does not mean files were deleted. Selection is
-based on input/representation feasibility before comparative predictive results.
-
-
-## Source-backed question metadata (13-10-2026)
+## Source-backed question metadata
 
 `config/1. question_preparation/dataset_semantics.yaml` is the single maintained dictionary for the 18 selected datasets:
 raw target, task, observation unit, readable task meaning, every official text column, typed raw
@@ -201,7 +202,7 @@ baby-product currency and company-field extraction conventions, CLEAR `British W
 legacy movie `RatingValue` scale/provenance, salary interval endpoints, and US Accidents'
 intermediate traffic-severity boundaries. Unknown units/definitions are not guessed.
 
-Only documentary meanings enter `documented-task-v3`; source URLs remain in question-bank
+Metadata verified 13 October 2026. Only documentary meanings enter `documented-task-v3`; source URLs remain in question-bank
 provenance and are excluded from the model payload. Version 3 adds quotation marks around
 binary class descriptions and uses "a lower or higher value for" to support singular and
 plural regression target names. Target meanings, options, class order and the nine-level
@@ -212,7 +213,7 @@ order and types; the human description is added alongside each raw class. The se
 fields keep their raw names; per-column requests include only their applicable field definitions.
 Selected-dataset budgets read the frozen prepared question version, including definitions of
 nonempty fields. Removed datasets retain an audit-only template for workload comparison.
-Actual billing still needs a hosted pilot.
+Measured hosted billing is recorded in [AGENTS_MEMORY](AGENTS_MEMORY.md).
 
 Non-text ISO date columns are recognized on each training partition and converted to UTC
 epoch seconds for the numeric predictors. Test dates use that same conversion rather than

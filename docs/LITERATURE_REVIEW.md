@@ -1,16 +1,16 @@
 # Literature review
 
-This document records JEVPFN-specific evidence and limits of interpretation, checked on
-**24 October 2026**, with SII interface and statistical-resolution clarifications on
-26 October and a native-text version/control review on 27 October. It is not an
-execution report or a list of future experiments.
-Deployment note, 30 October: new Jev calls pin 1.14.0 after the owner's upgrade decision.
-The model-specific 1.13 evidence below remains historical; it is not a claim that every
-documented behavior persists in 1.14. New interface and sensitivity results require their
-own saved-response review. The benchmark protocol and library pins are unchanged.
-The selected methods are defined in [README](../README.md) and configuration;
-dataset meanings in [DATA_SOURCES](DATA_SOURCES.md); operating instructions in [VSC](VSC.md).
-A source review or passing interface test does not establish real GPU compatibility.
+JEVPFN-specific research evidence and limits of interpretation, reviewed on
+**24 October 2026** (SII interface and statistical resolution clarified 26 October;
+native-text versions and controls 27 October). It is neither an execution report nor a
+list of future experiments. Methods: [README](../README.md); dataset meanings:
+[DATA_SOURCES](DATA_SOURCES.md); operations: [VSC](VSC.md).
+
+Since 30 October new Jev calls pin **1.14.0**. The 1.13 evidence below is historical and
+does not claim that every documented behavior persists in 1.14; the 1.14 interface and
+sensitivity results were reviewed separately from saved responses
+([AGENTS_MEMORY](AGENTS_MEMORY.md)). Protocol and library pins are unchanged. A source
+review or passing interface test does not establish real GPU compatibility.
 
 ## 1. Evidence, scope and provenance
 
@@ -116,7 +116,7 @@ mutable tables. Open-weight availability does not mean zero compute cost or unre
 
 | Selected extractor | Source behavior that must survive the adapter |
 |---|---|
-| [Jev 1.13](https://docs.typesafe.ai/api) | Hosted Noul, Choice and Score. Pin the model; preserve usage/version and raw response. Organization throughput and context/billing bounds are separate concepts. |
+| [Jev](https://docs.typesafe.ai/api) (1.14.0; reviewed as 1.13) | Hosted Noul, Choice and Score. Pin the model; preserve usage/version and raw response. Organization throughput and context/billing bounds are separate concepts. |
 | [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Custom decision runtime, not ordinary generated chat. LFM Open License is a conditional open-weight licence, not a blanket permissive open-source claim; qualifying research permissions and redistribution conditions must be respected. |
 | [Liquid d1-2B](https://huggingface.co/LiquidAI/d1-2B) | Separate LFM3 successor, text-only in this study; same questions and explicit mean readout. Its new runtime/window need independent acceptance; vendor benchmark improvements are not downstream evidence. |
 | [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Native decision head, noncausal full attention and saved calibration temperature. Generic causal-LM next-token inference is not equivalent. |

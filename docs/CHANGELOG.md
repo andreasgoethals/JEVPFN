@@ -2,6 +2,13 @@
 
 ## 30-10-2026
 
+- Rewrite the documentation for the current stage. README now leads with status, the
+  RQ1–RQ3 design and the new figure index; VSC follows execution order (access, storage,
+  runtimes, pipeline, maintenance, transfer); AGENTS_MEMORY is newest-first and records the
+  submitted open-weight campaign, including two Jigsaw publication-lock failures and the
+  stopped controller observed at 17:20 UTC. Evidence, hashes and commands are preserved;
+  DATA_SOURCES and LITERATURE_REVIEW drop stale pilot and 1.13 wording.
+
 - Rework notebook figures around the RQ1–RQ3 story in the paper notes. 0A now shows
   runtime gates beside measured B200 memory/load/contract time (signed acceptances read),
   output profiles and pairwise agreement of all twelve decision models on 280 identical
