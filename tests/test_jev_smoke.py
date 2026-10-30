@@ -63,6 +63,22 @@ def test_three_real_contract_shapes_resume_without_another_call(local):
     assert len(client.calls) == 3
 
 
+def test_model_upgrade_preserves_legacy_paid_ledger_and_cleanup_can_find_new_ledger(local):
+    import json
+
+    directory = paths.jev_cache_path("jev_cache/_control/jev_smoke")
+    directory.mkdir(parents=True, exist_ok=True)
+    legacy = {"model": "jev-1.13.0", "request_identity": "historical", "attempts": []}
+    old_state = directory / "state.json"
+    old_state.write_text(json.dumps(legacy), encoding="utf-8")
+    before = old_state.read_bytes()
+    report = smoke.run(execute=True, client_factory=Client, sleep=lambda _: None)
+    assert report["model"] == "jev-1.14.0"
+    smoke.preserve_smoke_state()
+    assert old_state.read_bytes() == before
+    assert (directory / "models/jev-1.14.0/state.json").is_file()
+
+
 def test_explicit_frozen_round_preserves_old_ledger_and_reuses_its_own_responses(local):
     original = Client()
     smoke.run(execute=True, client_factory=lambda: original, sleep=lambda _: None)

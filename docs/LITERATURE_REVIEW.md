@@ -4,6 +4,10 @@ This document records JEVPFN-specific evidence and limits of interpretation, che
 **24 October 2026**, with SII interface and statistical-resolution clarifications on
 26 October and a native-text version/control review on 27 October. It is not an
 execution report or a list of future experiments.
+Deployment note, 30 October: new Jev calls pin 1.14.0 after the owner's upgrade decision.
+The model-specific 1.13 evidence below remains historical; it is not a claim that every
+documented behavior persists in 1.14. New interface and sensitivity results require their
+own saved-response review. The benchmark protocol and library pins are unchanged.
 The selected methods are defined in [README](../README.md) and configuration;
 dataset meanings in [DATA_SOURCES](DATA_SOURCES.md); operating instructions in [VSC](VSC.md).
 A source review or passing interface test does not establish real GPU compatibility.

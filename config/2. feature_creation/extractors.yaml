@@ -11,8 +11,8 @@ comparison_scope: downstream_text_representation_utility_not_agent_routing_leade
 candidates:
   jev:
     enabled: false
-    model: jev-1.13.0
-    version: 1.13.0
+    model: jev-1.14.0
+    version: 1.14.0
     delivery: hosted_typesafe
     context_tokens: 32000
     input_price_per_million_usd: 0.042

@@ -471,6 +471,8 @@ def feature_inventory(path: Path) -> pd.DataFrame:
     records = []
     for (encoded,) in rows:
         manifest = json.loads(encoded)
+        if manifest.get("purpose") == "validation_only":
+            continue  # Partial prefixes are inspectable by ID, never benchmark inventory.
         identity = manifest["identity"]
         if digest(identity) != manifest["artifact_id"]:
             raise ValueError("Invalid feature manifest identity")

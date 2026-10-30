@@ -29,8 +29,8 @@ def request(text="first"):
         canonical_json(
             {
                 "provider": "jev",
-                "model": "jev-1.13.0",
-                "version": "1.13.0",
+                "model": "jev-1.14.0",
+                "version": "1.14.0",
                 "api_mapping_version": "typesafe-systemone-v1",
                 "request_configuration": {},
             }
@@ -47,7 +47,7 @@ def extraction(tmp_path, isolated_output):
         def evaluate(self, _):
             self.calls += 1
             return {
-                "model": "jev-1.13.0",
+                "model": "jev-1.14.0",
                 "answers": {"semantic": {"type": "noul", "noul": 0.4}},
                 "usage": {"input_tokens": 10},
             }

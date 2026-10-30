@@ -69,7 +69,7 @@ def account_check(client_factory=None):
     with factory(
         api_key=key,
         base_url="https://api.typesafe.ai",
-        model="jev-1.13.0",
+        model=load_yaml("feature_creation")["jev"]["model"],
         retry=RetryPolicy(max_retries=0),
         timeout=30,
     ) as client:

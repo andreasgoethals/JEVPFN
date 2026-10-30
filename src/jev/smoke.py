@@ -1,7 +1,7 @@
 """Three sequential, synthetic Jev requests; separate from the dataset extraction pilot.
 
 No inference without --execute. Model/price/context bounds come from the official
-16 October model reference. These slow probes do not establish sustained account throughput.
+30 October model reference. These slow probes do not establish sustained account throughput.
 The maximum three attempted requests reserve $0.008064 at the documented 64k
 per-request context ceiling and $0.042/M input. No SDK or application retries.
 """
@@ -52,6 +52,14 @@ def preserve_smoke_state():
                 # The canonical output describes a new round. Its paid ledger is
                 # already durable; it must never replace the original ledger.
                 return directory, state
+            if latest.get("model", "jev-1.13.0") != "jev-1.13.0":
+                model = latest.get("model")
+                if model != "jev-1.14.0":
+                    raise ValueError("Latest Jev diagnostic has an unreviewed model identity")
+                model_state = directory / "models" / model / "state.json"
+                if not model_state.exists() or digest(latest) != digest(json.loads(model_state.read_text(encoding="utf-8"))):
+                    raise ValueError("Latest Jev diagnostic differs from its permanent model ledger")
+                return directory, state  # Preserve the original 1.13 ledger in place.
         if state.exists():
             saved = json.loads(state.read_text(encoding="utf-8"))
             if legacy.exists() and digest(saved) != digest(
@@ -85,7 +93,7 @@ def requests(*, robustness=False, real=False):
     settings = dict(
         provider="jev",
         model=MODEL,
-        version="1.13.0",
+        version=POLICY["version"],
         api_mapping_version=MAPPING_VERSION,
         request_configuration={},
     )
@@ -121,7 +129,7 @@ def run(
         raise RuntimeError("The bounded Jev smoke test requires --execute locally")
     if round_id is not None and not re.fullmatch(r"[0-9a-f]{64}", round_id):
         raise ValueError("Diagnostic round must be a frozen source SHA-256")
-    if MODEL != "jev-1.13.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
+    if MODEL != "jev-1.14.0" or TOKEN_BOUND != 64000 or MAX_CALLS != 3 or not 0 < PRICE <= 0.042:
         raise ValueError("Smoke policy differs from the reviewed model/context/three-call budget")
     key = None if revalidate_only else api_key()
     from src.cluster.freeze import check_if_present
@@ -135,10 +143,12 @@ def run(
         if robustness
         else "jev_smoke"
     )
-    if diagnostic or round_id is not None:
+    if diagnostic or round_id is not None or MODEL != "jev-1.13.0":
         directory = paths.jev_cache_path("jev_cache/_control/" + test_name)
         if round_id is not None:
             directory = directory / "rounds" / round_id
+        else:
+            directory = directory / "models" / MODEL
         directory.mkdir(parents=True, exist_ok=True)
         state_path = directory / "state.json"
     else:

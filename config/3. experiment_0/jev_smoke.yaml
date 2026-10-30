@@ -1,10 +1,10 @@
 # Only the three synthetic connection/task probes; never authorizes dataset extraction.
-model: jev-1.13.0
-version: 1.13.0
+model: jev-1.14.0
+version: 1.14.0
 input_price_per_million_usd: 0.042
 documented_request_context_tokens: 64000
 maximum_requests: 3
 minimum_interval_seconds: 5  # Our own slow client policy, not a claimed account limit.
 account_limits_verified: false
 reference: https://docs.typesafe.ai/models
-checked_on: '2026-10-16'
+checked_on: '2026-10-30'

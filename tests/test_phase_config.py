@@ -21,7 +21,7 @@ def test_phase_inheritance_preserves_defaults():
     cfg = load_config("feature_creation")
     assert cfg["phase"] == "feature_creation"
     assert cfg["allow_download"] is False
-    assert cfg["jev"]["model"] == "jev-1.13.0"
+    assert cfg["jev"]["model"] == "jev-1.14.0"
     assert cfg["jev"]["regression_scores"] == list(range(-4, 5))
     assert cfg["provider_reference"]["state_plus_longest_question_tokens"] == 32000
     assert load_yaml("experiment_0/debug")["cluster"]["account"] == "lp_verbekelab"

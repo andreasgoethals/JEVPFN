@@ -16,8 +16,8 @@ from src.utils.serialization import canonical_json, digest, file_sha256
 def request(provider="jev", text="same", dataset="fixture", row="csv:0"):
     settings = {
         "provider": provider,
-        "model": "jev-1.13.0",
-        "version": "1.13.0",
+        "model": "jev-1.14.0",
+        "version": "1.14.0",
         "api_mapping_version": "typesafe-systemone-v1",
         "request_configuration": {},
     }
@@ -34,7 +34,7 @@ def request(provider="jev", text="same", dataset="fixture", row="csv:0"):
 
 
 def response(value=0.7):
-    return {"model": "jev-1.13.0", "answers": {"semantic": {"type": "noul", "noul": value}}}
+    return {"model": "jev-1.14.0", "answers": {"semantic": {"type": "noul", "noul": value}}}
 
 
 def test_failed_attempts_merge_once_without_creating_responses(tmp_path):

@@ -1,5 +1,18 @@
 # Changelog
 
+## 30-10-2026
+
+- Pin new Jev work to 1.14 with model-separated diagnostic ledgers; preserve 1.13
+  accounting and responses. Revalidate before the owner-authorized local prefix pilot.
+- Add a bounded first-100-row pilot using the guarded production dispatcher. Batch large
+  selections, reuse exact responses, skip empty text and materialize numeric subset
+  artifacts excluded from benchmark inventory. Preserve cumulative spending caps and
+  stop before the additional USD 1 ceiling can be exceeded by another reserved attempt.
+- Align agent instructions with the updated canonical template: protected frozen VSC
+  checkout, sealed PROJECT control runtime, temporary 30-minute monitoring and scoped
+  cleanup. Consolidate dated evidence and remove obsolete H100/setup instructions.
+
+
 ## 29-10-2026
 
 - Verified the corrected CPU controller on VSC in job 62471351: all four launch

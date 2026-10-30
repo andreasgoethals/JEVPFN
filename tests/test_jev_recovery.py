@@ -30,7 +30,7 @@ def test_paid_rounded_multiclass_response_recovers_without_redispatch(extraction
     }
     request = replace(request, payload_json=canonical_json(payload))
     response = {
-        "model": "jev-1.13.0",
+        "model": "jev-1.14.0",
         "usage": {"input_tokens": 10},
         "answers": {
             "semantic": {
@@ -76,7 +76,7 @@ class Client:
             raise RejectedRetryable()
         if self.mode == "timeout":
             raise TimeoutError()
-        response = {"model": "jev-1.13.0", "answers": {"semantic": {"type": "noul", "noul": 0.4}}}
+        response = {"model": "jev-1.14.0", "answers": {"semantic": {"type": "noul", "noul": 0.4}}}
         if self.mode != "missing_usage":
             response["usage"] = {"input_tokens": 10}
         return response

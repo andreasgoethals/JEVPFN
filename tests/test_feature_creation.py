@@ -68,7 +68,7 @@ def populate(dataset, cfg, cache):
 def test_binary_mapping_is_label_free(dataset, cfg):
     request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
     body = api_preview(request)
-    assert body["model"] == "jev-1.13.0"
+    assert body["model"] == "jev-1.14.0"
     assert body["questions"]["semantic"]["type"] == "noul"
     assert body["state"]["text"] == {"text": "alpha"}
     assert set(body["state"]) == {"task", "text"}
@@ -126,7 +126,7 @@ def test_complete_multiclass_vector(dataset, cfg):
         "probabilities": {"c000": 0.1, "c001": 0.7, "c002": 0.2},
         "confidence": 0.4,
     }
-    supplied = {"model": "jev-1.13.0", "answers": {"semantic": answer}}
+    supplied = {"model": "jev-1.14.0", "answers": {"semantic": answer}}
     assert response_features(request, supplied) == {
         "p_c000": 0.1,
         "p_c001": 0.7,
@@ -147,7 +147,7 @@ def test_observed_jev_rounding_is_normalized_without_changing_raw_response(datas
     request = build_requests(dataset.features, dataset.metadata, 0, cfg)[0]
     values = [0.05, 0.33, 0.34, 0.27]
     supplied = {
-        "model": "jev-1.13.0",
+        "model": "jev-1.14.0",
         "answers": {
             "semantic": {
                 "type": "choice",
@@ -209,7 +209,7 @@ def test_rounded_regression_uses_normalized_distribution(dataset, cfg):
     criteria = api_preview(request)["questions"]["semantic"]["criteria"]
     probabilities = dict(zip(map(str, range(9)), [0, 0, 0.33, 0.33, 0.33, 0, 0, 0, 0]))
     supplied = {
-        "model": "jev-1.13.0",
+        "model": "jev-1.14.0",
         "answers": {
             "semantic": {
                 "type": "score",
@@ -242,7 +242,7 @@ def test_regression_preserves_nine_probabilities_and_maps_index(dataset, cfg):
         "probabilities": probabilities,
         "confidence": 0.5,
     }
-    supplied = {"model": "jev-1.13.0", "answers": {"semantic": answer}}
+    supplied = {"model": "jev-1.14.0", "answers": {"semantic": answer}}
     result = response_features(request, supplied)
     assert result["expected_direction"] == 1.0
     assert sum(value for key, value in result.items() if key.startswith("p_")) == 1

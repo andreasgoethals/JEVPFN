@@ -69,7 +69,7 @@ def test_api_timing_failure_keeps_paid_response_recoverable(isolated_output, tmp
     from tests.test_spending_policy import request
 
     response = {
-        "model": "jev-1.13.0",
+        "model": "jev-1.14.0",
         "answers": {"semantic": {"type": "noul", "noul": 0.4}},
         "usage": {"input_tokens": 10},
     }

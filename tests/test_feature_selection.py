@@ -36,7 +36,7 @@ def test_two_providers_coexist_and_are_selected_explicitly(tmp_path, isolated_ou
     for r in requests:
         cache.put(
             r,
-            {"model": "jev-1.13.0", "answers": {"semantic": {"type": "noul", "noul": 0.25}}},
+            {"model": "jev-1.14.0", "answers": {"semantic": {"type": "noul", "noul": 0.25}}},
             kind="verified_response",
         )
     jev = materialize_cached_block(dataset, cfg, cache)

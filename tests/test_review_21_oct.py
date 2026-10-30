@@ -32,8 +32,8 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
     original_config = campaign.load_yaml
     selector = dict(
         provider="jev",
-        model="jev-1.13.0",
-        version="1.13.0",
+        model="jev-1.14.0",
+        version="1.14.0",
         question_bank_id="bank",
         question_variant="accepted",
     )

@@ -16,8 +16,8 @@ jev:
   enabled: false  # Guarded transport exists; execution remains disabled in this phase.
   representation: per_column_and_joint
   include_non_text_features: false  # Agreed: Jev sees text only; non-text features go to TabPFN.
-  model: jev-1.13.0  # Official model documentation checked 2026-09-30; no call made.
-  version: 1.13.0
+  model: jev-1.14.0  # Official model documentation checked 2026-10-30; no call made.
+  version: 1.14.0
   request_configuration: {}  # No invented provider parameters.
   template_version: directional-v2
   binary_positive_class: canonical_last  # Mechanical orientation, not a domain assertion.
@@ -37,7 +37,7 @@ downstream:
   enabled: false
 provider_reference:
   endpoint: https://api.typesafe.ai/v1/systemone
-  model: jev-1.13.0
+  model: jev-1.14.0
   source: https://docs.typesafe.ai/models
   checked_on: '2026-10-12'
   state_plus_longest_question_tokens: 32000

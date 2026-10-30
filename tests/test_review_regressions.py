@@ -279,7 +279,7 @@ def test_installed_typesafe_sdk_mock_transport_keeps_pins_and_no_hidden_retries(
 
     calls = []
     raw = {
-        "model": "jev-1.13.0",
+        "model": "jev-1.14.0",
         "answers": {"semantic": {"type": "noul", "noul": 0.4}},
         "usage": {"input_tokens": 10},
     }

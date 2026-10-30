@@ -5,45 +5,12 @@ This research codebase explores all 20 core MulTaBench TEXT datasets and uses 18
 extraction/evaluation. Zomato Restaurants and Spotify Genres remain in exploration but
 are excluded from experiments for text burden and 114-class feature size.
 
-**Stage: preparing final Experiment 0A; full extraction and benchmarks remain disabled.**
-The 29 October 14:47 download confirms all eleven open-weight decision runtimes
-have bounded B200 contract/pilot evidence, including Decision3 (26 checks; 414 new
-pilot requests, 36 reused, zero failures). TabSTAR v1.1 passed 16 predictor fixtures
-and resume checks; full-dataset profiling remains for 0B. Three encoder contracts also
-have bounded B200 passes. Scratch release succeeded, with personal GPFS usage at
-8.66/500 GiB after the tests; durable weights/images and results remain preserved.
-These runs used the recorded pre-notebook-review source, not the final frozen revision.
-Setup and frozen 0A limit resident working sets to two and publish/release copied
-inputs after their last consumer. The new bounded parallel lifecycle still needs the
-fresh full-campaign run. Keep active VSC checkouts unchanged. See [VSC](docs/VSC.md).
-Token audits use ten independent CPU partitions per provider and a strict merge, reusing
-matching committed counts. Bounded B200 passes do not certify full-dataset extraction
-or final acceptance. Source identities are recorded; the final frozen run repeats all gates.
-Twelve extractors are implemented. Question-v3 evidence covers 18 datasets, 1,698,127
-distinct inputs and 3,294,340 row/input links. Dated evidence is in
-[AGENTS_MEMORY](docs/AGENTS_MEMORY.md).
-
-GPU execution now defaults to **Mindwell B200**. CPU jobs build separate CUDA 13.0
-containers, count tokens and copy each required working set to native GPFS scratch.
-Authoritative inputs, weights and durable results remain on Lustre PROJECT; logs and
-small manifests remain on DATA. The actual checkout and Git operations stay on DATA.
-Manual Windows-agent access and PROJECT-root overrides follow the updated template; the
-CPU controller now uses a sealed PROJECT container. Its dependency, nested-launch,
-two-node storage, data and native B200 migration tests passed; the former DATA
-environment was then retired. Committed feature/prediction databases publish periodically
-and at job exit; predictor staging also restores durable completed folds and predictions
-so a recreated scratch workspace resumes them. A 200 GiB application working-set
-budget and 20 GiB personal headroom check prevent staging all runtimes at once.
-Scratch response queues, embeddings and predictions survive input-copy release.
-Scratch is not a backup. No new
-GPFS project allocation is required. Existing H100 images remain preserved; all A100
-routes are excluded. See [VSC](docs/VSC.md).
-
-The local Jev dataset pilot completed 288 diagnostic requests across all 18 datasets.
-Prompt-sensitivity checks exposed wording/instruction effects requiring review. These are
-bounded setup tests, not production features or final acceptance.
-Since 28 October 2026, the owner permits the assistant to commit and push reviewed changes.
-Never pull updated source into a VSC checkout while its jobs are active.
+**Stage: frozen VSC Experiment 0A is running; full extraction and benchmarks are gated.**
+CPU/data/question checks and all eleven tokenizer audits passed. B200 tests must finish
+before review and open-weight extraction. New local Jev work pins **1.14.0**, revalidated
+before the first-100-row pilot; 1.13 results remain historical. Current dated evidence is
+in [AGENTS_MEMORY](docs/AGENTS_MEMORY.md); commands are in [VSC](docs/VSC.md). Never update
+a checkout consumed by queued/running jobs.
 
 ## Research contract
 
@@ -75,7 +42,7 @@ per-column request; duplicate numeric columns are included only once in combined
 
 | Extractor | Execution |
 |---|---|
-| Jev 1.13.0 | TypeSafe API, locally |
+| Jev 1.14.0 | TypeSafe API, locally |
 | Liquid d1-3B | Open weights, VSC |
 | Liquid d1-2B (LFM3) | Open weights, VSC |
 | Strands Decider 2B | Open weights, VSC |
@@ -261,7 +228,7 @@ Existing environments need no recreation. Select that kernel in VS Code/Jupyter.
 .\.venv\Scripts\python.exe -m src.utils.run_notebooks
 ```
 
-Preparation is local and offline. `preparation --rebuild` explicitly regenerates the active
+Preparation is local and deterministic; downloaded inputs are processed offline. `preparation --rebuild` explicitly regenerates the active
 input set transactionally; historical versions and paid features remain intact. The exhaustive
 audit checks every unique payload and every original row/text-slot link. It checks mechanics,
 not a proof of linguistic correctness or provider interpretation.
@@ -293,9 +260,8 @@ not all together in the notebook environment. Full setup/transfer commands are i
 
 On VSC, PROJECT holds large inputs, weights/containers, caches, exact-token databases,
 predictions and large results. DATA holds the actual checkout including `.git`, compact manifests and logs. Installed
-cluster dependencies belong inside PROJECT containers. The existing control Conda environment
-on DATA is a migration exception: recreate and validate a CPU image before an idle cutover,
-never silently relocate it. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
+cluster dependencies, including the CPU controller, are sealed PROJECT containers. The
+former DATA environment was retired after CPU and native B200 verification. Both use `JEVPFN/output_JEVPFN/`. Local notebooks always use local storage.
 On B200, large active writes use the staged GPFS working set and publish to durable
 Lustre; small logs/manifests still use DATA. Large VSC writes fail rather than falling back to DATA. Free filesystem capacity is not quota.
 Evaluation creates one PROJECT database and one small DATA locator per dataset/phase.

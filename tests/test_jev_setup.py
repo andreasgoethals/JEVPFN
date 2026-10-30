@@ -171,7 +171,7 @@ def test_configure_uses_public_rejection_contract_and_recorded_account_limits(
     assert live["context_envelope"]["mode"] == "provider_enforced"
     validator = ReviewedContextEnvelope(cfg)
     monkeypatch.setattr(
-        "src.jev.hosted.api_preview", lambda _: {"model": "jev-1.13.0", "state": "hello"}
+        "src.jev.hosted.api_preview", lambda _: {"model": cfg["jev"]["model"], "state": "hello"}
     )
     validator(None)
     # Small HTTP body is not falsely reported as a locally counted token guarantee.

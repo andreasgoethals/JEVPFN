@@ -4,10 +4,13 @@ Use this guide for execution; use README for the experiment design and
 AGENTS_MEMORY for dated observations. Historical bounded B200 checks passed for all eleven
 open-weight decision runtimes, three encoders and TabSTAR. Final acceptance still requires
 one complete frozen campaign; historical setup passes are not current acceptance.
+The current frozen campaign is already running. Preserve its queued inputs, source and
+output; do not repeat a reset or upload while it has consumers. See AGENTS_MEMORY for
+the exact receipt/job IDs. New local Jev validation is a separate revision.
 
 ## Shared manual access
 
-The canonical template and this project's copy matched byte-for-byte on 29 October 2026.
+The canonical template and this project's copy matched byte-for-byte on 30 October 2026.
 The owner renews their shared Windows-agent certificate manually:
 
 ```powershell
@@ -29,6 +32,12 @@ as success. This is a verified gateway workaround, not an authentication failure
 Read relevant files, logs, quotas and scheduler state directly after that probe. Access
 alone authorizes no submissions, cancellations, migration or deletion. Do not pull into
 a checkout consumed by active or queued jobs; keep recovery state until it is published.
+
+One temporary 30-minute local monitor follows the current campaign. Its ID is
+`jevpfn-0a-progress`, recorded with owner/source/jobs/completion criteria in compact local
+output. Keep the host/app available. It stays quiet without meaningful change and never
+authenticates, submits or cleans. Pause on expired credentials; remove it once tracked work
+is terminal and evidence assessed. Do not create a duplicate monitor.
 
 ## Storage and hardware
 
@@ -141,7 +150,8 @@ cutover receipt embeds the reports, so a later deliberate output reset preserves
 the image's installation evidence. Normal activation then verifies the selected
 image and fails on corruption. B200 staging includes a checksum-verified native
 copy of this small CPU image alongside its model image, within the same quota budget.
-The old control environment is retained until cutover validation is complete. After
+For future migrations, retain the old environment until cutover validation is complete.
+The current migration and retirement have already passed. After
 native staging, `control_gpu_test.slurm` verifies both the native CPU image and a
 monitored model-container CUDA kernel on B200. Only a matching pass permits
 `python -m src.cluster.control_runtime retire-legacy --test-job-id JOBID`; this
@@ -199,263 +209,14 @@ keep no more than two such runtime batches resident. Durable checkpoints and sea
 containers do not need downloading or rebuilding. Full extraction stays disabled
 until acceptance; this storage change does not grant acceptance.
 
-## Stop only this project's H100 jobs and update
+## Setup before a future frozen campaign
 
-Do not update source used by active jobs. The cancellation utility previews first,
-then checks live ownership, H100 partition and a resolved WorkDir/Command inside
-this checkout. A matching job name alone is insufficient. CPU jobs, B200 jobs and
-other projects are excluded. From the activated CPU environment:
-
-```bash
-cd "$VSC_DATA/JEVPFN"
-python -m src.cluster.cancel_h100
-python -m src.cluster.cancel_h100 --apply
-squeue --clusters=wice,mindwell --me
-```
-
-If this utility has not reached VSC yet, upload just the helper from local PowerShell:
-
-```powershell
-Set-Location 'C:\Users\U0152019\PhD Documents\Projects\5. JEVPFN\JEVPFN'
-scp .\src\cluster\cancel_h100.py 'vsc38338@login.hpc.kuleuven.be:/data/leuven/383/vsc38338/JEVPFN_cancel_h100.py'
-if ($LASTEXITCODE -ne 0) { throw 'Cancellation helper upload failed.' }
-```
-
-Then use the existing CPU interpreter in the VSC terminal:
-
-```bash
-cd "$VSC_DATA/JEVPFN"
-export PYTHONPATH="$VSC_DATA/JEVPFN${PYTHONPATH:+:$PYTHONPATH}"
-"$VSC_DATA/conda_envs/JEVPFN/bin/python" "$VSC_DATA/JEVPFN_cancel_h100.py"
-"$VSC_DATA/conda_envs/JEVPFN/bin/python" "$VSC_DATA/JEVPFN_cancel_h100.py" --apply
-squeue --clusters=wice,mindwell --me
-```
-
-This does not change the active checkout. Never cancel by username.
-Wait for the remaining JEVPFN CPU jobs and cancellation to finish, then update:
-
-The tested local implementation, including new files, must first be committed and pushed. A successful
-`git pull` cannot retrieve uncommitted local work. PowerShell blocks run on Windows;
-Bash blocks run in the VSC terminal. Pasting `Set-Location` or `$LASTEXITCODE` into Bash
-does not upload or validate anything.
-
-```bash
-cd "$VSC_DATA/JEVPFN"
-git pull --ff-only
-git submodule update --init --recursive
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
-export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"
-export JEVPFN_CONDA_ENV=JEVPFN
-source scripts/activate_conda.sh
-"${JEVPFN_PYTHON:?}" -m src.cluster.setup --cluster wice
-myquota
-```
-
-Use the existing Python 3.12 CPU environment. Only for a new environment, use the
-project's existing Conda installation and install `.[dev,staging,token-audit]`, then
-run `python -m pip check`. Activation checks the actual interpreter; a changed
-shell prompt alone is insufficient. Do not install all GPU extras together or
-modify another project's environment.
-
-## Finish setup before the clean campaign
-
-One command prepares and tests all eleven open-weight extractors and three encoders. Preview first:
-
-```bash
-bash scripts/test_all.sh
-bash scripts/test_all.sh --execute --watch
-```
-
-The preview must select Mindwell B200. The script activates the existing CPU environment,
-selects the durable root and starts the resumable coordinator. It never cleans output,
-regenerates questions or makes paid calls. The prepared questions remain the audited local files.
-
-The graph performs CPU/data checks, immutable decision-model and encoder checkpoint
-staging, missing Blackwell container builds, exact token counts, GPFS staging,
-B200 contracts, bounded dataset pilots and all three encoder tests. Both filesystems
-must pass two-node locking and SQLite snapshot tests: durable Lustre on wICE and
-native GPFS scratch on Mindwell's `batch_graniterapids` CPU partition. Every GPU
-job waits for those checks. It does not enable full extraction or certify acceptance.
-Liquid d1-2B is `liquid_lfm3`; it keeps its own weights, image and token database.
-Its CPU partitions wait for its Transformers 5.19 container and run inside that image;
-other models retain their existing tokenizer environments. The same question v3 files
-are reused: no grammar or class-vocabulary change accompanies this addition.
-
-The complete setup contains 215 jobs with no reusable containers, or 204 when all eleven
-sealed images exist. Containers are verified in their own CPU staging jobs, not hashed
-serially on the login node. Each runtime has its own two-node GPFS storage check; a
-failed model cannot block every other model through a shared staging prerequisite.
-Configuration permits 64 queued/running jobs: at most 40 token partitions, six other CPU
-checks/merges, 12 GPU tests, two downloads, two builds and one bulk transfer/release. A separate two-workspace residency limit covers staging through the last GPU consumer
-and release, including queue waits; it prevents all providers retaining large GPFS copies.
-CPU token/download/build branches still proceed independently. Token audits cannot fill the GPU/build pools.
-Slurm still decides placement and start times; this does not promise simultaneous starts.
-Cross-cluster dependencies are checked through accounting, not assumed to work
-through Slurm federation. `--watch` polls once per minute and submits ready steps.
-If OnDemand disconnects, already submitted jobs continue; reconnect, activate the
-CPU environment and repeat the same command. Without `--watch`, each invocation
-reconciles/submits currently ready work. Never launch another independent graph.
-
-The receipt is DATA
-`output_JEVPFN/3. experiment_0/manifests/container_setup/open_models_mindwell_b200.json`.
-It records exact job IDs and clusters. Inspect a recorded job with:
-
-```bash
-sacct --clusters=wice,mindwell -j JOB_ID --format=JobID,JobName%30,State,ExitCode,Elapsed,MaxRSS
-squeue --clusters=mindwell --me -o "%.18i %.16P %.10T %.10l %.35R"
-```
-
-Use the reported integer in place of `JOB_ID`. Successful submission or an empty
-queue is not a test result. A failed job blocks only its descendants. Other branches
-continue; the same receipt's `summary` lists failed job IDs, commands/exit codes and
-blocked tests. The watcher exits nonzero after all runnable tests finish if any failed.
-Missing accounting stays pending. Failed/timed-out `sacct` queries also remain pending:
-setup and frozen 0A watchers retain job IDs, save the bounded error details, defer new
-submissions and retry on their next minute poll. At most one failed query per cluster
-is made in a pass; the other cluster can still have its recorded jobs reconciled.
-Recovery resumes the same jobs and retains the last error for diagnosis. It never
-converts an unavailable status into success. Ambiguous/interrupted `sbatch` submissions
-still stop the coordinator to prevent duplicate jobs. Keep its receipt; never erase it
-to guess retries. An older launcher already marked `stopped_requires_review` needs the
-idle/restart procedure below after accounting recovers; do not manually edit its receipt.
-Submission errors now display their saved stdout/stderr; frozen 0A also retains these
-diagnostics. Failed storage workers print bounded log tails into the parent job log.
-Controller DNS/socket errors are infrastructure failures, not model or credit-balance
-failures. Submitted jobs can continue while the coordinator is stopped. A timed-out
-sbatch may have been accepted: inspect squeue and sacct on that cluster before any
-retry. Do not clear a starting receipt or update source while existing jobs use it.
-
-If accounting confirms that a timed-out submission was accepted and is now terminal,
-record its ID before restarting. The helper queries [Slurm accounting](https://slurm.schedmd.com/sacct.html)
-and matches the user, account, checkout and full submission command. It refuses active,
-missing or mismatched records; applying it also requires all JEVPFN jobs to be idle.
-It preserves diagnostics and the stopped status and never submits a replacement or
-claims test acceptance. For the confirmed 26 October GPFS job:
-
-```bash
-"$JEVPFN_PYTHON" -m src.cluster.setup_recovery --step liquid_gpfs_storage --job-id 11739854
-"$JEVPFN_PYTHON" -m src.cluster.setup_recovery --step liquid_gpfs_storage --job-id 11739854 --apply
-```
-
-The first command previews; the second updates only the stopped setup receipt.
-Then use the restart command below. If accounting cannot identify the submission,
-keep the receipt unchanged and investigate; this helper provides no force override.
-
-Within a provider, independent GPU diagnostic groups and real-dataset checks collect
-failures before returning a failing job. A poisoned CUDA context, memory exhaustion or
-request ceiling aborts that worker. CPU library, question and synthetic test commands
-also all run even if an earlier command fails. Neither behavior turns a failure into a pass.
-
-After fixing a stopped setup or changing its source, wait until all JEVPFN jobs
-finish, then explicitly restart the checks:
-
-```bash
-"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all --restart
-"$JEVPFN_PYTHON" -m src.cluster.setup_extractors --all --restart --execute --watch
-```
-
-Restart checks both clusters for active JEVPFN jobs and requires accounting for
-every recorded job. An ambiguous submission is refused. It preserves earlier
-attempts inside the same receipt, verifies and reuses sealed Blackwell images,
-and retains weights, token batches, caches and logs. Cheap checks run again;
-the previous failure is never relabelled as a pass. After a disconnect, resume
-with `--all --execute --watch` without `--restart`.
-
-The 28 October download completed 174/176 steps. All ten token merges passed; the
-earlier five merge timeouts are resolved. Nine open-weight contracts/pilots passed.
-Decision3 failed before inference because its publisher runtime requires an explicit
-CUDA index. The adapter now uses the current logical device (respecting Slurm's visible
-device mapping). This fix does not change questions, token identities or images.
-
-After publishing/pulling with JEVPFN jobs idle, the targeted setup command is:
-Export the roots and activate the CPU environment as above, then:
-
-```bash
-"$JEVPFN_PYTHON" -u -m src.cluster.setup_extractors \
-  --provider decision3 --provider liquid_lfm3 --restart --execute --watch
-```
-
-This creates a targeted diagnostic attempt reusing the sealed image and completed
-token counts, and retains the complete previous attempt inside the same receipt.
-It repeats CPU/storage prerequisites and verifies cached inputs before submitting the
-GPFS/B200 descendants. After a disconnect, use `--provider decision3 --provider liquid_lfm3 --execute --watch`
-and omit `--restart`; the `--all` wrapper would select a
-different provider list. The final clean 0A campaign still tests all providers/encoders.
-
-The 29 October 14:47 download confirms Decision3 token merge, B200 contracts and
-18-dataset pilot passed, and TabSTAR's GPFS/predictor fixtures passed. Scratch release
-also passed and personal GPFS fell to 8.66/500 GiB. No rebuild or repeated manual
-Decision3/TabSTAR setup chain is required. These are pre-freeze setup receipts;
-proceed to the clean campaign below once local review/tests finish. The full bounded
-workspace graph and frozen-source acceptance still need that campaign.
-
-
-The 26 October Liquid/Strands GPFS staging failure was a link-checksum normalization
-mismatch: Tykky writes image paths containing `bin//python`, while the seal used the
-equivalent `bin/python`. Sealing and relocation now share that normalization. Existing
-sealed images and copied trees can be reused; do not rebuild them or bypass verification.
-Actual changes to links, images or wrappers still fail, with mismatched filenames reported.
-
-The `--all` graph includes E5-small-v2, E5-large-v2 and Qwen3-Embedding-0.6B. Their
-CPU checkpoint-staging job finishes before the Clef runtime's GPFS working set is
-copied; their B200 tests then use that sealed runtime. There is no separate manual
-encoder download step. A provider-only setup without Clef deliberately omits encoders.
-Checkpoint downloads are allowed in connected CPU Slurm allocations; a Slurm job
-ID alone is not a GPU allocation. GPU allocations and frozen-campaign encoder
-downloads are refused before any network work.
-Mindwell activation resolves and verifies the prepared native GPFS workspace before
-inference. No GPU job downloads weights or copies a missing working set. Contract
-tests and pilots check actual
-probabilities, class/score order, exact token parity, batching, missing/duplicate
-inputs, context rejection, cache/row mappings and prompt sensitivity. Semantic
-failures must be reviewed rather than hidden by relaxing tests. Larger pilots are
-capped at 1,000 requests/provider; their timings guide throughput estimates.
-
-Each provider's audit uses ten independent jobs, each counting a disjoint ~10% of every
-dataset's unique inputs. A short recovery job first rolls back any hot SQLite journal
-left by cancellation and checks the existing database before parallel readers start.
-Each partition writes one PROJECT SQLite file; no parallel worker writes
-the final database. Existing matching monolithic counts are reused, including committed
-batches from cancelled jobs. A separate CPU merge checks identities, file hashes, exact input
-coverage and prepared-token contents, and rolls back all merge inserts on any conflict.
-The final counts retain their original schema/identity for GPU consumers. Restart partitions
-stay on PROJECT for recovery; they are excluded from GPFS copies and downloaded result bundles.
-The serial preparation step recovers interrupted SQLite transactions and checks the compact
-identity/count tables and prepared-token key coverage. It no longer scans all token blobs
-with a whole-database quick_check before the parallel work. Existing prepared caches get
-a compact lookup index if needed. Elapsed-stage messages identify recovery, table checks,
-each dataset and key coverage. This step is not final acceptance: the merge still verifies
-every input, partition checksum, compressed token checksum and count before GPU use.
-The five added renderers use eight CPUs/27,200 MiB per partition and a 12-hour limit; the
-original five and Liquid d1-2B use two CPUs/6,800 MiB and four hours. Progress logs report throughput at least
-once per minute between batches. Shorter partitions improve parallelism, but queueing, text
-length and I/O prevent a guaranteed tenfold speedup. Frozen 0A contains 192 VSC jobs: eleven recovery checks, 110 token
-partitions, eleven merges, CPU checks, one Lustre check, eleven scratch stages, eleven native GPFS checks,
-eleven GPU contracts, eleven bounded pilots, three encoder tests and eleven workspace releases. Setup also downloads/builds.
-
-To migrate an active monolithic audit, first stop its watching coordinator with Ctrl+C.
-Cancel only its explicitly verified token job IDs, leave container builds running, and wait
-for those builds to finish before pulling new source. Do not clean output during migration.
-Then run `bash scripts/test_all.sh --restart --execute --watch`; it preserves assets and
-committed token batches. After a disconnect, omit `--restart` to resume the new graph.
-
-Mindwell's observed BSD `flock` did not exclude a second node. Linux locks and workspace
-leases now use POSIX `lockf`, with thread serialization to respect process-owned lock semantics.
-The two-node exclusion/release/snapshot test remains mandatory on both filesystems. Never mix
-old and new lock implementations in simultaneous writers. Checkpoint staging no longer treats
-publisher `.lock` assets as transient files; real hash mismatches still stop and list filenames.
-
-After a kill or failed publication, preserve scratch and recover committed results
-in the CPU environment before restaging that runtime:
-
-```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.scratch_stage publish --runtime intern
-sbatch scripts/slurm/experiment_0_scratch_stage.slurm intern
-```
-
-Replace `intern` with the affected runtime. Publication never deletes the working
-set. Restaging refuses active runtime leases. A semantic cache conflict requires
-inspection; do not replace populated databases manually.
+The current frozen campaign is already running; keep its source and prepared inputs
+unchanged. Once idle, an authorized unfrozen setup uses
+`bash scripts/test_all.sh --execute --watch`. The graph stages pinned models, builds
+compact PROJECT images, partitions exact-token audits and runs independent CPU/GPU
+contracts and pilots concurrently. Resume saved job IDs; never blindly restart an
+uncertain scheduler submission. Current jobs and migration evidence are in AGENTS_MEMORY.
 
 ## Local Jev setup
 
@@ -470,14 +231,14 @@ precedence; remove stale overrides. In local PowerShell:
 ```
 
 The account check only sends an authenticated model-list GET. Smoke tests check
-pinned `jev-1.13.0` binary, multiclass and nine-level outputs; robustness uses a
+pinned `jev-1.14.0` binary, multiclass and nine-level outputs; robustness uses a
 separate bounded diagnostic. Existing paid responses/ledgers are reused, including
 after output cleanup. `--revalidate-only` reprocesses saved responses without API
 calls; never erase uncertain attempts to obtain a retry.
 
 The owner confirmed 80 RPS and 100,000 input TPS on 21 October; recheck the account's
 [rate-limits page](https://console.typesafe.ai/rate-limits) before full extraction.
-The pilot deliberately runs one worker, at least five seconds apart. The documented
+The small interface/dataset pilot deliberately runs one worker, at least five seconds apart. The documented
 32k state/question and 64k complete-request limits are provider-enforced; a 64k
 billing reservation is a worst-case spending bound, not a measured token count.
 The HTTP body ceiling does not prove token fit. Overflow stops without truncation.
@@ -500,9 +261,28 @@ reviewed `--review FILE --apply --writers-stopped` transitions preserve charges
 and history. Spending-policy revisions must preserve cumulative charges/reservations.
 Neither a larger balance nor successful smoke tests enables full extraction.
 
-## One clean reset, question preparation and upload
+After Jev 1.14 is revalidated, the additional first-100-source-rows validation is:
 
-Do this **after** the B200 setup/encoder tests, local Jev pilot and reviewed CPU-control
+```powershell
+.\.venv\Scripts\python.exe -m src.jev.prefix_pilot
+.\.venv\Scripts\python.exe -m src.jev.prefix_pilot --execute
+if ($LASTEXITCODE -ne 0) { throw 'Prefix pilot stopped; inspect its receipt before resuming.' }
+```
+
+It covers 1,800 rows and 7,643 distinct joint/per-column requests at one RPS, with a USD 1
+cumulative dataset-charge/reservation cap and the existing private budget caps. The rate
+floor is about 127 minutes; latency adds time. Empty text produces missing numeric values
+without calls. Numeric artifacts are marked validation-only with a different data identity,
+excluded from benchmark inventory and rejected by full-data assembly. Exact 1.14 responses
+can be reused later; 1.13 responses/ledgers are preserved separately. This does not enable
+full Jev extraction. Current model/price/context references were checked on 30 October:
+[models](https://docs.typesafe.ai/models), [request errors](https://docs.typesafe.ai/api/errors).
+
+## Future authorized reset, question preparation and upload
+
+The reset/upload already preceded the current frozen campaign. Routine housekeeping
+preserves retained results, submissions, backups and recovery state. Use the following
+only for a separately authorized fresh campaign **after** B200 tests, local Jev pilot and CPU-control
 container migration described above, with all
 JEVPFN jobs and manual/notebook writers stopped. Preserve their evidence until the
 cause of every failure is understood. Synchronize the same reviewed source first.
@@ -608,6 +388,23 @@ inputs, runtime, token audit and reports. Tests do not sign acceptance automatic
 
 ## Feature creation, 0B and benchmark
 
+
+After successful frozen 0A review, finish that validation stage explicitly. Enable
+the reviewed full-extraction switches and exact provider acceptance paths, enable
+the three frozen encoders, and freeze the extraction configuration.
+`python -m src.cluster.feature_campaign` previews the graph; `--execute --watch`
+resumes its recorded Slurm jobs. It contains 198 decision/dataset GPU allocations,
+three full-dataset encoder allocations and eleven stage/release pairs. Each
+decision runtime permits two concurrent dataset jobs; at most two working sets
+remain resident. These execution partitions preserve every selected row/input.
+No Jev API call or downstream predictor is launched. Release publishes committed
+results even after a failed consumer and preserves mutable recovery stores.
+
+The final successful job graph still requires complete-artifact validation; it is
+not Experiment 0B acceptance. Each dataset's full probabilities/responses, numeric
+features, measured timings and hardware/job identities remain available.
+
+
 Between reviewed stages, with no writers, use
 `python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped`
 on both machines before changing the next stage's configuration. Record a new
@@ -680,36 +477,8 @@ TabSTAR selects v1.1 through package 1.2.2, not the original model interface. It
 classification/regression snapshots and E5 dependency are pinned in the model catalog.
 The CPU stager writes checksummed offline Hugging Face snapshots and aliases, with one
 predictor manifest; it neither loads a model nor modifies tracked configuration.
-The 29 October download confirms its weights and versioned container are ready.
-The GPFS copy failed on quota; after scoped scratch recovery, resume the final three
-steps below. The first two commands are needed only for a new installation or a
-failed/missing authoritative checkpoint/container. Staging retries transport failures
-at most three times; valid pinned downloads are reused and integrity errors stop.
-Do not mix TabSTAR's Transformers 4.57.6 environment with the decision-tokenizer environment.
-Its new `tabstar-v1p1` container path preserves old images. Once JEVPFN jobs are idle,
-and before a frozen stage, run in the VSC Bash terminal:
-
-```bash
-(
-set -euo pipefail
-cd "$VSC_DATA/JEVPFN"
-mkdir -p "output_JEVPFN/3. experiment_0/logs"
-sbatch --wait scripts/slurm/stage_tabstar.slurm
-sbatch --wait scripts/slurm/experiment_0_container_build.slurm tabstar new /lustre1/project/stg_00211 blackwell-cu130
-sbatch --wait scripts/slurm/experiment_0_scratch_stage.slurm tabstar
-sbatch --wait scripts/slurm/experiment_0_storage_gpfs.slurm tabstar
-sbatch --wait scripts/slurm/experiment_0_predictor.slurm tabstar tabstar
-sbatch --wait scripts/slurm/experiment_0_scratch_release.slurm tabstar --apply
-)
-```
-
-These are prerequisite-ordered jobs for this one runtime; the extractor/encoder graph
-can progress independently through `test_all`. A source update requires idle JEVPFN jobs;
-do not pull into an active checkout. Bounded TabSTAR fits can be tested before full feature
-creation, but they are 0B predictor-interface evidence, not complete 0B acceptance. The
-full-feature and full-fold checks must run again after extraction. No weights or model
-training are run on login nodes. Required adaptation retains the publisher's fixed
-LoRA/three-epoch averaging recipe; temporary epoch checkpoints are not retained as results.
+TabSTAR's v1.1 bounded contracts passed during setup. This does not replace 0B
+full-feature/full-fold validation. No model training runs on login nodes.
 
 CatBoost/linear use `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on wICE.
 All nine predictors need real task/feature contracts, including binary, multiclass,
@@ -784,20 +553,3 @@ paper-sized PDF figures, `figures/Captions.md` and the complete `All Results.md`
 For a smaller independent response/feature backup, use `export --omit-token-counts`.
 It retains cache databases, predictions and compact evidence while omitting only
 rebuildable detailed token databases. The default export still includes merged counts.
-
-## Accepted open-weight feature campaign
-
-After successful frozen 0A review, finish that validation stage explicitly. Enable
-the reviewed full-extraction switches and exact provider acceptance paths, enable
-the three frozen encoders, and freeze the extraction configuration.
-`python -m src.cluster.feature_campaign` previews the graph; `--execute --watch`
-resumes its recorded Slurm jobs. It contains 198 decision/dataset GPU allocations,
-three full-dataset encoder allocations and eleven stage/release pairs. Each
-decision runtime permits two concurrent dataset jobs; at most two working sets
-remain resident. These execution partitions preserve every selected row/input.
-No Jev API call or downstream predictor is launched. Release publishes committed
-results even after a failed consumer and preserves mutable recovery stores.
-
-The final successful job graph still requires complete-artifact validation; it is
-not Experiment 0B acceptance. Each dataset's full probabilities/responses, numeric
-features, measured timings and hardware/job identities remain available.

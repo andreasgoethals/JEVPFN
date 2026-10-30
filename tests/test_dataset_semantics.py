@@ -159,7 +159,7 @@ def test_frozen_question_materialization_matches_cached_request(isolated_output,
             frozen = apply_frozen_question(request, meta, bank, "documented")
             cache.put(
                 frozen,
-                {"model": "jev-1.13.0", "answers": {"semantic": {"type": "noul", "noul": 0.4}}},
+                {"model": "jev-1.14.0", "answers": {"semantic": {"type": "noul", "noul": 0.4}}},
                 kind="verified_response",
             )
     block = materialize_cached_block(

@@ -38,7 +38,11 @@ On 29 October the owner authorized the CPU control-container rebuild/cutover,
 Slurm debugging, verified final local/VSC output reset, fresh 0A, evidence review
 and accepted full open-weight feature creation. Carry this out autonomously within
 JEVPFN; preserve other projects. Full Jev extraction, 0B and benchmarks wait for the
-owner's next stage. Preserve the old CPU environment until the replacement passes.
+owner's next stage. The CPU migration passed; the old DATA environment is retired.
+On 30 October the owner authorized switching new Jev calls to pinned 1.14 and
+revalidating it before a local first-100-source-rows pilot for all eighteen datasets.
+This bounded pilot must preserve earlier 1.13 ledgers and the cumulative budget;
+it does not authorize full Jev extraction.
 
 ## Layout and operations
 
@@ -50,7 +54,7 @@ benchmark's statistical analysis in scope.
 VSC authentication is shared and manual. Reuse the owner's native Windows OpenSSH agent.
 Only when access needs renewal, ask them to run `step ssh login --context VSC` and approve
 KU Leuven Authenticator. Do not initiate login, install another agent, add project-specific
-credentials/configuration or schedule reminders. Follow docs/TEMPLATE.md's bounded native
+credentials/configuration or schedule authentication reminders. Follow docs/TEMPLATE.md's bounded native
 `ssh.exe -F none -T` stdin-script probe, with host-key verification. Verify markers and exit
 status; an empty exit-0 response proves nothing. The current gateway drops unredirected
 remote stderr: the verified project workaround is `exec 2>&1` inside the LF script, retaining
@@ -58,6 +62,11 @@ error text in stdout and the remote exit status. See docs/VSC.md for the dated e
 Inspect this project's remote logs, files, quotas and jobs directly when relevant. Access
 does not authorize new workloads, cancellation, migration or cleanup. Preserve active/queued
 checkouts and recovery data; never update source consumed by a job.
+Use a temporary 30-minute progress monitor for authorized long-running work. Record its
+ID, owner, jobs, source and completion criteria in compact local output. Reuse an existing
+monitor, stay quiet without meaningful changes, pause after an expired certificate,
+and remove it after all tracked work is terminal and evidence is assessed. Monitoring
+requires the local host/app; it never grants new submission or cleanup authority.
 
 Reusable Python is in src/; upstream data-source snapshots stay under src/data/upstream/ and
 are never executed. Config/notebook/output phase folders use the same numbers. Do not create

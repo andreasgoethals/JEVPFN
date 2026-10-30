@@ -1,0 +1,6 @@
+# First source rows, not a representative performance evaluation or full extraction.
+rows: 100
+maximum_unique_requests: 10000
+requests_per_second: 1
+# Counts existing dataset charges/reservations too; the private campaign caps still apply.
+cumulative_dataset_cost_limit_usd: 1.0

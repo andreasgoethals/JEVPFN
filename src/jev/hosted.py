@@ -51,7 +51,7 @@ class ReviewedContextEnvelope:
         if mode not in {"reviewed_byte_envelope", "provider_enforced"}:
             raise ValueError("Unknown context policy")
         if mode == "provider_enforced" and (
-            c["model"] != "jev-1.13.0"
+            c["model"] not in {"jev-1.13.0", "jev-1.14.0"}
             or c["max_request_utf8_bytes"] != 32 * 1024 * 1024
             or c["max_billed_input_tokens"] != 64000
             or c.get("per_question_context_tokens") != 32000
@@ -87,7 +87,8 @@ def pilot_input_numbers(path, input_set_id):
     return numbers
 
 
-def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=TypeSafeTransport):
+def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=TypeSafeTransport,
+        prefix_policy=None):
     if not execute or not cfg["live_extraction"].get("enabled"):
         raise RuntimeError("Jev execution requires explicit opt-in and enabled live configuration")
     if paths.on_vsc():
@@ -96,6 +97,13 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
 
     check_if_present()
     review = cfg["live_extraction"]
+    if prefix_policy is not None:
+        if full or review.get("workers") != 1 or review.get("full_feature_creation_enabled"):
+            raise ValueError("Prefix validation requires one worker and full extraction disabled")
+        if prefix_policy != load_yaml("experiment_0/jev_prefix_pilot"):
+            raise ValueError("Prefix policy differs from the reviewed bounded configuration")
+        if review["requests_per_second"] > review["verified_account_requests_per_second"]:
+            raise ValueError("Pilot rate exceeds the verified account limit")
     if full and (
         review.get("full_feature_creation_enabled") is not True
         or review.get("pilot_accepted") is not True
@@ -110,13 +118,18 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
         items = [i for i in items if i["dataset_id"] in dataset_ids]
     if set(i["dataset_id"] for i in items) - limits.keys():
         raise ValueError("Every selected dataset needs an approved spending allocation")
+    from src.jev.prefix_pilot import ledger_total, prefix_numbers, selected_records
+
     selection = {
         i["dataset_id"]: None
         if full
+        else prefix_numbers(paths.dataset_question_path(i["dataset_id"]), i["input_set_id"], prefix_policy["rows"])
+        if prefix_policy is not None
         else pilot_input_numbers(paths.dataset_question_path(i["dataset_id"]), i["input_set_id"])
         for i in items
     }
-    if not full and sum(map(len, selection.values())) > review["max_pilot_requests"]:
+    request_ceiling = prefix_policy["maximum_unique_requests"] if prefix_policy else review["max_pilot_requests"]
+    if not full and sum(map(len, selection.values())) > request_ceiling:
         raise ValueError("Pilot exceeds its approved request ceiling")
     settings = {
         "provider": "jev",
@@ -145,7 +158,8 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
         "run_id": run_id,
         "provider": "jev",
         "status": "running",
-        "mode": "full" if full else "pilot",
+        "mode": "full" if full else "prefix_validation" if prefix_policy else "pilot",
+        "prefix_policy": prefix_policy,
         "settings": settings,
         "configuration_sha256": digest(cfg),
         "datasets": [],
@@ -163,6 +177,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
     # One local campaign owns the account rate gate; merges wait for dataset writers.
     try:
         with file_lock(paths.jev_cache_path() / ".jev_campaign.lock", timeout=1):
+            total_usage = sum(ledger_total(paths.dataset_cache_path(i["dataset_id"])) for i in selected_inputs())
             with timings.measure("client_setup", items=0):
                 client = transport_factory(cfg, allow_network=True)
             for item in items:
@@ -181,17 +196,29 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         policy_revision_manifest=review.get("spending_policy_revision_manifest"),
                         timings=timings,
                     )
+                    records = (
+                        selected_records(paths.dataset_question_path(dataset_id), item["input_set_id"], selection[dataset_id])
+                        if prefix_policy else iter_prepared_inputs(
+                            paths.dataset_question_path(dataset_id), input_set_id=item["input_set_id"],
+                            input_numbers=selection[dataset_id],
+                        )
+                    )
                     requests = (
                         prepared_request(
                             record, settings=settings, provenance={"dataset_id": dataset_id}
                         )
-                        for record in iter_prepared_inputs(
-                            paths.dataset_question_path(dataset_id),
-                            input_set_id=item["input_set_id"],
-                            input_numbers=selection[dataset_id],
-                        )
+                        for record in records
                     )
+                    before_usage = ledger_total(cache.path)
+                    other_usage = total_usage - before_usage
+                    budget_stopped = []
+                    if prefix_policy:
+                        requests = budgeted_requests(requests, cache, other_usage,
+                            prefix_policy["cumulative_dataset_cost_limit_usd"], limits[dataset_id], budget_stopped)
                     counts = extractor.run(requests)
+                    total_usage = other_usage + ledger_total(cache.path)
+                    if budget_stopped:
+                        counts["budget_stop"] = 1
                     report["datasets"].append(
                         {
                             "dataset_id": dataset_id,
@@ -209,8 +236,15 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         from src.jev.self_hosted import _materialize
 
                         _materialize(dataset_id, settings, cache, item["input_set_id"])
+                    elif prefix_policy:
+                        from src.jev.prefix_pilot import materialize
+
+                        report["datasets"][-1]["features"] = materialize(
+                            dataset_id, settings, cache, item["input_set_id"], prefix_policy["rows"]
+                        )
+                        write_json(manifest, report)
             else:
-                report["status"] = "completed_requires_review"
+                report["status"] = "completed_prefix_pilot_requires_review" if prefix_policy else "completed_requires_review"
     except BaseException as exc:
         report.update(status="failed", error_type=type(exc).__name__)
         raise
@@ -220,6 +254,19 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
         if client is not None and callable(getattr(client, "close", None)):
             client.close()
     return report
+
+
+def budgeted_requests(requests, cache, other_usage, ceiling, limits, stopped):
+    """Single-worker pre-dispatch cap; resume can still read already-paid responses."""
+    from src.jev.prefix_pilot import ledger_total
+
+    reserve = limits.max_billed_input_tokens * limits.input_price_per_million / 1e6
+    for request in requests:
+        if (cache.get(request, kind="verified_response") is None
+                and other_usage + ledger_total(cache.path) + reserve > ceiling + 1e-12):
+            stopped.append(True)
+            return
+        yield request
 
 
 def main(argv=None):
