@@ -238,7 +238,9 @@ calls; never erase uncertain attempts to obtain a retry.
 
 The owner confirmed 80 RPS and 100,000 input TPS on 21 October; recheck the account's
 [rate-limits page](https://console.typesafe.ai/rate-limits) before full extraction.
-The small interface/dataset pilot deliberately runs one worker, at least five seconds apart. The documented
+Synthetic probes run at least five seconds apart. The current reviewed dataset pilot uses
+one worker at one RPS, within the owner-confirmed limits; setup_pilot initially defaults to
+0.2 RPS until an explicit rate review. The documented
 32k state/question and 64k complete-request limits are provider-enforced; a 64k
 billing reservation is a worst-case spending bound, not a measured token count.
 The HTTP body ceiling does not prove token fit. Overflow stops without truncation.

@@ -2,6 +2,11 @@
 
 ## 30-10-2026
 
+- Fresh local Jev 1.14 0A passed all eight steps: 1,163 tests, exhaustive questions,
+  31 live diagnostics and 288 new dataset-pilot responses. Reviewed instruction/order
+  sensitivity explicitly; bounded approval does not enable full Jev extraction.
+  Current-source Liquid and Strands B200 contracts also passed; remaining VSC gates continue.
+
 - Pin new Jev work to 1.14 with model-separated diagnostic ledgers; preserve 1.13
   accounting and responses. Revalidate before the owner-authorized local prefix pilot.
 - Add a bounded first-100-row pilot using the guarded production dispatcher. Batch large

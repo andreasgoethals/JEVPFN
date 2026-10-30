@@ -18,17 +18,21 @@ The VSC DATA checkout remains **73807ee6c193377b99134196e69e6ee9538410be**, froz
 `eb20d0e666fd1c9a0bed5e12c73b043221f293eaf4ae5ab855e3e1a0178cd2b3`.
 The current receipt is
 `3. experiment_0/manifests/0A_vsc/20261029T215821Z_8d152b91.json`.
-Latest direct SSH: **138 completed, zero failures, two submitted, 52 waiting on dependencies**.
-Mindwell 11753859 (Liquid) and 11753882 (Strands) remain pending on Priority. Both have
-20-minute bounded contract allocations. GPU execution in this frozen campaign has not
-started; historical successful model tests cannot accept the new campaign. The existing
+Latest direct SSH: **140 completed, zero failures, two submitted, 50 waiting on dependencies**.
+Mindwell contracts 11753859 (Liquid, 2m17s) and 11753882 (Strands, 2m34s) passed:
+known-answer semantics, batch parity, runtime/token parity and all eighteen dataset cases.
+Their separate pilots are 11755221 and 11755222. The other provider/encoder branches
+still need to finish; two passes do not accept the complete campaign. The existing
 PROJECT-controller watcher advances ready jobs and resumes their recorded IDs.
 
 Local HEAD advanced to e11a351 through a TEMPLATE-only commit. Byte-identical executable
 source/config/runtime pins were verified against the earlier local 0A receipt before its
 local-only stage closure. That closure explicitly records the documentation-only ancestry;
-it does not claim a test at the newer HEAD. New Jev 1.14/prefix code requires fresh local
-validation. It does not modify or retroactively validate the queued VSC source.
+it does not claim a test at the newer HEAD. Jev 1.14 source c2c72bfd0a49d26e2446f19df0529897fa1ea4efd3e8914add26027afc0a6b8e
+was validated locally at d24b79c: all eight steps in
+0A_local/20261030T081306Z_c9a72019.json passed, including 1,163 tests (25 optional/platform
+skips), 31 live diagnostics and 288 new dataset pilot calls. The bounded review is
+before_extraction/accepted_jev14_pilot.json; full Jev remains unauthorized. It does not modify or retroactively validate the queued VSC source.
 
 Temporary progress monitor: **jevpfn-0a-progress**, every 30 minutes, local host/app required.
 Its source/job/owner/completion receipt is `3. experiment_0/manifests/progress_monitor.json`.
@@ -49,6 +53,7 @@ tracked work is terminal and evidence assessed. Do not create a duplicate monito
 | Frozen VSC 0A CPU/data/question checks | Passed on source 73807ee. |
 | Frozen VSC exact token audits | All eleven providers, all eighteen datasets, zero overflowing unique inputs. |
 | Historical bounded B200 setup | Eleven decision runtimes, three encoders and TabSTAR passed on their recorded earlier sources. Not current frozen acceptance. |
+| Jev 1.14 local 0A | All eight steps passed on d24b79c; 1,163 tests passed, 25 skipped. Bounded review accepted; first-100-row validation follows. |
 | Earlier local 0A | All eight steps passed on source 73807ee with Jev 1.13; superseded for new Jev calls by the 1.14 validation requirement. |
 | Earlier notebook execution | Eleven notebooks, thirteen PDFs, saved captions/reports; all visually inspected without clipped/overlapping labels. |
 
@@ -102,8 +107,10 @@ worker at 1 RPS, with a USD 1 cumulative dataset-charge/reservation cap in addit
 existing private campaign/dataset limits. It skips empty text, reuses exact saved 1.14
 requests and stores joint/per-column numeric blocks as validation-only subset artifacts.
 Those artifacts are excluded from benchmark inventory and rejected by full-data assembly.
-Full Jev extraction remains disabled and owner-run. New tests, API results and prefix
-progress are in their exact current-source receipts; do not infer completion from this plan.
+Full Jev extraction remains disabled and owner-run. The Jev 1.14 bounded review passed; prefix progress is in its exact current-source
+receipt. Do not infer all 1,800 rows completed from pilot approval. Real-text instruction
+sensitivity persisted: probability change 0.48 with a class flip; multiclass option reversal
+had total variation 0.07 without a class flip. These limitations were explicitly reviewed.
 
 ## Documentation and research scope
 
