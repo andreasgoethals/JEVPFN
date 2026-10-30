@@ -241,8 +241,8 @@ A released runtime must be staged again before any GPU work. Setup/frozen 0A han
 that automatically. For manual predictor or production batches, run the runtime's
 scratch stage first and its release only after all that runtime's consumers finish;
 keep no more than two such runtime batches resident. Durable checkpoints and sealed
-containers do not need downloading or rebuilding. Full extraction stays disabled
-until acceptance; this storage change does not grant acceptance.
+containers do not need downloading or rebuilding. Storage recovery alone never enables
+full extraction; its separate signed acceptance and enable switches remain required.
 
 ## Setup before a future frozen campaign
 
@@ -583,7 +583,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Import failed.' }
 
 Exports include durable data/results and DATA logs/manifests, not credentials,
 weights or environments. Import verifies paths/checksums and transactionally merges
-compatible databases; conflicting records stop. Do not overwrite local caches with
+compatible databases; conflicting records stop. VSC freeze receipts are imported under
+`manifests/imported_revisions/`, never as an active local freeze. Do not overwrite local caches with
 an unvalidated folder copy. All notebooks run locally and save executed outputs,
 paper-sized PDF figures, `figures/Captions.md` and the complete `All Results.md`.
 For a smaller independent response/feature backup, use `export --omit-token-counts`.

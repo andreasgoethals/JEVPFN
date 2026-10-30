@@ -100,6 +100,44 @@ def test_import_not_allowed_on_vsc(isolated_output, tmp_path):
         import_bundle(tmp_path / "none.zip")
 
 
+@pytest.mark.parametrize("local_is_frozen", [False, True])
+def test_remote_freeze_is_history_and_cannot_activate_or_replace_local_freeze(
+    tmp_path, monkeypatch, local_is_frozen
+):
+    import hashlib
+
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    active = paths.manifests_dir("experiment_0") / "frozen_revision.json"
+    if local_is_frozen:
+        active.parent.mkdir(parents=True)
+        active.write_text('local frozen stage', encoding="utf-8")
+    body = b'{"git_head":"remote-stage","source_sha256":"remote-source"}'
+    record = {
+        "path": "output_JEVPFN/3. experiment_0/manifests/frozen_revision.json",
+        "member": "files/frozen.json",
+        "kind": "output",
+        "sha256": hashlib.sha256(body).hexdigest(),
+        "bytes": len(body),
+    }
+    bundle = tmp_path / "remote-freeze.zip"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("files/frozen.json", body)
+        archive.writestr("manifest.json", json.dumps({
+            "schema": "jevpfn.transfer.v1", "bundle_id": "remote-freeze", "files": [record],
+        }))
+    imported = import_bundle(bundle)
+    historical = active.parent / "imported_revisions" / (
+        "frozen_revision__vsc_" + record["sha256"][:12] + ".json"
+    )
+    assert historical.read_bytes() == body
+    assert imported["outputs"] == [{"status": "added", "path": str(historical)}]
+    assert active.exists() is local_is_frozen
+    if local_is_frozen:
+        assert active.read_text(encoding="utf-8") == 'local frozen stage'
+    repeated = import_bundle(bundle)
+    assert repeated["outputs"] == [{"status": "reused", "path": str(historical)}]
+
+
 def test_token_summary_rebases_and_retains_other_provider(tmp_path, monkeypatch):
     from src.cluster.transfer import _combine_token_reports
     from src.utils.config import load_yaml

@@ -329,6 +329,12 @@ def import_bundle(bundle: Path) -> dict:
                 )
             else:
                 destination = paths.outputs_dir().joinpath(*relative.parts[1:])
+                if relative.name == "frozen_revision.json" and relative.parts[-2] == "manifests":
+                    # A remote freeze is evidence, never authority to freeze this host.
+                    destination = (
+                        destination.parent / "imported_revisions"
+                        / f"frozen_revision__vsc_{record['sha256'][:12]}.json"
+                    )
                 # Refuse pre-existing symlink parents pointing outside the local output root.
                 if not destination.resolve().is_relative_to(paths.outputs_dir().resolve()):
                     raise ValueError("Output destination escapes the local output folder")

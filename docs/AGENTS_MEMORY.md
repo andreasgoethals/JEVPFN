@@ -154,10 +154,13 @@ Lustre build leaves are absent. Successful workspace release retired bulk staged
 Remaining compact recovery state, token shards and legacy images need their separate
 publication/acceptance/rollback gates. They are not permission to wipe scratch.
 The two-resident/200 GiB working-set budget with 20 GiB personal headroom remains fixed.
-Approved token-part retirement **62477662** verifies final merged SQLite integrity,
+Approved token-part retirement verifies final merged SQLite integrity,
 complete count/prepared-token coverage and idle ownership before removing only redundant
 shards. It preserves their compact receipts, final databases and all accepted evidence.
-Inspect `storage_cleanup/token_shards_retirement_20261030.json` for the exact outcome.
+The first maintenance scan 62477662 was stopped before retirement because its default
+SQLite cache made the large integrity/coverage scan too slow. Replacement 62477905 retains the
+same integrity/coverage checks with a bounded 256 MiB cache. Inspect
+`storage_cleanup/token_shards_retirement_20261030.json` for its job ID and exact outcome.
 
 The final authorized reset already removed local output and 84.2 GB of VSC output before
 the current campaign. It preserved raw/prepared data, caches/accounting, weights and images.
@@ -208,7 +211,7 @@ three benchmarks. Per-dataset SQLite stores contain compressed numeric tables an
 response provenance, not one file per response. Embeddings retain full vectors; PCA
 belongs to subsequent training partitions.
 
-Before handover, 1,165 local tests passed (25 optional/platform skips), plus 92 focused
+Before handover, 1,167 local tests passed (25 optional/platform skips), plus 92 focused
 checks after enabling extraction (four optional Torch skips). All eleven notebooks
 executed and saved thirteen figures/captions/reports. Lint and whitespace checks passed.
 The inference adapters, tokenization, checkpoint readers, encoder implementation and
@@ -227,6 +230,13 @@ acceptance records also have a verified local ZIP copy, SHA-256
 Review retained instruction/option sensitivity and warm median request latencies of
 roughly 0.026–0.298 seconds; bounded observations are not population robustness or a
 full-run completion guarantee. Existing batch sizes and runtime pins remain fixed.
+
+The VSC backup initially imported its old freeze as an active local control file during
+the between-stage window. The exact foreign receipt was preserved under
+`manifests/imported_revisions/`; no source or paid data was removed. Transfer imports now
+always route foreign freezes to history, with regression cases for both absent and
+existing local freezes. This prevents the later full-feature download from controlling
+the laptop stage. Recovery receipt: storage_cleanup/imported_freeze_recovery_20261030.json.
 
 ## Documentation and research scope
 

@@ -2,6 +2,9 @@
 
 ## 30-10-2026
 
+- Import foreign freeze receipts as content-addressed historical evidence. A VSC
+  download cannot activate or replace the laptop's frozen stage, including when the
+  laptop is between stages. Preserve the already imported receipt and test both cases.
 - Complete fresh 0A operational review/backup in Slurm, sign eleven open-weight and
   three encoder acceptances, and configure their explicit full-extraction campaign.
   Preserve the tested runtimes and question version; Jev and benchmarks remain gated.
