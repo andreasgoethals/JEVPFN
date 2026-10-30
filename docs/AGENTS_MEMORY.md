@@ -151,15 +151,13 @@ Lustre build leaves are absent. Successful workspace release retired bulk staged
 Remaining compact recovery state, token shards and legacy images need their separate
 publication/acceptance/rollback gates. They are not permission to wipe scratch.
 The two-resident/200 GiB working-set budget with 20 GiB personal headroom remains fixed.
-Approved token-part retirement verifies final merged SQLite integrity,
-complete count/prepared-token coverage and idle ownership before removing only redundant
-shards. It preserves their compact receipts, final databases and all accepted evidence.
-The first maintenance scan 62477662 was stopped before retirement because its default
-Two read-only whole-database BLOB scans (62477662, 62477905) were stopped before any
-retirement. The scoped check 62477933 verifies count/metadata table integrity, per-dataset
-coverage and every prepared-token key using the compact covering index and a 256 MiB
-cache; the accepted merge already verified prepared payload contents. Inspect
-`storage_cleanup/token_shards_retirement_20261030.json` for its exact outcome.
+Token-shard retirement is deferred without deletion. Three additional read-only scans
+(62477662, 62477905, 62477933) were stopped because deep SQLite verification on durable
+Lustre exceeded the useful housekeeping bound. Original merged-count/content checks and
+fresh 0A acceptance remain valid. Retain the roughly 39 GiB of recovery parts through
+the first verified full-feature run; then retire them using native staged metadata and
+complete prepared-token consumption evidence. Outcome:
+`storage_cleanup/token_shards_retirement_deferred_20261030.json`.
 
 The final authorized reset already removed local output and 84.2 GB of VSC output before
 the current campaign. It preserved raw/prepared data, caches/accounting, weights and images.

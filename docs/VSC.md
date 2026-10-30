@@ -137,7 +137,10 @@ Parallel token partitions are temporarily retained on PROJECT as durable recover
 through frozen 0A review. They are not GPU inputs: scratch staging excludes the shards
 folder. After merge/coverage/checksum acceptance and confirmation that no recovery/merge
 consumer remains, retain the final per-provider databases and compact receipts; retire
-redundant partition databases under a reviewed cleanup. They are not permanent study results.
+redundant partition databases under a reviewed cleanup. The 30 October additional deep
+scan was stopped without deletion because Lustre inspection was too slow; those parts
+remain explicit recovery evidence through the first verified production run, not permanent
+study results.
 
 Legacy GPU image manifests are included in the current frozen runtime identity, even when
 the B200 profile selects another image. Do not remove them mid-campaign. Review their
