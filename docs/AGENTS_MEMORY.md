@@ -50,6 +50,11 @@ desktop monitor remains removed at the owner's request.
 
 Local repair checks: 1,176 tests passed, 25 environment-specific skips; the focused
 34 publication/campaign checks, Ruff and both edited/new Slurm scripts' Bash syntax passed.
+Linux job 62516047 passed 64 regressions and unchanged numerical-source checks. Its extra
+read-only cache inspection was stopped because Lustre random reads fell below 1 MiB/s;
+no data was modified. The replacement inspection uses node-local SQLite snapshots and
+prints per-store progress. This is a housekeeping/QA performance issue, not an inference
+or integrity failure.
 
 ## Initial open-weight feature campaign (historical)
 

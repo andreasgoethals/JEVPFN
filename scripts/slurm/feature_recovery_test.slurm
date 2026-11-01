@@ -20,11 +20,12 @@ export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
 "${JEVPFN_PYTHON:?}" -m pytest -q tests/test_feature_campaign.py tests/test_scratch_stage.py tests/test_cache_merge.py tests/test_parallel_diagnostics.py tests/test_freeze.py
 "$JEVPFN_PYTHON" - <<'PY'
-import json, os, sqlite3, subprocess
+import json, os, shutil, sqlite3, subprocess, tempfile
 from contextlib import closing
 from pathlib import Path
 from src.cluster.freeze import source_snapshot
 from src.jev.features import load_block
+from src.jev.merge import snapshot
 from src.utils import paths
 from src.utils.serialization import write_json
 
@@ -38,6 +39,31 @@ unchanged = [
 for name in unchanged:
     old = subprocess.check_output(['git', 'show', '954c93f:' + name])
     assert old.replace(b'\r\n', b'\n') == Path(name).read_bytes().replace(b'\r\n', b'\n'), name
+
+def inspect_store(source, runtime):
+    # Lustre random reads were <1 MiB/s in the first inspection. Stream a
+    # consistent snapshot once, then check its indexes/blobs on node-local disk.
+    local = Path(os.environ.get('SLURM_TMPDIR') or '/tmp')
+    if shutil.disk_usage(local).free < source.stat().st_size + 512 * 2**20:
+        raise OSError('Insufficient node-local space for recovery inspection')
+    print(json.dumps({'event': 'inspect_store_started', 'source': str(source)}), flush=True)
+    with tempfile.TemporaryDirectory(prefix='jevpfn-recovery-', dir=local) as temporary:
+        p = snapshot(source, Path(temporary) / source.name)
+        with closing(sqlite3.connect(p.as_uri() + '?mode=ro', uri=True)) as db:
+            count = db.execute("SELECT COUNT(*) FROM responses WHERE kind='verified_response'").fetchone()[0]
+            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            ids = list(db.execute('SELECT artifact_id,manifest_json FROM feature_artifacts')) if 'feature_artifacts' in tables else []
+        blocks = []
+        for aid, encoded in ids:
+            m = json.loads(encoded)
+            if m['identity']['provider'] != runtime or m.get('purpose') == 'validation_only':
+                continue
+            block = load_block(p, aid)
+            blocks.append({'artifact_id': aid, 'rows': len(block.values),
+                           'mode': m['identity']['representation'], 'status': m['status']})
+    print(json.dumps({'event': 'inspect_store_completed', 'source': str(source), 'blocks': len(blocks)}), flush=True)
+    return count, blocks
+
 stores = []
 for runtime in ('liquid', 'strands'):
     for tier, root in (
@@ -48,18 +74,7 @@ for runtime in ('liquid', 'strands'):
             p = root / 'data/jev_cache' / (dataset + '.sqlite3')
             if not p.is_file():
                 continue
-            with closing(sqlite3.connect(p.as_uri() + '?mode=ro', uri=True)) as db:
-                count = db.execute("SELECT COUNT(*) FROM responses WHERE kind='verified_response'").fetchone()[0]
-                tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                ids = list(db.execute('SELECT artifact_id,manifest_json FROM feature_artifacts')) if 'feature_artifacts' in tables else []
-            blocks = []
-            for aid, encoded in ids:
-                m = json.loads(encoded)
-                if m['identity']['provider'] != runtime or m.get('purpose') == 'validation_only':
-                    continue
-                block = load_block(p, aid)  # Verifies checksums, identity and saved table shapes.
-                blocks.append({'artifact_id': aid, 'rows': len(block.values),
-                               'mode': m['identity']['representation'], 'status': m['status']})
+            count, blocks = inspect_store(p, runtime)
             stores.append({'runtime': runtime, 'tier': tier, 'dataset': dataset,
                            'verified_responses_all_providers': count, 'blocks': blocks})
 report = {'status': 'operational_recovery_checks_passed', 'job_id': os.environ['SLURM_JOB_ID'],
