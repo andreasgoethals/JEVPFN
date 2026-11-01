@@ -3,9 +3,11 @@
 Commands and site rules in execution order. The design is in [README](../README.md);
 dated run evidence, job IDs and failures are in [AGENTS_MEMORY](AGENTS_MEMORY.md).
 
-Current stage: 0A is accepted and the open-weight/encoder extraction campaign runs from
-the frozen DATA checkout at `954c93f`. Do not reset successful output, and do not pull
-into that checkout while any JEVPFN job is queued or running.
+Current stage: 0A is accepted. The initial feature campaign at `954c93f` stopped on
+publication contention and an account submission ceiling. Operational recovery preserves
+its successful features and cached responses. Do not reset successful output or pull
+into a checkout while any JEVPFN job consumes it; exact recovery IDs are in AGENTS_MEMORY
+and the campaign receipt.
 
 ## 1. Access
 
@@ -55,6 +57,9 @@ credentials and is removed once all tracked work is terminal and assessed.
   failures. Publication merges compatible records, never replaces a complete durable
   cache with a partial one, and stops on conflicts. Predictor staging restores and unions
   durable evaluation stores, reusing completed folds.
+- Publication locks each destination independently; a busy periodic target is deferred,
+  while final publication waits. Dataset jobs publish their own dataset store. Source
+  snapshots stay on native scratch during validation; final unions remain on PROJECT.
 - Scratch is not a backup: unused GPFS files are purged after 30 days and a killed node
   loses work since the last publication. Keep an independent downloaded copy of features.
 - At most two runtime working sets are resident, within a 200 GiB application budget,
@@ -208,6 +213,16 @@ recorded job IDs; a step left `starting` without a job ID is ambiguous and must 
 checked in Slurm accounting before any resubmission. Never run two campaigns for one
 provider. Review publication receipts before downloading or marking a dataset complete;
 completed extraction still needs artifact validation and is not 0B.
+
+Named Slurm submission-ceiling refusals leave work pending and retry on the next poll;
+generic policy errors, timeouts or missing receipts remain ambiguous. For a reviewed
+operational repair, first confirm all existing jobs are terminal, preserve the old freeze,
+update and test the idle checkout, then record the new freeze. Recover the unchanged grid
+with `python -u -m src.cluster.feature_campaign --execute --watch --recover --reviewed-by NAME`.
+Recovery reconciles every known ID, reuses completed jobs and retains previous attempts.
+The CPU-only `feature_recovery_test.slurm` checks regressions, unchanged numerical source
+and saved feature blocks without replacing accepted 0A reports. Preserve scratch until
+recovered publication succeeds; do not restage over it or delete failed responses.
 
 ### 4.5 Jev (local, owner-run)
 

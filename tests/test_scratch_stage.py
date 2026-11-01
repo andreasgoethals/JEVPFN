@@ -94,6 +94,42 @@ def test_periodic_publication_ignores_historical_backups_and_does_not_multiply_f
         assert db.execute("SELECT COUNT(*) FROM imported_extraction_records").fetchone() == (1,)
 
 
+def test_periodic_busy_target_does_not_block_another_dataset(roots):
+    from src.utils.locking import file_lock
+    from src.utils.serialization import digest
+
+    durable, work = roots
+    marker(durable, work)
+    cache(work / "data/jev_cache/busy.sqlite3")
+    cache(work / "data/jev_cache/ready.sqlite3")
+    lock = durable / ".publication-locks" / (digest("data/jev_cache/busy.sqlite3") + ".lock")
+    with file_lock(lock, timeout=0):
+        result = stage._publish(durable, work, periodic=True)
+    assert result["busy_skipped"] == 1
+    assert result["decision_stores"] == 1
+    assert not (durable / "data/jev_cache/busy.sqlite3").exists()
+    assert (durable / "data/jev_cache/ready.sqlite3").is_file()
+    # Final publication subsequently includes the deferred target.
+    assert stage._publish(durable, work)["decision_stores"] == 2
+
+
+def test_dataset_publication_does_not_scan_another_jobs_store(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    cache(work / "data/jev_cache/fixture.sqlite3")
+    (work / "data/jev_cache/unrelated.sqlite3").write_bytes(b"not a readable fixture")
+    original = stage.snapshot
+
+    def native_snapshot(source, destination):
+        assert destination.is_relative_to(work)
+        return original(source, destination)
+
+    monkeypatch.setattr(stage, "snapshot", native_snapshot)
+    result = stage._publish(durable, work, dataset_id="fixture")
+    assert result["decision_stores"] == 1
+    assert not (durable / "data/jev_cache/unrelated.sqlite3").exists()
+
+
 def test_copy_snapshots_committed_wal_without_copying_open_journal(tmp_path):
     source = tmp_path / "source.sqlite3"
     with sqlite3.connect(source) as db:

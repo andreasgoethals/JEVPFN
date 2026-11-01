@@ -1,5 +1,16 @@
 # Changelog
 
+## 01-11-2026
+
+- Repair production publication contention: lock each destination independently, publish
+  only the dataset assigned to a decision job, and validate source snapshots on native
+  scratch. Busy periodic targets defer; final publication and conflict checks remain required.
+- Defer named Slurm submission-ceiling refusals instead of crashing the controller.
+  Keep uncertain submissions blocked. Add explicit reviewed recovery that reconciles
+  terminal IDs, preserves history and reuses successful jobs and cached responses.
+- Add isolated Linux recovery checks for saved feature blocks and unchanged numerical
+  source; preserve accepted 0A evidence and identify historical failed logs separately.
+
 ## 30-10-2026
 
 - Rewrite the documentation for the current stage. README now leads with status, the

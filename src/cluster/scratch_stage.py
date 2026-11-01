@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
@@ -124,21 +125,24 @@ def _copy(source, destination, *, snapshot_sqlite=True):
         return sha
 
 
-def _publish(durable, work, *, periodic=False):
+def _publish(durable, work, *, periodic=False, dataset_id=None):
     """Never replace a durable response DB with a partial scratch copy."""
     from src.cluster.transfer import _publish_file
     from src.data.text_embeddings import merge as merge_embeddings
     from src.evaluation.store import merge as merge_evaluations
 
-    counts = {"decision_stores": 0, "embedding_stores": 0, "outputs": 0}
+    counts = {"decision_stores": 0, "embedding_stores": 0, "outputs": 0, "busy_skipped": 0}
+    if dataset_id is not None:
+        dataset_id = paths.output_component(dataset_id)
     staged = (
         json.loads((work / MARKER).read_text()).get("files", {}) if (work / MARKER).exists() else {}
     )
     durable.mkdir(parents=True, exist_ok=True)
     with (
         staging_environment(durable),
-        file_lock(durable / ".scratch-publication.lock", timeout=600),
-        tempfile.TemporaryDirectory(prefix=".publish-", dir=durable) as temporary,
+        # Validate the source snapshot on native scratch. Writing it to Lustre
+        # first made every validation reread the large payload across mounts.
+        tempfile.TemporaryDirectory(prefix=".publish-", dir=work) as temporary,
     ):
         for kind, folder, merger in (
             ("decision_stores", "data/jev_cache", merge_cache),
@@ -153,6 +157,8 @@ def _publish(durable, work, *, periodic=False):
             for source in sources:
                 relative = source.relative_to(work)
                 if kind != "outputs" and source.suffix != ".sqlite3":
+                    continue
+                if kind != "outputs" and dataset_id is not None and source.stem != dataset_id:
                     continue
                 if kind == "outputs" and "results" not in relative.parts:
                     continue
@@ -171,23 +177,38 @@ def _publish(durable, work, *, periodic=False):
                     and file_sha256(source) == staged[relative.as_posix()]
                 ):
                     continue
-                copied = Path(temporary) / relative
-                copied.parent.mkdir(parents=True, exist_ok=True)
-                if source.suffix == ".sqlite3":
-                    snapshot(source, copied)
-                else:
-                    shutil.copyfile(source, copied)
-                if kind == "decision_stores":
-                    # Both working and durable copies survive; the atomic union
-                    # does not need a growing full-store backup every ten minutes.
-                    merger(copied, destination, backup_destination=False, deduplicate_ledger=True)
-                elif merger is not None:
-                    merger(copied, destination)
-                elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
-                    merge_evaluations(copied, destination)
-                else:
-                    _publish_file(copied, destination)
-                counts[kind] += 1
+                # Unrelated datasets must publish concurrently. A periodic writer
+                # can defer a busy destination; final publication must acquire it.
+                lock = durable / ".publication-locks" / (digest(relative.as_posix()) + ".lock")
+                with ExitStack() as stack:
+                    try:
+                        stack.enter_context(file_lock(lock, timeout=0 if periodic else 3600))
+                    except TimeoutError:
+                        if not periodic:
+                            raise
+                        counts["busy_skipped"] += 1
+                        continue
+                    started = time.monotonic()
+                    print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
+                                      "periodic": periodic}), flush=True)
+                    copied = Path(temporary) / relative
+                    copied.parent.mkdir(parents=True, exist_ok=True)
+                    if source.suffix == ".sqlite3":
+                        snapshot(source, copied)
+                    else:
+                        shutil.copyfile(source, copied)
+                    if kind == "decision_stores":
+                        # Preserve the validated transactional union and both copies.
+                        merger(copied, destination, backup_destination=False, deduplicate_ledger=True)
+                    elif merger is not None:
+                        merger(copied, destination)
+                    elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
+                        merge_evaluations(copied, destination)
+                    else:
+                        _publish_file(copied, destination)
+                    counts[kind] += 1
+                    print(json.dumps({"event": "publication_completed", "path": relative.as_posix(),
+                                      "seconds": time.monotonic() - started}), flush=True)
     return counts
 
 
@@ -443,13 +464,14 @@ def run(runtime, command):
         process = subprocess.Popen(child_command(command), env=child_environment())
         stopped = threading.Event()
         publication_errors = []
+        dataset_id = os.environ.get("JEVPFN_PUBLISH_DATASET")
 
         def checkpoint():
             # Only committed SQLite pages are copied. This also protects long
             # extraction jobs that never get a normal exit after node failure.
             while not stopped.wait(600):
                 try:
-                    _publish(durable, work, periodic=True)
+                    _publish(durable, work, periodic=True, dataset_id=dataset_id)
                 except Exception as exc:
                     publication_errors.append(exc)
                     process.terminate()
@@ -464,7 +486,7 @@ def run(runtime, command):
             stopped.set()
             thread.join()
             signal.signal(signal.SIGTERM, previous)
-            _publish(durable, work)
+            _publish(durable, work, dataset_id=dataset_id)
         if publication_errors:
             raise RuntimeError(
                 "Periodic durable publication failed; scratch is retained"

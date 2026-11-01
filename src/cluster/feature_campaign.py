@@ -14,7 +14,7 @@ import time
 
 from src.cluster.experiment_zero import scheduler_state
 from src.cluster.freeze import check_if_present, runtime_pins
-from src.cluster.job_graph import advance
+from src.cluster.job_graph import SubmissionDeferred, advance
 from src.cluster.maintenance import require_idle_vsc
 from src.cluster.scheduling import gpu_profile, project_export
 from src.cluster.workspace_graph import add_releases
@@ -26,6 +26,18 @@ from src.utils.acceptance import reviewed_acceptance
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import digest, write_json
+
+
+def capacity_rejection(stdout, stderr):
+    """Only named submission ceilings prove that sbatch accepted no allocation."""
+    return not (stdout or "").strip() and any(
+        code in (stderr or "")
+        for code in (
+            "QOSMaxSubmitJobPerUserLimit",
+            "QOSMaxSubmitJobPerAccountLimit",
+            "AssocMaxSubmitJobLimit",
+        )
+    )
 
 
 def plan():
@@ -98,7 +110,7 @@ def plan():
     return add_releases(steps, command_style=True)
 
 
-def run(*, execute=False):
+def run(*, execute=False, recover=False, reviewed_by=None):
     steps = plan()
     if not execute:
         return dict(
@@ -134,12 +146,55 @@ def run(*, execute=False):
     )
     if receipt.exists():
         report = json.loads(receipt.read_text())
+        if recover:
+            if not reviewed_by or not reviewed_by.strip():
+                raise ValueError("Recovery requires a named reviewer")
+            require_idle_vsc()
+            old_steps = report["steps"]
+            if len(old_steps) != len(steps) or any(
+                any(old.get(k) != new.get(k) for k in ("name", "cluster", "command"))
+                for old, new in zip(old_steps, steps, strict=True)
+            ):
+                raise ValueError("Recovery cannot change the campaign plan")
+            # Reconcile every known ID before allowing any new submission.
+            for step in old_steps:
+                if step.get("job_id"):
+                    result = scheduler_state(step["job_id"], cluster=step["cluster"])
+                    if result is None:
+                        raise ValueError("Recovery requires terminal accounting for every job")
+                    step.update(scheduler_state=result[0], exit_code=result[1],
+                                status="completed" if result == ("COMPLETED", "0:0") else "failed")
+                elif step.get("status") == "starting":
+                    diagnostic = step.get("submission_diagnostics", {})
+                    if diagnostic.get("error_type") != "CalledProcessError" or not capacity_rejection(
+                        diagnostic.get("stdout"), diagnostic.get("stderr")
+                    ):
+                        raise ValueError("Unresolved ambiguous submission; recovery refused")
+            from datetime import UTC, datetime
+
+            stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+            previous = receipt.parent / "recovery_history" / f"campaign_{stamp}_{report['identity'][:12]}.json"
+            write_json(previous, report)
+            for step in steps:
+                old = next(s for s in old_steps if s["name"] == step["name"])
+                if old.get("status") == "completed":
+                    step.update(old)
+                elif old.get("job_id") or old.get("submission_diagnostics"):
+                    step["previous_attempt"] = old
+            report = dict(identity=identity, steps=steps, recovery={
+                "reviewed_by": reviewed_by.strip(), "previous_receipt": str(previous),
+                "created_utc": datetime.now(UTC).isoformat(),
+                "meaning": "Operational recovery; successful jobs reused, cached responses retained",
+            })
+            write_json(receipt, report)
         if report["identity"] != identity or any(
             s.get("status") == "starting" for s in report["steps"]
         ):
             raise ValueError("Campaign changed or submission is ambiguous; inspect before retrying")
         steps = report["steps"]
     else:
+        if recover:
+            raise ValueError("Recovery requires an existing campaign receipt")
         require_idle_vsc()
         report = dict(identity=identity, steps=steps)
     for phase in ("experiment_0", "feature_creation"):
@@ -161,6 +216,13 @@ def run(*, execute=False):
                 "error_type": type(exc).__name__,
                 **{key: str(getattr(exc, key, None) or "")[-4096:] for key in ("stdout", "stderr")},
             }
+            diagnostic = step["submission_diagnostics"]
+            if isinstance(exc, subprocess.CalledProcessError) and capacity_rejection(
+                diagnostic["stdout"], diagnostic["stderr"]
+            ):
+                step["status"] = "pending"
+                save()
+                raise SubmissionDeferred("Account submission ceiling reached; retry next poll") from exc
             save()  # An uncertain submission stays 'starting'; never resubmit it blindly.
             raise
         step["submission_diagnostics"] = {
@@ -193,15 +255,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--recover", action="store_true",
+                        help="Review terminal attempts and reuse successes across an operational repair")
+    parser.add_argument("--reviewed-by")
     args = parser.parse_args()
     if args.watch and not args.execute:
         parser.error("--watch requires --execute")
+    if args.recover and (not args.execute or not args.reviewed_by):
+        parser.error("--recover requires --execute and --reviewed-by")
     if not args.execute:
         print(json.dumps(run()))
         return 0
     while True:
         with file_lock(paths.manifests_dir("feature_creation") / ".campaign.lock", timeout=1):
-            report = run(execute=args.execute)
+            report = run(execute=args.execute, recover=args.recover, reviewed_by=args.reviewed_by)
+        args.recover = False
         print(json.dumps(report), flush=True)
         if not args.watch or report["status"] != "running":
             return int(report["status"] == "completed_with_failures")

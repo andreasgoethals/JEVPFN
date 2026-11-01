@@ -1,6 +1,6 @@
 # Operational evidence
 
-Updated 30 October 2026, 17:20 UTC. This file owns current run state, exact evidence and
+Updated 1 November 2026. This file owns current run state, exact evidence and
 reusable failure lessons, newest first. Method: [README](../README.md); commands:
 [VSC](VSC.md); dataset meanings: [DATA_SOURCES](DATA_SOURCES.md); research evidence:
 [LITERATURE_REVIEW](LITERATURE_REVIEW.md); older detail: Git and [CHANGELOG](CHANGELOG.md).
@@ -18,7 +18,40 @@ Submission is not completion. Preserve active or queued checkouts and recovery i
 - Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
 
-## Open-weight feature campaign (in progress)
+## Operational recovery (1 November)
+
+Direct accounting confirms no JEVPFN jobs queued/running before repair. Both Fake Job
+Posting jobs completed (Liquid 11757487; Strands 11757556), and Liquid Kickstarter
+11759420 completed on 31 October, 23:04 CET. Both Jigsaw attempts failed during publication
+(11757488, 11757580). Liquid's 99,661 Jigsaw responses and two numeric blocks were saved;
+Strands retained 67,000 responses and needs to finish the dataset. No model/CUDA or
+recorded request failure appeared in the 21 production text logs scanned.
+
+The controller stopped on the definite `QOSMaxSubmitJobPerUserLimit` refusal for Strands
+Kickstarter. Its manifest remained stale; scheduler accounting, not that `running` label,
+establishes the old attempts' terminal state. Recovery must reuse successful IDs and
+saved responses, retry the two failed jobs and the refused submission, and continue the
+unchanged 223-step grid. None of the three full encoder jobs has started yet.
+
+Repairs replace the global publication lock with destination-specific locks, restrict
+decision publication to the assigned dataset, and keep source snapshots on native scratch.
+A busy periodic target defers without killing inference; final publication still verifies
+the transaction. Named submission ceilings wait for the next poll; uncertain acceptance
+still stops for review. `--recover --reviewed-by NAME` records old attempts and reconciles
+all IDs before reusing completed work. Inference, question, embedding and merge-validation
+implementations are unchanged. Recovery QA and exact replacement IDs live in the phase's
+`manifests/recovery_qa_*.json` and `open_weight_campaign.json`; submission is not completion.
+
+Quota snapshot: PROJECT 760.3G/1T, 52,415/150,000 files; personal GPFS scratch 59.79G/500G;
+Lustre scratch 4.262G/500G; DATA 46,278M/76,800M. No quota is exceeded. GPFS PROJECT
+`prj_00013` is now visible (2T, empty); no migration to it is implied or performed.
+Keep scratch responses, token recovery shards and accepted 0A evidence. The scheduled
+desktop monitor remains removed at the owner's request.
+
+Local repair checks: 1,176 tests passed, 25 environment-specific skips; the focused
+34 publication/campaign checks, Ruff and both edited/new Slurm scripts' Bash syntax passed.
+
+## Initial open-weight feature campaign (historical)
 
 Production freeze: Git `954c93fdb29290e85cb98bf3a374674d466e5ef8`, source
 `9b216097e5780189b8e3e547b52a69ee6dc9f27661df7ac686f92b3eccc3332d`. Handover CPU job

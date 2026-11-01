@@ -25,5 +25,8 @@ fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 JEVPFN_FEATURE_ARGS=(--provider "$JEVPFN_PROVIDER" --execute --full)
-if [[ -n "${4:-}" ]]; then JEVPFN_FEATURE_ARGS+=(--dataset "$4"); fi
+if [[ -n "${4:-}" ]]; then
+    JEVPFN_FEATURE_ARGS+=(--dataset "$4")
+    export JEVPFN_PUBLISH_DATASET="$4"
+fi
 jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.jev.self_hosted "${JEVPFN_FEATURE_ARGS[@]}"

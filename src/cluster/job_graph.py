@@ -11,6 +11,10 @@ from datetime import UTC, datetime
 TERMINAL = {"completed", "failed", "blocked"}
 
 
+class SubmissionDeferred(RuntimeError):
+    """Slurm definitely rejected admission; retain pending work for the next poll."""
+
+
 class AccountingUnavailable(RuntimeError):
     """A read-only status query failed; the known job's outcome remains unknown."""
 
@@ -199,7 +203,12 @@ def advance(steps, *, settings, state, submit, save):
             )
         ):
             continue
-        submit(step)  # Persists 'starting' BEFORE calling sbatch; never retry ambiguous receipts.
+        try:
+            submit(step)  # Persist before sbatch; never retry ambiguous receipts.
+        except SubmissionDeferred:
+            # Stop this admission pass, rather than hammering a full account.
+            save()
+            break
         active[kind] += 1
         if step.get("workspace_stage"):
             resident.add(step["workspace_stage"])
