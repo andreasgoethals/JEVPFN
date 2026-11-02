@@ -1,5 +1,14 @@
 # Changelog
 
+## 02-11-2026
+
+- Add reviewed parallel admission for a frozen feature campaign: remove the two-dataset
+  submission throttle, partition unsubmitted encoders into 54 dataset jobs, prioritize
+  embedding staging at the next free storage slot, and preserve native byte/workspace gates.
+- Preserve exact existing IDs and all scientific inputs. Record a separate scheduling
+  artifact/policy and execution identity; the old dispatcher cannot duplicate full encoders.
+  Accounting outages and definite site-capacity refusals defer; uncertain submissions stop.
+
 ## 01-11-2026
 
 - Repair production publication contention: lock each destination independently, publish

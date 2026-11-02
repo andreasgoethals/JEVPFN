@@ -43,6 +43,13 @@ On 30 October the owner authorized switching new Jev calls to pinned 1.14 and
 revalidating it before a local first-100-source-rows pilot for all eighteen datasets.
 This bounded pilot must preserve earlier 1.13 ledgers and the cumulative budget;
 it does not authorize full Jev extraction.
+On 2 November the owner requested maximum parallel admission of remaining feature and
+embedding work. Use feature_admission: all ready datasets per staged runtime, encoders
+partitioned by dataset, embedding staging at the next free storage slot. Preserve the
+two-workspace/byte safeguards and exact known job IDs. A reviewed, checksummed scheduling
+companion may replace the login controller outside the frozen source tree; record its
+artifact, policy and original/execution campaign identities. Never pull into active source
+or alter scientific inputs to change queue admission. The desktop monitor remains disabled.
 
 ## Layout and operations
 

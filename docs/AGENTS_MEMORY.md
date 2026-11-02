@@ -1,6 +1,6 @@
 # Operational evidence
 
-Updated 1 November 2026. This file owns current run state, exact evidence and
+Updated 2 November 2026. This file owns current run state, exact evidence and
 reusable failure lessons, newest first. Method: [README](../README.md); commands:
 [VSC](VSC.md); dataset meanings: [DATA_SOURCES](DATA_SOURCES.md); research evidence:
 [LITERATURE_REVIEW](LITERATURE_REVIEW.md); older detail: Git and [CHANGELOG](CHANGELOG.md).
@@ -17,6 +17,44 @@ Submission is not completion. Preserve active or queued checkouts and recovery i
   all eighteen datasets, preserving 1.13 ledgers and cumulative budget.
 - Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
+
+## Parallel admission (2 November)
+
+The owner requested all remaining work as parallel as possible. Canonical implementation:
+`src/cluster/feature_admission.py`. All ready dataset jobs per staged model can be admitted
+together; three unsubmitted full encoder jobs split into 54 dataset jobs. The execution
+graph has 274 steps, with the same 198 decision dataset jobs, 396 decision blocks and
+54 embedding stores. Cloudflare/embedding staging takes the next genuine free workspace.
+The two-resident/200 GiB storage safeguards and single bulk-transfer writer remain; Slurm
+controls accepted/running jobs. Do not submit held or duplicate jobs merely to fill a queue.
+
+Frozen inference checkout remains `e50043b8da93a435791e37c24c303fda07761f19`, source
+`1e817dc6056d5a7f82c65f604f1ba65145191e824f1dadb5b276c7aed9309307`; original campaign
+identity `d2c53785ea532f3231e6cc2d288946a2540f9ccd0e21b62a09e6d41443a648b6`.
+The scheduling companion is deployed separately as a checksummed DATA artifact, imported
+through the sealed CPU image. Its policy, old receipt, execution identity and controller
+process are recorded in feature-creation output. Do not pull new main into VSC consumers.
+No model pin, question, numerical feature implementation, dataset scope or Jev gate changes.
+
+Last confirmed progress before handover: Liquid 8/18 datasets, Strands 4/18; 24 feature
+blocks. Recovered jobs 11763392–11763395 completed and published successfully. Three
+known outstanding IDs are 11763745, 11763763 and 11763671. Their current state is unknown
+while Slurm accounting/cluster queries fail with `Address family '0' not supported`.
+The old controller retained IDs through that outage. After queries recovered, a Strands
+Product Sentiment submission timed out inside the site's balance/submit wrapper, leaving
+an ambiguous `starting` receipt and stopping the old controller. Reconcile both successful
+accounting and live-queue queries before retrying; preserve the diagnostic and review in
+the campaign. No fresh acceptance of a
+submission may be claimed until an actual Slurm receipt exists. The official status page
+was generated 30 October and does not resolve the directly observed 2 November failure.
+Snapshot: PROJECT 767.8G/1T, 53,995/150,000 files; personal GPFS scratch 79.93G/500G.
+This change introduces no asset migration or additional scratch deletion; the existing
+reviewed publication/release jobs remain in the graph.
+The desktop progress automation stays removed. Current truth is in
+`2. feature_creation/manifests/open_weight_campaign.json` and its controller receipt.
+Local validation: 1,182 passed, 25 environment-specific skips; six focused admission tests
+also passed on the final artifact. Ruff and diff checks passed. Real VSC admission and
+accepted IDs must be verified separately from these local tests.
 
 ## Operational recovery (1 November)
 

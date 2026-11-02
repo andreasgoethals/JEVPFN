@@ -205,21 +205,40 @@ python -m src.cluster.feature_campaign
 python -u -m src.cluster.feature_campaign --execute --watch
 ```
 
-The graph has 223 steps: 198 decision × dataset B200 jobs, three full encoder jobs and
-eleven stage/release pairs, for 396 decision blocks and 54 embedding stores. Each runtime
-runs at most two dataset jobs and at most two working sets are resident. It launches no
-Jev call or predictor. Exact duplicates reuse saved outputs. The launcher resumes
+The original graph has 223 steps: 198 decision × dataset jobs, three full encoder jobs
+and eleven stage/release pairs. The original controller admits two datasets per runtime.
+Since the owner's 2 November parallelism request, `src.cluster.feature_admission` replaces
+that admission policy: all ready datasets can queue together, and three unsubmitted encoder
+jobs split into 54 independent dataset jobs (274 execution steps). Outputs remain 396
+decision blocks and 54 embedding stores. The next free workspace prioritizes Cloudflare
+staging, then its encoder jobs. Two resident workspaces, the 200 GiB working budget and
+one bulk-transfer writer remain storage safeguards. No Jev call or predictor is launched.
+Exact duplicates reuse saved outputs. The launcher resumes
 recorded job IDs; a step left `starting` without a job ID is ambiguous and must be
 checked in Slurm accounting before any resubmission. Never run two campaigns for one
 provider. Review publication receipts before downloading or marking a dataset complete;
 completed extraction still needs artifact validation and is not 0B.
+
+Parallel admission binds `--expected-campaign`, `--expected-source` and `--reviewed-by`
+to the original frozen campaign. It archives the old receipt, preserves accepted IDs and
+records a separate execution identity and controller artifact SHA. The old controller
+refuses that changed execution identity, so it cannot accidentally launch the three
+unpartitioned encoders again. Each encoder shard uses the existing script's dataset
+argument and explicitly exports `JEVPFN_PUBLISH_DATASET` for scoped publication.
+When source has active consumers, deploy the reviewed companion as an immutable compact
+artifact under DATA output, running inside the sealed CPU image with the frozen checkout
+as its import root. Under the campaign lock, verify and stop only the old login controller;
+record the replacement's host/PID/start ticks and hash. GPU jobs, assets and frozen code
+are unchanged. This is an admission handover, not a new validation acceptance or migration.
+After the campaign ends, reconcile the DATA checkout with main before the next stage.
 
 Named Slurm submission-ceiling refusals leave work pending and retry on the next poll;
 generic policy errors, timeouts or missing receipts remain ambiguous. For a reviewed
 operational repair, first confirm all existing jobs are terminal, preserve the old freeze,
 update and test the idle checkout, then record the new freeze. Recover the unchanged grid
 with `python -u -m src.cluster.feature_campaign --execute --watch --recover --reviewed-by NAME`.
-Recovery reconciles every known ID, reuses completed jobs and retains previous attempts.
+That command is for the original unpartitioned graph; do not use it after parallel
+admission. Recovery reconciles every known ID, reuses completed jobs and retains previous attempts.
 The CPU-only `feature_recovery_test.slurm` checks regressions, unchanged numerical source
 and saved feature blocks without replacing accepted 0A reports. Preserve scratch until
 recovered publication succeeds; do not restage over it or delete failed responses.
