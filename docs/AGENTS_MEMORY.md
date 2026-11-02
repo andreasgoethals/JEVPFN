@@ -56,6 +56,25 @@ Local validation: 1,182 passed, 25 environment-specific skips; six focused admis
 also passed on the final artifact. Ruff and diff checks passed. Real VSC admission and
 accepted IDs must be verified separately from these local tests.
 
+Deployment verified 2 November, 08:22 UTC: controller PID 2743308, host tier2-p-login-3,
+start ticks 112683660. Canonical implementation commit `37a9ea9`; deployed artifact
+`controller_tools/feature_admission_1240371794716a88.py`, SHA-256
+`1240371794716a884ae5bd6f03a2edcf9f4ddcf40cac21ce4807cd62b07a7fc8`.
+Execution identity `f59f7fb6851b709898054d75fc96c48fa6b8cc37983e3e6552c352ba52bafa57`;
+policy SHA `695c07f9f6f3ee76c3894b4862fea9746339c01503880b16c392d568c79694ae`.
+Three original queued IDs are preserved; the expanded graph has 14 completed steps
+(12 decision datasets plus two stages), three submitted and 257 pending. No new Slurm ID
+has yet been accepted from the parallel policy. The controller retries the definite
+`QOSMaxSubmitJobPerUserLimit` refusal every 60 seconds without crashing or duplicating work.
+
+Live Mindwell `scontrol show assoc_mgr` confirms effective QoS `lp_verbekelab` limits of
+500 submitted jobs per user/account and 16 running jobs per user/account. Expanded arrays
+show 500 tasks already submitted: 484 pending, 16 running across this user's projects.
+Slurm/accounting is responding again; admission capacity is now the blocker. Other projects
+were neither cancelled nor reprioritized. Proof and current state:
+`parallel_deployment_20261102.json`, `parallel_reconciliation_20261102.json`,
+`controller_process.json`, and `logs/open_weight_parallel_watch.log` in feature-creation output.
+
 ## Operational recovery (1 November)
 
 Direct accounting confirms no JEVPFN jobs queued/running before repair. Both Fake Job

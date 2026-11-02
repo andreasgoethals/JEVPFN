@@ -12,7 +12,7 @@ tabular predictors and compared with frozen general embeddings and native text s
 |---|---|
 | Exploration, question preparation | Complete: all 20 core datasets explored; 18 selected; question v3 frozen. |
 | Experiment 0A (before extraction) | Accepted. VSC 192/192 steps passed; signed acceptance for eleven open-weight providers and three encoders. Local Jev 1.14 0A and its first-100-rows pilot passed (validation only). |
-| Open-weight and encoder extraction | Twelve decision dataset jobs confirmed complete. Parallel admission submits all ready datasets; embedding work is split into 54 dataset jobs. Current accounting access and accepted IDs are recorded separately ([AGENTS_MEMORY](docs/AGENTS_MEMORY.md)). |
+| Open-weight and encoder extraction | Twelve decision dataset jobs confirmed complete. Parallel admission is active; embedding work is split into 54 dataset jobs. New submissions currently wait for the shared VSC QoS capacity ([AGENTS_MEMORY](docs/AGENTS_MEMORY.md)). |
 | Full Jev extraction, 0B, Experiments 1–3 | Disabled until separately reviewed and authorized. |
 
 Exact receipts, job IDs and failures: [AGENTS_MEMORY](docs/AGENTS_MEMORY.md). Commands:

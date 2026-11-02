@@ -231,6 +231,11 @@ as its import root. Under the campaign lock, verify and stop only the old login 
 record the replacement's host/PID/start ticks and hash. GPU jobs, assets and frozen code
 are unchanged. This is an admission handover, not a new validation acceptance or migration.
 After the campaign ends, reconcile the DATA checkout with main before the next stage.
+On 2 November the live controller reports `lp_verbekelab` limits of 500 submitted and
+16 running jobs per user/account, shared across projects on Mindwell. These are measured
+site limits, not a hard-coded application preference; recheck them for a later campaign.
+At that snapshot all 500 slots were occupied. The dispatcher refills as capacity opens;
+unprepared work still waits for verified native staging. Arrays count each pending task.
 
 Named Slurm submission-ceiling refusals leave work pending and retry on the next poll;
 generic policy errors, timeouts or missing receipts remain ambiguous. For a reviewed
