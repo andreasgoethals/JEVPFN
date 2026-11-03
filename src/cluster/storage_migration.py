@@ -384,12 +384,30 @@ def retire_old(*, native_only=False, source_only=False):
     require_idle_vsc(allow_current=True)  # Recheck after the potentially long hash pass.
     if source.is_mount() or source.stat().st_uid != os.getuid():
         raise ValueError("Old project root ownership/mount boundary changed")
-    # Absolute host checkpoint links were rewritten; required image-internal
-    # /LOCAL_TYKKY prefixes remain mounted inside their unchanged image files.
+    # Host checkpoint links were rewritten. Some historical wrapped images mount
+    # their original PROJECT prefix *inside* the image, without a host dependency.
+    # Permit only the exact image-executable links from an intact relocation seal.
+    from src.cluster.containers import MARKER
+    from src.cluster.containers import files as container_files
+
+    internal_links = set()
+    for marker in (destination / "containers").rglob(MARKER):
+        folder = marker.parent
+        seal = json.loads(marker.read_text())
+        if (seal.get("container_id") != digest({k: v for k, v in seal.items() if k != "container_id"})
+                or seal.get("files") != container_files(folder)):
+            raise ValueError("A relocated container changed before retirement")
+        prefix = seal.get("relocation", {}).get("image_internal_prefix_preserved")
+        if prefix:
+            for link in (folder / "_bin").glob("*"):
+                if link.is_symlink():
+                    target = Path(os.readlink(link))
+                    if target.is_absolute() and ".." not in target.parts and target.is_relative_to(Path(prefix)):
+                        internal_links.add(link)
     for base, dirs, files in os.walk(destination, followlinks=False):
         for name in dirs + files:
             p = Path(base) / name
-            if p.is_symlink() and os.readlink(p).startswith(str(source) + "/"):
+            if p.is_symlink() and os.readlink(p).startswith(str(source) + "/") and p not in internal_links:
                 raise ValueError("A destination link still depends on old PROJECT")
     readonly = []
     for base, _, _ in os.walk(source, followlinks=False):

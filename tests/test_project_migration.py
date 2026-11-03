@@ -42,6 +42,20 @@ def test_sqlite_wal_requires_snapshot_or_quiescence(tmp_path):
         assert migration.verify_sqlite(tmp_path) == ["fixture.sqlite3"]
 
 
+def test_checkpoint_rewrite_leaves_container_image_prefixes_to_sealed_relocator(tmp_path):
+    source, target = tmp_path / "old/JEVPFN", tmp_path / "new/JEVPFN"
+    target.mkdir(parents=True)
+    link = target / "containers/legacy/_bin/python"
+    link.parent.mkdir(parents=True)
+    try:
+        link.symlink_to(source / "environments/legacy/bin/python")
+        (target / "checkpoint").symlink_to(source / "weights")
+    except OSError:
+        pytest.skip("Symlink privilege unavailable")
+    assert migration.rewrite_links(source, target) == ["checkpoint"]
+    assert os.readlink(link).removeprefix("\\\\?\\") == str(source / "environments/legacy/bin/python")
+
+
 def test_shared_root_configuration_does_not_infer_site_allocation(tmp_path, monkeypatch):
     import json
 

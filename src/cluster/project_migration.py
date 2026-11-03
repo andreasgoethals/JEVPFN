@@ -99,6 +99,11 @@ def verify_sqlite(root, *, integrity=True, temporary_root=None, workers=1, expec
 def rewrite_links(source, destination):
     rewritten = []
     for base, dirs, files in os.walk(destination, followlinks=False):
+        # Sealed containers have their own relocator. In particular, wrapped
+        # legacy images can mount an old PROJECT prefix *inside* SquashFS;
+        # rewriting those executable links would break their Conda installation.
+        if Path(base) == destination:
+            dirs[:] = [name for name in dirs if name != "containers"]
         for name in dirs + files:
             p = Path(base) / name
             if not p.is_symlink():
@@ -121,6 +126,8 @@ def compare(source_inventory, destination_inventory, source, destination, *, rel
         if value != b["files"][key]:
             raise ValueError("Copied bytes/executable mode differ: " + key)
     for key, target in a["links"].items():
+        if relocated and key.startswith("containers/"):
+            continue  # The container relocator verifies these sealed links.
         expected = target
         normalized_target = target.removeprefix("\\\\?\\")
         if relocated and Path(normalized_target).is_absolute() and (Path(normalized_target) == source or source in Path(normalized_target).parents):
