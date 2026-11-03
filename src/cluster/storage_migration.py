@@ -278,7 +278,7 @@ def accept(reviewed_by):
 
 def retire_old():
     """Owner-authorized exact retirement, only after verified copy and native acceptance."""
-    from src.cluster.maintenance import require_idle_vsc
+    from src.cluster.maintenance import reject_links, require_idle_vsc
     from src.cluster.project_migration import compare, inventory, roots, verify_sqlite
     from src.cluster.scratch_capacity import retire_publication_snapshots
     from src.cluster.scratch_stage import MARKER, _publish, workspace_lease
