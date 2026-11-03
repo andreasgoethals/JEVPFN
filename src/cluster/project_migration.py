@@ -120,7 +120,7 @@ def compare(source_inventory, destination_inventory, source, destination, *, rel
             raise ValueError("A required hardlink relationship was lost")
 
 
-def copy(source, destination, receipt, *, writers_stopped=False, workers=4):
+def copy(source, destination, receipt, *, writers_stopped=False, workers=4, defer_verification=False):
     source, destination = roots(source, destination)
     if not writers_stopped or not os.environ.get("SLURM_JOB_ID"):
         raise ValueError("Consistent copy requires quiescent writers and a transfer allocation")
@@ -134,34 +134,54 @@ def copy(source, destination, receipt, *, writers_stopped=False, workers=4):
     if (destination / "_JEVPFN_PROJECT_MIGRATION.json").exists():
         raise ValueError("Destination has entered cutover; never overwrite it from the old authority")
     destination.mkdir(mode=0o2770, exist_ok=True)
-    subprocess.run(["rsync", "-aH", "--checksum", "--no-owner", "--no-group", "--no-acls", "--no-xattrs",
+    # The independent destination SHA-256 pass below is authoritative. A second
+    # rsync checksum scan would redundantly read every large immutable asset.
+    subprocess.run(["rsync", "-aH", "--no-owner", "--no-group", "--no-acls", "--no-xattrs",
                     "--chmod=Dg+rwx,Dg+s,Do-rwx,Fg+r,Fo-rwx", str(source) + "/", str(destination) + "/"], check=True)
-    copied = inventory(destination, workers)
-    compare(original, copied, source, destination)
-    print(json.dumps({"event": "copy_bytes_verified"}), flush=True)
-    if verify_sqlite(destination) != sqlite_files:
-        raise ValueError("SQLite membership changed during migration")
-    result = {"status": "copied_and_verified_requires_relocation_and_runtime_acceptance",
+    result = {"status": "copied_requires_native_verification",
               "source": str(source), "destination": str(destination), "source_inventory": original,
               "sqlite_files": sqlite_files, "created_utc": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 - host Python 3.9
               "job_id": os.environ["SLURM_JOB_ID"], "copied_logical_bytes": sum(v["bytes"] for v in original["files"].values())}
     receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt.write_text(json.dumps(result, indent=2))
+    if not defer_verification:
+        result = verify_copy(receipt, workers=workers)
     print(json.dumps({k: v for k, v in result.items() if k not in {"source_inventory", "sqlite_files"}}), flush=True)
+    return result
+
+
+def verify_copy(receipt, *, workers=4):
+    if not os.environ.get("SLURM_JOB_ID"):
+        raise ValueError("Destination verification requires a CPU allocation")
+    result = json.loads(receipt.read_text())
+    if result.get("status") != "copied_requires_native_verification":
+        raise ValueError("Only a completed unaccepted copy can enter native verification")
+    source, destination = roots(result["source"], result["destination"])
+    compare(result["source_inventory"], inventory(destination, workers), source, destination)
+    print(json.dumps({"event": "copy_bytes_verified"}), flush=True)
+    if verify_sqlite(destination) != result["sqlite_files"]:
+        raise ValueError("SQLite membership changed during migration")
+    result.update(status="copied_and_verified_requires_relocation_and_runtime_acceptance",
+                  verification_job_id=os.environ["SLURM_JOB_ID"])
+    receipt.write_text(json.dumps(result, indent=2))
     return result
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=("copy", "inventory", "rewrite-links"))
+    p.add_argument("action", choices=("copy", "inventory", "rewrite-links", "verify-copy"))
     p.add_argument("--source", required=True, type=Path)
     p.add_argument("--destination", required=True, type=Path)
     p.add_argument("--receipt", required=True, type=Path)
     p.add_argument("--writers-stopped", action="store_true")
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--defer-verification", action="store_true")
     a = p.parse_args()
     if a.action == "copy":
-        copy(a.source, a.destination, a.receipt, writers_stopped=a.writers_stopped, workers=a.workers)
+        copy(a.source, a.destination, a.receipt, writers_stopped=a.writers_stopped, workers=a.workers,
+             defer_verification=a.defer_verification)
+    elif a.action == "verify-copy":
+        verify_copy(a.receipt, workers=a.workers)
     elif a.action == "inventory":
         a.receipt.write_text(json.dumps(inventory(a.source, a.workers), indent=2))
     else:

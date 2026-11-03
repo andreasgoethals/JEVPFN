@@ -73,3 +73,25 @@ def test_hardlinks_are_kept_and_checked(tmp_path):
     (target / "b").write_bytes(b"same")
     with pytest.raises(ValueError, match="hardlink"):
         migration.compare(migration.inventory(source), migration.inventory(target), source, target)
+
+
+def test_native_verification_refuses_a_stale_same_size_destination(tmp_path, monkeypatch):
+    import json
+    import shutil
+
+    source, target = tmp_path / "a/JEVPFN", tmp_path / "b/JEVPFN"
+    source.mkdir(parents=True)
+    target.parent.mkdir()
+    (source / "weights").write_bytes(b"correct")
+    receipt = tmp_path / "receipt.json"
+    monkeypatch.setenv("SLURM_JOB_ID", "copy")
+    monkeypatch.setattr(migration.subprocess, "run", lambda *a, **k: shutil.copytree(source, target, dirs_exist_ok=True))
+    migration.copy(source, target, receipt, writers_stopped=True, defer_verification=True)
+    assert json.loads(receipt.read_text())["status"] == "copied_requires_native_verification"
+    (target / "weights").write_bytes(b"CORRUPT")
+    with pytest.raises(ValueError, match="bytes"):
+        migration.verify_copy(receipt)
+    assert json.loads(receipt.read_text())["status"] == "copied_requires_native_verification"
+    (target / "weights").write_bytes(b"correct")
+    monkeypatch.setenv("SLURM_JOB_ID", "native-check")
+    assert migration.verify_copy(receipt)["verification_job_id"] == "native-check"
