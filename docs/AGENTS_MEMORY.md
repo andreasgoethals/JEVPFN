@@ -29,24 +29,37 @@ The owner-approved cutover stops admissions before changing roots. Controller
 campaign lock. No inference job was cancelled. Liquid release 62527859 completed
 0:0 in 2h01m07s and published all eighteen stores. The 36 completed Liquid/Strands
 GPU jobs remain historical successes; remaining science is held during migration.
-Immutable precopy 62530688 completed 0:0 in 15m18s. Consistent full copy/checksum and
-Transfer job 62533641 hashes the closed source on native wICE and copies to GPFS;
-a separate native Mindwell CPU pass will verify destination SHA-256 and SQLite
-integrity. Earlier transfer attempts 62531701/62532144 were stopped before mutable
-data copied; the latter finished a fresh 4,579-file/352-database source inventory
-but its redundant rsync checksumming read GPFS too slowly from wICE. No science was
-cancelled. Local suite: 1,204 passed, 25 environment-specific skips; subsequent
-copy split/corruption guards passed six tests. Native acceptance/cleanup are pending.
+Immutable precopy 62530688 and full closed-store transfer 62533641 completed 0:0.
+Native Mindwell verification 11767564 checked 4,579 files (531,705,668,068 logical
+bytes) and all 352 SQLite databases. Relocation 62535220 preserved nineteen image
+payloads, resealed host wrappers and rewrote 28 external checkpoint links. Private
+metadata permissions and read-only raw inputs were verified explicitly.
+
+CPU acceptance 11767661 passed real two-node GPFS locking/snapshot tests, data
+preflight and all nineteen installed interpreters/package sets. Migration publication
+11767745 completed 0:0 in 13m03s: eight CPU workers checked all eighteen dataset unions
+against twelve stopped native workspaces. Every incoming record already existed in
+the validated durable superset; no completed result was replaced or lost. Outputs
+and recovery records were also published. Legacy-prefix check 11767804 completed 0:0 in 46s, with the old PROJECT hidden.
+The independently downloaded 349,974,442-byte numerical bundle passed ZIP, SQLite,
+artifact hashes and full local row-count checks for all 72 Liquid/Strands blocks;
+its SHA-256 is `6952d5b650dc5b9ebb7dc2266913ca2e624a2387a3efea4be2c0f2166b37ea0b`. Local suite: 1,221 passed, 26 environment-specific skips.
+Historical failed/interrupted maintenance logs remain provenance, not science failures.
+
 Measured pre-cutover allocated usage: old PROJECT 495.211 GiB, DATA checkout
 0.756 GiB, owned GPFS working sets 108.445 GiB. Destination group is lp_verbekelab
 with inherited moderator ACLs and no public access. No owned jevpfn-prefixed build
-directory remains on Lustre scratch; other projects are untouched.
-Records: `2. feature_creation/manifests/storage_migration/` on DATA. Do not interpret
-successful copying as runtime acceptance, backup, or permission to resume consumers.
+directory remained on Lustre scratch; other projects are untouched. All admissions
+and scientific writers remain stopped. Native B200 relocation checks, acceptance
+and retirement are still pending; copying/CPU success alone is not acceptance.
 
-New routing uses native GPFS PROJECT immutables directly, isolated GPFS scratch
-mutable stores, and Mindwell CPU preparation. Preserve historical receipts verbatim;
-derived migration records bind new runtime seals and retain the previous identities.
+Records: `2. feature_creation/manifests/storage_migration/` on DATA. New routing uses
+native GPFS PROJECT immutables directly, isolated GPFS scratch mutable stores, and
+Mindwell CPU preparation. Historical receipts are preserved verbatim; derived
+migration records bind relocated seals and retain the previous identities. Eleven
+short independent B200 checks replace the cancelled, unstarted two-hour maintenance
+allocation 11767669. Normal B200 availability remains an external queue constraint;
+no other project's allocations/accounts are used.
 
 ## Release recovery (3 November, before migration)
 

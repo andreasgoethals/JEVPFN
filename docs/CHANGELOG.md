@@ -9,6 +9,9 @@
   validated node-local unions and checksummed atomic publication. Require an
   independent numerical backup before retirement; release published shared-mode
   working copies and preserve read-only raw inputs and private metadata permissions.
+- Prove unchanged recovery subsets without rewriting complete durable stores; validate
+  datasets in parallel CPU workers. Test relocated runtimes with the old PROJECT hidden
+  and require terminal native CPU/GPU evidence before deleting redundant copies.
 
 - Fix release timeouts by performing validated cache unions on native storage and
   transactionally publishing the result; use declared node-local merge I/O and

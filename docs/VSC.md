@@ -102,10 +102,11 @@ scratch. Keep old images only while a recorded run or rollback needs them.
   from three passing reports of one job on an idle checkout. After native staging,
   `control_gpu_test.slurm` verifies the image and a CUDA kernel on B200; only then
   `control_runtime retire-legacy` may remove the old DATA prefix (already done). CPU
-  preflight uses wICE batch with three cores at the 3,400 MiB/core default.
+  preflight follows the selected durable filesystem: Mindwell batch_graniterapids for
+  the GPFS deployment, with the partition memory-per-core default.
 - **B200 images.** Separate `containers/blackwell-cu130/<runtime>/` images keep publisher
   pins with the exact cu130 Torch/torchvision wheels (the cu128 index lacks them; CUDA 13
-  needs driver branch â‰¥ 580). Startup checks CUDA 13.0, native `sm_100`, BF16 and the B200
+  needs driver branch >= 580). Startup checks CUDA 13.0, native `sm_100`, BF16 and the B200
   device. These checks do not establish model correctness; never substitute newer packages
   to bypass a failed pin.
 - **Model-image probes** inside a CPU-controller job use an overlapping host Slurm step;
@@ -366,15 +367,19 @@ python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --c
 ```
 
 Each task owns one dataset × model × representation and resumes its five folds from
-checksummed records. GPU models default to B200, CPU models to wICE.
+checksummed records. GPU models default to B200; CPU models follow the native route of the allocated
+durable root (Mindwell for this GPFS deployment).
 
 ## 5. Working sets and storage maintenance
 
 A stage holds a working-set slot from submission until its consumers are terminal and its
-release succeeds. Release runs after failed consumers too: it publishes committed results,
-then removes only copied inputs, checkpoints, images and token evidence. It keeps response
-queues, embeddings, PCA, predictions, diagnostics, durable assets and DATA logs; a
-publication conflict keeps the inputs and blocks further staging. Manual release, after
+release succeeds. In the GPFS shared-asset deployment, immutable inputs/images are read
+directly from PROJECT; release publishes committed mutable stores, then retires only
+verified redundant working copies. PROJECT retains response history, features, embeddings,
+PCA and predictions; DATA retains compact operational evidence. A publication conflict,
+unknown recovery snapshot or consumer keeps the workspace and blocks further staging.
+Legacy mirrored workspaces retain their mutable queues until an explicit reviewed
+migration retirement. Manual release, after
 all JEVPFN jobs and watchers stop (preview, then apply):
 
 ```bash
@@ -393,8 +398,10 @@ Retention exceptions, each retired only by a reviewed, scoped cleanup with no co
 
 - Token recovery partitions (~39 GiB) stay on PROJECT through the first verified
   production run; they are excluded from GPU staging.
-- Legacy GPU image manifests are part of the frozen runtime identity; keep them until an
-  idle stage boundary confirms no rollback need.
+- Six legacy cu126 image trees (~24 GiB) are retained on the new PROJECT for historical
+  reproducibility; they are not selected for B200. Their individually reviewed seals
+  and sizes are in `storage_migration/retention_review.json`. No old-host copy is needed
+  once relocation acceptance and independent backup pass.
 - Build scratch is temporary. The build script does not retire successful build leaves
   itself; clean only verified owned leaves after the owner reviews the plan.
 
