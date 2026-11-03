@@ -65,7 +65,7 @@ def inventory(root, workers=4):
             "hardlinks": [sorted(v) for v in groups.values() if len(v) > 1]}
 
 
-def verify_sqlite(root):
+def verify_sqlite(root, *, integrity=True):
     reports = []
     for p in sorted(root.rglob("*.sqlite3")):
         if p.is_symlink():
@@ -75,9 +75,10 @@ def verify_sqlite(root):
         if any(Path(str(p) + s).exists() and Path(str(p) + s).stat().st_size
                for s in ("-wal", "-journal")):
             raise ValueError("SQLite has uncheckpointed pages; snapshot it first: " + str(p))
-        with sqlite3.connect(p.resolve().as_uri() + "?mode=ro", uri=True) as db:
-            if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
-                raise ValueError("SQLite integrity failure: " + str(p))
+        if integrity:
+            with sqlite3.connect(p.resolve().as_uri() + "?mode=ro", uri=True) as db:
+                if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                    raise ValueError("SQLite integrity failure: " + str(p))
         reports.append(p.relative_to(root).as_posix())
     return reports
 
@@ -124,18 +125,25 @@ def copy(source, destination, receipt, *, writers_stopped=False, workers=4):
     if not writers_stopped or not os.environ.get("SLURM_JOB_ID"):
         raise ValueError("Consistent copy requires quiescent writers and a transfer allocation")
     print(json.dumps({"event": "migration_inventory_started", "source": str(source)}), flush=True)
-    sqlite_files = verify_sqlite(source)
+    # Closed/checkpointed source bytes are copied and compared exactly. Run the
+    # random-read integrity pass on native GPFS, not twice through slow Lustre.
+    sqlite_files = verify_sqlite(source, integrity=False)
     original = inventory(source, workers)
+    print(json.dumps({"event": "source_hashes_verified", "files": len(original["files"]),
+                      "sqlite_files": len(sqlite_files)}), flush=True)
+    if (destination / "_JEVPFN_PROJECT_MIGRATION.json").exists():
+        raise ValueError("Destination has entered cutover; never overwrite it from the old authority")
     destination.mkdir(mode=0o2770, exist_ok=True)
     subprocess.run(["rsync", "-aH", "--checksum", "--no-owner", "--no-group", "--no-acls", "--no-xattrs",
                     "--chmod=Dg+rwx,Dg+s,Do-rwx,Fg+r,Fo-rwx", str(source) + "/", str(destination) + "/"], check=True)
     copied = inventory(destination, workers)
     compare(original, copied, source, destination)
+    print(json.dumps({"event": "copy_bytes_verified"}), flush=True)
     if verify_sqlite(destination) != sqlite_files:
         raise ValueError("SQLite membership changed during migration")
     result = {"status": "copied_and_verified_requires_relocation_and_runtime_acceptance",
               "source": str(source), "destination": str(destination), "source_inventory": original,
-              "sqlite_files": sqlite_files, "created_utc": datetime.now(timezone.utc).isoformat(),
+              "sqlite_files": sqlite_files, "created_utc": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 - host Python 3.9
               "job_id": os.environ["SLURM_JOB_ID"], "copied_logical_bytes": sum(v["bytes"] for v in original["files"].values())}
     receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt.write_text(json.dumps(result, indent=2))
