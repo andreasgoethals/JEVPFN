@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -72,6 +73,71 @@ def test_new_consumer_blocks_replacement_without_losing_either_store(tmp_path):
         union_closed_stores([incoming.path], destination.path, tmp_path,
                             writers_stopped=True, consumer_check=queued_consumer)
     assert file_sha256(destination.path) == before and incoming.path.is_file()
+
+
+def test_validated_exact_superset_is_not_rewritten_or_remerged(tmp_path, monkeypatch):
+    from src.cluster import closed_publication
+
+    destination = cache(tmp_path / "destination.sqlite3")
+    incoming = tmp_path / "incoming.sqlite3"
+    shutil.copyfile(destination.path, incoming)
+    before = file_sha256(destination.path)
+
+    def unnecessary_merge(*args, **kwargs):
+        raise AssertionError("An exact validated subset needed no mutation")
+
+    monkeypatch.setattr(closed_publication, "merge_cache", unnecessary_merge)
+    result = union_closed_stores([incoming], destination.path, tmp_path, writers_stopped=True)
+    assert result["protocol"] == "exclusive_sqlite_validated_exact_superset"
+    assert file_sha256(destination.path) == before
+    with closing(sqlite3.connect(incoming)) as db, db:
+        db.execute("UPDATE responses SET request_key='invalid'")
+    with pytest.raises(ValueError, match="identity"):
+        union_closed_stores([incoming], destination.path, tmp_path, writers_stopped=True)
+
+
+def test_subset_proof_never_uses_case_insensitive_response_equality(tmp_path):
+    destination = cache(tmp_path / "destination.sqlite3")
+    with destination._connect() as db:
+        db.executescript("""
+            ALTER TABLE responses RENAME TO prior;
+            CREATE TABLE responses (request_key TEXT NOT NULL,kind TEXT NOT NULL,
+                payload_json TEXT NOT NULL,settings_json TEXT NOT NULL,
+                response_json TEXT COLLATE NOCASE NOT NULL,created_at TEXT NOT NULL,
+                PRIMARY KEY(request_key,kind));
+            INSERT INTO responses SELECT * FROM prior;
+            DROP TABLE prior;
+        """)
+    incoming = tmp_path / "incoming.sqlite3"
+    shutil.copyfile(destination.path, incoming)
+    with closing(sqlite3.connect(incoming)) as db, db:
+        db.execute("UPDATE responses SET response_json=upper(response_json)")
+    before = file_sha256(destination.path)
+    with pytest.raises(ValueError, match="Conflicting"):
+        union_closed_stores([incoming], destination.path, tmp_path, writers_stopped=True)
+    assert file_sha256(destination.path) == before
+
+
+def test_disjoint_unions_can_use_spawned_cpu_processes(tmp_path):
+    from concurrent.futures import ProcessPoolExecutor
+    from multiprocessing import get_context
+
+    from src.cluster.closed_publication import single_thread_worker
+
+    node = tmp_path / "node"
+    node.mkdir()
+    tasks = []
+    for i in range(2):
+        folder = tmp_path / str(i)
+        destination = cache(folder / "destination.sqlite3")
+        source = cache(folder / "incoming.sqlite3", request("intern"))
+        tasks.append((source.path, destination.path))
+    with ProcessPoolExecutor(max_workers=2, mp_context=get_context("spawn"), initializer=single_thread_worker) as pool:
+        futures = [pool.submit(union_closed_stores, [a], b, node, writers_stopped=True) for a, b in tasks]
+        assert all(f.result()["dataset_id"] == "fixture" for f in futures)
+    for _, p in tasks:
+        assert cache(p).get(request("intern"), kind="verified_response") == response()
+    assert not list(node.iterdir())
 
 
 def test_native_allocated_project_closed_union_and_resume():

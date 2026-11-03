@@ -128,7 +128,10 @@ def same_science(old_settings, new_settings):
 
 def publish_workspaces():
     """Union every old native recovery store into the new durable authority."""
-    from src.cluster.closed_publication import union_closed_stores
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from multiprocessing import get_context
+
+    from src.cluster.closed_publication import guarded_dataset_union, single_thread_worker
     from src.cluster.maintenance import require_idle_vsc
     from src.cluster.scratch_stage import (
         MARKER,
@@ -158,16 +161,32 @@ def publish_workspaces():
             for p in _dataset_stores(work / "data/jev_cache"):
                 datasets.setdefault(p.name, []).append(p)
         unions = []
-        for name, sources in sorted(datasets.items()):
-            print(json.dumps({"event": "closed_union_started", "dataset": name,
-                              "working_stores": len(sources)}), flush=True)
-            result = union_closed_stores(sources, destination / "data/jev_cache" / name,
-                                         _publication_temporary_root(workspaces[0][0]), writers_stopped=True,
-                                         consumer_check=lambda: require_idle_vsc(allow_current=True))
-            unions.append(result)
-            write_json(records() / "dataset_union_progress.json", {"datasets": unions})
-            print(json.dumps({"event": "closed_union_completed", "dataset": name,
-                              "bytes": result["bytes"]}), flush=True)
+        if not datasets:
+            raise ValueError("No recoverable dataset stores found; inspect the stopped workspaces")
+        temporary_root = _publication_temporary_root(workspaces[0][0])
+        peaks = sorted((max(p.stat().st_size for p in sources)
+                        + ((destination / "data/jev_cache" / name).stat().st_size
+                           if (destination / "data/jev_cache" / name).exists() else 0)
+                        for name, sources in datasets.items()), reverse=True)
+        workers = min(8, int(os.environ.get("SLURM_CPUS_PER_TASK", "1")), len(datasets))
+        while workers > 1 and 3 * sum(peaks[:workers]) + 20 * 2**30 > shutil.disk_usage(temporary_root).free:
+            workers -= 1
+        print(json.dumps({"event": "closed_union_parallelism", "workers": workers,
+                          "datasets": len(datasets), "temporary_root": str(temporary_root)}), flush=True)
+        with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn"), initializer=single_thread_worker) as pool:
+            futures = {pool.submit(guarded_dataset_union, sources, destination / "data/jev_cache" / name, temporary_root): name
+                       for name, sources in sorted(datasets.items())}
+            try:
+                for future in as_completed(futures):
+                    result = future.result()
+                    unions.append(result)
+                    write_json(records() / "dataset_union_progress.json", {"datasets": sorted(unions, key=lambda r: r["dataset_id"])})
+                    print(json.dumps({"event": "closed_union_completed", "dataset": futures[future],
+                                      "bytes": result["bytes"], "protocol": result["protocol"]}), flush=True)
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                raise
         for work, marker, saved in workspaces:
             result = _publish(destination, work, include_decision_stores=False)
             result["decision_stores"] = len(list(_dataset_stores(work / "data/jev_cache")))

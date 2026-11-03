@@ -57,6 +57,56 @@ def closed_copy(source, destination):
     return before
 
 
+def exact_subset(source, destination):
+    """Read-only, byte-exact inclusion of every validated table/column/record.
+
+    Both stores must already have passed validate_cache. Indexed primary keys
+    locate candidates; type and BLOB comparisons prevent collation/coercion from
+    treating different provenance, response bytes or feature blobs as identical.
+    """
+    def quoted(value):
+        return '"' + value.replace('"', '""') + '"'
+
+    with closing(sqlite3.connect(destination.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        db.execute("ATTACH DATABASE ? AS incoming", (source.resolve().as_uri() + "?mode=ro",))
+        tables = [r[0] for r in db.execute("SELECT name FROM incoming.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+        for table in tables:
+            name = quoted(table)
+            a = db.execute("PRAGMA incoming.table_info(" + name + ")").fetchall()
+            b = db.execute("PRAGMA main.table_info(" + name + ")").fetchall()
+            if not b or [(r[1], r[5]) for r in a] != [(r[1], r[5]) for r in b]:
+                return False
+            keys = [r[1] for r in a if r[5]]
+            if not keys:
+                return False
+            predicates = [f"d.{quoted(k)} IS s.{quoted(k)}" for k in keys]
+            for row in a:
+                column = quoted(row[1])
+                predicates += [f"typeof(d.{column})=typeof(s.{column})",
+                               f"CAST(d.{column} AS BLOB) IS CAST(s.{column} AS BLOB)"]
+            sql = (f"SELECT 1 FROM incoming.{name} AS s WHERE NOT EXISTS "
+                   f"(SELECT 1 FROM main.{name} AS d WHERE {' AND '.join(predicates)}) LIMIT 1")
+            if db.execute(sql).fetchone():
+                return False
+    return True
+
+
+def guarded_dataset_union(sources, destination, temporary_root):
+    """Picklable CPU worker; each dataset has its own locks and temporary files."""
+    from src.cluster.maintenance import require_idle_vsc
+
+    return union_closed_stores(sources, destination, temporary_root, writers_stopped=True,
+                               consumer_check=lambda: require_idle_vsc(allow_current=True))
+
+
+def single_thread_worker():
+    import pyarrow
+    from threadpoolctl import threadpool_limits
+
+    pyarrow.set_cpu_count(1)
+    threadpool_limits(limits=1)
+
+
 def union_closed_stores(sources, destination, temporary_root, *, writers_stopped=False, consumer_check=None):
     """One validated durable publication per dataset, not per old working set.
 
@@ -85,18 +135,37 @@ def union_closed_stores(sources, destination, temporary_root, *, writers_stopped
         if destination.exists():
             mode = stat.S_IMODE(destination.stat().st_mode)
             original_hash = closed_copy(destination, native)
+        dataset = validate_cache(native) if native.exists() else None
+        changed = False
         reports = []
         for number, source in enumerate(sources):
             incoming = Path(temp) / ("incoming_" + str(number) + ".sqlite3")
             source_hash = closed_copy(source, incoming)
-            with staging_environment(root):
-                result = merge_cache(incoming, native, backup_destination=False, deduplicate_ledger=True)
+            incoming_dataset = validate_cache(incoming)
+            if dataset is not None and incoming_dataset != dataset:
+                raise ValueError("Stopped stores belong to different datasets")
+            if dataset is not None and exact_subset(incoming, native):
+                result = {"responses_added": 0, "closed_subset_verified": True}
+            else:
+                with staging_environment(root):
+                    result = merge_cache(incoming, native, backup_destination=False, deduplicate_ledger=True)
+                dataset = validate_cache(native)
+                changed = True
             reports.append({"source": str(source), "sha256": source_hash, "union": result})
             gc.collect()  # Close cyclic SQLite readers before retiring their temporary files.
             incoming.unlink()
-        dataset = validate_cache(native)
         gc.collect()
         expected = sha(native)
+        if not changed and original_hash is not None:
+            if consumer_check is not None:
+                consumer_check()
+            with exclusive_database(destination):
+                if sha(destination) != original_hash or expected != original_hash:
+                    raise ValueError("A validated superset changed during migration")
+            return {"dataset_id": dataset, "destination": str(destination), "sha256": original_hash,
+                    "bytes": destination.stat().st_size, "sources": reports,
+                    "consumer_guard": consumer_check is not None,
+                    "protocol": "exclusive_sqlite_validated_exact_superset"}
         candidate = destination.parent / (".migration-union-" + uuid4().hex + ".partial")
         try:
             shutil.copyfile(native, candidate)
