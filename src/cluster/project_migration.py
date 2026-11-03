@@ -9,9 +9,12 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -65,22 +68,32 @@ def inventory(root, workers=4):
             "hardlinks": [sorted(v) for v in groups.values() if len(v) > 1]}
 
 
-def verify_sqlite(root, *, integrity=True):
-    reports = []
-    for p in sorted(root.rglob("*.sqlite3")):
+def verify_sqlite(root, *, integrity=True, temporary_root=None, workers=1, expected_hashes=None):
+    def check(p):
         if p.is_symlink():
-            continue
+            return None
         # A quiescent byte-for-byte transfer is consistent only when no WAL or
         # rollback journal contains committed pages outside the copied main DB.
         if any(Path(str(p) + s).exists() and Path(str(p) + s).stat().st_size
                for s in ("-wal", "-journal")):
             raise ValueError("SQLite has uncheckpointed pages; snapshot it first: " + str(p))
         if integrity:
-            with sqlite3.connect(p.resolve().as_uri() + "?mode=ro", uri=True) as db:
-                if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
-                    raise ValueError("SQLite integrity failure: " + str(p))
-        reports.append(p.relative_to(root).as_posix())
-    return reports
+            with tempfile.TemporaryDirectory(prefix="jevpfn-sqlite-check-", dir=temporary_root) as temp:
+                checked = p
+                if temporary_root:
+                    if shutil.disk_usage(temporary_root).free < p.stat().st_size + 512 * 2**20:
+                        raise OSError("Insufficient node-local space for a consistent SQLite check")
+                    checked = Path(temp) / p.name
+                    shutil.copyfile(p, checked)
+                    expected = (expected_hashes or {}).get(p.relative_to(root).as_posix()) or sha(p)
+                    if sha(checked) != expected:
+                        raise ValueError("Node-local SQLite copy differs from verified PROJECT bytes")
+                with closing(sqlite3.connect(checked.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+                    if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                        raise ValueError("SQLite integrity failure: " + str(p))
+        return p.relative_to(root).as_posix()
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return [p for p in pool.map(check, sorted(root.rglob("*.sqlite3"))) if p is not None]
 
 
 def rewrite_links(source, destination):
@@ -150,7 +163,7 @@ def copy(source, destination, receipt, *, writers_stopped=False, workers=4, defe
     return result
 
 
-def verify_copy(receipt, *, workers=4):
+def verify_copy(receipt, *, workers=4, temporary_root=None, sqlite_workers=1):
     if not os.environ.get("SLURM_JOB_ID"):
         raise ValueError("Destination verification requires a CPU allocation")
     result = json.loads(receipt.read_text())
@@ -159,10 +172,12 @@ def verify_copy(receipt, *, workers=4):
     source, destination = roots(result["source"], result["destination"])
     compare(result["source_inventory"], inventory(destination, workers), source, destination)
     print(json.dumps({"event": "copy_bytes_verified"}), flush=True)
-    if verify_sqlite(destination) != result["sqlite_files"]:
+    if verify_sqlite(destination, temporary_root=temporary_root, workers=sqlite_workers,
+                     expected_hashes={k:v["sha256"] for k,v in result["source_inventory"]["files"].items()}) != result["sqlite_files"]:
         raise ValueError("SQLite membership changed during migration")
     result.update(status="copied_and_verified_requires_relocation_and_runtime_acceptance",
-                  verification_job_id=os.environ["SLURM_JOB_ID"])
+                  verification_job_id=os.environ["SLURM_JOB_ID"],
+                  sqlite_check_temporary_root=str(temporary_root) if temporary_root else None)
     receipt.write_text(json.dumps(result, indent=2))
     return result
 
@@ -176,12 +191,14 @@ def main():
     p.add_argument("--writers-stopped", action="store_true")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--defer-verification", action="store_true")
+    p.add_argument("--temporary-root", type=Path)
+    p.add_argument("--sqlite-workers", type=int, default=1)
     a = p.parse_args()
     if a.action == "copy":
         copy(a.source, a.destination, a.receipt, writers_stopped=a.writers_stopped, workers=a.workers,
              defer_verification=a.defer_verification)
     elif a.action == "verify-copy":
-        verify_copy(a.receipt, workers=a.workers)
+        verify_copy(a.receipt, workers=a.workers, temporary_root=a.temporary_root, sqlite_workers=a.sqlite_workers)
     elif a.action == "inventory":
         a.receipt.write_text(json.dumps(inventory(a.source, a.workers), indent=2))
     else:

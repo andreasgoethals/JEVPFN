@@ -95,3 +95,21 @@ def test_native_verification_refuses_a_stale_same_size_destination(tmp_path, mon
     (target / "weights").write_bytes(b"correct")
     monkeypatch.setenv("SLURM_JOB_ID", "native-check")
     assert migration.verify_copy(receipt)["verification_job_id"] == "native-check"
+
+
+def test_node_local_integrity_copies_are_verified_and_removed(tmp_path):
+    root, local = tmp_path / "project", tmp_path / "node"
+    root.mkdir()
+    local.mkdir()
+    expected = {}
+    for name in ("one.sqlite3", "two.sqlite3"):
+        p = root / name
+        db = sqlite3.connect(p)
+        db.execute("CREATE TABLE values_to_preserve (value)")
+        db.execute("INSERT INTO values_to_preserve VALUES ('original')")
+        db.commit()
+        db.close()
+        expected[name] = migration.sha(p)
+    assert migration.verify_sqlite(root, temporary_root=local, workers=2, expected_hashes=expected) == sorted(expected)
+    assert {p.name: migration.sha(p) for p in root.iterdir()} == expected
+    assert not list(local.iterdir())

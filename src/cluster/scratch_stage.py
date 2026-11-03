@@ -217,11 +217,13 @@ def _publish(durable, work, *, periodic=False, dataset_id=None):
 
 
 def _publication_temporary_root(work):
-    """wICE transfers use node-local merge I/O; B200 uses its native GPFS workspace."""
-    if os.environ.get("SLURM_CLUSTER_NAME") == "wice" and os.environ.get("SLURM_JOB_ID"):
-        local = Path(os.environ.get("SLURM_TMPDIR") or "/tmp")
+    """Temporary unions use declared node-local disk; resumable stores stay on GPFS."""
+    cluster = os.environ.get("SLURM_CLUSTER_NAME")
+    declared = os.environ.get("VSC_SCRATCH_NODE") or os.environ.get("SLURM_TMPDIR")
+    if os.environ.get("SLURM_JOB_ID") and (declared or cluster == "wice"):
+        local = Path(declared or "/tmp")
         if not local.is_absolute() or not local.is_dir() or local.is_relative_to(paths.data_root()):
-            raise ValueError("wICE publication needs a verified node-local temporary directory")
+            raise ValueError("Publication needs a verified node-local temporary directory")
         return local
     return work
 

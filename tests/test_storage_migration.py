@@ -32,6 +32,17 @@ def test_cpu_execution_follows_explicit_authority(monkeypatch):
     assert scheduling.cpu_cluster() == "wice"
 
 
+def test_mindwell_publication_uses_declared_node_disk_for_temporary_unions(tmp_path, monkeypatch):
+    from src.cluster.scratch_stage import _publication_temporary_root
+
+    local = tmp_path / "node"
+    local.mkdir()
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    monkeypatch.setenv("SLURM_JOB_ID", "99")
+    monkeypatch.setenv("VSC_SCRATCH_NODE", str(local))
+    assert _publication_temporary_root(tmp_path / "shared_work") == local
+
+
 def test_explicit_durable_authority_wins_over_old_project_alias(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     monkeypatch.setenv("JEVPFN_PROJECT_ROOT", str(tmp_path / "old"))
