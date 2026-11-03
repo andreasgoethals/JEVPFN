@@ -274,7 +274,7 @@ def retire_old():
     from src.cluster.maintenance import require_idle_vsc
     from src.cluster.project_migration import compare, inventory, roots, verify_sqlite
     from src.cluster.scratch_capacity import retire_publication_snapshots
-    from src.cluster.scratch_stage import MARKER, workspace_lease
+    from src.cluster.scratch_stage import MARKER, _publish, workspace_lease
 
     require_idle_vsc(allow_current=True)
     if not os.environ.get("SLURM_JOB_ID"):
@@ -326,6 +326,21 @@ def retire_old():
         shutil.rmtree(work)
         if not any(work.parent.iterdir()):
             work.parent.rmdir()
+    validation = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-migration-validation"
+    for marker in sorted(validation.glob("jevpfn-work/*/JEVPFN/" + MARKER)):
+        work = marker.parent
+        with workspace_lease(work):
+            saved = json.loads(marker.read_text())
+            if saved.get("purpose") != "migration_diagnostics" or saved.get("durable_root") != str(destination):
+                raise ValueError("Unrecognized validation workspace; preserve it")
+            _publish(destination, work)
+            shutil.rmtree(work)
+        if not any(work.parent.iterdir()):
+            work.parent.rmdir()
+    # Only empty parents may be removed; an unexpected file/cache is preserved.
+    for p in (validation / "jevpfn-work", validation):
+        if p.is_dir() and not any(p.iterdir()):
+            p.rmdir()
     # Absolute host checkpoint links were rewritten; required image-internal
     # /LOCAL_TYKKY prefixes remain mounted inside their unchanged image files.
     for base, dirs, files in os.walk(destination, followlinks=False):
