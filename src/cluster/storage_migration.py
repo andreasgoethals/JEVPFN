@@ -252,6 +252,37 @@ def same_installed_runtime(sealed, actual):
     return installed == expected and actual.get("torch_cuda") == cuda
 
 
+def legacy_prefixes():
+    """Prove the two historical image prefixes work with old PROJECT hidden."""
+    from src.cluster.containers import MARKER, probe
+
+    if not os.environ.get("SLURM_JOB_ID"):
+        raise RuntimeError("Virtual-prefix validation needs a native CPU allocation")
+    _, _, source, destination = load_copy()
+    sentinel = source / "checkpoints/decision_models/liquid/_JEVPFN_CHECKPOINT.json"
+    if not sentinel.is_file():
+        raise ValueError("The protected old-root sentinel must still exist on the host")
+    previous = os.environ.get("APPTAINER_BINDPATH")
+    result = {"status": "failed", "job_id": os.environ["SLURM_JOB_ID"], "runtimes": []}
+    try:
+        with tempfile.TemporaryDirectory(prefix="jevpfn-retired-root-mask-", dir=os.environ["VSC_SCRATCH_NODE"]) as temp:
+            os.environ["APPTAINER_BINDPATH"] = (previous + "," if previous else "") + temp + ":" + str(source) + ":ro"
+            for provider in ("cloudflare", "intern"):
+                folder = destination / "containers" / provider
+                actual = probe(folder / "bin/python", sentinel=sentinel)
+                if actual["sentinel_visible"] or not same_installed_runtime(json.loads((folder / MARKER).read_text()), actual):
+                    raise ValueError("Legacy image depends on old host files: " + provider)
+                result["runtimes"].append({"provider": provider, "old_root_hidden": True, "runtime": actual})
+        result["status"] = "legacy_prefixes_independent_of_old_host_root"
+        return result
+    finally:
+        if previous is None:
+            os.environ.pop("APPTAINER_BINDPATH", None)
+        else:
+            os.environ["APPTAINER_BINDPATH"] = previous
+        write_json(records() / "legacy_prefixes.json", result)
+
+
 def numeric_backup():
     """Compact independent-download bundle; explicitly not a response-cache replacement."""
     from src.jev.features import load_block
@@ -314,18 +345,23 @@ def accept(reviewed_by):
     relocation = records() / "relocated.json"
     cpu = records() / "cpu_accepted.json"
     publication = records() / "workspaces_published.json"
+    legacy = records() / "legacy_prefixes.json"
+    if json.loads(legacy.read_text()).get("status") != "legacy_prefixes_independent_of_old_host_root":
+        raise ValueError("Historical image prefixes must work without the old host root")
     if (json.loads(cpu.read_text()).get("status") != "native_cpu_locking_sqlite_tests_passed"
             or json.loads(publication.read_text()).get("status") != "all_old_native_stores_published"):
         raise ValueError("CPU checks and recovery-store publication must pass")
     reports = [records() / ("gpu_" + provider + ".json") for provider in SELF_HOSTED]
     bodies = [json.loads(p.read_text()) for p in reports]
     if any(r.get("status") != "relocated_gpu_and_resume_passed"
+           or r.get("old_root_hidden") is not True
            or r.get("settings_sha256") != digest(r.get("settings", {}))
            or file_sha256(Path(r["original_acceptance"])) != r["original_acceptance_sha256"]
            for r in bodies):
         raise ValueError("Every relocated decision runtime must pass")
     jobs = {r["job_id"] for r in bodies} | {json.loads(cpu.read_text())["job_id"],
-                                           json.loads(publication.read_text())["job_id"]}
+                                           json.loads(publication.read_text())["job_id"],
+                                           json.loads(legacy.read_text())["job_id"]}
     for job in jobs:
         if scheduler_state(job, cluster="mindwell") != ("COMPLETED", "0:0"):
             raise ValueError("Validation allocation is not confirmed complete")
@@ -346,7 +382,7 @@ def accept(reviewed_by):
             or downloaded.get("status") != "independent_numeric_backup_verified"
             or downloaded.get("validated_complete_production_blocks", 0) < 72):
         raise ValueError("Verify the independent numerical backup before retiring original results")
-    evidence = [copied, relocation, cpu, publication, numeric, independent, *reports, *(p for p, _ in embeddings)]
+    evidence = [copied, relocation, cpu, publication, legacy, numeric, independent, *reports, *(p for p, _ in embeddings)]
     for provider, gpu_report in zip(SELF_HOSTED, bodies, strict=True):
         old = Path(gpu_report["original_acceptance"])
         original = reviewed_acceptance(old, stage="before_extraction")
@@ -459,13 +495,15 @@ def retire_old(*, native_only=False, source_only=False):
     # Permit only the exact image-executable links from an intact relocation seal.
     from src.cluster.containers import MARKER
     from src.cluster.containers import files as container_files
+    from src.cluster.control_runtime import host_view
 
     internal_links = set()
     for marker in (destination / "containers").rglob(MARKER):
         folder = marker.parent
         seal = json.loads(marker.read_text())
+        view = host_view(folder)
         if (seal.get("container_id") != digest({k: v for k, v in seal.items() if k != "container_id"})
-                or seal.get("files") != container_files(folder)):
+                or seal.get("files") != container_files(view, **({"link_root": folder} if view != folder else {}))):
             raise ValueError("A relocated container changed before retirement")
         prefix = seal.get("relocation", {}).get("image_internal_prefix_preserved")
         if prefix:
@@ -595,6 +633,9 @@ def gpu(provider):
     from src.jev.cache import ResponseCache
     from src.jev.self_hosted import SelfHostedClient, inference_environment, token_evidence
 
+    _, _, old_root, _ = load_copy()
+    if (old_root / "checkpoints/decision_models/liquid/_JEVPFN_CHECKPOINT.json").exists():
+        raise ValueError("Migration GPU checks must hide the old PROJECT root")
     inference_environment()
     client = SelfHostedClient(provider, allow_model_runs=True)
     evidence, _ = token_evidence(provider, client.counter)
@@ -619,6 +660,7 @@ def gpu(provider):
               "settings": client.settings, "settings_sha256": digest(client.settings),
               "token_audit_id": evidence["audit_id"], "semantic_probes": first,
               "cached_resume_identical": True, "original_acceptance": str(old_acceptance),
+              "old_root_hidden": True,
               "original_acceptance_sha256": file_sha256(old_acceptance),
               "job_id": os.environ["SLURM_JOB_ID"]}
     write_json(records() / ("gpu_" + provider + ".json"), result)
@@ -627,12 +669,13 @@ def gpu(provider):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=("relocate", "gpu", "publish-workspaces", "cpu-accept", "accept", "retire-old", "retire-native", "retire-source", "rebind", "numeric-backup"))
+    p.add_argument("action", choices=("relocate", "gpu", "publish-workspaces", "cpu-accept", "legacy-prefixes", "accept", "retire-old", "retire-native", "retire-source", "rebind", "numeric-backup"))
     p.add_argument("--provider")
     p.add_argument("--reviewed-by")
     p.add_argument("--previous-freeze", type=Path)
     a = p.parse_args()
-    result = (retire_old(native_only=True) if a.action == "retire-native" else
+    result = (legacy_prefixes() if a.action == "legacy-prefixes" else
+              retire_old(native_only=True) if a.action == "retire-native" else
               retire_old(source_only=True) if a.action == "retire-source" else
               numeric_backup() if a.action == "numeric-backup" else
               rebind(a.previous_freeze, a.reviewed_by) if a.action == "rebind" else

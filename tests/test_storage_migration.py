@@ -173,6 +173,22 @@ def test_retirement_removes_only_verified_old_project_and_preserves_allocation(t
     write_json(work / MARKER, {"runtime": "fixture", "durable_root": str(source), "files": {}})
     write_json(root / "workspaces_published.json", {"workspaces": [{
         "runtime": "fixture", "working_root": str(work), "old_marker_sha256": file_sha256(work / MARKER)}]})
+    from src.cluster import containers, control_runtime
+    from src.utils.serialization import digest
+
+    executing = destination / "containers/control-v1"
+    host = tmp_path / "unmasked_control"
+    for relative in ("container.sif", "deps.sqfs", "bin/python"):
+        p = host / relative
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"host wrapper or immutable image")
+    (executing / "bin").mkdir(parents=True)
+    (executing / "bin/python").write_bytes(b"masked installed executable")
+    seal = {"files": containers.files(host)}
+    seal["container_id"] = digest(seal)
+    write_json(executing / containers.MARKER, seal)
+    monkeypatch.setenv("JEVPFN_CONTROL_IMAGE", str(executing))
+    monkeypatch.setattr(control_runtime, "HOST_VIEW", host)
     if changed:
         (source / "weights").write_bytes(b"unreviewed change")
         with pytest.raises(ValueError, match="bytes"):
