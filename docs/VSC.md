@@ -3,11 +3,12 @@
 Commands and site rules in execution order. The design is in [README](../README.md);
 dated run evidence, job IDs and failures are in [AGENTS_MEMORY](AGENTS_MEMORY.md).
 
-Current stage: 0A is accepted. The initial feature campaign at `954c93f` stopped on
-publication contention and an account submission ceiling. Operational recovery preserves
-its successful features and cached responses. Do not reset successful output or pull
-into a checkout while any JEVPFN job consumes it; exact recovery IDs are in AGENTS_MEMORY
-and the campaign receipt.
+Current stage: 0A is accepted and 36 Liquid/Strands dataset jobs completed. Admissions
+are held for the owner-authorized PROJECT migration. The layout below is the target
+GPFS deployment; the cutover is accepted only by the checksummed migration receipts
+in `2. feature_creation/manifests/storage_migration/`. Preserve the old authority until
+copy, native CPU/GPU validation, recovery publication and consumer checks pass. Do not
+reset successful science or pull into a checkout used by a job.
 
 ## 1. Access
 

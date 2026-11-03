@@ -30,11 +30,17 @@ campaign lock. No inference job was cancelled. Liquid release 62527859 completed
 0:0 in 2h01m07s and published all eighteen stores. The 36 completed Liquid/Strands
 GPU jobs remain historical successes; remaining science is held during migration.
 Immutable precopy 62530688 completed 0:0 in 15m18s. Consistent full copy/checksum and
-SQLite verification job 62532144 is running. Initial read-only verifier 62531701 was
-stopped before copying mutable files to move random-read integrity checks to native
-GPFS; journal checks and exact checksum comparison remain mandatory. Local routing/
-regression suite: 1,200 passed, 25 environment-specific skips; native acceptance and
-cleanup remain pending.
+Transfer job 62533641 hashes the closed source on native wICE and copies to GPFS;
+a separate native Mindwell CPU pass will verify destination SHA-256 and SQLite
+integrity. Earlier transfer attempts 62531701/62532144 were stopped before mutable
+data copied; the latter finished a fresh 4,579-file/352-database source inventory
+but its redundant rsync checksumming read GPFS too slowly from wICE. No science was
+cancelled. Local suite: 1,204 passed, 25 environment-specific skips; subsequent
+copy split/corruption guards passed six tests. Native acceptance/cleanup are pending.
+Measured pre-cutover allocated usage: old PROJECT 495.211 GiB, DATA checkout
+0.756 GiB, owned GPFS working sets 108.445 GiB. Destination group is lp_verbekelab
+with inherited moderator ACLs and no public access. No owned jevpfn-prefixed build
+directory remains on Lustre scratch; other projects are untouched.
 Records: `2. feature_creation/manifests/storage_migration/` on DATA. Do not interpret
 successful copying as runtime acceptance, backup, or permission to resume consumers.
 
@@ -42,7 +48,7 @@ New routing uses native GPFS PROJECT immutables directly, isolated GPFS scratch
 mutable stores, and Mindwell CPU preparation. Preserve historical receipts verbatim;
 derived migration records bind new runtime seals and retain the previous identities.
 
-## Release recovery (3 November)
+## Release recovery (3 November, before migration)
 
 Read all 615 available text logs (101,767 lines) and reconciled every campaign ID.
 All 36 Liquid/Strands dataset jobs completed 0:0: eighteen datasets per provider;
