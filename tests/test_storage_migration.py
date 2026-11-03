@@ -122,6 +122,9 @@ def test_retirement_removes_only_verified_old_project_and_preserves_allocation(t
     for p in (source, destination):
         p.mkdir(parents=True)
         (p / "weights").write_bytes(b"verified bytes")
+        (p / "data/raw").mkdir(parents=True)
+        (p / "data/raw/input.csv").write_bytes(b"preserve original data")
+    (source / "data/raw").chmod(0o500)
     root = tmp_path / "records"
     root.mkdir()
     monkeypatch.setattr(storage_migration, "records", lambda: root)

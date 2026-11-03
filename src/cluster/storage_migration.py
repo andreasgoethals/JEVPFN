@@ -380,10 +380,21 @@ def retire_old():
             p = Path(base) / name
             if p.is_symlink() and os.readlink(p).startswith(str(source) + "/"):
                 raise ValueError("A destination link still depends on old PROJECT")
+    readonly = []
+    for base, _, _ in os.walk(source, followlinks=False):
+        p = Path(base)
+        if not p.stat().st_mode & 0o200:
+            if p.stat().st_uid != os.getuid() or not p.is_relative_to(source):
+                raise ValueError("Cannot retire a read-only directory outside the owned old tree")
+            # Raw inputs remain read-only on the accepted new authority. Only
+            # the verified redundant old directories need owner write to unlink.
+            os.chmod(p, p.stat().st_mode | 0o700)
+            readonly.append(p.relative_to(source).as_posix())
     shutil.rmtree(source)
     result = {"status": "old_project_and_published_native_copies_retired", "source": str(source),
               "destination": str(destination), "old_logical_bytes": sum(r["bytes"] for r in current["files"].values()),
               "workspaces": retired, "job_id": os.environ["SLURM_JOB_ID"],
+              "retired_readonly_directories": readonly,
               "retained": "historical token shards and legacy images on GPFS until their individual review"}
     write_json(records() / "retired.json", result)
     return result
