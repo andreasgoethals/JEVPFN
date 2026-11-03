@@ -301,7 +301,7 @@ def accept(reviewed_by):
     return result
 
 
-def retire_old():
+def retire_old(*, native_only=False, source_only=False):
     """Owner-authorized exact retirement, only after verified copy and native acceptance."""
     from src.cluster.maintenance import reject_links, require_idle_vsc
     from src.cluster.project_migration import compare, inventory, roots, verify_sqlite
@@ -322,57 +322,68 @@ def retire_old():
     for item in accepted["evidence"]:
         if file_sha256(Path(item["path"])) != item["sha256"]:
             raise ValueError("Migration acceptance evidence changed")
+    if not source_only:
+        published = json.loads((records() / "workspaces_published.json").read_text())
+        retired = []
+        native_parent = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-work"
+        for item in published["workspaces"]:
+            work = reject_links(Path(item["working_root"]))
+            if work.parent.parent != native_parent or work.name != "JEVPFN" or work.is_symlink():
+                raise ValueError("Old workspace escaped its owned native leaf")
+            with workspace_lease(work):
+                if file_sha256(work / MARKER) != item["old_marker_sha256"]:
+                    raise ValueError("Old workspace changed after publication")
+                orphaned = retire_publication_snapshots(work)
+                for folder in orphaned["retained"]:
+                    old = Path(folder)
+                    backup = destination / "migration_recovery" / item["runtime"] / old.name
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    if backup.exists():
+                        raise ValueError("Recovery archive already exists; inspect before replacing")
+                    shutil.copytree(old, backup, symlinks=True)
+                    compare(inventory(old), inventory(backup), old, backup)
+                    verify_sqlite(backup)
+                # The supported cache union validates every response, origin, feature
+                # blob and recovery ledger. Keep the exact old marker as provenance.
+                write_json(records() / "retired_workspace_markers" / (item["runtime"] + ".json"),
+                           json.loads((work / MARKER).read_text()))
+                if any(p.is_mount() for p in work.rglob("*") if p.is_dir() and not p.is_symlink()):
+                    raise ValueError("A native workspace contains a mount")
+                retired.append({"runtime": item["runtime"], "path": str(work), "orphan_review": orphaned})
+            shutil.rmtree(work)
+            if not any(work.parent.iterdir()):
+                work.parent.rmdir()
+        validation = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-migration-validation"
+        for marker in sorted(validation.glob("jevpfn-work/*/JEVPFN/" + MARKER)):
+            work = reject_links(marker.parent)
+            with workspace_lease(work):
+                saved = json.loads(marker.read_text())
+                if saved.get("purpose") != "migration_diagnostics" or saved.get("durable_root") != str(destination):
+                    raise ValueError("Unrecognized validation workspace; preserve it")
+                _publish(destination, work)
+                shutil.rmtree(work)
+            if not any(work.parent.iterdir()):
+                work.parent.rmdir()
+        # Only empty parents may be removed; an unexpected file/cache is preserved.
+        for p in (validation / "jevpfn-work", validation):
+            if p.is_dir() and not any(p.iterdir()):
+                p.rmdir()
+        native_result = {"status": "native_published_copies_retired", "workspaces": retired,
+                         "job_id": os.environ["SLURM_JOB_ID"]}
+        write_json(records() / "native_retired.json", native_result)
+        if native_only:
+            return native_result
+    else:
+        native_result = json.loads((records() / "native_retired.json").read_text())
+        if native_result.get("status") != "native_published_copies_retired":
+            raise ValueError("Native recovery publication/retirement must finish first")
+        retired = native_result["workspaces"]
     # Re-read the protected old authority immediately before destructive action.
-    current = inventory(source)
+    current = inventory(source, workers=8)
     compare(copied["source_inventory"], current, source, source)
     require_idle_vsc(allow_current=True)  # Recheck after the potentially long hash pass.
     if source.is_mount() or source.stat().st_uid != os.getuid():
         raise ValueError("Old project root ownership/mount boundary changed")
-    published = json.loads((records() / "workspaces_published.json").read_text())
-    retired = []
-    native_parent = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-work"
-    for item in published["workspaces"]:
-        work = reject_links(Path(item["working_root"]))
-        if work.parent.parent != native_parent or work.name != "JEVPFN" or work.is_symlink():
-            raise ValueError("Old workspace escaped its owned native leaf")
-        with workspace_lease(work):
-            if file_sha256(work / MARKER) != item["old_marker_sha256"]:
-                raise ValueError("Old workspace changed after publication")
-            orphaned = retire_publication_snapshots(work)
-            for folder in orphaned["retained"]:
-                old = Path(folder)
-                backup = destination / "migration_recovery" / item["runtime"] / old.name
-                backup.parent.mkdir(parents=True, exist_ok=True)
-                if backup.exists():
-                    raise ValueError("Recovery archive already exists; inspect before replacing")
-                shutil.copytree(old, backup, symlinks=True)
-                compare(inventory(old), inventory(backup), old, backup)
-                verify_sqlite(backup)
-            # The supported cache union validates every response, origin, feature
-            # blob and recovery ledger. Keep the exact old marker as provenance.
-            write_json(records() / "retired_workspace_markers" / (item["runtime"] + ".json"),
-                       json.loads((work / MARKER).read_text()))
-            if any(p.is_mount() for p in work.rglob("*") if p.is_dir() and not p.is_symlink()):
-                raise ValueError("A native workspace contains a mount")
-            retired.append({"runtime": item["runtime"], "path": str(work), "orphan_review": orphaned})
-        shutil.rmtree(work)
-        if not any(work.parent.iterdir()):
-            work.parent.rmdir()
-    validation = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-migration-validation"
-    for marker in sorted(validation.glob("jevpfn-work/*/JEVPFN/" + MARKER)):
-        work = reject_links(marker.parent)
-        with workspace_lease(work):
-            saved = json.loads(marker.read_text())
-            if saved.get("purpose") != "migration_diagnostics" or saved.get("durable_root") != str(destination):
-                raise ValueError("Unrecognized validation workspace; preserve it")
-            _publish(destination, work)
-            shutil.rmtree(work)
-        if not any(work.parent.iterdir()):
-            work.parent.rmdir()
-    # Only empty parents may be removed; an unexpected file/cache is preserved.
-    for p in (validation / "jevpfn-work", validation):
-        if p.is_dir() and not any(p.iterdir()):
-            p.rmdir()
     # Absolute host checkpoint links were rewritten; required image-internal
     # /LOCAL_TYKKY prefixes remain mounted inside their unchanged image files.
     for base, dirs, files in os.walk(destination, followlinks=False):
@@ -528,12 +539,14 @@ def gpu(provider):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=("relocate", "gpu", "publish-workspaces", "cpu-accept", "accept", "retire-old", "rebind", "numeric-backup"))
+    p.add_argument("action", choices=("relocate", "gpu", "publish-workspaces", "cpu-accept", "accept", "retire-old", "retire-native", "retire-source", "rebind", "numeric-backup"))
     p.add_argument("--provider")
     p.add_argument("--reviewed-by")
     p.add_argument("--previous-freeze", type=Path)
     a = p.parse_args()
-    result = (numeric_backup() if a.action == "numeric-backup" else
+    result = (retire_old(native_only=True) if a.action == "retire-native" else
+              retire_old(source_only=True) if a.action == "retire-source" else
+              numeric_backup() if a.action == "numeric-backup" else
               rebind(a.previous_freeze, a.reviewed_by) if a.action == "rebind" else
               retire_old() if a.action == "retire-old" else accept(a.reviewed_by) if a.action == "accept" else
               cpu_accept() if a.action == "cpu-accept" else relocate() if a.action == "relocate" else
