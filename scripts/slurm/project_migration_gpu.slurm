@@ -1,0 +1,33 @@
+#!/bin/bash -l
+# Amortize queueing: sequential bounded probes in one allocation, no extraction.
+#SBATCH --job-name=jevpfn-migration-b200
+#SBATCH --account=lp_verbekelab
+#SBATCH --clusters=mindwell
+#SBATCH --partition=gpu_b200
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gpus-per-node=1
+#SBATCH --time=02:00:00
+#SBATCH --output="output_JEVPFN/2. feature_creation/manifests/storage_migration/gpu_%j.log"
+#SBATCH --error="output_JEVPFN/2. feature_creation/manifests/storage_migration/gpu_%j.log"
+set -euo pipefail
+cd "${VSC_DATA:?}/JEVPFN"
+source scripts/storage_environment.sh
+export JEVPFN_PHASE=experiment_0 JEVPFN_RUNTIME_PROFILE=blackwell-cu130
+export VSC_SCRATCH_GPFS1="${VSC_SCRATCH_GPFS1:?}/jevpfn-migration-validation"
+test -d "$VSC_SCRATCH_GPFS1/jevpfn-work"
+for provider in liquid liquid_lfm3 strands perplexity cloudflare intern h2o sii kev decision3 nimble; do
+    export JEVPFN_CONDA_ENV="$provider"
+    export JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
+    source scripts/slurm/_activate_env.sh
+    jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.cluster.storage_migration gpu --provider "$provider"
+    # _activate_env owns a per-allocation disposable cache. Retire it before
+    # switching interpreters; final trap covers the last iteration/failures.
+    /usr/bin/python3 -I src/cluster/runtime_cache.py cleanup "$XDG_CACHE_HOME"
+done
+export JEVPFN_CONDA_ENV=cloudflare JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
+source scripts/slurm/_activate_env.sh
+for encoder in e5_small_v2 e5_large_v2 qwen3_embedding_0_6b; do
+    jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.cluster.embedding_contracts --execute --encoder "$encoder"
+done

@@ -86,8 +86,10 @@ predictions and large results. DATA holds the checkout, compact manifests and op
 logs. Both use JEVPFN/output_JEVPFN/<number>. phase/. Use the validated transfer export/import,
 never wholesale replacement of populated caches. See docs/VSC.md for commands/site details.
 The owner excludes all A100 allocations, including debug/MIG routes. GPU jobs default to
-Mindwell B200. CPU staging prepares per-runtime native GPFS scratch working sets; durable
-Lustre remains authoritative. Use `JEVPFN_PROJECT_ROOT` or `VSC_PROJECT_ROOT` for the allocated
+Mindwell B200. CPU staging prepares isolated mutable native GPFS scratch stores. The allocated GPFS
+PROJECT root is durable authority after the reviewed migration; immutable weights,
+images, questions and token evidence are shared directly without full scratch copies. Use the ignored `.vsc-storage.local.json`, `JEVPFN_DURABLE_ROOT`,
+`JEVPFN_PROJECT_ROOT` or `VSC_PROJECT_ROOT` for the allocated
 shared root; legacy `JEVPFN_STAGING_ROOT` remains an explicit working-set override so B200
 jobs cannot accidentally read cross-mounted PROJECT. Never silently fall back to DATA.
 The CPU controller uses a versioned PROJECT image selected by control.active.json.

@@ -97,8 +97,10 @@ def storage_policy_failures(cluster: str | None = None) -> list[str]:
         from src.cluster.scratch_stage import MARKER
 
         durable = os.environ.get("JEVPFN_DURABLE_ROOT", "")
-        if not durable or "lustre" not in durable or not Path(durable).is_dir():
-            failures.append("B200 scratch needs the existing durable Lustre allocation.")
+        if not durable or not Path(durable).is_dir() or not any(
+            durable.startswith(prefix) and "/project/" in durable for prefix in ("/gpfs", "/lustre")
+        ):
+            failures.append("B200 scratch needs an explicitly selected existing durable PROJECT allocation.")
         if not (project / "JEVPFN" / MARKER).is_file():
             failures.append("B200 working set has not been CPU-staged and fingerprinted.")
     return failures

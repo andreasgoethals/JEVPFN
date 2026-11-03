@@ -2,8 +2,8 @@
 # Operational recovery QA only: no inference, API calls or accepted-report replacement.
 #SBATCH --job-name=jevpfn-feature-recovery-qa
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=batch
+#SBATCH --clusters=mindwell
+#SBATCH --partition=batch_graniterapids
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
@@ -11,9 +11,10 @@
 #SBATCH --output="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_PHASE=feature_creation
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+export JEVPFN_STAGING_ROOT=${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}
 export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 export JEVPFN_CONDA_ENV=JEVPFN
@@ -35,7 +36,7 @@ unchanged = [
     'src/jev/checkpoints.py', 'src/jev/tokenization.py', 'src/jev/decision_tokenization.py',
     'src/jev/registry.py', 'src/jev/provider.py', 'src/jev/requests.py', 'src/jev/inputs.py',
     'src/jev/question_bank.py', 'src/jev/features.py', 'src/jev/merge.py',
-    'src/data/text_embeddings.py', 'src/cluster/token_shards.py',
+    'src/data/text_embeddings.py',
 ]
 for name in unchanged:
     old = subprocess.check_output(['git', 'show', '954c93f:' + name])

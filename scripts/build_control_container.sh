@@ -1,10 +1,12 @@
 #!/bin/bash
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Recreate the recorded CPU dependencies; no populated environment is relocated.
 set -euo pipefail
 [[ -n "${SLURM_JOB_ID:-}" ]] || { echo 'Use a CPU Slurm build allocation.' >&2; exit 2; }
 cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_CONTROL_LEGACY=1 JEVPFN_CONDA_ENV=JEVPFN
-export JEVPFN_STAGING_ROOT="${JEVPFN_PROJECT_ROOT:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${JEVPFN_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}"
 source scripts/activate_conda.sh
 source scripts/check_container_tools.sh
 control_repo="$PWD"

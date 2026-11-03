@@ -1,8 +1,10 @@
 #!/bin/bash
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Invoked by activate_conda only after the CPU image is explicitly selected.
 jevpfn_activate_control() {
     local image="$1"
-    local active="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}/JEVPFN/containers/control.active.json"
+    local active="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}/JEVPFN/containers/control.active.json"
     local verification=()
     if [[ -f "$active" ]]; then verification=(--active "$active"); fi
     /usr/bin/python3 -I src/cluster/control_runtime.py verify "$image" "${verification[@]}" >/dev/null || return

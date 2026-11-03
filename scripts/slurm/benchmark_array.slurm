@@ -2,14 +2,14 @@
 # Use the validated command emitted by src.cluster.benchmark_jobs.
 #SBATCH --job-name=jevpfn-benchmark
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=batch
+#SBATCH --clusters=mindwell
+#SBATCH --partition=batch_graniterapids
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=56000M
 #SBATCH --time=24:00:00
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 JEVPFN_MANIFEST="${1:?Pass manifest}"
 JEVPFN_MANIFEST_HASH="${2:?Pass manifest hash}"
 export JEVPFN_CONDA_ENV="${3:?Pass runtime}"

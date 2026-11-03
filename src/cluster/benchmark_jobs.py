@@ -23,7 +23,13 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False):
         raise ValueError("Positive array concurrency required")
     runtime = load_yaml("experiment_1/models")["models"][model]["runtime"]
     gpu = runtime["device"].startswith("cuda")
-    route = gpu_profile(profile if gpu else "wice_h100", runtime=model)
+    route = gpu_profile(profile, runtime=model)
+    if not gpu and route.get("storage_mode") == "scratch_mirror":
+        # CPU predictors run natively against PROJECT; they have no GPU scratch
+        # staging dependency and must not receive an uncreated GPU working set.
+        route = {**route, "staging_root": route["durable_root"],
+                 "partition": "batch_graniterapids"}
+        route.pop("storage_mode")
     candidates = [
         a
         for a in benchmark_plan()

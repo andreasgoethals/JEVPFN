@@ -8,15 +8,15 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-node=1
-#SBATCH --mem=28000M
 #SBATCH --time=24:00:00
 #SBATCH --output="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=feature_creation
 # Arguments survive KU Leuven's clean batch environment; submitting-shell exports do not.
 export JEVPFN_PROVIDER="${1:?Usage: sbatch script.slurm PROVIDER [ENV_PREFIX] [PROJECT_ROOT]}"
-export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
+export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
 export JEVPFN_CONDA_ENV="${2:-$JEVPFN_STAGING_ROOT/JEVPFN/environments/$JEVPFN_PROVIDER}"
 if [[ "$JEVPFN_PROVIDER" == perplexity && "${SLURM_MEM_PER_NODE:-0}" -lt 112000 ]]; then
     echo "Perplexity 27B has a larger initial host-memory profile: sbatch --mem=112000M script.slurm perplexity ..." >&2

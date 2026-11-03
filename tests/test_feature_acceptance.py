@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,10 @@ from src.utils.serialization import digest, write_json
 
 @pytest.fixture
 def evidence(isolated_output, monkeypatch):
+    from src.cluster import storage_contracts
     from src.cluster.evidence import current_identity
+
+    monkeypatch.setattr(storage_contracts, "storage_backend", lambda _: "lustre")
 
     validation = current_identity()
     root = paths.manifests_dir("experiment_0")
@@ -214,6 +218,19 @@ def test_b200_requires_both_active_and_durable_storage_checks(evidence):
     (before / "storage_contracts/gpfs.json").unlink()
     with pytest.raises(ValueError, match="found 0"):
         acceptance.evidence_for("liquid")
+
+
+def test_gpfs_durable_and_scratch_evidence_remain_distinct(evidence, monkeypatch):
+    from src.cluster import storage_contracts
+
+    _, before, _ = evidence
+    monkeypatch.setattr(storage_contracts, "storage_backend", lambda _: "gpfs")
+    p = before / "storage_contracts/fixed.json"
+    body = json.loads(p.read_text())
+    write_json(p, body | {"storage_backend": "gpfs"})
+    result = acceptance.evidence_for("liquid")
+    assert {p.name for p in (Path(r["path"]) for r in result["evidence"])
+            if "storage_contracts" in p.parts} == {"fixed.json", "gpfs.json"}
 
 
 @pytest.mark.parametrize("foreign_provider", ["liquid_lfm3", "intern"])

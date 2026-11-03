@@ -80,7 +80,9 @@ def nested_model_probe(root):
 
     source = root / "containers/blackwell-cu130/cloudflare"
     with tempfile.TemporaryDirectory(
-        prefix="jevpfn-control-launch-", dir=os.environ["VSC_SCRATCH_LUSTRE1"]
+        prefix="jevpfn-control-launch-", dir=os.environ[
+            "VSC_SCRATCH_GPFS1" if os.environ.get("SLURM_CLUSTER_NAME") == "mindwell"
+            else "VSC_SCRATCH_LUSTRE1"]
     ) as temp:
         target = Path(temp) / "cloudflare"
         shutil.copytree(source, target, symlinks=True)
@@ -109,15 +111,16 @@ def integration_test():
     from src.utils.serialization import write_json
 
     image = Path(os.environ["JEVPFN_CONTROL_IMAGE"])
+    cluster = os.environ["SLURM_CLUSTER_NAME"]
     manifest = verify(image)
     root = Path(os.environ["JEVPFN_STAGING_ROOT"]) / "JEVPFN"
     commands = [
         [
             "sbatch",
             "--test-only",
-            "--clusters=wice",
+            "--clusters=" + cluster,
             "--account=lp_verbekelab",
-            "--partition=batch",
+            "--partition=" + ("batch_graniterapids" if cluster == "mindwell" else "batch"),
             "--time=00:01:00",
             "--cpus-per-task=1",
             "--mem=1000M",
@@ -125,7 +128,7 @@ def integration_test():
         ],
         [
             "sacct",
-            "--clusters=wice",
+            "--clusters=" + cluster,
             "-j",
             os.environ["SLURM_JOB_ID"],
             "--noheader",

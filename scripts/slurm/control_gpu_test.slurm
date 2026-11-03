@@ -9,14 +9,14 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-node=1
-#SBATCH --mem=28000M
 #SBATCH --time=00:10:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_PHASE=experiment_0 JEVPFN_CONDA_ENV=cloudflare
-export JEVPFN_DURABLE_ROOT="${JEVPFN_PROJECT_ROOT:-/lustre1/project/stg_00211}"
+export JEVPFN_DURABLE_ROOT="${JEVPFN_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}"
 source scripts/slurm/_activate_env.sh
 "${JEVPFN_MONITOR_PYTHON:?}" -I -c 'import os; from src.cluster.control_runtime import verify; print("NATIVE_CONTROL_VERIFIED", verify(os.environ["JEVPFN_CONTROL_IMAGE"])["container_id"])'
 jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.cluster.control_runtime gpu-test

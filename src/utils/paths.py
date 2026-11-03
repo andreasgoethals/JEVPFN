@@ -4,7 +4,7 @@ THE ONLY MODULE THAT BUILDS A PATH — everything else asks this one. A path ass
 site with `"output_JEVPFN/" + name` is correct on a laptop and wrong on the cluster, and the failure
 shows up as a full quota or an empty results directory hours into a job.
 
-        project storage  /lustre1/project/stg_00211/<Project>/  big files; confirm quota/backup
+        project storage  $PROJECT_ROOT/<Project>/  big files; confirm quota/backup
     personal data    $VSC_DATA/<Project>/                   repo + output_JEVPFN/, backed up, 75 GiB
     scratch          $VSC_SCRATCH/                          purged after 30 days of no ACCESS
 
@@ -32,10 +32,6 @@ _NOTEBOOK_SCRATCH = None
 
 #: The per-project folder name on BOTH shared tiers.
 PROJECT_NAME = "JEVPFN"
-
-#: Fallback for project storage when the site variable is not set. The literal path is a
-#: last resort, not the primary source — VSC has moved it before.
-STAGING_FALLBACK = "/lustre1/project/stg_00211"
 
 #: `parents[2]` because this file is `<root>/src/utils/paths.py`. From __file__, not the working
 #: directory, so a script, a test and a notebook agree wherever they were launched from.
@@ -72,16 +68,16 @@ def staging_override() -> Path | None:
         p = _env_path(var)
         if p:
             return p
+    if on_vsc() or os.environ.get("JEVPFN_DURABLE_ROOT"):
+        return durable_project_override()
     return None
 
 
 def durable_project_override() -> Path | None:
     """Persistent allocation override, independent of a native scratch working set."""
-    for name in ("JEVPFN_DURABLE_ROOT", "JEVPFN_PROJECT_ROOT", "VSC_PROJECT_ROOT"):
-        value = _env_path(name)
-        if value:
-            return value
-    return None
+    from src.cluster.storage_config import configured_root
+
+    return configured_root()
 
 
 def _use_staging() -> bool:
@@ -99,11 +95,8 @@ def staging_root() -> Path:
     override = staging_override()
     if override:
         return override
-    lustre = _env_path("VSC_PROJECT_LUSTRE1")
-    if lustre:
-        return lustre / "stg_00211"
     if on_vsc():
-        return Path(STAGING_FALLBACK)
+        raise ValueError("Select the allocated durable PROJECT root explicitly; no filesystem fallback")
     return REPO_ROOT
 
 
@@ -333,6 +326,8 @@ def dataset_cache_path(dataset_id: str) -> Path:
 
 
 def decision_inputs_dir() -> Path:
+    if os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1" and durable_project_override():
+        return _under(durable_project_override(), "data", "decision_inputs")
     return jev_cache_path("decision_inputs")
 
 
@@ -349,7 +344,9 @@ def dataset_question_path(dataset_id: str) -> Path:
 def raw_dir(*parts: str) -> Path:
     """`data/raw/` — never modified, never committed, never deleted by the cleaner."""
     if _use_staging():
-        return _under(staging_root(), "data", "raw", *parts)
+        root = (durable_project_override() if os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1"
+                else None) or staging_root()
+        return _under(root, "data", "raw", *parts)
     return REPO_ROOT.joinpath("data", "raw", *parts)
 
 
@@ -365,7 +362,7 @@ def data_search_paths(*parts: str) -> list[Path]:
     out works unconfigured, and the same code finds it on the cluster."""
     roots = [REPO_ROOT.joinpath("data", *parts)]
     if _use_staging():
-        staged = _under(staging_root(), "data", *parts)
+        staged = _under((durable_project_override() if os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1" else None) or staging_root(), "data", *parts)
         if staged not in roots:
             roots.append(staged)
     return roots
@@ -383,7 +380,9 @@ def checkpoints_dir(*parts: str) -> Path:
     """Model weights. Big -> project storage. Never deleted by the cleaner: downloaded from
     upstream, or a training run to reproduce."""
     if _use_staging():
-        return _under(staging_root(), "checkpoints", *parts)
+        root = (durable_project_override() if os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1"
+                else None) or staging_root()
+        return _under(root, "checkpoints", *parts)
     return REPO_ROOT.joinpath("checkpoints", *parts)
 
 
@@ -392,6 +391,9 @@ def tokenizer_dir(provider: str) -> Path:
 
 
 def token_audit_dir() -> Path:
+    if os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1" and durable_project_override():
+        return _under(durable_project_override(), OUTPUT_DIR_NAME, phase_folder("experiment_0"),
+                      "results", "token_audit")
     return results_dir("token_audit", phase="experiment_0")
 
 

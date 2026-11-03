@@ -54,7 +54,7 @@ def test_vsc_jobs_resume_after_disconnect_and_submit_independent_ready_jobs(
     assert report["status"] == "vsc_checks_completed_requires_review"
     assert all("--wait" not in c for c in commands)
     assert all(
-        "--mem=112000M" in c for c in commands if "perplexity" in c and "--partition=gpu_b200" in c
+        "--cpus-per-task=14" in c for c in commands if "perplexity" in c and "--partition=gpu_b200" in c
     )
     exp0.run("vsc", execute=True)
     assert len(commands) == len(exp0.steps("vsc"))

@@ -1,18 +1,18 @@
 #!/bin/bash -l
 #SBATCH --job-name=jevpfn-stage-tabstar
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=batch
+#SBATCH --clusters=mindwell
+#SBATCH --partition=batch_graniterapids
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=6800M
 #SBATCH --time=02:00:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
+export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
 export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
 unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE

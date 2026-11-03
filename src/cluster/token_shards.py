@@ -15,6 +15,7 @@ from contextlib import closing
 from itertools import islice
 from pathlib import Path
 
+from src.cluster.scheduling import cpu_cluster
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
@@ -460,8 +461,8 @@ def plan(provider, root, *, dependencies=()):
         dependencies=list(dependencies),
         script="experiment_0_tokens.slurm",
         args=[root, provider, "prepare", str(count)],
-        flags=["--cpus-per-task=1", "--mem=6800M", "--time=02:00:00"],
-        cluster="wice",
+        flags=["--cpus-per-task=2", "--time=02:00:00"],
+        cluster=cpu_cluster(),
     )
     parts = [
         dict(
@@ -470,7 +471,7 @@ def plan(provider, root, *, dependencies=()):
             script="experiment_0_tokens.slurm",
             args=[root, provider, str(i), str(count)],
             flags=resources(provider, sharded=True),
-            cluster="wice",
+            cluster=cpu_cluster(),
             pool="tokens",
         )
         for i in range(count)
@@ -484,11 +485,10 @@ def plan(provider, root, *, dependencies=()):
             script="experiment_0_tokens.slurm",
             args=[root, provider, "merge", str(count)],
             flags=[
-                "--cpus-per-task=1",
-                "--mem=6800M",
+                "--cpus-per-task=2",
                 "--time=24:00:00" if provider in ADDED else "--time=04:00:00",
             ],
-            cluster="wice",
+            cluster=cpu_cluster(),
         ),
     ]
 

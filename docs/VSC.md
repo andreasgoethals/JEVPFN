@@ -38,30 +38,31 @@ credentials and is removed once all tracked work is terminal and assessed.
 | Role | Location |
 |---|---|
 | Git checkout with `.git`, specs, compact logs/manifests | `$VSC_DATA/JEVPFN` (`/data/leuven/383/vsc38338/JEVPFN`) |
-| Authoritative data, questions, weights, containers, features, predictions, large results | `/lustre1/project/stg_00211/JEVPFN` (PROJECT, Lustre) |
+| Authoritative data, questions, weights, containers, features, predictions, large results | `/gpfs1/project/prj_00013/JEVPFN` (PROJECT, GPFS) |
 | CPU controller image | `PROJECT/JEVPFN/containers/control-v1`, selected by `control.active.json` |
 | Active B200 working set, one per runtime | `$VSC_SCRATCH_GPFS1/jevpfn-work/<runtime>/JEVPFN` |
 | Notebooks and merged results | Local repository |
 
-- Set `JEVPFN_PROJECT_ROOT` (or `VSC_PROJECT_ROOT`) to `/lustre1/project/stg_00211`; the
-  resolver appends `JEVPFN`. `JEVPFN_STAGING_ROOT` explicitly overrides it for a working
-  set. Launchers pass the root as an argument and `--export=ALL,JEVPFN_DURABLE_ROOT=...`;
-  direct `sbatch` calls must do the same. Large output never falls back to DATA.
-- GPU work runs on **Mindwell B200**; wICE CPU jobs stage, download, build and count on
-  Lustre, then copy and verify a native GPFS working set (no GPFS project allocation is
-  needed). B200 jobs never stream bulk data from cross-mounted Lustre. A100 (including
-  debug/MIG) is excluded; the H100 profile is only for explicit compatibility use.
-- Resource profiles: 4 CPUs/28,000 MiB for small providers, 14 CPUs/112,000 MiB for
-  Perplexity, SII, Kev and Decision3. A 48-hour allocation is a resumable segment.
-- Working sets publish committed SQLite data to Lustre every 600 s and on exit, including
-  failures. Publication merges compatible records, never replaces a complete durable
-  cache with a partial one, and stops on conflicts. Predictor staging restores and unions
-  durable evaluation stores, reusing completed folds.
-- Publication validates/unions decision stores on GPFS for B200 or node-local disk for
-  wICE transfer jobs, then uses SQLite backup
-  to publish the union transactionally under its extraction lock. Only one dataset
-  snapshot is retained at a time. New decision workspaces warm only their own provider;
-  full response history remains on PROJECT.
+- Private `.vsc-storage.local.json` selects the allocated durable shared root. It is
+  ignored by Git and read by `scripts/storage_environment.sh` before image activation.
+  Explicit `JEVPFN_DURABLE_ROOT`/`JEVPFN_PROJECT_ROOT` overrides remain supported;
+  no allocation is inferred from a cluster name. The resolver appends `JEVPFN`.
+  `JEVPFN_STAGING_ROOT` selects a separate mutable working set. Frozen runtime pins
+  include the resolved durable authority.
+- Mindwell B200 runs inference; Mindwell `batch_graniterapids` runs CPU staging,
+  downloads, builds, token counts and PCA. wICE is an explicitly selected compatibility
+  route requiring native Lustre staging or node-local transfer I/O, never GPFS SQLite
+  random I/O. A100 is excluded. No automatic H100 fallback.
+- GPFS PROJECT weights, images, raw inputs, questions and exact token databases are
+  shared directly. Per-runtime mutable response/embedding/evaluation databases and
+  temporary compiler caches remain isolated on native GPFS scratch; do not duplicate
+  immutable working sets. Four CPUs use the B200 default 32,000 MiB; fourteen use
+  112,000 MiB. CPU jobs use their partition's memory-per-core default.
+- Working sets publish committed SQLite data to GPFS PROJECT every 600 seconds and
+  on exit. Publication validates compatible unions under a per-destination extraction
+  lock and uses SQLite backup to commit them transactionally. It never replaces a
+  complete durable cache with a partial scratch copy. Resume restores completed folds.
+  New decision workspaces warm only their provider's records.
 - Publication locks each destination independently; a busy periodic target is deferred,
   while final publication waits. Dataset jobs publish their own dataset store. Source
   snapshots stay on native scratch during validation; final unions remain on PROJECT.
@@ -72,7 +73,7 @@ credentials and is removed once all tracked work is terminal and assessed.
   Staging checks other projects' usage; check `myquota` for bytes and files. Free
   filesystem space is not quota. Never delete another project's files.
 
-Infrastructure references: VSC Library `3bcdf55e576d10161d6189b40ac39380bbba9eca`
+Infrastructure references: current VSC Library pin `0ed4ffa89d312b9bb6411681b6a14f81672439f3`; historical reviews used VSC Library `3bcdf55e576d10161d6189b40ac39380bbba9eca`
 (hardware review, 23 October) and `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87` (storage and
 Slurm recheck, 27 October); see its `guides/SLURM.md`, `STORAGE.md`, `SOFTWARE.md`, `CLUSTERS.md`.
 
@@ -91,7 +92,7 @@ scratch. Keep old images only while a recorded run or rollback needs them.
   preflight uses wICE batch with three cores at the 3,400 MiB/core default.
 - **B200 images.** Separate `containers/blackwell-cu130/<runtime>/` images keep publisher
   pins with the exact cu130 Torch/torchvision wheels (the cu128 index lacks them; CUDA 13
-  needs driver branch ≥ 580). Startup checks CUDA 13.0, native `sm_100`, BF16 and the B200
+  needs driver branch â‰¥ 580). Startup checks CUDA 13.0, native `sm_100`, BF16 and the B200
   device. These checks do not establish model correctness; never substitute newer packages
   to bypass a failed pin.
 - **Model-image probes** inside a CPU-controller job use an overlapping host Slurm step;
@@ -113,7 +114,7 @@ machines. On VSC (`JEVPFN_PYTHON` is the controller interpreter):
 "${JEVPFN_PYTHON:?}" -m src.utils.output_cleanup --tier both --include-archives
 "$JEVPFN_PYTHON" -m src.utils.output_cleanup --tier both --include-archives --apply --writers-stopped
 "$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
-mkdir -p /lustre1/project/stg_00211/JEVPFN/uploads
+mkdir -p /gpfs1/project/prj_00013/JEVPFN/uploads
 ```
 
 This permanently deletes output on DATA, PROJECT and GPFS working sets, and keeps data,
@@ -135,7 +136,7 @@ features, accounting, weights, containers, environments and secrets. Locally:
     Invoke-Jev -m src.utils.run_notebooks
     Invoke-Jev -m src.cluster.freeze --record
     Invoke-Jev -m src.cluster.input_transfer pack
-    scp '.\output_JEVPFN\transfers\decision_inputs_v3.zip' '.\output_JEVPFN\transfers\decision_inputs_v3.zip.sha256' '.\output_JEVPFN\3. experiment_0\manifests\frozen_revision.json' 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/uploads/'
+    scp '.\output_JEVPFN\transfers\decision_inputs_v3.zip' '.\output_JEVPFN\transfers\decision_inputs_v3.zip.sha256' '.\output_JEVPFN\3. experiment_0\manifests\frozen_revision.json' 'vsc38338@login.hpc.kuleuven.be:/gpfs1/project/prj_00013/JEVPFN/uploads/'
     if ($LASTEXITCODE -ne 0) { throw 'Upload failed; do not continue.' }
 }
 ```
@@ -145,8 +146,8 @@ Install and freeze on VSC; installation validates every member, hash and row lin
 an atomic replacement, and freeze compares source and configuration (not notebook output):
 
 ```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /lustre1/project/stg_00211/JEVPFN/uploads/decision_inputs_v3.zip --writers-stopped
-"$JEVPFN_PYTHON" -m src.cluster.freeze --record --expected-file /lustre1/project/stg_00211/JEVPFN/uploads/frozen_revision.json
+"${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /gpfs1/project/prj_00013/JEVPFN/uploads/decision_inputs_v3.zip --writers-stopped
+"$JEVPFN_PYTHON" -m src.cluster.freeze --record --expected-file /gpfs1/project/prj_00013/JEVPFN/uploads/frozen_revision.json
 ```
 
 An idle, unfrozen setup for a later campaign runs `bash scripts/test_all.sh --execute --watch`:
@@ -304,9 +305,9 @@ To add local Jev responses to VSC, upload closed SQLite snapshots to PROJECT
 `uploads/jev_features/` (never over `data/jev_cache/`) and merge them in an idle CPU job:
 
 ```bash
-for source in /lustre1/project/stg_00211/JEVPFN/uploads/jev_features/*.sqlite3; do
+for source in /gpfs1/project/prj_00013/JEVPFN/uploads/jev_features/*.sqlite3; do
     test -f "$source" || { echo 'No uploaded Jev cache snapshots found.' >&2; exit 1; }
-    "${JEVPFN_PYTHON:?}" -m src.jev.merge "$source" "/lustre1/project/stg_00211/JEVPFN/data/jev_cache/${source##*/}"
+    "${JEVPFN_PYTHON:?}" -m src.jev.merge "$source" "/gpfs1/project/prj_00013/JEVPFN/data/jev_cache/${source##*/}"
 done
 ```
 
@@ -394,12 +395,13 @@ After all writers stop and failed scratch jobs are published, export on VSC and 
 locally (substitute the printed bundle name):
 
 ```bash
-export JEVPFN_STAGING_ROOT=/lustre1/project/stg_00211
+source scripts/storage_environment.sh
+export JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
 "${JEVPFN_PYTHON:?}" -m src.cluster.transfer export
 ```
 
 ```powershell
-scp 'vsc38338@login.hpc.kuleuven.be:/lustre1/project/stg_00211/JEVPFN/output_JEVPFN/transfers/EXACT_BUNDLE.zip' "$env:USERPROFILE\Downloads\"
+scp 'vsc38338@login.hpc.kuleuven.be:/gpfs1/project/prj_00013/JEVPFN/output_JEVPFN/transfers/EXACT_BUNDLE.zip' "$env:USERPROFILE\Downloads\"
 if ($LASTEXITCODE -ne 0) { throw 'Download failed.' }
 .\.venv\Scripts\python.exe -m src.cluster.transfer import "$env:USERPROFILE\Downloads\EXACT_BUNDLE.zip"
 if ($LASTEXITCODE -ne 0) { throw 'Import failed.' }

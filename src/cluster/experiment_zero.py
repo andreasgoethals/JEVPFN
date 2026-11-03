@@ -52,7 +52,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         ]
     if site != "vsc":
         raise ValueError("Site must be local or vsc")
-    from src.cluster.scheduling import gpu_profile, project_export
+    from src.cluster.scheduling import cpu_cluster, gpu_profile, project_export
 
     default_profile = gpu_profile()
     durable = default_profile.get("durable_root", default_profile["staging_root"])
@@ -92,7 +92,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     for name, script, args in items:
         independent = name in {"cpu", "storage"} or name.endswith("_tokens")
         dependencies = [] if independent else ["cpu"]
-        cluster, flags = "wice", []
+        cluster, flags = cpu_cluster(), ["--clusters=" + cpu_cluster(), "--partition=" + ("batch_graniterapids" if cpu_cluster() == "mindwell" else "batch")]
         if name.endswith("_scratch"):
             dependencies = ["cpu", "storage", name.removesuffix("_scratch") + "_tokens"]
         elif name.endswith("gpfs_storage"):
@@ -116,7 +116,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 if name.endswith("_pilot"):
                     dependencies.append(provider + "_contracts")
                 if provider in {"perplexity", "sii", "kev", "decision3"}:
-                    flags.extend(["--mem=112000M", "--cpus-per-task=14"])
+                    flags.extend(["--cpus-per-task=14"])
         result.append(
             {
                 "name": name,

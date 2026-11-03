@@ -8,17 +8,17 @@
 #SBATCH --ntasks=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=2G
 #SBATCH --time=00:05:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_PHASE=experiment_0
 export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STORAGE_MODE=scratch_mirror
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
-export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}"
+export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}"
 export JEVPFN_STORAGE_RUNTIME="${1:?Pass a staged runtime}"
 source scripts/activate_conda.sh
 JEVPFN_STAGING_ROOT="$("${JEVPFN_PYTHON:?}" -m src.cluster.scratch_stage path --runtime "$JEVPFN_STORAGE_RUNTIME")"

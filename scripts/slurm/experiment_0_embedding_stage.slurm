@@ -2,18 +2,18 @@
 # Shared encoder assets are prepared on CPU, then included in the Clef working set.
 #SBATCH --job-name=jevpfn-exp0-encoder-stage
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=batch
+#SBATCH --clusters=mindwell
+#SBATCH --partition=batch_graniterapids
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=13600M
 #SBATCH --time=01:00:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}" JEVPFN_CONDA_ENV=JEVPFN
+export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}" JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
 for encoder in e5_small_v2 e5_large_v2 qwen3_embedding_0_6b; do
     "${JEVPFN_PYTHON:?}" -m src.data.text_embeddings --stage --encoder "$encoder"

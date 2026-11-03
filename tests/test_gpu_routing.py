@@ -56,11 +56,12 @@ def test_default_gpu_plans_use_b200_and_cpu_jobs_stay_on_cpu():
         scheduling.gpu_profile("wice_a100")
 
 
-def test_b200_runtime_workspaces_use_native_scratch_and_durable_lustre(monkeypatch):
+def test_b200_runtime_workspaces_use_native_scratch_and_explicit_durable_project(monkeypatch):
+    monkeypatch.setenv("JEVPFN_DURABLE_ROOT", "/gpfs1/project/example")
     monkeypatch.setenv("VSC_SCRATCH_GPFS1", "/gpfs1/scratch/example/user")
     profile = scheduling.gpu_profile(runtime="intern")
     assert profile["staging_root"] == "/gpfs1/scratch/example/user/jevpfn-work/intern"
-    assert profile["durable_root"] == "/lustre1/project/stg_00211"
+    assert profile["durable_root"] == "/gpfs1/project/example"
     assert profile["runtime_profile"] == "blackwell-cu130"
     with pytest.raises(ValueError, match="Invalid runtime"):
         scheduling.gpu_profile(runtime="../../another_project")

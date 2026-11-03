@@ -29,9 +29,11 @@ def gpu_profile(name=None, *, runtime=None):
     if name not in profiles:
         raise ValueError("Unknown GPU scheduling profile")
     profile = dict(profiles[name])
-    project = (os.environ.get("JEVPFN_DURABLE_ROOT") or os.environ.get("JEVPFN_PROJECT_ROOT")
-               or os.environ.get("VSC_PROJECT_ROOT"))
+    from src.utils.paths import durable_project_override
+
+    project = durable_project_override()
     if project:
+        project = project.as_posix()
         project_path = PurePosixPath(project)
         if (not project_path.is_absolute() or ".." in project_path.parts
                 or project_path.name == "JEVPFN"):
@@ -72,6 +74,14 @@ def gpu_profile(name=None, *, runtime=None):
     if PurePosixPath(root).name == "JEVPFN":
         raise ValueError("staging_root is the allocation parent, not its JEVPFN directory")
     return profile
+
+
+def cpu_cluster():
+    """CPU jobs use the filesystem native to their explicitly selected authority."""
+    from src.utils.paths import durable_project_override
+
+    root = durable_project_override()
+    return "mindwell" if root and root.as_posix().startswith("/gpfs") else "wice"
 
 
 def reject_a100_allocation():

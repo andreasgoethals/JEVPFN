@@ -118,11 +118,13 @@ def evidence_for(provider, *, campaign=None):
         ),
     )
     # Both filesystems participate in B200 extraction: native GPFS for active
-    # writes and Lustre for durable publication. A pass on one cannot certify the other.
+    # writes and allocated PROJECT for durable publication. Each location needs evidence.
     from src.cluster.scheduling import gpu_profile
 
     storage_files = []
-    backends = [("lustre", "storage")]
+    from src.cluster.storage_contracts import storage_backend
+
+    backends = [(storage_backend(paths.checkpoints_dir()), "storage")]
     if gpu_profile().get("storage_mode") == "scratch_mirror":
         backends.append(("gpfs", "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"))
     for backend, step in backends:
@@ -132,7 +134,7 @@ def evidence_for(provider, *, campaign=None):
                 r.get("status") == "storage_contracts_passed_requires_quota_and_backup_review"
                 and matching(r, step)
                 and r.get("storage_backend") == backend
-                and (backend != "gpfs" or r.get("runtime") == provider)
+                and (r.get("runtime") is None if step == "storage" else r.get("runtime") == provider)
                 and r.get("snapshot_restore") is True
             ),
         )

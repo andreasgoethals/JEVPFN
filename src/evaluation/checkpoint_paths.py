@@ -19,12 +19,14 @@ def checkpoint_path(value):
         return source if source.is_absolute() else active / source
 
     active = active.resolve()
+    authority = paths.durable_project_override() or paths.staging_root()
+    native_durable = authority.as_posix().startswith("/gpfs") and "/project/" in authority.as_posix()
     durable = (
-        Path(os.environ.get("JEVPFN_DURABLE_ROOT", paths.STAGING_FALLBACK))
+        authority
         / "JEVPFN"
         / "checkpoints"
     ).resolve()
-    if active.is_relative_to(durable):
+    if active.is_relative_to(durable) and not native_durable:
         raise ValueError("Mindwell predictor assets need their native staged checkpoint tree")
     if source.is_absolute():
         source = source.resolve()

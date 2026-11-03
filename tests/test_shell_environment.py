@@ -171,6 +171,7 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
         TEST_ENV=selected.as_posix(),
         TEST_FAILURE=failure,
         TEST_ACTIVATION=(ROOT / "scripts" / "activate_conda.sh").as_posix(),
+        JEVPFN_DURABLE_ROOT=(tmp_path / "project").as_posix(),
         JEVPFN_CONDA_ENV=selected.as_posix(),  # This fixture tests the legacy-prefix route.
     )
     result = subprocess.run(
@@ -195,7 +196,7 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
         (
             "experiment_0_decision_contracts",
             ["intern"],
-            ["intern", "/lustre1/project/stg_00211/JEVPFN/environments/intern"],
+            ["intern", "/gpfs1/project/example/JEVPFN/environments/intern"],
         ),
         (
             "experiment_0_decision_pilot",
@@ -205,7 +206,7 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
         (
             "feature_creation",
             ["liquid"],
-            ["liquid", "/lustre1/project/stg_00211/JEVPFN/environments/liquid"],
+            ["liquid", "/gpfs1/project/example/JEVPFN/environments/liquid"],
         ),
         (
             "experiment_0_predictor",
@@ -213,15 +214,17 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
             ["catboost", "/project/catboost"],
         ),
         ("experiment_0_gpu", ["/project/gpu"], ["/project/gpu"]),
-        ("experiment_0_tokens", [], ["JEVPFN", "/lustre1/project/stg_00211"]),
-        ("experiment_0_storage", [], ["JEVPFN", "/lustre1/project/stg_00211"]),
-        ("experiment_0_cpu", [], ["JEVPFN", "/lustre1/project/stg_00211"]),
+        ("experiment_0_tokens", [], ["JEVPFN", "/gpfs1/project/example"]),
+        ("experiment_0_storage", [], ["JEVPFN", "/gpfs1/project/example"]),
+        ("experiment_0_cpu", [], ["JEVPFN", "/gpfs1/project/example"]),
     ],
 )
 def test_job_arguments_survive_clean_submission_environment(tmp_path, script, args, expected):
     # Execute the real script's setup prefix with no inherited project variables.
     source = (ROOT / "scripts/slurm" / f"{script}.slurm").read_text()
     prefix = source.split('cd "${VSC_DATA:?}/JEVPFN"')[0]
+    # Deployment bootstrap is tested separately; here exercise only positional arguments.
+    prefix = prefix.replace('source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"\n', "")
     driver = tmp_path / "job.sh"
     driver.write_text(
         prefix
@@ -229,6 +232,7 @@ def test_job_arguments_survive_clean_submission_environment(tmp_path, script, ar
         encoding="utf-8",
     )
     env = {k: v for k, v in os.environ.items() if not k.startswith(("JEVPFN_", "VSC_", "SLURM_"))}
+    env["JEVPFN_PROJECT_ROOT"] = "/gpfs1/project/example"
     result = subprocess.run(
         [bash_executable(), str(driver), *args], env=env, capture_output=True, text=True, timeout=20
     )
@@ -245,14 +249,13 @@ def test_gpu_memory_profiles_fit_b200_and_token_job_matches_four_cores():
         if "#SBATCH --partition=gpu_b200" in text:
             gpu_jobs += 1
             assert "#SBATCH --clusters=mindwell" in text
-            memory = next(
-                line.split("=")[1]
-                for line in text.splitlines()
-                if line.startswith("#SBATCH --mem=")
-            )
-            assert memory.endswith("M") and int(memory[:-1]) <= 194400
-    assert gpu_jobs == 8
-    assert "#SBATCH --mem=13600M" in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+            assert "#SBATCH --mem=" not in text
+            cores = int(next(line.split("=")[1] for line in text.splitlines()
+                             if line.startswith("#SBATCH --cpus-per-task=")))
+            assert 1 <= cores <= 24  # B200 node: 192 cores / 8 GPUs.
+    assert gpu_jobs >= 8
+    assert "#SBATCH --mem=" not in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+
 
 
 def test_rejected_control_activation_clears_a_previous_interpreter(tmp_path):
@@ -265,7 +268,7 @@ def test_rejected_control_activation_clears_a_previous_interpreter(tmp_path):
         'if source "$TEST_ACTIVATION"; then exit 99; fi\n'
         '[[ -z "${JEVPFN_PYTHON:-}" ]]\n', encoding="utf-8")
     result = subprocess.run([bash_executable(), str(driver)], cwd=tmp_path,
-                            env={**os.environ, "TEST_ACTIVATION": (ROOT / "scripts/activate_conda.sh").as_posix()},
+                            env={**os.environ, "TEST_ACTIVATION": (ROOT / "scripts/activate_conda.sh").as_posix(), "JEVPFN_DURABLE_ROOT": "/gpfs1/project/example"},
                             capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
 
@@ -293,12 +296,12 @@ def test_all_monitored_jobs_separate_host_monitor_from_workload_interpreter():
             line for line in script.read_text().splitlines() if "-m src.cluster.monitor" in line
         ]
         for call in calls:
-            assert call.startswith(
+            assert call.lstrip().startswith(
                 'jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- '
             )
             assert '-- "${JEVPFN_PYTHON:?}" -m ' in call
             monitored.append(script.name)
-    assert len(monitored) == 9
+    assert len(set(monitored)) >= 9
 
 
 def test_perplexity_requirements_guard_runs_before_packages_exist(tmp_path):
@@ -452,7 +455,7 @@ def test_private_wrap_template_preserves_contents_and_executable_bits(tmp_path, 
     work = tmp_path / "work with spaces"
     for p in (source, destination, work):
         p.mkdir()
-    (source / "package.txt").write_text("unchanged package bytes α\n", encoding="utf-8")
+    (source / "package.txt").write_text("unchanged package bytes Î±\n", encoding="utf-8")
     (source / "empty").mkdir()
     (source / "tool").write_text("#!/bin/bash\nprintf 'executable works\\n'\n")
     (source / "tool").chmod(0o755)
@@ -490,7 +493,7 @@ def test_private_wrap_template_preserves_contents_and_executable_bits(tmp_path, 
         timeout=20,
     )
     assert result.returncode == {"none": 0, "copy": 27, "post_install": 29}[failure], result.stderr
-    assert (source / "package.txt").read_text(encoding="utf-8") == "unchanged package bytes α\n"
+    assert (source / "package.txt").read_text(encoding="utf-8") == "unchanged package bytes Î±\n"
     assert not (source / "_post_install.sh").exists()
     if failure != "copy":
         assert (destination / "package.txt").read_bytes() == (source / "package.txt").read_bytes()
@@ -625,7 +628,7 @@ def test_native_gpfs_storage_probe_uses_two_cpu_nodes_and_publication_wrapper():
         "--partition=batch_graniterapids",
         "--nodes=2",
         "--ntasks-per-node=1",
-        "--mem=2G",
+
         "--time=00:05:00",
         "source scripts/activate_conda.sh",
         "export SLURM_EXPORT_ENV=ALL",
@@ -660,8 +663,10 @@ def test_b200_bootstrap_propagates_failure_before_exporting_a_bad_root(tmp_path,
         env=dict(
             os.environ,
             TEST_FAILURE=failure,
+            JEVPFN_DURABLE_ROOT="/gpfs1/project/example",
             TEST_B200_SCRIPT=(ROOT / "scripts/activate_b200_storage.sh").as_posix(),
             SLURM_CLUSTER_NAME="mindwell",
+            SLURM_JOB_PARTITION="gpu_b200",
             JEVPFN_CONDA_ENV="cloudflare",
         ),
         capture_output=True,

@@ -20,6 +20,7 @@ def relocated_runtime(request, isolated_output, monkeypatch):
     scratch.mkdir()
     monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(durable))
     monkeypatch.setenv("JEVPFN_DURABLE_ROOT", str(durable))
+    monkeypatch.setattr(scratch_stage, "roots", lambda runtime: (durable / "JEVPFN", scratch / "jevpfn-work" / runtime / "JEVPFN"))
     monkeypatch.setenv("VSC_SCRATCH_GPFS1", str(scratch))
     monkeypatch.setenv("JEVPFN_RUNTIME_PROFILE", "blackwell-cu130")
     monkeypatch.setenv("SLURM_JOB_ID", "fixture-build")

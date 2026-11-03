@@ -2,19 +2,20 @@
 # Submit from $VSC_DATA/JEVPFN after creating "output_JEVPFN/3. experiment_0/logs".
 #SBATCH --job-name=jevpfn-exp0-cpu
 #SBATCH --account=lp_verbekelab
-#SBATCH --clusters=wice
-#SBATCH --partition=batch
+#SBATCH --clusters=mindwell
+#SBATCH --partition=batch_graniterapids
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
-# Use the verified batch default of 3400 MiB/core instead of inflating a 2-core request.
+# Use the partition memory-per-core default.
 #SBATCH --time=00:20:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=experiment_0
 export JEVPFN_CONDA_ENV=JEVPFN
-export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
+export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 jevpfn_failed=0

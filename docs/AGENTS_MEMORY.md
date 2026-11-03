@@ -15,29 +15,32 @@ Submission is not completion. Preserve active or queued checkouts and recovery i
   preserving existing Jev responses and the durable VSC copy.
 - 30 October: pin new Jev calls to 1.14 and run a bounded first-100-source-rows pilot on
   all eighteen datasets, preserving 1.13 ledgers and cumulative budget.
-- 3 November: the owner explicitly placed the GPFS PROJECT migration on hold while
-  they prepare a migration plan. Do not relocate assets/results or change storage roots.
-  Continue authorized work on existing roots within its validated storage gates.
+- 3 November: the owner subsequently explicitly authorized the full verified migration
+  to `/gpfs1/project/prj_00013/JEVPFN`, superseding the earlier hold. Preserve source
+  on DATA, quiesce consumers, validate relocation/publication/resume, then retire
+  verified old JEVPFN copies without touching other projects or allocation roots.
 - Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
 
-## Migration hold and live continuation (3 November)
+## GPFS PROJECT migration (3 November, in progress)
 
-The owner will establish the migration plan; no migration is authorized now.
-Direct check: controller PID 806752/start ticks 121562803 remains live; release
-62527859 is RUNNING at 46m11s, publishing completed stores using node-local `/tmp`
-without an observed error. Campaign remains 38 completed steps, one submitted,
-235 pending, no failures/blocked steps. No new decision/encoder job is queued yet;
-workspace releases and staging remain genuine prerequisites.
+The owner-approved cutover stops admissions before changing roots. Controller
+806752/start ticks 121562803 on tier2-p-login-3 was verified and stopped under the
+campaign lock. No inference job was cancelled. Liquid release 62527859 completed
+0:0 in 2h01m07s and published all eighteen stores. The 36 completed Liquid/Strands
+GPU jobs remain historical successes; remaining science is held during migration.
+Immutable precopy 62530688 completed 0:0 in 15m18s. Consistent full copy/checksum and
+SQLite verification job 62532144 is running. Initial read-only verifier 62531701 was
+stopped before copying mutable files to move random-read integrity checks to native
+GPFS; journal checks and exact checksum comparison remain mandatory. Local routing/
+regression suite: 1,200 passed, 25 environment-specific skips; native acceptance and
+cleanup remain pending.
+Records: `2. feature_creation/manifests/storage_migration/` on DATA. Do not interpret
+successful copying as runtime acceptance, backup, or permission to resume consumers.
 
-Verified redundant Liquid publication snapshots have retired. Personal GPFS scratch
-is 131.7G/500G (previously 166G); PROJECT is 822.5G/1T, 58,738/150,000 files.
-The separate GPFS PROJECT allocation remains empty. No data/assets were relocated,
-roots changed, other-project jobs touched or desktop monitoring recreated. Preserve
-remaining Strands recovery snapshots until their own publication/retirement checks.
-The existing dispatcher continues approved work; these are measured current quotas,
-not a reservation of future durable capacity. Await the owner's migration plan before
-any storage cutover.
+New routing uses native GPFS PROJECT immutables directly, isolated GPFS scratch
+mutable stores, and Mindwell CPU preparation. Preserve historical receipts verbatim;
+derived migration records bind new runtime seals and retain the previous identities.
 
 ## Release recovery (3 November)
 

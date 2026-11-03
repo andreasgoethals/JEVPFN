@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from src.cluster.freeze import check_if_present, source_snapshot
 from src.cluster.job_graph import advance
 from src.cluster.maintenance import require_idle_vsc
-from src.cluster.scheduling import gpu_profile, project_export
+from src.cluster.scheduling import cpu_cluster, gpu_profile, project_export
 from src.cluster.token_shards import plan as token_plan
 from src.jev.catalog import ADDED, SELF_HOSTED
 from src.utils import paths
@@ -46,7 +46,7 @@ def plan(providers, *, reuse=()):
         ),
     ]
     for step in steps:
-        step["cluster"] = "wice"
+        step["cluster"] = cpu_cluster()
     if "cloudflare" in providers:
         steps.append(
             dict(
@@ -55,7 +55,7 @@ def plan(providers, *, reuse=()):
                 script="experiment_0_embedding_stage.slurm",
                 args=[],
                 flags=[],
-                cluster="wice",
+                cluster=cpu_cluster(),
             )
         )
     for provider in providers:
@@ -66,7 +66,7 @@ def plan(providers, *, reuse=()):
                 script="experiment_0_stage.slurm",
                 args=[provider, root],
                 flags=[],
-                cluster="wice",
+                cluster=cpu_cluster(),
             )
         )
         ready = provider + "_stage"
@@ -79,7 +79,7 @@ def plan(providers, *, reuse=()):
                     script="experiment_0_container_build.slurm",
                     args=[provider, "new", root, profile["runtime_profile"]],
                     flags=[],
-                    cluster="wice",
+                    cluster=cpu_cluster(),
                 )
             )
             ready = provider + "_build"
@@ -102,7 +102,7 @@ def plan(providers, *, reuse=()):
                 script="experiment_0_scratch_stage.slurm",
                 args=[provider],
                 flags=[],
-                cluster="wice",
+                cluster=cpu_cluster(),
             )
         )
         storage = "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"
@@ -114,7 +114,6 @@ def plan(providers, *, reuse=()):
             f"--partition={profile['partition']}",
             "--time=00:30:00",
             "--cpus-per-task=14" if provider in LARGE else "--cpus-per-task=4",
-            "--mem=112000M" if provider in LARGE else "--mem=28000M",
         ]
         steps.append(
             dict(

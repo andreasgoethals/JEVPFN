@@ -1,8 +1,13 @@
 #!/bin/bash
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Host bootstrap; no downloads/copies occur while a GPU waits.
-if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
+if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && ( "${SLURM_JOB_PARTITION:-}" == gpu* || "${JEVPFN_STORAGE_MODE:-}" == scratch_mirror ) ]]; then
     export JEVPFN_STORAGE_MODE=scratch_mirror JEVPFN_RUNTIME_PROFILE=blackwell-cu130
-    export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}"
+    export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}"
+    if [[ "$JEVPFN_DURABLE_ROOT" == /gpfs*/project/* ]]; then
+        export JEVPFN_SHARED_IMMUTABLES=1
+    fi
     JEVPFN_SAVED_RUNTIME="${JEVPFN_CONDA_ENV:?}"
     export JEVPFN_SCRATCH_RUNTIME="${JEVPFN_SAVED_RUNTIME##*/}"
     export JEVPFN_CONDA_ENV=JEVPFN

@@ -50,6 +50,7 @@ def test_frozen_b200_identity_uses_durable_pins_not_staged_subset(tmp_path, monk
     staged.parent.mkdir(parents=True)
     staged.write_text('{"identity":"relocated"}')
     pins = freeze.runtime_pins()
-    assert list(pins) == ["containers/blackwell-cu130/liquid/_JEVPFN_CONTAINER.json"]
+    assert set(pins) == {"containers/blackwell-cu130/liquid/_JEVPFN_CONTAINER.json", "deployment/durable_root"}
+    assert pins["deployment/durable_root"] == str(durable)
     pin.write_text('{"identity":"changed"}')
     assert freeze.runtime_pins() != pins

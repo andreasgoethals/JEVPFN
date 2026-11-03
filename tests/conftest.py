@@ -33,6 +33,8 @@ def _isolate_routing_environment(monkeypatch):
         "VSC_PROJECT_ROOT",
         "JEVPFN_DURABLE_ROOT",
         "JEVPFN_STORAGE_MODE",
+        "JEVPFN_SHARED_IMMUTABLES",
+        "JEVPFN_STORAGE_CONFIG",
         "JEVPFN_SCRATCH_RUNTIME",
         "VSC_STAGING_ROOT",
         "JEVPFN_LOCAL_STORAGE_ROOT",
@@ -64,6 +66,8 @@ def _isolate_routing_environment(monkeypatch):
 def _isolate_local_credentials(tmp_path, monkeypatch):
     """Never let synthetic tests read the owner's real, ignored credential file."""
     from src.jev import auth
+
+    monkeypatch.setenv("JEVPFN_STORAGE_CONFIG", str(tmp_path / "absent_storage.json"))
 
     monkeypatch.setattr(auth, "LOCAL_CREDENTIAL_PATH", tmp_path / "absent_credentials.json")
 

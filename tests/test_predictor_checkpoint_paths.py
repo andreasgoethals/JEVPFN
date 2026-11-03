@@ -66,6 +66,17 @@ def test_mindwell_cannot_keep_durable_as_its_active_checkpoint_tree(trees, monke
         checkpoint_paths.checkpoint_path("weights.bin")
 
 
+def test_native_allocated_gpfs_assets_can_be_shared_directly(monkeypatch):
+    from pathlib import Path
+
+    authority = Path("/gpfs1/project/example")
+    active = authority / "JEVPFN/checkpoints"
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    monkeypatch.setattr(paths, "durable_project_override", lambda: authority)
+    monkeypatch.setattr(paths, "checkpoints_dir", lambda: active)
+    assert checkpoint_paths.checkpoint_path("model/weights.bin") == (active / "model/weights.bin").resolve()
+
+
 def test_local_and_wice_arguments_remain_compatible(trees, monkeypatch):
     durable, native = trees
     for cluster in ("", "wice"):

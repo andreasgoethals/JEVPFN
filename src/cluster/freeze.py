@@ -38,11 +38,16 @@ def runtime_pins():
         "checkpoints/text_embeddings/*/_JEVPFN_EMBEDDING.json",
         "checkpoints/predictors/*/_JEVPFN_PREDICTOR.json",
     )
-    return {
+    result = {
         p.relative_to(root).as_posix(): file_sha256(p)
         for pattern in patterns
         for p in sorted(root.glob(pattern))
     }
+    # A private deployment pointer may change paths without changing tracked code.
+    # Freeze the resolved authority, never the optional pointer's formatting.
+    if paths.on_vsc() and paths.durable_project_override():
+        result["deployment/durable_root"] = str(paths.durable_project_override())
+    return result
 
 
 def source_hash(path):

@@ -1,6 +1,7 @@
 """Keep a bounded number of native working sets until their last consumer finishes."""
 
 from src.cluster.job_graph import dependencies
+from src.cluster.scheduling import cpu_cluster
 
 
 def add_releases(steps, *, command_style=False):
@@ -17,7 +18,7 @@ def add_releases(steps, *, command_style=False):
             consumers.update(found)
         release = dict(
             name=runtime + "_release",
-            cluster="wice",
+            cluster=cpu_cluster(),
             pool="transfer",
             workspace_release=runtime,
             terminal_dependencies=sorted(consumers),
@@ -30,6 +31,8 @@ def add_releases(steps, *, command_style=False):
                     "sbatch",
                     "--parsable",
                     *exports,
+                    "--clusters=" + cpu_cluster(),
+                    "--partition=" + ("batch_graniterapids" if cpu_cluster() == "mindwell" else "batch"),
                     "scripts/slurm/experiment_0_scratch_release.slurm",
                     runtime,
                     "--apply",

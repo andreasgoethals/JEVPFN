@@ -16,7 +16,7 @@ from src.cluster.experiment_zero import scheduler_state
 from src.cluster.freeze import check_if_present, runtime_pins
 from src.cluster.job_graph import SubmissionDeferred, advance
 from src.cluster.maintenance import require_idle_vsc
-from src.cluster.scheduling import gpu_profile, project_export
+from src.cluster.scheduling import cpu_cluster, gpu_profile, project_export
 from src.cluster.workspace_graph import add_releases
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
@@ -51,12 +51,14 @@ def plan():
         steps.append(
             dict(
                 name=provider + "_scratch",
-                cluster="wice",
+                cluster=cpu_cluster(),
                 depends_on=[],
                 command=[
                     "sbatch",
                     "--parsable",
                     export,
+                    "--clusters=" + cpu_cluster(),
+                    "--partition=" + ("batch_graniterapids" if cpu_cluster() == "mindwell" else "batch"),
                     "scripts/slurm/experiment_0_scratch_stage.slurm",
                     provider,
                 ],
@@ -78,7 +80,6 @@ def plan():
                         "--partition=gpu_b200",
                         "--time=2-00:00:00",
                         "--cpus-per-task=14" if large else "--cpus-per-task=4",
-                        "--mem=112000M" if large else "--mem=28000M",
                         "scripts/slurm/feature_creation.slurm",
                         provider,
                         provider,

@@ -176,6 +176,9 @@ Rows join on dataset ID, source fingerprint and `csv:N`. Feature blocks record r
 text groups, question, provider/checkpoint/settings identities and checksums; per-column
 and joint blocks give the three decision arms without repeated calls. On VSC, DATA holds the
 checkout and compact logs, PROJECT holds data, weights, sealed containers and large results
+(native GPFS PROJECT for Mindwell after the reviewed migration; selected explicitly in ignored
+`.vsc-storage.local.json`). Immutable assets are shared directly and mutable per-runtime
+SQLite stores remain isolated on native scratch, with transactional durable publication
 ([VSC](docs/VSC.md)). Move results only with the validated transfer export/import, never
 by copying over populated stores.
 

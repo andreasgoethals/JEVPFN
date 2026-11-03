@@ -2,6 +2,10 @@
 
 ## 03-11-2026
 
+- Add explicit GPFS PROJECT deployment authority, consistent migration verification,
+  container relocation checks and native Mindwell CPU routing. Share immutable
+  assets directly while keeping writable caches and publication isolated.
+
 - Fix release timeouts by performing validated cache unions on native storage and
   transactionally publishing the result; use node-local merge I/O for wICE and GPFS
   for B200, and bound temporary snapshots to one dataset.

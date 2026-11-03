@@ -440,6 +440,7 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
     from src.evaluation.store import read_predictions, recipes
 
     durable, _ = roots
+    monkeypatch.setattr(stage, "roots", lambda runtime: (durable, roots[1].parent.parent / runtime / "JEVPFN"))
     # Real source/config paths, isolated DATA/PROJECT output paths.
     monkeypatch.setattr(paths, "REPO_ROOT", Path(stage.__file__).resolve().parents[2])
     monkeypatch.setenv("VSC_DATA", str(tmp_path / "data"))

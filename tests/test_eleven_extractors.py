@@ -67,7 +67,8 @@ def test_cpu_graph_before_gpu_with_bounded_builds():
             for suffix in ("_stage", "_tokens", "_build", "_scratch")
         )
         if provider in setup_extractors.LARGE:
-            assert "--mem=112000M" in contracts["flags"]
+            assert "--cpus-per-task=14" in contracts["flags"]
+            assert not any(f.startswith("--mem") for f in contracts["flags"])
             assert "--cpus-per-task=14" in contracts["flags"]
         assert by_name[provider + "_pilot"]["dependencies"] == [provider + "_contracts"]
     assert by_name["gpfs_storage"]["cluster"] == "mindwell"

@@ -54,6 +54,7 @@ desktop.ini
 # Credentials at every depth. Never store real keys in tracked config/notebook cells.
 .env
 .env.*
+/.vsc-storage.local.json
 credentials.json
 credentials.*
 secrets.*

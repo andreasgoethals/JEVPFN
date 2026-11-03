@@ -1,11 +1,14 @@
 #!/bin/bash
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Source from a login/setup shell or a Slurm job. This never installs packages.
 # Keep interpreter selection identical before installation and during experiments.
 jevpfn_activate_conda() {
     unset JEVPFN_PYTHON  # A rejected control image must not leave a previous interpreter selected.
-    local control_root="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}/JEVPFN/containers"
+    local control_root="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}/JEVPFN/containers"
     if [[ "${JEVPFN_CONTROL_LEGACY:-0}" != 1 && ( "${JEVPFN_CONTROL_TEST:-0}" == 1 || -f "$control_root/control.active.json" ) && "${JEVPFN_CONDA_ENV:-JEVPFN}" == JEVPFN ]]; then
         local control_image="${JEVPFN_STAGING_ROOT:-${control_root%/JEVPFN/containers}}/JEVPFN/containers/control-v1"
+        if [[ "${JEVPFN_SHARED_IMMUTABLES:-0}" == 1 ]]; then control_image="$control_root/control-v1"; fi
         source scripts/activate_control.sh "$control_image"
         return $?
     fi

@@ -41,6 +41,7 @@ def test_watchers_preserve_jobs_during_outage_and_resume_without_duplicates(
 ):
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
+    monkeypatch.setenv("JEVPFN_DURABLE_ROOT", "/gpfs1/project/fixture")
     monkeypatch.setattr(paths, "manifests_dir", lambda *a: tmp_path / "manifests")
     monkeypatch.setattr(paths, "logs_dir", lambda *a: tmp_path / "logs")
     monkeypatch.setattr(setup_extractors, "require_idle_vsc", lambda: None)

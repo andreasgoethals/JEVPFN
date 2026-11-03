@@ -1,11 +1,14 @@
 #!/bin/bash
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Select sealed model/CPU images; retain the explicit legacy route for custom prefixes.
 JEVPFN_REQUESTED_ENV="${JEVPFN_CONDA_ENV:-JEVPFN}"
 JEVPFN_RUNTIME_NAME="${JEVPFN_REQUESTED_ENV##*/}"
 if [[ "$JEVPFN_RUNTIME_NAME" == tabstar-v1p1 ]]; then JEVPFN_RUNTIME_NAME=tabstar; fi
 JEVPFN_RUNTIME_IMAGE="$JEVPFN_RUNTIME_NAME"
 if [[ "$JEVPFN_RUNTIME_NAME" == tabstar ]]; then JEVPFN_RUNTIME_IMAGE=tabstar-v1p1; fi
-JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}/JEVPFN"
+JEVPFN_RUNTIME_BASE="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}/JEVPFN"
+if [[ "${JEVPFN_SHARED_IMMUTABLES:-0}" == 1 ]]; then JEVPFN_RUNTIME_BASE="$JEVPFN_DURABLE_ROOT/JEVPFN"; fi
 if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell ]]; then
     export JEVPFN_RUNTIME_PROFILE="${JEVPFN_RUNTIME_PROFILE:-blackwell-cu130}"
     [[ "$JEVPFN_RUNTIME_PROFILE" == blackwell-cu130 ]] || { echo 'Mindwell requires blackwell-cu130.' >&2; return 2; }

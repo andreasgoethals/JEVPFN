@@ -11,7 +11,9 @@ from src.utils import paths
 def require_idle_vsc(*, allow_current=False):
     if not paths.on_vsc() or (os.environ.get("SLURM_JOB_ID") and not allow_current):
         raise RuntimeError("Run maintenance in the VSC login shell, outside a Slurm job")
-    failures = storage_policy_failures("wice")
+    from src.cluster.scheduling import cpu_cluster
+
+    failures = storage_policy_failures(cpu_cluster())
     if failures:
         raise ValueError("; ".join(failures))
     # Check both clusters; unrelated jobs such as CreditPFN do not block maintenance.

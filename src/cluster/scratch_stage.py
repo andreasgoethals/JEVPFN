@@ -1,4 +1,4 @@
-"""Native B200 working sets with durable, conflict-checked publication to Lustre.
+"""Native B200 working sets with durable, conflict-checked publication to PROJECT.
 
 CPU staging copies only a selected runtime and its required inputs. GPFS scratch is
 never called a backup. Publication uses SQLite snapshots and existing cache unions;
@@ -29,7 +29,9 @@ def roots(runtime):
 
     if runtime not in RUNTIMES:
         raise ValueError("Unknown runtime for B200 working set")
-    durable = paths.durable_project_override() or Path(paths.STAGING_FALLBACK)
+    durable = paths.durable_project_override()
+    if durable is None:
+        raise ValueError("An explicit durable PROJECT root is required")
     scratch = os.environ.get("VSC_SCRATCH_GPFS1")
     if not scratch or not Path(scratch).is_absolute():
         raise ValueError("VSC_SCRATCH_GPFS1 must identify your existing GPFS scratch allocation")
@@ -39,8 +41,11 @@ def roots(runtime):
         raise ValueError("Both native scratch and durable project allocations must exist")
     if scratch == durable or scratch.is_relative_to(durable) or durable.is_relative_to(scratch):
         raise ValueError("Scratch and durable roots must be separate allocations")
-    if paths.on_vsc() and ("gpfs" not in str(scratch) or "lustre" not in str(durable)):
-        raise ValueError("B200 uses GPFS scratch and durable Lustre, not personal DATA")
+    if paths.on_vsc() and (not str(scratch).startswith("/gpfs") or not any(
+        str(durable).startswith(prefix) and "/project/" in str(durable)
+        for prefix in ("/gpfs", "/lustre")
+    )):
+        raise ValueError("B200 needs native GPFS scratch and an allocated GPFS/Lustre PROJECT root")
     return (
         reject_links(durable / "JEVPFN"),
         reject_links(scratch / "jevpfn-work" / runtime / "JEVPFN"),
@@ -312,6 +317,7 @@ def stage(runtime):
 
     durable, work = roots(runtime)
     require_cpu_staging()
+    shared_assets = str(durable).startswith("/gpfs") or os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1"
     with capacity_lease(work), workspace_lease(work):
         previous = {}
         if (work / MARKER).exists():
@@ -400,6 +406,9 @@ def stage(runtime):
                 for source in _dataset_stores(folder):
                     candidates[source.relative_to(durable)] = source
         for folder in inputs:
+            if shared_assets and (folder.startswith("checkpoints/") or folder in {"data/raw", "data/decision_inputs"}
+                                  or "token_audit" in folder):
+                continue
             location = durable / folder
             sources = (
                 _dataset_stores(location)
@@ -422,7 +431,9 @@ def stage(runtime):
                 ):
                     continue
                 candidates[relative] = source
-        if not any(p.parts[:2] == ("data", "decision_inputs") for p in candidates):
+        if not any(p.parts[:2] == ("data", "decision_inputs") for p in candidates) and not (
+            shared_assets and (durable / "data/decision_inputs").is_dir()
+        ):
             raise ValueError("Prepared questions are absent from durable storage")
         with staging_environment(durable):
             source_container = containers.container_dir(runtime)
@@ -434,10 +445,12 @@ def stage(runtime):
 
             verify_control(control)
             check_capacity(work, candidates, source_container, additional_containers=[control],
-                           cache_provider=runtime if runtime in containers.SELF_HOSTED else None)
+                           cache_provider=runtime if runtime in containers.SELF_HOSTED else None,
+                           shared_assets=shared_assets)
         else:
             check_capacity(work, candidates, source_container,
-                           cache_provider=runtime if runtime in containers.SELF_HOSTED else None)
+                           cache_provider=runtime if runtime in containers.SELF_HOSTED else None,
+                           shared_assets=shared_assets)
         files = {}
         for relative, source in candidates.items():
             destination = work / relative
@@ -484,12 +497,13 @@ def stage(runtime):
                     destination,
                     snapshot_sqlite=relative.parts[:2] != ("data", "decision_inputs"),
                 )
-        with staging_environment(work):
-            target_container = containers.container_dir(runtime)
-        if not target_container.exists():
-            shutil.copytree(source_container, target_container, symlinks=True)
-        containers.relocate(source_container, target_container)
-        if control_selected:
+        if not shared_assets:
+            with staging_environment(work):
+                target_container = containers.container_dir(runtime)
+            if not target_container.exists():
+                shutil.copytree(source_container, target_container, symlinks=True)
+            containers.relocate(source_container, target_container)
+        if control_selected and not shared_assets:
             copied_control = work / "containers/control-v1"
             control_view = host_view(control)
             if not copied_control.exists():
@@ -513,6 +527,7 @@ def stage(runtime):
             "status": "staged_requires_b200_contracts",
             "quota_verified": False,
             "scratch_is_backup": False,
+            "shared_immutable_root": str(durable) if shared_assets else None,
         }
         write_json(work / MARKER, report)
         write_json(

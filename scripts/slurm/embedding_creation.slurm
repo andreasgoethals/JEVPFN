@@ -9,15 +9,15 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gpus-per-node=1
-#SBATCH --mem=56000M
 #SBATCH --time=24:00:00
 #SBATCH --output="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=feature_creation
 JEVPFN_ENCODER="${1:?Pass e5_small_v2|e5_large_v2|qwen3_embedding_0_6b}"
 export JEVPFN_CONDA_ENV="${2:-cloudflare}"
-export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}}"
+export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
 JEVPFN_EMBEDDING_ARGS=(--encoder "$JEVPFN_ENCODER" --execute)

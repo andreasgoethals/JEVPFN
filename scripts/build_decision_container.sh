@@ -1,4 +1,6 @@
 #!/bin/bash
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Called by the bounded CPU build allocation; scratch holds all unpacked build files.
 set -euo pipefail
 JEVPFN_BUILD_PROVIDER="${1:?Pass a selected decision provider or reviewed predictor runtime}"
@@ -22,7 +24,7 @@ esac
 case "$JEVPFN_BUILD_MODE" in wrap|new) ;; *) echo 'Mode must be wrap or new.' >&2; exit 2 ;; esac
 [[ -n "${SLURM_JOB_ID:-}" ]] || { echo 'Build in a compute allocation.' >&2; exit 2; }
 JEVPFN_BUILD_REPO="${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}"
 export JEVPFN_CONDA_ENV=JEVPFN
 cd "$JEVPFN_BUILD_REPO"
 source scripts/activate_conda.sh

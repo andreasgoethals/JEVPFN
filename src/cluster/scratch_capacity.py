@@ -81,7 +81,8 @@ def provider_cache_bound(source, provider):
     return min(source.stat().st_size, size)
 
 
-def check_capacity(work, candidates, source_container, *, additional_containers=(), cache_provider=None):
+def check_capacity(work, candidates, source_container, *, additional_containers=(), cache_provider=None,
+                   shared_assets=False):
     """Check application and personal scratch budgets before the first bulk copy.
 
     Other projects may grow after this check; reserve headroom, never claim a quota
@@ -104,12 +105,12 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
     sources = [(source, work / relative) for relative, source in candidates.items()]
     container_relative = source_container.relative_to(source_container.parents[2])
     # Container paths always live under JEVPFN/containers/<profile>/<runtime>.
-    sources += [
+    sources += [] if shared_assets else [
         (p, work / container_relative / p.relative_to(source_container))
         for p in source_container.rglob("*")
         if p.is_file() and not p.is_symlink()
     ]
-    for container in additional_containers:
+    for container in (() if shared_assets else additional_containers):
         sources += [(p, work / "containers/control-v1" / p.relative_to(container))
                     for p in container.rglob("*") if p.is_file() and not p.is_symlink()]
     sizes = [

@@ -1,5 +1,5 @@
-# GPU default: B200 with a native GPFS working set and durable Lustre publication.
-# CPU preparation remains on wICE. No GPU job reads its large working set from Lustre.
+# GPU default: B200 with a native GPFS working set and selected durable PROJECT publication.
+# CPU preparation follows the selected native PROJECT filesystem. No GPU job reads its large working set from Lustre.
 # Independent pools: long token audits cannot prevent ready GPU jobs from submitting.
 # Queued jobs also count. Actual placement/priority remains Slurm's decision.
 max_active_jobs: 64
@@ -23,12 +23,12 @@ profiles:
   wice_h100:
     cluster: wice
     partition: gpu_h100
-    staging_root: /lustre1/project/stg_00211
+    staging_root: /lustre1/project/ALLOCATION
   mindwell_b200:
     cluster: mindwell
     partition: gpu_b200
     storage_mode: scratch_mirror
     scratch_root: /gpfs1/scratch/383/vsc38338  # VSC_SCRATCH_GPFS1 takes precedence
-    durable_root: /lustre1/project/stg_00211
+    durable_root: /gpfs1/project/ALLOCATION
     runtime_profile: blackwell-cu130
 monitor_interval_seconds: 10

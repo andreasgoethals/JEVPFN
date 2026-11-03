@@ -1,4 +1,5 @@
 #!/bin/bash -l
+jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
 # Historical native environments. Current B200 setup uses setup_extractors and sealed images.
 set -euo pipefail
 JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble}"
@@ -12,8 +13,9 @@ case "$JEVPFN_SETUP_PROVIDER" in
     h2o|sii|kev|decision3|nimble) JEVPFN_SETUP_EXTRA=decision-open ;;
     *) echo 'Unknown selected decision provider.' >&2; exit 2 ;;
 esac
+source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-/lustre1/project/stg_00211}"
+export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}"
 export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
 "${JEVPFN_PYTHON:?}" -c 'from src.cluster.maintenance import require_idle_vsc; require_idle_vsc()'

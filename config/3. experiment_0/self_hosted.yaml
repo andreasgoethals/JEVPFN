@@ -10,16 +10,16 @@ max_recorded_failures_per_dataset: 10  # --continue-on-error remains incomplete,
 full_feature_creation_enabled: true  # All eleven frozen 0A reviews accepted on 30 October.
 accepted_before_extraction_manifest: null
 accepted_before_extraction_manifests:
-  liquid: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_liquid.json'
-  liquid_lfm3: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_liquid_lfm3.json'
-  strands: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_strands.json'
-  perplexity: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_perplexity.json'
-  cloudflare: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_cloudflare.json'
-  intern: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_intern.json'
-  h2o: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_h2o.json'
-  sii: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_sii.json'
-  kev: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_kev.json'
-  decision3: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_decision3.json'
-  nimble: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_nimble.json'
+  liquid: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_liquid.json'
+  liquid_lfm3: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_liquid_lfm3.json'
+  strands: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_strands.json'
+  perplexity: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_perplexity.json'
+  cloudflare: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_cloudflare.json'
+  intern: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_intern.json'
+  h2o: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_h2o.json'
+  sii: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_sii.json'
+  kev: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_kev.json'
+  decision3: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_decision3.json'
+  nimble: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_nimble.json'
 dataset_selection:
   exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]
