@@ -40,6 +40,11 @@ def relocate():
     private_modes = []
     for key in copied["source_inventory"]["files"]:
         old, new = source / key, destination / key
+        control = source / "containers/control-v1"
+        if old.is_relative_to(control):
+            # The running Tykky image masks its host bin/ with installed
+            # executables. Permission checks need the explicit read-only bind.
+            old = host_view(control) / old.relative_to(control)
         mode = old.stat().st_mode & 0o777
         if not mode & 0o077:
             os.chmod(new, mode)
