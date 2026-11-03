@@ -155,6 +155,13 @@ def cpu_accept():
               "durable_root": str(paths.durable_project_override()),
               "evidence": [{"path": str(p), "sha256": file_sha256(p)} for p in [control, *storage]]}
     write_json(records() / "cpu_accepted.json", result)
+    pointer = paths.checkpoints_dir().parent / "containers/control.active.json"
+    selected = json.loads(pointer.read_text())
+    selected["validation_job_id"] = job
+    selected["project_migration"]["cpu_acceptance"] = {
+        "path": str(records() / "cpu_accepted.json"),
+        "sha256": file_sha256(records() / "cpu_accepted.json")}
+    write_json(pointer, selected)
     return result
 
 
@@ -300,7 +307,7 @@ def retire_old():
     retired = []
     native_parent = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-work"
     for item in published["workspaces"]:
-        work = Path(item["working_root"])
+        work = reject_links(Path(item["working_root"]))
         if work.parent.parent != native_parent or work.name != "JEVPFN" or work.is_symlink():
             raise ValueError("Old workspace escaped its owned native leaf")
         with workspace_lease(work):
@@ -328,7 +335,7 @@ def retire_old():
             work.parent.rmdir()
     validation = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-migration-validation"
     for marker in sorted(validation.glob("jevpfn-work/*/JEVPFN/" + MARKER)):
-        work = marker.parent
+        work = reject_links(marker.parent)
         with workspace_lease(work):
             saved = json.loads(marker.read_text())
             if saved.get("purpose") != "migration_diagnostics" or saved.get("durable_root") != str(destination):
