@@ -148,6 +148,8 @@ def publish_workspaces():
 
 
 def cpu_accept():
+    from src.cluster.containers import MARKER, probe
+
     job = os.environ["SLURM_JOB_ID"]
     if os.environ.get("SLURM_CLUSTER_NAME") != "mindwell":
         raise ValueError("GPFS cutover CPU validation must run natively on Mindwell")
@@ -161,7 +163,20 @@ def cpu_accept():
                and r.get("storage_backend") == "gpfs" and r.get("snapshot_restore") is True]
     if len(storage) != 1:
         raise ValueError("Native two-node locking/snapshot validation is missing")
+    runtimes = []
+    for item in json.loads((records() / "relocated.json").read_text())["containers"]:
+        folder = Path(item["path"])
+        sealed = json.loads((folder / MARKER).read_text())
+        actual = probe(folder / "bin/python")
+        installed = {k.lower().replace("_", "-"): v for k, v in actual["packages"].items()}
+        expected = {k.lower().replace("_", "-"): v for k, v in sealed["runtime"]["packages"].items()}
+        if (installed != expected
+                or actual.get("torch_cuda") != sealed["runtime"].get("torch_cuda")):
+            raise ValueError("Relocated interpreter changed installed dependencies: " + str(folder))
+        runtimes.append({"path": str(folder), "container_id": sealed["container_id"], "runtime": actual})
+        print(json.dumps({"event": "relocated_interpreter_passed", "path": str(folder)}), flush=True)
     result = {"status": "native_cpu_locking_sqlite_tests_passed", "job_id": job,
+              "relocated_interpreters": runtimes,
               "durable_root": str(paths.durable_project_override()),
               "evidence": [{"path": str(p), "sha256": file_sha256(p)} for p in [control, *storage]]}
     write_json(records() / "cpu_accepted.json", result)
