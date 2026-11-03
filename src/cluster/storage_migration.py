@@ -37,6 +37,15 @@ def relocate():
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Relocation verification belongs in a CPU allocation")
     receipt, copied, source, destination = load_copy()
+    private_modes = []
+    for key in copied["source_inventory"]["files"]:
+        old, new = source / key, destination / key
+        mode = old.stat().st_mode & 0o777
+        if not mode & 0o077:
+            os.chmod(new, mode)
+            if new.stat().st_mode & 0o077:
+                raise ValueError("A private source file acquired group/public access")
+            private_modes.append(key)
     results = []
     for marker in sorted((source / "containers").rglob(MARKER)):
         old = marker.parent
@@ -81,6 +90,7 @@ def relocate():
             db.execute("INSERT OR REPLACE INTO hashes VALUES (?,?,?)",
                        (str(p), signature(p), copied["source_inventory"]["files"][target]["sha256"]))
     result = {"status": "relocated_requires_cpu_gpu_acceptance", "containers": results,
+              "owner_only_modes_preserved": private_modes,
               "rewritten_checkpoint_links": rewritten, "copy_receipt": str(receipt),
               "copy_receipt_sha256": file_sha256(receipt), "source": str(source),
               "destination": str(destination), "job_id": os.environ["SLURM_JOB_ID"]}

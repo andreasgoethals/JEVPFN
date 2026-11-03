@@ -137,7 +137,7 @@ def copy(source, destination, receipt, *, writers_stopped=False, workers=4, defe
     # The independent destination SHA-256 pass below is authoritative. A second
     # rsync checksum scan would redundantly read every large immutable asset.
     subprocess.run(["rsync", "-aH", "--no-owner", "--no-group", "--no-acls", "--no-xattrs",
-                    "--chmod=Dg+rwx,Dg+s,Do-rwx,Fg+r,Fo-rwx", str(source) + "/", str(destination) + "/"], check=True)
+                    "--chmod=Dg+rwx,Dg+s,Do-rwx,Fo-rwx", str(source) + "/", str(destination) + "/"], check=True)
     result = {"status": "copied_requires_native_verification",
               "source": str(source), "destination": str(destination), "source_inventory": original,
               "sqlite_files": sqlite_files, "created_utc": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 - host Python 3.9
