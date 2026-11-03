@@ -90,9 +90,11 @@ def test_migration_rebind_preserves_36_completed_jobs_and_all_encoder_partitions
     monkeypatch.setattr(maintenance, "require_idle_vsc", lambda: None)
     monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": True, "source_sha256": "new"})
     monkeypatch.setattr(freeze, "runtime_pins", lambda: {})
-    monkeypatch.setattr(freeze, "source_snapshot", lambda: {"files": {"src/jev/self_hosted.py": "same"}})
+    monkeypatch.setattr(freeze, "source_snapshot", lambda: {"files": {
+        "src/jev/self_hosted.py": "same", "src/cluster/preflight.py": "new native storage policy"}})
     previous = tmp_path / "previous.json"
-    write_json(previous, {"frozen_receipt": {"files": {"src/jev/self_hosted.py": "same"}}})
+    write_json(previous, {"frozen_receipt": {"files": {
+        "src/jev/self_hosted.py": "same", "src/cluster/preflight.py": "old Lustre storage policy"}}})
     original = feature_admission.plan()
     encoders = [s["name"] for s in original if s["name"].startswith("embeddings_")]
     expanded = feature_admission.partition_encoders(original, encoders)

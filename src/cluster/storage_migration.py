@@ -459,7 +459,7 @@ def rebind(previous_freeze, reviewed_by):
                  or (k.startswith("config/") and not k.endswith(("experiment_0/scheduling.yaml", "experiment_0/self_hosted.yaml")))}
     routing_sources = {"src/utils/paths.py", "src/evaluation/checkpoint_paths.py", *(
         "src/cluster/" + name + ".py" for name in (
-            "project_migration", "storage_migration", "storage_config", "maintenance", "scheduling",
+            "project_migration", "storage_migration", "storage_config", "maintenance", "scheduling", "preflight",
             "scratch_capacity", "scratch_stage", "workspace_graph", "benchmark_jobs", "experiment_zero",
             "feature_campaign", "setup_extractors", "token_shards", "accept_features", "control_runtime", "freeze",
         ))}
