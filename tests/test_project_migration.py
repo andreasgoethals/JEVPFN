@@ -127,3 +127,18 @@ def test_node_local_integrity_copies_are_verified_and_removed(tmp_path):
     assert migration.verify_sqlite(root, temporary_root=local, workers=2, expected_hashes=expected) == sorted(expected)
     assert {p.name: migration.sha(p) for p in root.iterdir()} == expected
     assert not list(local.iterdir())
+
+
+def test_allocated_group_permissions_do_not_make_raw_inputs_writable(tmp_path):
+    raw = tmp_path / "data/raw"
+    raw.mkdir(parents=True)
+    p = raw / "input.csv"
+    p.write_bytes(b"immutable input")
+    assert migration.protect_raw_permissions(tmp_path) == 2
+    try:
+        assert not raw.stat().st_mode & 0o222
+        assert not p.stat().st_mode & 0o222
+        assert p.read_bytes() == b"immutable input"
+    finally:
+        raw.chmod(0o700)
+        p.chmod(0o600)

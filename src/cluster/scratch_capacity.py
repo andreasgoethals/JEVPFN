@@ -352,9 +352,11 @@ def retire_published_mutable(work):
     from src.cluster.scratch_stage import MARKER
 
     candidates = []
+    if work.is_mount():
+        raise ValueError("Mounted working tree prevents retirement")
     for p in work.rglob("*"):
-        if p.is_symlink():
-            raise ValueError("Linked mutable work requires review before retirement")
+        if p.is_symlink() or p.is_mount():
+            raise ValueError("Linked/mounted mutable work requires review before retirement")
         if not p.is_file():
             continue
         relative = p.relative_to(work)

@@ -32,7 +32,7 @@ def relocate():
     from src.cluster.containers import MARKER
     from src.cluster.containers import relocate as move_image
     from src.cluster.control_runtime import host_view
-    from src.cluster.project_migration import rewrite_links
+    from src.cluster.project_migration import protect_raw_permissions, rewrite_links
 
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Relocation verification belongs in a CPU allocation")
@@ -51,6 +51,7 @@ def relocate():
             if new.stat().st_mode & 0o077:
                 raise ValueError("A private source file acquired group/public access")
             private_modes.append(key)
+    readonly_raw = protect_raw_permissions(destination)
     results = []
     for marker in sorted((source / "containers").rglob(MARKER)):
         old = marker.parent
@@ -96,6 +97,7 @@ def relocate():
                        (str(p), signature(p), copied["source_inventory"]["files"][target]["sha256"]))
     result = {"status": "relocated_requires_cpu_gpu_acceptance", "containers": results,
               "owner_only_modes_preserved": private_modes,
+              "readonly_raw_entries": readonly_raw,
               "rewritten_checkpoint_links": rewritten, "copy_receipt": str(receipt),
               "copy_receipt_sha256": file_sha256(receipt), "source": str(source),
               "destination": str(destination), "job_id": os.environ["SLURM_JOB_ID"]}

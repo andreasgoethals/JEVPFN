@@ -116,6 +116,19 @@ def rewrite_links(source, destination):
     return rewritten
 
 
+def protect_raw_permissions(root):
+    """Keep verified raw inputs read-only, including the new allocation's ACL mask."""
+    raw = root / "data/raw"
+    if not raw.is_dir():
+        raise ValueError("Verified raw inputs are missing")
+    entries = [raw, *raw.rglob("*")]
+    if any(p.is_symlink() for p in entries):
+        raise ValueError("Raw permission review refuses linked inputs")
+    for p in entries:
+        p.chmod(p.stat().st_mode & ~0o222)
+    return len(entries)
+
+
 def compare(source_inventory, destination_inventory, source, destination, *, relocated=False):
     a, b = source_inventory, destination_inventory
     if a["files"].keys() != b["files"].keys() or a["links"].keys() != b["links"].keys():
