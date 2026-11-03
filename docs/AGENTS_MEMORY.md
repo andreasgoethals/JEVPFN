@@ -46,7 +46,31 @@ are recorded below when known.
 Linux QA 62527170 completed 0:0 in 6m20s: 101 regression passes, a real
 native/durable union (17.3 seconds), unchanged scientific source and 12 saved-store
 views with 24 validated blocks. The follow-up node-local routing change passed
-61 focused tests locally; final full-suite verification is running.
+61 focused tests locally. Final full-suite verification: 1,189 passed, 25 skipped;
+Ruff and shell checks passed. Final Linux QA 62527352 completed 0:0 in 5m56s:
+102 tests, real publication using `/tmp` (14.6 seconds), 12 store views/24 blocks.
+Both QA runs retained the same numerical source and accepted runtime pins.
+
+Deployed inference checkout is now `1381bd8fe12d07c05e345160bddacce394b3cf17`,
+source `3215ad67e0605df20e687f42997747b594e3b1b3af3e8bf0f40e41cc765a9a69`.
+Reviewed recovery reused all 36 successful dataset IDs and two successful stages;
+reset only failed/unsubmitted work, retaining old attempts. Execution identity
+`0835236be120c3df656b407d953c1b3959a3702a7ad7070fc310762fa689f2ab`;
+origin identity `3064a8c129a754c8b63bf6746f31c801d86673fb81a9b997c4d6f38f5a3c22d9`.
+Controller PID 806752/start ticks 121562803 on tier2-p-login-3 is live. First release
+62527859 is accepted and PENDING (Priority); 38 completed steps, one submitted,
+235 pending, no current failures/blocked descendants. Embedding and other providers
+are not yet submitted: the dispatcher admits them after workspace/storage gates.
+The desktop monitor remains absent; full Jev, 0B and benchmarks remain owner-gated.
+
+All 36 production summaries were parsed: each provider processed/reused 1,698,127
+unique requests over eighteen datasets, with zero failed requests. Evidence:
+`inspection_20261103.json`, `release_recovery_review_20261103.json`,
+`source_transition_20261103.json`, `recovery_qa_62527352.json`,
+`controller_process.json`, and `logs/open_weight_recovery_watch_20261103.log`.
+The native environment directories are empty mountpoints/39 bytes of metadata,
+not installed dependency trees. A larger durable-storage move to the separate
+2 TiB GPFS PROJECT allocation needs the owner's choice; none was performed.
 
 Template matches the canonical copy byte-for-byte (SHA-256 9e113ac591a7d702bc61060a3bce703419cb7a296fcf9cf77283c1e5ffd27a20).
 DATA remains the real Git checkout and compact logs/receipts; installed dependencies
