@@ -106,3 +106,48 @@ def test_migration_rebind_preserves_36_completed_jobs_and_all_encoder_partitions
     assert len(completed) == 36
     assert len([s for s in saved["steps"] if s["name"].startswith("embeddings_")]) == 54
     assert all(s.get("status", "pending") == "pending" for s in saved["steps"] if s["name"].startswith("embeddings_"))
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_retirement_removes_only_verified_old_project_and_preserves_allocation(tmp_path, monkeypatch, changed):
+    import os
+
+    from src.cluster import maintenance, project_migration, storage_migration
+    from src.utils.serialization import file_sha256
+
+    source, destination = tmp_path / "old/JEVPFN", tmp_path / "new/JEVPFN"
+    unrelated = source.parent / "another-project"
+    unrelated.mkdir(parents=True)
+    (unrelated / "keep").write_bytes(b"other research")
+    for p in (source, destination):
+        p.mkdir(parents=True)
+        (p / "weights").write_bytes(b"verified bytes")
+    root = tmp_path / "records"
+    root.mkdir()
+    monkeypatch.setattr(storage_migration, "records", lambda: root)
+    monkeypatch.setattr(maintenance, "require_idle_vsc", lambda **k: None)
+    monkeypatch.setattr(paths, "checkpoints_dir", lambda: destination / "checkpoints")
+    monkeypatch.setenv("SLURM_JOB_ID", "fixture")
+    monkeypatch.setenv("VSC_SCRATCH_GPFS1", str(tmp_path / "scratch"))
+    monkeypatch.setattr(os, "getuid", lambda: source.stat().st_uid, raising=False)
+    proof = root / "proof.json"
+    write_json(proof, {"passed": True})
+    write_json(root / "copy_verified.json", {
+        "status": "copied_and_verified_requires_relocation_and_runtime_acceptance",
+        "source": str(source), "destination": str(destination),
+        "source_inventory": project_migration.inventory(source)})
+    write_json(root / "accepted.json", {"status": "accepted_requires_consumer_check_and_retirement",
+                                       "destination": str(destination),
+                                       "evidence": [{"path": str(proof), "sha256": file_sha256(proof)}]})
+    write_json(root / "workspaces_published.json", {"workspaces": []})
+    if changed:
+        (source / "weights").write_bytes(b"unreviewed change")
+        with pytest.raises(ValueError, match="bytes"):
+            storage_migration.retire_old()
+        assert source.is_dir()
+    else:
+        assert storage_migration.retire_old()["status"] == "old_project_and_published_native_copies_retired"
+        assert not source.exists()
+    assert source.parent.is_dir()
+    assert (unrelated / "keep").read_bytes() == b"other research"
+    assert (destination / "weights").read_bytes() == b"verified bytes"
