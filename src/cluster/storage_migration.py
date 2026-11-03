@@ -6,6 +6,8 @@ import json
 import os
 import shutil
 import sqlite3
+import tempfile
+import zipfile
 from contextlib import closing
 from pathlib import Path
 
@@ -153,6 +155,52 @@ def cpu_accept():
               "durable_root": str(paths.durable_project_override()),
               "evidence": [{"path": str(p), "sha256": file_sha256(p)} for p in [control, *storage]]}
     write_json(records() / "cpu_accepted.json", result)
+    return result
+
+
+def numeric_backup():
+    """Compact independent-download bundle; explicitly not a response-cache replacement."""
+    from src.jev.features import load_block
+    from src.jev.merge import ARTIFACT_SQL
+
+    _, _, _, destination = load_copy()
+    target = destination / "output_JEVPFN/transfers/migration_numeric_features.zip"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        raise ValueError("Numeric backup already exists; verify the saved bundle instead of replacing it")
+    stores = []
+    with tempfile.TemporaryDirectory(prefix="jevpfn-numeric-backup-", dir=destination) as temp:
+        with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
+            for source in sorted((destination / "data/jev_cache").glob("*.sqlite3")):
+                copied = Path(temp) / source.name
+                with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src:
+                    if not src.execute("SELECT 1 FROM sqlite_master WHERE name='feature_artifacts'").fetchone():
+                        continue
+                    with closing(sqlite3.connect(copied)) as dst, dst:
+                        dst.executescript(ARTIFACT_SQL)
+                        for row in src.execute("SELECT * FROM feature_artifacts"):
+                            dst.execute("INSERT INTO feature_artifacts VALUES (?,?,?,?)", row)
+                with closing(sqlite3.connect(copied)) as db:
+                    ids = [r[0] for r in db.execute("SELECT artifact_id FROM feature_artifacts")]
+                production = []
+                for aid in ids:
+                    block = load_block(copied, aid)
+                    if block.manifest.get("purpose") != "validation_only":
+                        production.append({"artifact_id": aid, "identity": block.manifest["identity"],
+                                           "rows": len(block.values), "columns": len(block.values.columns)})
+                stores.append({"dataset": source.stem, "sha256": file_sha256(copied),
+                               "all_blocks": len(ids), "production_blocks": production})
+                archive.write(copied, source.name)
+                copied.unlink()
+            archive.writestr("manifest.json", json.dumps({"scope": "numeric artifacts and row/request links only; no raw responses or operational queues",
+                                                          "stores": stores}, indent=2))
+        with zipfile.ZipFile(target) as archive:
+            if archive.testzip():
+                raise ValueError("Numeric backup archive failed readback")
+    result = {"status": "numeric_backup_ready_requires_independent_download", "path": str(target),
+              "sha256": file_sha256(target), "bytes": target.stat().st_size,
+              "production_blocks": sum(len(s["production_blocks"]) for s in stores), "datasets": len(stores)}
+    write_json(records() / "numeric_backup.json", result)
     return result
 
 
@@ -409,12 +457,13 @@ def gpu(provider):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=("relocate", "gpu", "publish-workspaces", "cpu-accept", "accept", "retire-old", "rebind"))
+    p.add_argument("action", choices=("relocate", "gpu", "publish-workspaces", "cpu-accept", "accept", "retire-old", "rebind", "numeric-backup"))
     p.add_argument("--provider")
     p.add_argument("--reviewed-by")
     p.add_argument("--previous-freeze", type=Path)
     a = p.parse_args()
-    result = (rebind(a.previous_freeze, a.reviewed_by) if a.action == "rebind" else
+    result = (numeric_backup() if a.action == "numeric-backup" else
+              rebind(a.previous_freeze, a.reviewed_by) if a.action == "rebind" else
               retire_old() if a.action == "retire-old" else accept(a.reviewed_by) if a.action == "accept" else
               cpu_accept() if a.action == "cpu-accept" else relocate() if a.action == "relocate" else
               publish_workspaces() if a.action == "publish-workspaces" else gpu(a.provider))

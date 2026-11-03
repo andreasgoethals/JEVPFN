@@ -113,7 +113,7 @@ machines. On VSC (`JEVPFN_PYTHON` is the controller interpreter):
 ```bash
 "${JEVPFN_PYTHON:?}" -m src.utils.output_cleanup --tier both --include-archives
 "$JEVPFN_PYTHON" -m src.utils.output_cleanup --tier both --include-archives --apply --writers-stopped
-"$JEVPFN_PYTHON" -m src.cluster.setup --cluster wice
+"$JEVPFN_PYTHON" -m src.cluster.setup --cluster mindwell
 mkdir -p /gpfs1/project/prj_00013/JEVPFN/uploads
 ```
 
