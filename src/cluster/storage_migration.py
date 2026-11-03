@@ -223,7 +223,10 @@ def accept(reviewed_by):
         raise ValueError("CPU checks and recovery-store publication must pass")
     reports = [records() / ("gpu_" + provider + ".json") for provider in SELF_HOSTED]
     bodies = [json.loads(p.read_text()) for p in reports]
-    if any(r.get("status") != "relocated_gpu_and_resume_passed" for r in bodies):
+    if any(r.get("status") != "relocated_gpu_and_resume_passed"
+           or r.get("settings_sha256") != digest(r.get("settings", {}))
+           or file_sha256(Path(r["original_acceptance"])) != r["original_acceptance_sha256"]
+           for r in bodies):
         raise ValueError("Every relocated decision runtime must pass")
     jobs = {r["job_id"] for r in bodies} | {json.loads(cpu.read_text())["job_id"]}
     for job in jobs:
@@ -279,6 +282,7 @@ def retire_old():
     accepted = json.loads((records() / "accepted.json").read_text())
     if (accepted.get("status") != "accepted_requires_consumer_check_and_retirement"
             or accepted.get("destination") != str(destination)
+            or not accepted.get("evidence")
             or paths.checkpoints_dir().parent != destination):
         raise ValueError("The new authority has not been accepted")
     for item in accepted["evidence"]:
@@ -359,6 +363,13 @@ def rebind(previous_freeze, reviewed_by):
     protected = {k for k in changed if k.startswith(("src/jev/", "src/data/", "src/visualize/", "notebooks/"))
                  or (k.startswith("src/evaluation/") and k != "src/evaluation/checkpoint_paths.py")
                  or (k.startswith("config/") and not k.endswith(("experiment_0/scheduling.yaml", "experiment_0/self_hosted.yaml")))}
+    routing_sources = {"src/utils/paths.py", "src/evaluation/checkpoint_paths.py", *(
+        "src/cluster/" + name + ".py" for name in (
+            "project_migration", "storage_migration", "storage_config", "maintenance", "scheduling",
+            "scratch_capacity", "scratch_stage", "workspace_graph", "benchmark_jobs", "experiment_zero",
+            "feature_campaign", "setup_extractors", "token_shards", "accept_features", "control_runtime", "freeze",
+        ))}
+    protected |= {k for k in changed if k.startswith("src/") and k not in routing_sources}
     if protected:
         raise ValueError("Migration cannot authorize changed science: " + ", ".join(sorted(protected)))
     path = paths.manifests_dir("feature_creation") / "open_weight_campaign.json"
@@ -384,8 +395,8 @@ def rebind(previous_freeze, reviewed_by):
                 prior = {**prior, "scheduler_state": state[0], "exit_code": state[1],
                          "status": "completed" if state == ("COMPLETED", "0:0") else "failed"}
                 old[step["name"]] = prior
-        finished = {p for p in SELF_HOSTED if all(
-            s.get("status") == "completed" for s in old.values() if s.get("pool") == p)}
+        finished = {p for p in SELF_HOSTED if len([s for s in old.values() if s.get("pool") == p]) == 18
+                    and all(s.get("status") == "completed" for s in old.values() if s.get("pool") == p)}
         for step in expanded:
             prior = old[step["name"]]
             if prior.get("job_id") or prior.get("previous_attempt"):
