@@ -186,10 +186,11 @@ def _publish(durable, work, *, periodic=False, dataset_id=None):
                         continue
                     started = time.monotonic()
                     print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
-                                      "periodic": periodic}), flush=True)
+                                      "periodic": periodic,
+                                      "temporary_storage": str(_publication_temporary_root(work))}), flush=True)
                     # Bound temporary bytes to ONE store, rather than retaining
                     # all eighteen snapshots until the release process exits.
-                    with tempfile.TemporaryDirectory(prefix=".publish-", dir=work) as temporary:
+                    with tempfile.TemporaryDirectory(prefix=".publish-", dir=_publication_temporary_root(work)) as temporary:
                         copied = Path(temporary) / relative
                         copied.parent.mkdir(parents=True, exist_ok=True)
                         if source.suffix == ".sqlite3":
@@ -210,6 +211,16 @@ def _publish(durable, work, *, periodic=False, dataset_id=None):
     return counts
 
 
+def _publication_temporary_root(work):
+    """wICE transfers use node-local merge I/O; B200 uses its native GPFS workspace."""
+    if os.environ.get("SLURM_CLUSTER_NAME") == "wice" and os.environ.get("SLURM_JOB_ID"):
+        local = Path(os.environ.get("SLURM_TMPDIR") or "/tmp")
+        if not local.is_absolute() or not local.is_dir() or local.is_relative_to(paths.data_root()):
+            raise ValueError("wICE publication needs a verified node-local temporary directory")
+        return local
+    return work
+
+
 def _merge_native_decision(incoming, destination, work):
     """Validate/union on native storage; transactionally back up the union to PROJECT.
 
@@ -219,17 +230,20 @@ def _merge_native_decision(incoming, destination, work):
     A failed native merge never writes the durable destination.
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_root = _publication_temporary_root(work)
     required = incoming.stat().st_size + (destination.stat().st_size if destination.exists() else 0)
-    if shutil.disk_usage(work).free < 2 * required + 512 * 2**20:
+    if shutil.disk_usage(temporary_root).free < 2 * required + 512 * 2**20:
         raise OSError("Insufficient native space for a validated publication union")
     with (
         file_lock(destination.with_suffix(".extraction.lock"), timeout=3600),
-        tempfile.TemporaryDirectory(prefix=".union-", dir=work) as temporary,
+        tempfile.TemporaryDirectory(prefix=".union-", dir=temporary_root) as temporary,
     ):
-        native = Path(temporary) / destination.name
+        native_root = Path(temporary) / "JEVPFN"
+        native = native_root / "data/jev_cache" / destination.name
+        native.parent.mkdir(parents=True)
         if destination.exists():
             snapshot(destination, native)
-        with staging_environment(work):
+        with staging_environment(native_root):
             merge_cache(incoming, native, backup_destination=False, deduplicate_ledger=True)
         with (
             closing(sqlite3.connect(native.as_uri() + "?mode=ro", uri=True)) as src,

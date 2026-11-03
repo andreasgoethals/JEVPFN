@@ -3,7 +3,8 @@
 ## 03-11-2026
 
 - Fix release timeouts by performing validated cache unions on native storage and
-  transactionally publishing the result; bound temporary snapshots to one dataset.
+  transactionally publishing the result; use node-local merge I/O for wICE and GPFS
+  for B200, and bound temporary snapshots to one dataset.
 - Stage only the selected decision provider's warm cache and retain quota safeguards.
   Recover the expanded campaign without repeating completed jobs or changing science.
 

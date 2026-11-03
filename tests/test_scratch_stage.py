@@ -197,6 +197,28 @@ def test_publication_discards_each_store_snapshot_before_starting_the_next(roots
     assert stage.publish("intern")["decision_stores"] == 2
 
 
+def test_wice_publication_merges_on_node_local_disk_not_cross_mounted_gpfs(roots, monkeypatch, tmp_path):
+    durable, work = roots
+    marker(durable, work)
+    source = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    local = tmp_path / "node-local"
+    local.mkdir()
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "wice")
+    monkeypatch.setenv("SLURM_JOB_ID", "cpu-fixture")
+    monkeypatch.setenv("SLURM_TMPDIR", str(local))
+    real = stage.merge_cache
+
+    def node_merge(incoming, destination, **kwargs):
+        assert incoming.is_relative_to(local) and destination.is_relative_to(local)
+        return real(incoming, destination, **kwargs)
+
+    monkeypatch.setattr(stage, "merge_cache", node_merge)
+    assert stage.publish("intern")["decision_stores"] == 1
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern"), kind="verified_response") == response()
+    assert source.path.is_file() and not list(local.iterdir())
+
+
 def test_copy_snapshots_committed_wal_without_copying_open_journal(tmp_path):
     source = tmp_path / "source.sqlite3"
     with sqlite3.connect(source) as db:

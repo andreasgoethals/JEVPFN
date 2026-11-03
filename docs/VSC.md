@@ -57,7 +57,8 @@ credentials and is removed once all tracked work is terminal and assessed.
   failures. Publication merges compatible records, never replaces a complete durable
   cache with a partial one, and stops on conflicts. Predictor staging restores and unions
   durable evaluation stores, reusing completed folds.
-- Publication validates/unions decision stores on native GPFS, then uses SQLite backup
+- Publication validates/unions decision stores on GPFS for B200 or node-local disk for
+  wICE transfer jobs, then uses SQLite backup
   to publish the union transactionally under its extraction lock. Only one dataset
   snapshot is retained at a time. New decision workspaces warm only their own provider;
   full response history remains on PROJECT.

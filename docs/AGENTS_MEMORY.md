@@ -28,7 +28,8 @@ on Lustre. No new inference/CUDA/request failure appeared. The expanded campaign
 stopped at 38 completed steps, two failed releases and 234 blocked descendants;
 no JEVPFN job remained queued/running. Other projects were left untouched.
 
-Operational repair: validate and merge decision snapshots on native GPFS, then use
+Operational repair: validate and merge decision snapshots on native GPFS for B200
+or node-local disk for wICE transfer jobs, then use
 SQLite's transactional backup to publish the union while holding the destination
 extraction lock. Release temporary snapshots after each store. Warm new decision
 workspaces with only their provider's responses/features, preserving complete
@@ -42,6 +43,10 @@ and a twelve-hour ceiling. Local verification: 1,187 full-suite passes, 25 envir
 case. Ruff and edited Bash syntax checks passed. Numerical extraction/PCA/encoder
 implementations and all model pins remain byte-identical. Real deployment/QA outcomes
 are recorded below when known.
+Linux QA 62527170 completed 0:0 in 6m20s: 101 regression passes, a real
+native/durable union (17.3 seconds), unchanged scientific source and 12 saved-store
+views with 24 validated blocks. The follow-up node-local routing change passed
+61 focused tests locally; final full-suite verification is running.
 
 Template matches the canonical copy byte-for-byte (SHA-256 9e113ac591a7d702bc61060a3bce703419cb7a296fcf9cf77283c1e5ffd27a20).
 DATA remains the real Git checkout and compact logs/receipts; installed dependencies
