@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -159,6 +160,26 @@ def test_union_validates_both_stores_on_native_storage_and_includes_durable_wal(
     assert target.get(request(), kind="verified_response") == response()
     assert target.get(request("intern"), kind="verified_response") == response()
     assert not list(work.glob(".publish-*")) and not list(work.glob(".union-*"))
+
+
+def test_publication_readback_detects_valid_sqlite_with_changed_content(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    source = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    target = durable / "data/jev_cache/fixture.sqlite3"
+    original = stage.snapshot
+
+    def changed_readback(incoming, destination):
+        result = original(incoming, destination)
+        if incoming == target and destination.name == "published_readback.sqlite3":
+            with closing(sqlite3.connect(destination)) as db, db:
+                db.execute("UPDATE responses SET created_at='changed'")
+        return result
+
+    monkeypatch.setattr(stage, "snapshot", changed_readback)
+    with pytest.raises(ValueError, match="readback differs"):
+        stage.publish("intern")
+    assert source.get(request("intern"), kind="verified_response") == response()
 
 
 def test_provider_warm_cache_keeps_only_matching_responses_origins_and_features(roots):

@@ -71,6 +71,7 @@ def test_historical_cuda_field_uses_only_its_exact_pinned_wheel_and_profile():
     sealed = {"runtime_profile": "legacy-cu126", "runtime": {"packages": {"torch": "2.9.0+cu126"}}}
     actual = {"packages": {"torch": "2.9.0+cu126"}, "torch_cuda": "12.6"}
     assert same_installed_runtime(sealed, actual)
+    assert same_installed_runtime({"runtime": sealed["runtime"]}, actual)
     assert not same_installed_runtime(sealed, {**actual, "torch_cuda": "13.0"})
     assert not same_installed_runtime({**sealed, "runtime_profile": "blackwell-cu130"}, actual)
     assert not same_installed_runtime(sealed, {**actual, "packages": {"torch": "2.10.0+cu126"}})

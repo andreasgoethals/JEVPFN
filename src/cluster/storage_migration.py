@@ -198,7 +198,7 @@ def same_installed_runtime(sealed, actual):
     cuda = sealed["runtime"].get("torch_cuda")
     # Six historical cu126 seals predate this optional diagnostic field. Their
     # pinned wheel and explicit legacy profile still identify CUDA unambiguously.
-    if (cuda is None and sealed.get("runtime_profile") == "legacy-cu126"
+    if (cuda is None and sealed.get("runtime_profile", "legacy-cu126") == "legacy-cu126"
             and expected.get("torch", "").endswith("+cu126")):
         cuda = "12.6"
     return installed == expected and actual.get("torch_cuda") == cuda

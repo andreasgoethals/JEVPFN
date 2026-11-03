@@ -6,6 +6,7 @@ interrupted jobs leave their working set intact for explicit recovery.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -257,8 +258,31 @@ def _merge_native_decision(incoming, destination, work):
             closing(sqlite3.connect(destination)) as dst,
         ):
             src.backup(dst)
-            if dst.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
-                raise ValueError("Published SQLite union failed its integrity check")
+        # Read committed pages back with SQLite backup (including any WAL), then
+        # perform random-read integrity checks on native temporary disk. Running
+        # quick_check directly on PROJECT caused millions of GPFS page reads.
+        verified = Path(temporary) / "published_readback.sqlite3"
+        snapshot(destination, verified)
+        if _backup_page_identity(native) != _backup_page_identity(verified):
+            raise ValueError("Published SQLite readback differs from the validated union")
+
+
+def _backup_page_identity(path):
+    """Compare backup content; only SQLite's storage/header counters may differ."""
+    with path.open("rb") as stream:
+        header = bytearray(stream.read(100))
+        if len(header) != 100 or not header.startswith(b"SQLite format 3\0"):
+            raise ValueError("Invalid SQLite backup header")
+        if any(value not in (1, 2) for value in header[18:20]):
+            raise ValueError("Unsupported SQLite journal format")
+        # Backup preserves destination WAL/rollback mode and advances its change
+        # and schema counters. No table/index/content byte is excluded.
+        header[18:20] = b"\0" * 2
+        header[24:28] = header[40:44] = header[92:96] = b"\0" * 4
+        result = hashlib.sha256(header)
+        for block in iter(lambda: stream.read(2**20), b""):
+            result.update(block)
+    return result.hexdigest()
 
 
 def _provider_cache(source, destination, provider):
