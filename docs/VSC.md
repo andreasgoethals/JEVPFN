@@ -66,7 +66,9 @@ credentials and is removed once all tracked work is terminal and assessed.
   New decision workspaces warm only their provider's records.
 - Publication locks each destination independently; a busy periodic target is deferred,
   while final publication waits. Dataset jobs publish their own dataset store. Source
-  snapshots stay on native scratch during validation; final unions remain on PROJECT.
+  snapshots and temporary unions use declared node-local disk when available;
+  resumable working stores stay on GPFS scratch and final unions remain on PROJECT.
+  Generated Transformers modules and compiler caches are isolated per allocation.
 - Scratch is not a backup: unused GPFS files are purged after 30 days and a killed node
   loses work since the last publication. Keep an independent downloaded copy of features.
 - At most two runtime working sets are resident, within a 200 GiB application budget,

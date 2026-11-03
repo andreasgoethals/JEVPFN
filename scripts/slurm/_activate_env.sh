@@ -41,6 +41,9 @@ export HF_XET_CACHE="$HF_HOME/xet"
 export TABPFN_MODEL_CACHE_DIR="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("tabpfn"))')"
 export TRITON_CACHE_DIR="$XDG_CACHE_HOME/triton"
 export CUDA_CACHE_PATH="$XDG_CACHE_HOME/nv"
+# Transformers' generated remote-code modules are disposable per-job imports,
+# not model weights. Keep concurrent writers outside shared PROJECT assets.
+export HF_MODULES_CACHE="$XDG_CACHE_HOME/hf_modules"
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export SLURM_EXPORT_ENV=ALL  # Propagate the prepared job environment to srun workers.
