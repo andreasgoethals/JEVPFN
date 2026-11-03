@@ -170,7 +170,8 @@ def numeric_backup():
         raise ValueError("Numeric backup already exists; verify the saved bundle instead of replacing it")
     stores = []
     with tempfile.TemporaryDirectory(prefix="jevpfn-numeric-backup-", dir=destination) as temp:
-        with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
+        building = Path(temp) / "numeric_features.zip"
+        with zipfile.ZipFile(building, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
             for source in sorted((destination / "data/jev_cache").glob("*.sqlite3")):
                 copied = Path(temp) / source.name
                 with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src:
@@ -194,9 +195,10 @@ def numeric_backup():
                 copied.unlink()
             archive.writestr("manifest.json", json.dumps({"scope": "numeric artifacts and row/request links only; no raw responses or operational queues",
                                                           "stores": stores}, indent=2))
-        with zipfile.ZipFile(target) as archive:
+        with zipfile.ZipFile(building) as archive:
             if archive.testzip():
                 raise ValueError("Numeric backup archive failed readback")
+        os.replace(building, target)
     result = {"status": "numeric_backup_ready_requires_independent_download", "path": str(target),
               "sha256": file_sha256(target), "bytes": target.stat().st_size,
               "production_blocks": sum(len(s["production_blocks"]) for s in stores), "datasets": len(stores)}
