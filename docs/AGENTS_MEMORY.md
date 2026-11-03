@@ -58,7 +58,9 @@ reset only failed/unsubmitted work, retaining old attempts. Execution identity
 `0835236be120c3df656b407d953c1b3959a3702a7ad7070fc310762fa689f2ab`;
 origin identity `3064a8c129a754c8b63bf6746f31c801d86673fb81a9b997c4d6f38f5a3c22d9`.
 Controller PID 806752/start ticks 121562803 on tier2-p-login-3 is live. First release
-62527859 is accepted and PENDING (Priority); 38 completed steps, one submitted,
+62527859 progressed from PENDING to RUNNING; final check shows normal publication
+using `/tmp`, with no errors. The 611 active text logs were rescanned (99,752 lines),
+with no flagged failures. Campaign counts: 38 completed steps, one submitted,
 235 pending, no current failures/blocked descendants. Embedding and other providers
 are not yet submitted: the dispatcher admits them after workspace/storage gates.
 The desktop monitor remains absent; full Jev, 0B and benchmarks remain owner-gated.
