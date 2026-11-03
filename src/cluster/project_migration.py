@@ -12,7 +12,7 @@ import os
 import sqlite3
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -89,7 +89,7 @@ def rewrite_links(source, destination):
             p = Path(base) / name
             if not p.is_symlink():
                 continue
-            target = Path(os.readlink(p))
+            target = Path(os.readlink(p).removeprefix("\\\\?\\"))
             if target.is_absolute() and (target == source or source in target.parents):
                 p.unlink()
                 p.symlink_to(destination / target.relative_to(source))
@@ -108,10 +108,11 @@ def compare(source_inventory, destination_inventory, source, destination, *, rel
             raise ValueError("Copied bytes/executable mode differ: " + key)
     for key, target in a["links"].items():
         expected = target
-        if relocated and Path(target).is_absolute() and (Path(target) == source or source in Path(target).parents):
-            expected = str(destination / Path(target).relative_to(source))
+        normalized_target = target.removeprefix("\\\\?\\")
+        if relocated and Path(normalized_target).is_absolute() and (Path(normalized_target) == source or source in Path(normalized_target).parents):
+            expected = str(destination / Path(normalized_target).relative_to(source))
         # Image-internal /LOCAL_TYKKY links intentionally remain unchanged.
-        if b["links"][key] != expected:
+        if b["links"][key].removeprefix("\\\\?\\") != expected.removeprefix("\\\\?\\"):
             raise ValueError("Copied link differs: " + key)
     for group in a["hardlinks"]:
         if not any(set(group) <= set(other) for other in b["hardlinks"]):
@@ -134,7 +135,7 @@ def copy(source, destination, receipt, *, writers_stopped=False, workers=4):
         raise ValueError("SQLite membership changed during migration")
     result = {"status": "copied_and_verified_requires_relocation_and_runtime_acceptance",
               "source": str(source), "destination": str(destination), "source_inventory": original,
-              "sqlite_files": sqlite_files, "created_utc": datetime.now(UTC).isoformat(),
+              "sqlite_files": sqlite_files, "created_utc": datetime.now(timezone.utc).isoformat(),
               "job_id": os.environ["SLURM_JOB_ID"], "copied_logical_bytes": sum(v["bytes"] for v in original["files"].values())}
     receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt.write_text(json.dumps(result, indent=2))
