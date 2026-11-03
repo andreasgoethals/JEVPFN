@@ -19,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_routing_environment(monkeypatch):
+def _isolate_routing_environment(tmp_path, monkeypatch):
     """Synthetic tests choose their own tiers; never inherit a real job's output roots.
 
     The Exp0 parent verifies actual host paths before invoking pytest. Unit tests
@@ -60,14 +60,13 @@ def _isolate_routing_environment(monkeypatch):
         "TYPESAFE_API_KEY",
     ):
         monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("JEVPFN_STORAGE_CONFIG", str(tmp_path / "absent_storage.json"))
 
 
 @pytest.fixture(autouse=True)
 def _isolate_local_credentials(tmp_path, monkeypatch):
     """Never let synthetic tests read the owner's real, ignored credential file."""
     from src.jev import auth
-
-    monkeypatch.setenv("JEVPFN_STORAGE_CONFIG", str(tmp_path / "absent_storage.json"))
 
     monkeypatch.setattr(auth, "LOCAL_CREDENTIAL_PATH", tmp_path / "absent_credentials.json")
 
