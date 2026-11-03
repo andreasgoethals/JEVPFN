@@ -339,7 +339,7 @@ def retire_old(*, native_only=False, source_only=False):
                 if file_sha256(work / MARKER) != item["old_marker_sha256"]:
                     raise ValueError("Old workspace changed after publication")
                 orphaned = retire_publication_snapshots(work)
-                for folder in orphaned["retained"]:
+                for folder in orphaned["retained_requires_review"]:
                     old = Path(folder)
                     backup = destination / "migration_recovery" / item["runtime"] / old.name
                     backup.parent.mkdir(parents=True, exist_ok=True)

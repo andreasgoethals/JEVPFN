@@ -155,7 +155,12 @@ def test_retirement_removes_only_verified_old_project_and_preserves_allocation(t
     write_json(root / "accepted.json", {"status": "accepted_requires_consumer_check_and_retirement",
                                        "destination": str(destination),
                                        "evidence": [{"path": str(proof), "sha256": file_sha256(proof)}]})
-    write_json(root / "workspaces_published.json", {"workspaces": []})
+    from src.cluster.scratch_stage import MARKER
+
+    work = tmp_path / "scratch/jevpfn-work/fixture/JEVPFN"
+    write_json(work / MARKER, {"runtime": "fixture", "durable_root": str(source), "files": {}})
+    write_json(root / "workspaces_published.json", {"workspaces": [{
+        "runtime": "fixture", "working_root": str(work), "old_marker_sha256": file_sha256(work / MARKER)}]})
     if changed:
         (source / "weights").write_bytes(b"unreviewed change")
         with pytest.raises(ValueError, match="bytes"):
@@ -164,6 +169,7 @@ def test_retirement_removes_only_verified_old_project_and_preserves_allocation(t
     else:
         assert storage_migration.retire_old()["status"] == "old_project_and_published_native_copies_retired"
         assert not source.exists()
+        assert not work.exists()
     assert source.parent.is_dir()
     assert (unrelated / "keep").read_bytes() == b"other research"
     assert (destination / "weights").read_bytes() == b"verified bytes"
