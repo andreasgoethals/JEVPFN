@@ -6,7 +6,7 @@ about the text of each row. Their probabilities are added to the non-text featur
 tabular predictors and compared with frozen general embeddings and native text systems on
 18 MulTaBench TEXT datasets.
 
-## Status (2 November 2026)
+## Status (3 November 2026)
 
 | Stage | State |
 |---|---|

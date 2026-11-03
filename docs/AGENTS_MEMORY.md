@@ -15,8 +15,29 @@ Submission is not completion. Preserve active or queued checkouts and recovery i
   preserving existing Jev responses and the durable VSC copy.
 - 30 October: pin new Jev calls to 1.14 and run a bounded first-100-source-rows pilot on
   all eighteen datasets, preserving 1.13 ledgers and cumulative budget.
+- 3 November: the owner explicitly placed the GPFS PROJECT migration on hold while
+  they prepare a migration plan. Do not relocate assets/results or change storage roots.
+  Continue authorized work on existing roots within its validated storage gates.
 - Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
+
+## Migration hold and live continuation (3 November)
+
+The owner will establish the migration plan; no migration is authorized now.
+Direct check: controller PID 806752/start ticks 121562803 remains live; release
+62527859 is RUNNING at 46m11s, publishing completed stores using node-local `/tmp`
+without an observed error. Campaign remains 38 completed steps, one submitted,
+235 pending, no failures/blocked steps. No new decision/encoder job is queued yet;
+workspace releases and staging remain genuine prerequisites.
+
+Verified redundant Liquid publication snapshots have retired. Personal GPFS scratch
+is 131.7G/500G (previously 166G); PROJECT is 822.5G/1T, 58,738/150,000 files.
+The separate GPFS PROJECT allocation remains empty. No data/assets were relocated,
+roots changed, other-project jobs touched or desktop monitoring recreated. Preserve
+remaining Strands recovery snapshots until their own publication/retirement checks.
+The existing dispatcher continues approved work; these are measured current quotas,
+not a reservation of future durable capacity. Await the owner's migration plan before
+any storage cutover.
 
 ## Release recovery (3 November)
 
