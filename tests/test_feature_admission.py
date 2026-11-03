@@ -174,3 +174,51 @@ def test_encoder_partitions_cover_each_dataset_once_and_bind_publication():
     next(s for s in already if s["name"] == selected[0])["job_id"] = "known"
     with pytest.raises(ValueError, match="already submitted"):
         dispatch.partition_encoders(already, selected)
+
+
+def test_source_recovery_preserves_completed_grid_and_retries_only_failed_attempts(campaign, monkeypatch):
+    from src.cluster import freeze
+
+    counter = iter(range(1000, 1100))
+    monkeypatch.setattr(dispatch.subprocess, "run", lambda command, **kw:
+                        subprocess.CompletedProcess(command, 0, stdout=f"{next(counter)};mindwell", stderr=""))
+    execute(campaign)
+    report = json.loads(campaign[0].read_text())
+    old_identity = report["identity"]
+    release = next(s for s in report["steps"] if s["name"] == "liquid_release")
+    release.update(status="failed", job_id="bad-release")
+    next(s for s in report["steps"] if s["name"] == "cloudflare_scratch").update(
+        status="blocked", blocked_by=["liquid_release"])
+    write_json(campaign[0], report)
+    old_freeze = campaign[0].parent / "completed.json"
+    write_json(old_freeze, {"frozen_receipt": {"files": {}, "runtime_pins": {}, "source_sha256": "frozen-source"}})
+    monkeypatch.setattr(dispatch, "require_idle_vsc", lambda: None)
+    monkeypatch.setattr(freeze, "source_snapshot", lambda: {"files": {}})
+    monkeypatch.setattr(dispatch, "scheduler_state", lambda job, **kw:
+                        ("TIMEOUT", "0:0") if job == "bad-release" else ("COMPLETED", "0:0"))
+    identity = dispatch.recover_campaign(previous_identity=old_identity, previous_freeze=old_freeze,
+                                        expected_source="frozen-source", reviewed_by="owner-authorized fixture")
+    recovered = json.loads(campaign[0].read_text())
+    assert sum(s.get("status") == "completed" for s in recovered["steps"]) == 38
+    retry = next(s for s in recovered["steps"] if s["name"] == "liquid_release")
+    assert "job_id" not in retry and retry["previous_attempt"]["job_id"] == "bad-release"
+    assert next(s for s in recovered["steps"] if s["name"] == "cloudflare_scratch").get("status", "pending") == "pending"
+    assert len([s for s in recovered["steps"] if s.get("encoder_group")]) == 54
+    # The recovered identity passes the normal immutable-policy checks.
+    monkeypatch.setattr(dispatch.subprocess, "run", lambda command, **kw:
+                        subprocess.CompletedProcess(command, 0, stdout="2000;wice", stderr=""))
+    dispatch.run(execute=True, expected_campaign=identity, expected_source="frozen-source",
+                 reviewed_by="owner-authorized fixture")
+
+
+def test_source_recovery_refuses_unapproved_scientific_changes_before_accounting(campaign, monkeypatch):
+    from src.cluster import freeze
+
+    old = campaign[0].parent / "completed.json"
+    write_json(old, {"frozen_receipt": {"files": {}, "runtime_pins": {}}})
+    monkeypatch.setattr(dispatch, "require_idle_vsc", lambda: None)
+    monkeypatch.setattr(freeze, "source_snapshot", lambda: {"files": {"src/jev/self_hosted.py": "changed"}})
+    monkeypatch.setattr(dispatch, "scheduler_state", lambda *a, **k: pytest.fail("Refuse before scheduler work"))
+    with pytest.raises(ValueError, match="changed science"):
+        dispatch.recover_campaign(previous_identity="any", previous_freeze=old,
+                                  expected_source="frozen-source", reviewed_by="fixture")

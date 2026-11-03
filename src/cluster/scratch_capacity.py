@@ -1,12 +1,15 @@
 """Bound GPFS working copies; publish results before releasing disposable inputs."""
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
+import sqlite3
 import subprocess
-from contextlib import contextmanager, suppress
+from contextlib import closing, contextmanager, suppress
 from pathlib import Path
 
 from src.cluster.maintenance import reject_links
@@ -54,7 +57,31 @@ def disposable_paths(work):
     return [reject_links(work / name) for name in relatives if (work / name).exists()]
 
 
-def check_capacity(work, candidates, source_container, *, additional_containers=()):
+def provider_cache_bound(source, provider):
+    """Conservative bytes for a provider-only warm cache, not every prior model."""
+    with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        size = 16 * 2**20
+        for table, predicate, columns in (
+            ("responses", "json_extract(settings_json,'$.provider')=?",
+             "length(payload_json)+length(settings_json)+length(response_json)"),
+            ("origins", "request_key IN (SELECT request_key FROM responses WHERE "
+             "json_extract(settings_json,'$.provider')=?)", "length(provenance_json)"),
+            ("failures", "json_extract(settings_json,'$.provider')=?",
+             "length(payload_json)+length(settings_json)+length(error_type)"),
+            ("feature_artifacts", "json_extract(manifest_json,'$.identity.provider')=?",
+             "length(manifest_json)+length(features_parquet)+length(requests_parquet)"),
+        ):
+            if table in tables:
+                count, payload = db.execute(
+                    f"SELECT COUNT(*),COALESCE(SUM({columns}),0) FROM {table} WHERE {predicate}",
+                    (provider,),
+                ).fetchone()
+                size += 8 * (payload + 4096 * count)
+    return min(source.stat().st_size, size)
+
+
+def check_capacity(work, candidates, source_container, *, additional_containers=(), cache_provider=None):
     """Check application and personal scratch budgets before the first bulk copy.
 
     Other projects may grow after this check; reserve headroom, never claim a quota
@@ -85,11 +112,14 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
     for container in additional_containers:
         sources += [(p, work / "containers/control-v1" / p.relative_to(container))
                     for p in container.rglob("*") if p.is_file() and not p.is_symlink()]
-    growth = sum(
-        max(0, source.stat().st_size - (dest.stat().st_size if dest.is_file() else 0))
+    sizes = [
+        (provider_cache_bound(source, cache_provider)
+         if cache_provider and dest.relative_to(work).parts[:2] == ("data", "jev_cache")
+         else source.stat().st_size, dest)
         for source, dest in sources
-    )
-    largest = max((source.stat().st_size for source, _ in sources), default=0)
+    ]
+    growth = sum(max(0, size - (dest.stat().st_size if dest.is_file() else 0)) for size, dest in sizes)
+    largest = max((size for size, _ in sizes), default=0)
     extra = growth + 2 * largest + settings["scratch_headroom_gib"] * GIB
     project_bytes = tree_bytes(root)
     personal_bytes = tree_bytes(root.parent)
@@ -157,6 +187,60 @@ def require_runtime_idle(runtime):
             # whose omitted arguments select a default runtime.
             if runtime in owners or not owners:
                 raise RuntimeError(f"Scratch release refused: JEVPFN job {job} may use {runtime}")
+
+
+def retire_publication_snapshots(work):
+    """Retire exact redundant snapshots only, under an idle exclusive workspace lease.
+
+    SQLite backup changes its header change/schema counters; every other byte must match
+    the retained main store and both stores must have no live WAL/journal content.
+    A mismatch/unknown file stays available for review instead of being cleaned.
+    """
+    def identity(path):
+        if any(Path(str(path) + suffix).exists() and Path(str(path) + suffix).stat().st_size
+               for suffix in ("-wal", "-journal")):
+            return None
+        before = path.stat()
+        with path.open("rb") as stream:
+            header = bytearray(stream.read(100))
+            if len(header) != 100 or not header.startswith(b"SQLite format 3\0"):
+                return None
+            header[24:28] = header[40:44] = header[92:96] = b"\0" * 4
+            sha = hashlib.sha256(header)
+            for block in iter(lambda: stream.read(2**20), b""):
+                sha.update(block)
+        after = path.stat()
+        return sha.hexdigest() if (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns) else None
+
+    retired, retained = [], []
+    for folder in sorted(work.glob(".publish-*")):
+        reject_links(folder)
+        if not re.fullmatch(r"\.publish-[a-z0-9_]+", folder.name):
+            retained.append(str(folder))
+            continue
+        files = [p for p in folder.rglob("*") if p.is_file() or p.is_symlink()]
+        valid = bool(files)
+        for copied in files:
+            reject_links(copied)
+            relative = copied.relative_to(folder)
+            source = reject_links(work / relative)
+            if (relative.parts[:2] != ("data", "jev_cache") or len(relative.parts) != 3
+                    or copied.suffix != ".sqlite3" or not source.is_file()):
+                valid = False
+                break
+            copied_identity = identity(copied)
+            if copied_identity is None or copied_identity != identity(source):
+                valid = False
+                break
+        if not valid:
+            retained.append(str(folder))
+            continue
+        if folder.resolve().parent != work.resolve():
+            raise ValueError("Snapshot cleanup escaped its owned workspace")
+        size = tree_bytes(folder)
+        shutil.rmtree(folder)
+        retired.append({"path": str(folder), "bytes": size})
+    return {"retired": retired, "retained_requires_review": retained}
 
 
 def release(runtime, *, apply=False):
@@ -227,6 +311,7 @@ def release(runtime, *, apply=False):
         if not apply:
             return report
         require_runtime_idle(runtime)
+        report["snapshot_retirement"] = retire_publication_snapshots(work)
         report["publication"] = _publish(durable, work)
         # A conflict or failed publication above leaves every input copy intact.
         write_json(marker_path, {**marker, "status": "releasing"})

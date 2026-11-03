@@ -7,11 +7,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=6800M
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
 set -euo pipefail
+export JEVPFN_PHASE=feature_creation
 cd "${VSC_DATA:?}/JEVPFN"
 export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-/lustre1/project/stg_00211}}}"
 export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"

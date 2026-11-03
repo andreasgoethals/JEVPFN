@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
-#SBATCH --time=00:20:00
+#SBATCH --time=01:00:00
 #SBATCH --output="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
 set -euo pipefail
@@ -18,12 +18,13 @@ export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
-"${JEVPFN_PYTHON:?}" -m pytest -q tests/test_feature_campaign.py tests/test_scratch_stage.py tests/test_cache_merge.py tests/test_parallel_diagnostics.py tests/test_freeze.py
+"${JEVPFN_PYTHON:?}" -m pytest -q tests/test_feature_campaign.py tests/test_feature_admission.py tests/test_scratch_stage.py tests/test_scratch_capacity.py tests/test_cache_merge.py tests/test_parallel_diagnostics.py tests/test_freeze.py
 "$JEVPFN_PYTHON" - <<'PY'
 import json, os, shutil, sqlite3, subprocess, tempfile
 from contextlib import closing
 from pathlib import Path
 from src.cluster.freeze import source_snapshot
+from src.cluster.scratch_stage import _publish
 from src.jev.features import load_block
 from src.jev.merge import snapshot
 from src.utils import paths
@@ -39,6 +40,15 @@ unchanged = [
 for name in unchanged:
     old = subprocess.check_output(['git', 'show', '954c93f:' + name])
     assert old.replace(b'\r\n', b'\n') == Path(name).read_bytes().replace(b'\r\n', b'\n'), name
+
+# Exercise real native merge + transactional PROJECT backup on a small completed
+# dataset before retrying large release jobs. No GPU/model/API call is made.
+publication = _publish(
+    Path(os.environ['JEVPFN_DURABLE_ROOT']) / 'JEVPFN',
+    Path(os.environ['VSC_SCRATCH_GPFS1']) / 'jevpfn-work/liquid/JEVPFN',
+    dataset_id='MUL_TEXT_PRODUCT_SENTIMENT',
+)
+assert publication['decision_stores'] == 1
 
 def inspect_store(source, runtime):
     # Lustre random reads were <1 MiB/s in the first inspection. Stream a
@@ -79,6 +89,7 @@ for runtime in ('liquid', 'strands'):
                            'verified_responses_all_providers': count, 'blocks': blocks})
 report = {'status': 'operational_recovery_checks_passed', 'job_id': os.environ['SLURM_JOB_ID'],
           'source': source_snapshot(), 'unchanged_scientific_files': unchanged, 'stores': stores,
+          'native_publication': publication,
           'meaning': 'Operational QA and saved-block integrity; no new inference or new 0A acceptance'}
 destination = paths.manifests_dir('feature_creation') / ('recovery_qa_' + os.environ['SLURM_JOB_ID'] + '.json')
 write_json(destination, report)

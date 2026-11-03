@@ -9,9 +9,10 @@ import argparse
 import json
 import os
 import shutil
+import sqlite3
 import tempfile
 import time
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 
 from src.cluster.maintenance import reject_links
@@ -138,12 +139,7 @@ def _publish(durable, work, *, periodic=False, dataset_id=None):
         json.loads((work / MARKER).read_text()).get("files", {}) if (work / MARKER).exists() else {}
     )
     durable.mkdir(parents=True, exist_ok=True)
-    with (
-        staging_environment(durable),
-        # Validate the source snapshot on native scratch. Writing it to Lustre
-        # first made every validation reread the large payload across mounts.
-        tempfile.TemporaryDirectory(prefix=".publish-", dir=work) as temporary,
-    ):
+    with staging_environment(durable):
         for kind, folder, merger in (
             ("decision_stores", "data/jev_cache", merge_cache),
             ("embedding_stores", "data/text_embeddings", merge_embeddings),
@@ -191,25 +187,88 @@ def _publish(durable, work, *, periodic=False, dataset_id=None):
                     started = time.monotonic()
                     print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
                                       "periodic": periodic}), flush=True)
-                    copied = Path(temporary) / relative
-                    copied.parent.mkdir(parents=True, exist_ok=True)
-                    if source.suffix == ".sqlite3":
-                        snapshot(source, copied)
-                    else:
-                        shutil.copyfile(source, copied)
-                    if kind == "decision_stores":
-                        # Preserve the validated transactional union and both copies.
-                        merger(copied, destination, backup_destination=False, deduplicate_ledger=True)
-                    elif merger is not None:
-                        merger(copied, destination)
-                    elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
-                        merge_evaluations(copied, destination)
-                    else:
-                        _publish_file(copied, destination)
+                    # Bound temporary bytes to ONE store, rather than retaining
+                    # all eighteen snapshots until the release process exits.
+                    with tempfile.TemporaryDirectory(prefix=".publish-", dir=work) as temporary:
+                        copied = Path(temporary) / relative
+                        copied.parent.mkdir(parents=True, exist_ok=True)
+                        if source.suffix == ".sqlite3":
+                            snapshot(source, copied)
+                        else:
+                            shutil.copyfile(source, copied)
+                        if kind == "decision_stores":
+                            _merge_native_decision(copied, destination, work)
+                        elif merger is not None:
+                            merger(copied, destination)
+                        elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
+                            merge_evaluations(copied, destination)
+                        else:
+                            _publish_file(copied, destination)
                     counts[kind] += 1
                     print(json.dumps({"event": "publication_completed", "path": relative.as_posix(),
                                       "seconds": time.monotonic() - started}), flush=True)
     return counts
+
+
+def _merge_native_decision(incoming, destination, work):
+    """Validate/union on native storage; transactionally back up the union to PROJECT.
+
+    The destination extraction lock covers its snapshot, merge and publication,
+    including other importers. SQLite backup commits the replacement as a single
+    transaction without replacing an inode underneath a reader or losing WAL pages.
+    A failed native merge never writes the durable destination.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    required = incoming.stat().st_size + (destination.stat().st_size if destination.exists() else 0)
+    if shutil.disk_usage(work).free < 2 * required + 512 * 2**20:
+        raise OSError("Insufficient native space for a validated publication union")
+    with (
+        file_lock(destination.with_suffix(".extraction.lock"), timeout=3600),
+        tempfile.TemporaryDirectory(prefix=".union-", dir=work) as temporary,
+    ):
+        native = Path(temporary) / destination.name
+        if destination.exists():
+            snapshot(destination, native)
+        with staging_environment(work):
+            merge_cache(incoming, native, backup_destination=False, deduplicate_ledger=True)
+        with (
+            closing(sqlite3.connect(native.as_uri() + "?mode=ro", uri=True)) as src,
+            closing(sqlite3.connect(destination)) as dst,
+        ):
+            src.backup(dst)
+            if dst.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                raise ValueError("Published SQLite union failed its integrity check")
+
+
+def _provider_cache(source, destination, provider):
+    """Warm only this open-weight provider; leave all durable history untouched.
+
+    Imported ledgers are archival, never an executable scratch queue. Existing
+    scratch queues are preserved by the caller's validated union. Predictor
+    staging still receives every representation through its original path.
+    """
+    from src.jev.cache import ResponseCache
+    from src.jev.merge import ARTIFACT_SQL, validate_cache
+
+    with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        dataset_id, = db.execute("SELECT dataset_id FROM dataset_identity").fetchone()
+    cache = ResponseCache(destination, dataset_id)
+    with cache._connect() as db:
+        db.execute("ATTACH DATABASE ? AS upstream", (source.resolve().as_uri() + "?mode=ro",))
+        db.execute("INSERT INTO responses SELECT * FROM upstream.responses "
+                   "WHERE json_extract(settings_json,'$.provider')=?", (provider,))
+        db.execute("INSERT INTO origins SELECT o.* FROM upstream.origins o "
+                   "JOIN responses r ON r.request_key=o.request_key AND r.kind=o.kind")
+        tables = {r[0] for r in db.execute("SELECT name FROM upstream.sqlite_master WHERE type='table'")}
+        if "failures" in tables:
+            db.execute("INSERT INTO failures SELECT * FROM upstream.failures "
+                       "WHERE json_extract(settings_json,'$.provider')=?", (provider,))
+        if "feature_artifacts" in tables:
+            db.execute(ARTIFACT_SQL)
+            db.execute("INSERT INTO feature_artifacts SELECT * FROM upstream.feature_artifacts "
+                       "WHERE json_extract(manifest_json,'$.identity.provider')=?", (provider,))
+    validate_cache(destination)
+    return destination
 
 
 def publish(runtime):
@@ -360,16 +419,27 @@ def stage(runtime):
             from src.cluster.control_runtime import verify as verify_control
 
             verify_control(control)
-            check_capacity(work, candidates, source_container, additional_containers=[control])
+            check_capacity(work, candidates, source_container, additional_containers=[control],
+                           cache_provider=runtime if runtime in containers.SELF_HOSTED else None)
         else:
-            check_capacity(work, candidates, source_container)
+            check_capacity(work, candidates, source_container,
+                           cache_provider=runtime if runtime in containers.SELF_HOSTED else None)
         files = {}
         for relative, source in candidates.items():
             destination = work / relative
             reject_links(destination)
             # Preserve operational queues in scratch; never replace them with the
             # durable union, whose imported queues intentionally remain archival.
-            if relative.parts[:2] == ("data", "jev_cache") and destination.is_file():
+            if relative.parts[:2] == ("data", "jev_cache") and runtime in containers.SELF_HOSTED:
+                # A new runtime must not copy all previous models' multi-GB
+                # response histories into every native workspace.
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(prefix=".warm-", dir=destination.parent) as temp:
+                    incoming = _provider_cache(source, Path(temp) / source.name, runtime)
+                    with staging_environment(work):
+                        merge_cache(incoming, destination, backup_destination=False, deduplicate_ledger=True)
+                files[relative.as_posix()] = file_sha256(destination)
+            elif relative.parts[:2] == ("data", "jev_cache") and destination.is_file():
                 with (
                     staging_environment(work),
                     tempfile.TemporaryDirectory(prefix=".merge-", dir=destination.parent) as temp,

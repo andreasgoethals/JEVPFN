@@ -57,6 +57,10 @@ credentials and is removed once all tracked work is terminal and assessed.
   failures. Publication merges compatible records, never replaces a complete durable
   cache with a partial one, and stops on conflicts. Predictor staging restores and unions
   durable evaluation stores, reusing completed folds.
+- Publication validates/unions decision stores on native GPFS, then uses SQLite backup
+  to publish the union transactionally under its extraction lock. Only one dataset
+  snapshot is retained at a time. New decision workspaces warm only their own provider;
+  full response history remains on PROJECT.
 - Publication locks each destination independently; a busy periodic target is deferred,
   while final publication waits. Dataset jobs publish their own dataset store. Source
   snapshots stay on native scratch during validation; final unions remain on PROJECT.
@@ -243,7 +247,11 @@ operational repair, first confirm all existing jobs are terminal, preserve the o
 update and test the idle checkout, then record the new freeze. Recover the unchanged grid
 with `python -u -m src.cluster.feature_campaign --execute --watch --recover --reviewed-by NAME`.
 That command is for the original unpartitioned graph; do not use it after parallel
-admission. Recovery reconciles every known ID, reuses completed jobs and retains previous attempts.
+admission. For the expanded graph use `src.cluster.feature_admission --recover-from OLD_EXECUTION_ID
+--previous-freeze ARCHIVED_COMPLETED_REVISION --expected-source NEW_SOURCE --reviewed-by NAME
+--execute --watch` after Linux recovery QA. The recovery refuses scientific/configuration or
+runtime-pin changes, preserves all completed job IDs and 54 encoder partitions, and retries
+only failed or unsubmitted work. Recovery reconciles every known ID and retains previous attempts.
 The CPU-only `feature_recovery_test.slurm` checks regressions, unchanged numerical source
 and saved feature blocks without replacing accepted 0A reports. Preserve scratch until
 recovered publication succeeds; do not restage over it or delete failed responses.

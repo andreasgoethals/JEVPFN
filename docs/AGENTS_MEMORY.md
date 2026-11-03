@@ -1,6 +1,6 @@
 # Operational evidence
 
-Updated 2 November 2026. This file owns current run state, exact evidence and
+Updated 3 November 2026. This file owns current run state, exact evidence and
 reusable failure lessons, newest first. Method: [README](../README.md); commands:
 [VSC](VSC.md); dataset meanings: [DATA_SOURCES](DATA_SOURCES.md); research evidence:
 [LITERATURE_REVIEW](LITERATURE_REVIEW.md); older detail: Git and [CHANGELOG](CHANGELOG.md).
@@ -17,6 +17,44 @@ Submission is not completion. Preserve active or queued checkouts and recovery i
   all eighteen datasets, preserving 1.13 ledgers and cumulative budget.
 - Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
+
+## Release recovery (3 November)
+
+Read all 615 available text logs (101,767 lines) and reconciled every campaign ID.
+All 36 Liquid/Strands dataset jobs completed 0:0: eighteen datasets per provider;
+72 full feature blocks are expected. The two release attempts, wICE 62524528 and
+62524970, timed out after four hours while redundantly merging response histories
+on Lustre. No new inference/CUDA/request failure appeared. The expanded campaign
+stopped at 38 completed steps, two failed releases and 234 blocked descendants;
+no JEVPFN job remained queued/running. Other projects were left untouched.
+
+Operational repair: validate and merge decision snapshots on native GPFS, then use
+SQLite's transactional backup to publish the union while holding the destination
+extraction lock. Release temporary snapshots after each store. Warm new decision
+workspaces with only their provider's responses/features, preserving complete
+PROJECT history and existing native queues. Conservative provider-specific capacity
+estimates retain the two-workspace/200 GiB and personal-quota/headroom guards.
+Reviewed recovery reconciles every known ID, preserves completed datasets and the
+54 encoder partitions, archives prior source/campaign receipts and refuses changes
+to scientific code/configuration/runtime pins. Release CPU jobs use default memory
+and a twelve-hour ceiling. Local verification: 1,187 full-suite passes, 25 environment-specific skips; final
+34 focused capacity/admission tests passed, including the later snapshot-retirement
+case. Ruff and edited Bash syntax checks passed. Numerical extraction/PCA/encoder
+implementations and all model pins remain byte-identical. Real deployment/QA outcomes
+are recorded below when known.
+
+Template matches the canonical copy byte-for-byte (SHA-256 9e113ac591a7d702bc61060a3bce703419cb7a296fcf9cf77283c1e5ffd27a20).
+DATA remains the real Git checkout and compact logs/receipts; installed dependencies
+remain sealed PROJECT images, persistent caches stay on PROJECT, and only owned
+working copies use GPFS scratch. Snapshot: PROJECT 822.1G/1T, 58,721/150,000 files;
+personal GPFS scratch 166G/500G. Failed release snapshots remain protected until
+verified publication permits exact scoped retirement. No new storage migration. Eight terminal/historical logs were archived and removed
+from active log folders only after archive readback and accepted-evidence-path checks.
+`recovery_history/failed_logs_20261103.zip` SHA-256
+`69328e816fe92a56f31ed35e505e4dd83c07fdb1022448f32dfbff4fed9d87b2`
+was downloaded and independently hash-verified. Old failed-release snapshots may be
+retired only when every retained database byte matches, apart from SQLite backup
+header counters; mismatches/unknown files stay protected.
 
 ## Parallel admission (2 November)
 

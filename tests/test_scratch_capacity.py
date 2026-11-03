@@ -335,3 +335,21 @@ def test_hf_cache_exception_does_not_bypass_original_asset_checks(roots, relativ
         cap.release("intern", apply=True)
     assert original.exists()
     assert (work / "checkpoints/model.bin").exists()
+
+
+def test_only_identical_redundant_publication_snapshots_can_retire(roots):
+    durable, work = roots
+    copied_assets(durable, work)
+    source = cache(work / "data/jev_cache/fixture.sqlite3")
+    identical = work / ".publish-identical/data/jev_cache/fixture.sqlite3"
+    stage.snapshot(source.path, identical)
+    older = work / ".publish-older/data/jev_cache/fixture.sqlite3"
+    stage.snapshot(source.path, older)
+    with sqlite3.connect(older) as db:
+        db.execute("DELETE FROM responses")
+    unknown = work / ".publish-unknown/keep.bin"
+    unknown.parent.mkdir()
+    unknown.write_bytes(b"unknown evidence")
+    result = cap.retire_publication_snapshots(work)
+    assert [Path(x["path"]).name for x in result["retired"]] == [".publish-identical"]
+    assert older.is_file() and unknown.is_file() and source.path.is_file()

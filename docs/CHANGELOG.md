@@ -1,5 +1,12 @@
 # Changelog
 
+## 03-11-2026
+
+- Fix release timeouts by performing validated cache unions on native storage and
+  transactionally publishing the result; bound temporary snapshots to one dataset.
+- Stage only the selected decision provider's warm cache and retain quota safeguards.
+  Recover the expanded campaign without repeating completed jobs or changing science.
+
 ## 02-11-2026
 
 - Add reviewed parallel admission for a frozen feature campaign: remove the two-dataset

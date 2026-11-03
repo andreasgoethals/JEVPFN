@@ -130,6 +130,73 @@ def test_dataset_publication_does_not_scan_another_jobs_store(roots, monkeypatch
     assert not (durable / "data/jev_cache/unrelated.sqlite3").exists()
 
 
+def test_union_validates_both_stores_on_native_storage_and_includes_durable_wal(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    target = cache(durable / "data/jev_cache/fixture.sqlite3")
+    cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    real = stage.merge_cache
+    calls = []
+
+    def native_merge(source, destination, **kwargs):
+        assert source.is_relative_to(work) and destination.is_relative_to(work)
+        calls.append((source, destination))
+        return real(source, destination, **kwargs)
+
+    monkeypatch.setattr(stage, "merge_cache", native_merge)
+    with sqlite3.connect(target.path) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("INSERT INTO responses SELECT 'invalid',kind,payload_json,settings_json,response_json,created_at "
+                   "FROM responses LIMIT 1")
+        db.commit()
+        # A conflict/invalid record in committed WAL must be validated before publication.
+        with pytest.raises(ValueError, match="identity"):
+            stage.publish("intern")
+        db.execute("DELETE FROM responses WHERE request_key='invalid'")
+        db.commit()
+        stage.publish("intern")
+    assert len(calls) == 2
+    assert target.get(request(), kind="verified_response") == response()
+    assert target.get(request("intern"), kind="verified_response") == response()
+    assert not list(work.glob(".publish-*")) and not list(work.glob(".union-*"))
+
+
+def test_provider_warm_cache_keeps_only_matching_responses_origins_and_features(roots):
+    from test_cache_merge import feature
+
+    from src.cluster.scratch_capacity import provider_cache_bound
+
+    durable, work = roots
+    marker(durable, work)
+    source = cache(durable / "data/jev_cache/fixture.sqlite3")
+    feature(source, "intern")
+    feature(source, "jev")
+    before = file_sha256(source.path)
+    target = work / "warm.sqlite3"
+    stage._provider_cache(source.path, target, "intern")
+    assert file_sha256(source.path) == before
+    with sqlite3.connect(target) as db:
+        assert {json.loads(r[0])["provider"] for r in db.execute("SELECT settings_json FROM responses")} == {"intern"}
+        assert {json.loads(r[0])["identity"]["provider"] for r in db.execute("SELECT manifest_json FROM feature_artifacts")} == {"intern"}
+        assert not db.execute("SELECT 1 FROM origins WHERE request_key NOT IN (SELECT request_key FROM responses)").fetchone()
+    assert target.stat().st_size <= provider_cache_bound(source.path, "intern")
+
+
+def test_publication_discards_each_store_snapshot_before_starting_the_next(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    for name in ("one", "two"):
+        cache(work / "data/jev_cache" / (name + ".sqlite3"))
+    real = stage._merge_native_decision
+
+    def bounded(source, destination, root):
+        assert len(list(work.glob(".publish-*"))) == 1
+        return real(source, destination, root)
+
+    monkeypatch.setattr(stage, "_merge_native_decision", bounded)
+    assert stage.publish("intern")["decision_stores"] == 2
+
+
 def test_copy_snapshots_committed_wal_without_copying_open_journal(tmp_path):
     source = tmp_path / "source.sqlite3"
     with sqlite3.connect(source) as db:
@@ -321,8 +388,10 @@ def test_restage_unions_active_dataset_db_on_native_root_and_preserves_its_queue
         db.execute("INSERT INTO extraction_policy VALUES (1, ?)", ('{"budget": 17}',))
     original.put(request("liquid"), response(), kind="verified_response")
     stage.stage("intern")
-    for provider in ("jev", "intern", "liquid"):
-        assert active.get(request(provider), kind="verified_response") == response()
+    assert active.get(request("intern"), kind="verified_response") == response()
+    for provider in ("jev", "liquid"):
+        assert active.get(request(provider), kind="verified_response") is None
+        assert original.get(request(provider), kind="verified_response") == response()
     with active._connect() as db:
         assert json.loads(
             db.execute("SELECT settings_json FROM extraction_policy").fetchone()[0]
