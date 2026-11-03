@@ -173,10 +173,7 @@ def cpu_accept():
         folder = Path(item["path"])
         sealed = json.loads((folder / MARKER).read_text())
         actual = probe(folder / "bin/python")
-        installed = {k.lower().replace("_", "-"): v for k, v in actual["packages"].items()}
-        expected = {k.lower().replace("_", "-"): v for k, v in sealed["runtime"]["packages"].items()}
-        if (installed != expected
-                or actual.get("torch_cuda") != sealed["runtime"].get("torch_cuda")):
+        if not same_installed_runtime(sealed, actual):
             raise ValueError("Relocated interpreter changed installed dependencies: " + str(folder))
         runtimes.append({"path": str(folder), "container_id": sealed["container_id"], "runtime": actual})
         print(json.dumps({"event": "relocated_interpreter_passed", "path": str(folder)}), flush=True)
@@ -193,6 +190,18 @@ def cpu_accept():
         "sha256": file_sha256(records() / "cpu_accepted.json")}
     write_json(pointer, selected)
     return result
+
+
+def same_installed_runtime(sealed, actual):
+    installed = {k.lower().replace("_", "-"): v for k, v in actual["packages"].items()}
+    expected = {k.lower().replace("_", "-"): v for k, v in sealed["runtime"]["packages"].items()}
+    cuda = sealed["runtime"].get("torch_cuda")
+    # Six historical cu126 seals predate this optional diagnostic field. Their
+    # pinned wheel and explicit legacy profile still identify CUDA unambiguously.
+    if (cuda is None and sealed.get("runtime_profile") == "legacy-cu126"
+            and expected.get("torch", "").endswith("+cu126")):
+        cuda = "12.6"
+    return installed == expected and actual.get("torch_cuda") == cuda
 
 
 def numeric_backup():

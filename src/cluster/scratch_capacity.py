@@ -99,7 +99,15 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
             raise ValueError(f"{key} must be a positive integer")
     root = work.parent.parent
     existing = [p / "JEVPFN" for p in root.iterdir() if p.is_dir()]
-    resident = [p for p in existing if p != work and disposable_paths(p)]
+    def resident_workspace(p):
+        if disposable_paths(p):
+            return True
+        from src.cluster.scratch_stage import MARKER
+
+        marker = p / MARKER
+        return marker.is_file() and json.loads(marker.read_text()).get("status") != "released_requires_restage"
+
+    resident = [p for p in existing if p != work and resident_workspace(p)]
     if len(resident) >= settings["max_resident_workspaces"]:
         raise OSError("GPFS working-set slots are full; publish/release idle JEVPFN copies first")
     sources = [(source, work / relative) for relative, source in candidates.items()]
@@ -315,6 +323,12 @@ def release(runtime, *, apply=False):
         report["snapshot_retirement"] = retire_publication_snapshots(work)
         report["publication"] = _publish(durable, work)
         # A conflict or failed publication above leaves every input copy intact.
+        if marker.get("shared_immutable_root") == str(durable):
+            if report["snapshot_retirement"]["retained_requires_review"]:
+                raise ValueError("Unreviewed recovery snapshots prevent retiring mutable copies")
+            report["published_mutable_retirement"] = retire_published_mutable(work)
+            report["preserved"] = ["durable assets, unioned responses/features and recovery state",
+                                   "DATA logs/manifests", "workspace identity and lease"]
         write_json(marker_path, {**marker, "status": "releasing"})
         for target in targets:
             if not target.resolve().is_relative_to(work.resolve()):
@@ -326,6 +340,41 @@ def release(runtime, *, apply=False):
             paths.manifests_dir("experiment_0") / "scratch" / f"{runtime}_release.json", report
         )
         return report
+
+
+def retire_published_mutable(work):
+    """Called only after idle/exclusive lease and successful transactional publication.
+
+    Shared-asset workspaces must not accumulate every finished provider's response
+    stores. Retain their identity/lease, and refuse any file outside published data
+    namespaces before removing anything. Legacy mirror release remains unchanged.
+    """
+    from src.cluster.scratch_stage import MARKER
+
+    candidates = []
+    for p in work.rglob("*"):
+        if p.is_symlink():
+            raise ValueError("Linked mutable work requires review before retirement")
+        if not p.is_file():
+            continue
+        relative = p.relative_to(work)
+        if relative.as_posix() in {MARKER, ".workspace.lock"}:
+            continue
+        dataset = (len(relative.parts) >= 3 and relative.parts[:2] in {
+            ("data", "jev_cache"), ("data", "text_embeddings")}
+            and (p.suffix in {".sqlite3", ".lock"} or p.name.endswith(("-wal", "-shm", "-journal"))))
+        result = (len(relative.parts) >= 4 and relative.parts[0] == "output_JEVPFN"
+                  and relative.parts[2] == "results")
+        if not dataset and not result:
+            raise ValueError("Unpublished working file prevents retirement: " + str(relative))
+        candidates.append(p)
+    total = sum(p.stat().st_size for p in candidates)
+    for p in candidates:
+        p.unlink()
+    for p in sorted((p for p in work.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+        if not any(p.iterdir()):
+            p.rmdir()
+    return {"files": [p.relative_to(work).as_posix() for p in candidates], "bytes": total}
 
 
 def main():

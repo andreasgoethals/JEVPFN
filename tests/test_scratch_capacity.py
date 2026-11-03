@@ -67,6 +67,27 @@ def test_failed_publication_never_removes_inputs(roots):
     assert (work / "containers/image.sif").exists()
 
 
+@pytest.mark.parametrize("unknown", [False, True])
+def test_shared_assets_release_retires_only_published_mutable_copies(roots, unknown):
+    durable, work = roots
+    marker(durable, work)
+    p = work / stage.MARKER
+    p.write_text(json.dumps({**json.loads(p.read_text()), "shared_immutable_root": str(durable)}))
+    source = work / "data/jev_cache/fixture.sqlite3"
+    cache(source, request("intern"))
+    if unknown:
+        (work / "unpublished.txt").write_text("preserve this")
+        with pytest.raises(ValueError, match="Unpublished"):
+            cap.release("intern", apply=True)
+        assert source.is_file() and (work / "unpublished.txt").is_file()
+    else:
+        result = cap.release("intern", apply=True)
+        assert result["published_mutable_retirement"]["bytes"] > 0
+        assert not source.exists() and p.is_file()
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern"), kind="verified_response") == response()
+
+
 def test_partial_stage_can_release_copies_but_unknown_workspace_cannot(roots):
     durable, work = roots
     copied_assets(durable, work)
@@ -155,6 +176,15 @@ def test_capacity_limits_count_resident_sets_not_just_active_copies(roots, monke
         (work.parent.parent / runtime / "JEVPFN/checkpoints").mkdir(parents=True)
     with pytest.raises(OSError, match="slots"):
         cap.check_capacity(work, {}, durable / "containers/blackwell-cu130/intern")
+
+
+def test_shared_asset_workspaces_still_consume_resident_slots(roots):
+    durable, work = roots
+    for runtime in ("liquid", "strands"):
+        other = work.parent.parent / runtime / "JEVPFN"
+        marker(durable, other)
+    with pytest.raises(OSError, match="slots"):
+        cap.check_capacity(work, {}, durable / "containers/blackwell-cu130/intern", shared_assets=True)
 
 
 @pytest.mark.parametrize("budget", ["scratch_working_set_gib", "scratch_allocation_gib"])

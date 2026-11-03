@@ -65,6 +65,17 @@ def test_only_host_execution_identity_can_change():
         assert not same_science(original, changed)
 
 
+def test_historical_cuda_field_uses_only_its_exact_pinned_wheel_and_profile():
+    from src.cluster.storage_migration import same_installed_runtime
+
+    sealed = {"runtime_profile": "legacy-cu126", "runtime": {"packages": {"torch": "2.9.0+cu126"}}}
+    actual = {"packages": {"torch": "2.9.0+cu126"}, "torch_cuda": "12.6"}
+    assert same_installed_runtime(sealed, actual)
+    assert not same_installed_runtime(sealed, {**actual, "torch_cuda": "13.0"})
+    assert not same_installed_runtime({**sealed, "runtime_profile": "blackwell-cu130"}, actual)
+    assert not same_installed_runtime(sealed, {**actual, "packages": {"torch": "2.10.0+cu126"}})
+
+
 def test_missing_private_authority_never_infers_a_project(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     for name in ("JEVPFN_STAGING_ROOT", "JEVPFN_DURABLE_ROOT", "JEVPFN_PROJECT_ROOT", "VSC_PROJECT_ROOT"):
