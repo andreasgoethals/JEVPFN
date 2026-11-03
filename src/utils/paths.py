@@ -64,12 +64,16 @@ def staging_override() -> Path | None:
     Separate from `staging_root()` because the big-file helpers short-circuit to the repo when
     off-cluster, which would make an override silently do nothing on a laptop.
     """
-    for var in STAGING_ENV_VARS:
+    # A working override is distinct from durable authority. The selected
+    # durable root takes priority over older PROJECT aliases, as activation does.
+    if p := _env_path("JEVPFN_STAGING_ROOT"):
+        return p
+    if (on_vsc() or os.environ.get("JEVPFN_DURABLE_ROOT")) and (p := durable_project_override()):
+        return p
+    for var in STAGING_ENV_VARS[1:]:
         p = _env_path(var)
         if p:
             return p
-    if on_vsc() or os.environ.get("JEVPFN_DURABLE_ROOT"):
-        return durable_project_override()
     return None
 
 

@@ -32,6 +32,15 @@ def test_cpu_execution_follows_explicit_authority(monkeypatch):
     assert scheduling.cpu_cluster() == "wice"
 
 
+def test_explicit_durable_authority_wins_over_old_project_alias(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "on_vsc", lambda: True)
+    monkeypatch.setenv("JEVPFN_PROJECT_ROOT", str(tmp_path / "old"))
+    monkeypatch.setenv("JEVPFN_DURABLE_ROOT", str(tmp_path / "new"))
+    assert paths.staging_root() == tmp_path / "new"
+    monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(tmp_path / "native"))
+    assert paths.staging_root() == tmp_path / "native"
+
+
 def test_only_host_execution_identity_can_change():
     original = {"model": "pinned", "request_configuration": {
         "checkpoint_sha256": "weights", "counter_id": "tokens", "batch_size": 2,

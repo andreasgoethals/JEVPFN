@@ -19,5 +19,6 @@ export JEVPFN_PHASE=experiment_0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_RUNTIME_PROFILE=
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.control_runtime test
 python -m src.cluster.storage_contracts --execute
+python -m src.cluster.preflight --verify-data
 python -m pytest -q tests/test_project_migration.py tests/test_storage_migration.py tests/test_file_lock.py tests/test_cache_merge.py tests/test_scratch_stage.py tests/test_scratch_capacity.py tests/test_feature_admission.py tests/test_freeze.py tests/test_feature_acceptance.py
 python -m src.cluster.storage_migration cpu-accept
