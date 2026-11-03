@@ -10,7 +10,8 @@ shows up as a full quota or an empty results directory hours into a job.
 
 The VSC documentation lists personal DATA backups, but does not establish the backup policy
 of this project's staging allocation. Verify it before storing paid responses. Use Lustre for
-wICE I/O; select native GPFS through the staging override before Mindwell bulk I/O.
+wICE I/O and allocated GPFS for Mindwell. Durable authority and mutable scratch
+working overrides are distinct; suitable native immutable assets can be shared.
 
 Experiment tables and predictions use project storage. Notebooks always run locally; their
 figures/reports ignore VSC experiment storage variables. Only compact summaries,
