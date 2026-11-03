@@ -69,12 +69,22 @@ credentials and is removed once all tracked work is terminal and assessed.
   snapshots and temporary unions use declared node-local disk when available;
   resumable working stores stay on GPFS scratch and final unions remain on PROJECT.
   Generated Transformers modules and compiler caches are isolated per allocation.
+- During the PROJECT migration only, all admissions/writers stop and every old
+  workspace holds an exclusive lease. Closed SQLite stores are checkpointed and
+  copied under exclusive database locks; their validated unions are assembled once
+  per dataset on node-local disk. A checksummed, fsynced complete file is atomically
+  installed only after another consumer check. This quiescent protocol must never
+  replace the live periodic-publication protocol. Independent numerical backup and
+  terminal CPU/GPU/publication evidence are required before source retirement.
 - Scratch is not a backup: unused GPFS files are purged after 30 days and a killed node
   loses work since the last publication. Keep an independent downloaded copy of features.
 - At most two runtime working sets are resident, within a 200 GiB application budget,
   500 GiB personal allocation and 20 GiB headroom (`config/3. experiment_0/scheduling.yaml`).
   Staging checks other projects' usage; check `myquota` for bytes and files. Free
   filesystem space is not quota. Never delete another project's files.
+  In shared-asset mode, successful release also retires the published mutable
+  copies; workspace identity/lease records remain. Unknown files, mounts or
+  recovery snapshots prevent removal. Legacy mirror releases preserve their queues.
 
 Infrastructure references: current VSC Library pin `0ed4ffa89d312b9bb6411681b6a14f81672439f3`; historical reviews used VSC Library `3bcdf55e576d10161d6189b40ac39380bbba9eca`
 (hardware review, 23 October) and `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87` (storage and

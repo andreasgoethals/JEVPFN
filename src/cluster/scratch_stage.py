@@ -132,7 +132,7 @@ def _copy(source, destination, *, snapshot_sqlite=True):
         return sha
 
 
-def _publish(durable, work, *, periodic=False, dataset_id=None):
+def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision_stores=True):
     """Never replace a durable response DB with a partial scratch copy."""
     from src.cluster.transfer import _publish_file
     from src.data.text_embeddings import merge as merge_embeddings
@@ -151,6 +151,8 @@ def _publish(durable, work, *, periodic=False, dataset_id=None):
             ("embedding_stores", "data/text_embeddings", merge_embeddings),
             ("outputs", "output_JEVPFN", None),
         ):
+            if kind == "decision_stores" and not include_decision_stores:
+                continue
             sources = (
                 _dataset_stores(work / folder)
                 if kind == "decision_stores"

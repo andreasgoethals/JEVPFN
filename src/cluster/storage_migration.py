@@ -8,7 +8,7 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
-from contextlib import closing
+from contextlib import ExitStack, closing
 from pathlib import Path
 
 from src.utils import paths
@@ -128,22 +128,49 @@ def same_science(old_settings, new_settings):
 
 def publish_workspaces():
     """Union every old native recovery store into the new durable authority."""
+    from src.cluster.closed_publication import union_closed_stores
     from src.cluster.maintenance import require_idle_vsc
-    from src.cluster.scratch_stage import MARKER, _publish, workspace_lease
+    from src.cluster.scratch_stage import (
+        MARKER,
+        _dataset_stores,
+        _publication_temporary_root,
+        _publish,
+        workspace_lease,
+    )
+    from src.utils.locking import file_lock
 
+    if not os.environ.get("SLURM_JOB_ID"):
+        raise RuntimeError("Closed recovery unions require a CPU allocation")
     require_idle_vsc(allow_current=True)
     _, _, source, destination = load_copy()
     if paths.checkpoints_dir().parent != destination:
         raise ValueError("Publication must select the verified new durable authority")
     parent = Path(os.environ["VSC_SCRATCH_GPFS1"]) / "jevpfn-work"
-    reports = []
-    for marker in sorted(parent.glob("*/JEVPFN/" + MARKER)):
-        work = marker.parent
-        with workspace_lease(work):
+    reports, datasets, workspaces = [], {}, []
+    with file_lock(records() / ".closed-publication.lock", timeout=1), ExitStack() as leases:
+        for marker in sorted(parent.glob("*/JEVPFN/" + MARKER)):
+            work = marker.parent
+            leases.enter_context(workspace_lease(work))
             saved = json.loads(marker.read_text())
             if saved.get("durable_root") != str(source):
                 raise ValueError("Unexpected native workspace authority; preserve for review")
-            result = _publish(destination, work)
+            workspaces.append((work, marker, saved))
+            for p in _dataset_stores(work / "data/jev_cache"):
+                datasets.setdefault(p.name, []).append(p)
+        unions = []
+        for name, sources in sorted(datasets.items()):
+            print(json.dumps({"event": "closed_union_started", "dataset": name,
+                              "working_stores": len(sources)}), flush=True)
+            result = union_closed_stores(sources, destination / "data/jev_cache" / name,
+                                         _publication_temporary_root(workspaces[0][0]), writers_stopped=True,
+                                         consumer_check=lambda: require_idle_vsc(allow_current=True))
+            unions.append(result)
+            write_json(records() / "dataset_union_progress.json", {"datasets": unions})
+            print(json.dumps({"event": "closed_union_completed", "dataset": name,
+                              "bytes": result["bytes"]}), flush=True)
+        for work, marker, saved in workspaces:
+            result = _publish(destination, work, include_decision_stores=False)
+            result["decision_stores"] = len(list(_dataset_stores(work / "data/jev_cache")))
             reports.append({"runtime": saved["runtime"], "working_root": str(work),
                             "old_marker_sha256": file_sha256(marker), "publication": result})
             write_json(records() / "workspace_publication_progress.json", {"workspaces": reports})
@@ -278,7 +305,8 @@ def accept(reviewed_by):
            or file_sha256(Path(r["original_acceptance"])) != r["original_acceptance_sha256"]
            for r in bodies):
         raise ValueError("Every relocated decision runtime must pass")
-    jobs = {r["job_id"] for r in bodies} | {json.loads(cpu.read_text())["job_id"]}
+    jobs = {r["job_id"] for r in bodies} | {json.loads(cpu.read_text())["job_id"],
+                                           json.loads(publication.read_text())["job_id"]}
     for job in jobs:
         if scheduler_state(job, cluster="mindwell") != ("COMPLETED", "0:0"):
             raise ValueError("Validation allocation is not confirmed complete")
@@ -292,7 +320,14 @@ def accept(reviewed_by):
 
     if {e for _, e in embeddings} != set(load_yaml("feature_creation/embedding_models")["models"]):
         raise ValueError("All three encoders need relocated GPU contracts")
-    evidence = [copied, relocation, cpu, publication, *reports, *(p for p, _ in embeddings)]
+    numeric = records() / "numeric_backup.json"
+    independent = records() / "numeric_independent_download.json"
+    backup, downloaded = json.loads(numeric.read_text()), json.loads(independent.read_text())
+    if (backup.get("sha256") != downloaded.get("sha256")
+            or downloaded.get("status") != "independent_numeric_backup_verified"
+            or downloaded.get("validated_complete_production_blocks", 0) < 72):
+        raise ValueError("Verify the independent numerical backup before retiring original results")
+    evidence = [copied, relocation, cpu, publication, numeric, independent, *reports, *(p for p, _ in embeddings)]
     for provider, gpu_report in zip(SELF_HOSTED, bodies, strict=True):
         old = Path(gpu_report["original_acceptance"])
         original = reviewed_acceptance(old, stage="before_extraction")
@@ -470,7 +505,7 @@ def rebind(previous_freeze, reviewed_by):
                  or (k.startswith("config/") and not k.endswith(("experiment_0/scheduling.yaml", "experiment_0/self_hosted.yaml")))}
     routing_sources = {"src/utils/paths.py", "src/evaluation/checkpoint_paths.py", *(
         "src/cluster/" + name + ".py" for name in (
-            "project_migration", "storage_migration", "storage_config", "maintenance", "scheduling", "preflight",
+            "project_migration", "storage_migration", "closed_publication", "storage_config", "maintenance", "scheduling", "preflight",
             "scratch_capacity", "scratch_stage", "workspace_graph", "benchmark_jobs", "experiment_zero",
             "feature_campaign", "setup_extractors", "token_shards", "accept_features", "control_runtime", "freeze",
         ))}

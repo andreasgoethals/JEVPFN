@@ -5,6 +5,10 @@
 - Add explicit GPFS PROJECT deployment authority, consistent migration verification,
   container relocation checks and native Mindwell CPU routing. Share immutable
   assets directly while keeping writable caches and publication isolated.
+- Consolidate stopped migration stores once per dataset with explicit SQLite locks,
+  validated node-local unions and checksummed atomic publication. Require an
+  independent numerical backup before retirement; release published shared-mode
+  working copies and preserve read-only raw inputs and private metadata permissions.
 
 - Fix release timeouts by performing validated cache unions on native storage and
   transactionally publishing the result; use declared node-local merge I/O and
