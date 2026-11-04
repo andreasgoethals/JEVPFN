@@ -1,11 +1,8 @@
 # Data sources and definitions
 
-The frozen MulTaBench release below defines the datasets, their text columns and the
-audit. Methodology is in [README](../README.md); execution commands are in [VSC](VSC.md).
-Sections run from provenance and the text definition, through statistics and reuse, to
-dataset selection, question semantics and interpretation caveats. Experiment 0B
-reports exact repeated feature rows across training and test and rejects exact copies
-or exact class relabelings of the target. Provenance review still matters for semantic proxies.
+This guide documents the pinned MulTaBench inputs, text definition and question semantics.
+The [README](../README.md) describes the evaluation, and the [VSC runbook](VSC.md) gives
+the verification commands.
 
 ## Primary sources and pins
 
@@ -32,12 +29,10 @@ through the versioned dataset-download endpoint, using only Python's standard li
 `data.csv` and `metadata.json` are extracted; no arbitrary archive paths or downloaded code run.
 The CSV reader follows the official pandas defaults, with `low_memory=False` for stable types.
 
-## Text is a benchmark definition, not a language judgement
+## How the benchmark identifies text
 
-The released metadata identifies target, task, shape and class count, but **does not provide a
-text-column list**. The official paper summary computes it dynamically. Our small dependency-free
-implementation of that published rule is `src/data/official_types.py`; the resulting names are
-frozen in the catalog for subsequent loading, so folds never redefine text columns.
+The official summary computes text columns from the data. `src/data/official_types.py`
+reproduces that rule, and the catalog freezes the resulting names for every fold.
 
 After excluding numerical and date columns, a field is text when it has at least 100 distinct
 nonmissing values **or** at least 80% distinct values among nonmissing entries. The numerical
@@ -58,42 +53,22 @@ be stated when comparing to the paper, rather than silently adding or removing t
 
 ## Statistics
 
-- Feature counts exclude the target; the total column count includes it.
-- Missingness uses pandas CSV null semantics. No extra sentinel strings are reinterpreted.
-- General feature unique counts exclude pandas-null entries. Text reuse separately excludes null,
-  nonfinite and whitespace-only inputs; its unique ratio divides by nonempty row count.
-- Numeric features use their CSV dtype; booleans are categorical; date-like strings are “other”.
-  Numeric-looking strings are not transformed into floats during this audit.
-- Numeric and regression summaries include count, mean, sample standard deviation, min/max and
-  5th/25th/50th/75th/95th percentiles; nonfinite values are excluded from these summaries.
-- Text lengths count characters and whitespace-delimited words. Missing/empty text contributes zero.
-  The additional nonempty character mean excludes skipped inputs.
-  Approximate tokens are `ceil(characters / 4)`, configurable as a character ratio. This is not
-  calibrated to Jev, especially for Unicode, codes or serialised lists.
-- Combined text tokens use `ceil(sum(text characters for that row) / ratio)`; per-column tokens
-  use separate ceilings. Examples are deterministic unique nonempty length ranks, clipped only
-  for local display. Actual requests retain all text.
-- Input-token estimates count exact compact intended JSON character lengths per row, including
-  task/question/choices and JSON escapes. Non-text features are excluded; empty inputs are skipped. They exclude unknown
-  provider wrappers, output tokens and retries. All logical slots are counted before deduplication.
-
-Target distributions and regression quantiles live only in audit artifacts. Request metadata
-uses the allowed distinct class labels, never their counts or any other target-derived statistic.
+- Feature counts exclude the target. Missingness follows pandas CSV parsing. General unique
+  counts exclude nulls. Text reuse also excludes nonfinite and whitespace-only values.
+- The audit preserves CSV numeric dtypes and treats booleans as categorical. Numerical
+  summaries and regression quantiles use finite observations. Target summaries stay in
+  the audit artifacts. Requests use the original class vocabulary and documentary meanings.
+- Text lengths use characters and whitespace-delimited words. Approximate tokens default to
+  `ceil(characters / 4)`, with separate ceilings for per-column inputs and a row total for joint
+  text. Workload estimates include the compact request JSON, including metadata and escapes.
+  Exact provider token audits count the fully rendered requests separately.
 
 ## Reproduction and outputs
 
-Preparation validates pinned hashes; local audit tables are temporary. The source catalog
-and permanent dataset files retain download/source identities. Parallel audit construction
-and reads share an OS-backed lock. CSVs retain their source licences and are not redistributed.
-
-Raw folders now use `data/raw/01_fake_job_posting/` through
-`data/raw/20_zomato_restaurants/`. Catalog `directory` selects the local name, while `slug`
-retains the exact official Kaggle download identifier. Renaming a local folder therefore does
-not change the upstream dataset. `data.csv`, `metadata.json` and `download.json` live directly
-inside each dataset folder. Dataset versions remain pinned in the catalog and `download.json`;
-the loader rejects a cached download with a different source or version instead of silently
-reusing it. Frozen source snapshots live under `src/data/upstream/`; their SHA-256 hashes are
-unchanged, and they are never imported or executed. No Python files remain under `data/`.
+The catalog's `directory` selects the numbered folder under `data/raw/`. Its `slug` selects
+the Kaggle source. Each folder holds `data.csv`, `metadata.json` and `download.json`.
+Preparation checks the recorded source, version and hashes. Frozen references under
+`src/data/upstream/` are retained for inspection. CSVs retain their source licences.
 
 ## Exact text reuse
 
@@ -112,14 +87,10 @@ these are four and five respectively. Exact input equality predicts cache reuse 
 unchanged task metadata, question and settings. Cache reuse means returning the first stored
 response; it does not require a claim that repeated API executions are bit-identical.
 
-`overview.csv` orders task/size, text availability, distinct values and per-column reuse,
-nonempty text length, joint availability/reuse/length, and total extraction workload.
-All text cells equal rows × text columns. Distinct text cells are unique **within each named
-column**, then summed; they do not collapse equal strings across different column names.
-Empty-cell percentages divide by all text cells; distinct/per-column reuse percentages divide
-by nonempty cells; joint reuse divides by rows with at least one text value. Both-mode reuse
-also includes identical requests shared across modes. Numeric values remain in the table/report.
-The figure combines counts and percentages where useful and places all notes outside its cells.
+`overview.csv` summarizes availability, lengths, distinct values and extraction workload.
+Distinct cells are counted within each named column and then summed. Empty-cell rates use
+all cells, per-column reuse rates use nonempty cells, and joint reuse rates use rows with
+available text. Both-mode reuse includes identical requests shared across modes.
 
 ## Long-text audit
 
@@ -134,12 +105,9 @@ excerpts, clipped only for display. No extraction truncation policy is implied.
 
 ## Extraction and experiment selection
 
-The full exploration retains all 20 core TEXT datasets and both raw releases. Zomato
-Restaurants is removed from feature creation and experiments for its extreme text burden;
-Spotify Genres is removed for its 114-class output dimensionality and associated extraction
-overhead. The common experiment collection therefore has 18 datasets. Selected overview
-figures/tables label both as REMOVED; this does not mean files were deleted. Selection is
-based on input/representation feasibility before comparative predictive results.
+Exploration retains all 20 core text datasets. The 18 benchmark datasets exclude Zomato
+Restaurants for its extreme text burden and Spotify Genres for its 114-class output and
+extraction overhead. These choices were made before comparative predictive results.
 
 ## Dataset issues relevant to the experiment
 
@@ -156,12 +124,9 @@ Fraud=1, toxicity=True and Kickstarter=Successful; Product Sentiment has descrip
 names. Units and meanings of coded classes are verified in the source-backed metadata below.
 
 Zomato contributes about three quarters of raw text tokens and has extreme review lengths.
-Some inputs exceed the documented Jev context limit under the approximate token screen.
-No automatic truncation, chunking or summarisation is implemented. Review scores may be
-target proxies and warrant input-availability review. The owner selected shuffled row CV
-without entity/time restrictions; this estimates that benchmark setting, not future-time or
-unseen-entity deployment performance.
-Audit target distributions/quantiles remain descriptive only; none enter Jev inputs.
+The approximate screen flags some inputs against the Jev context limit. Decision extraction
+rejects overflow. Frozen encoders cover long inputs in chunks. Review scores can be target
+proxies and warrant prediction-time availability review.
 
 The 30-09-2026 audit finds substantial reuse of joint inputs too: Vancouver Salaries avoids
 59.36% of nonempty joint slots, Zomato 31.94%, Video Games Sales 28.20% and Data Scientist
@@ -223,12 +188,10 @@ an unseen-category code. Missing dates stay missing. This preserves, but does no
 Kickstarter's upstream 1970/nanosecond-formatted timestamps; no duration feature is invented.
 Unseen nominal categories still map to missing for numeric-only adapters.
 
-Interpretation checks: SciMago's comma-formatted measurements and Rotten Tomatoes' count
-fields remain official text. Names/categories such as publisher, province and brand can carry
-categorical signal without requiring language understanding. Text missingness can also carry
-signal. The statistics/permutation controls address some of these alternatives; they do not
-replace a reviewed numeric-as-text/categorical sensitivity analysis. CLEAR's formula-related
-non-text inputs and Montgomery's previous salary can leave little headroom for text gains.
+SciMago's comma-formatted measurements and Rotten Tomatoes' count fields remain official
+text. Publisher, province and brand can provide categorical signal. The common structured
+baseline controls for text availability. CLEAR's formula-related non-text inputs and
+Montgomery's previous salary can leave little headroom for text gains.
 Prediction-time availability depends on the intended use. Jigsaw includes comment reaction
 counts, Women's Clothing includes recommendation and feedback fields, and US Accidents
 includes end times. A prospective use case would need to establish when these fields become

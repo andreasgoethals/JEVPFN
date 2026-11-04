@@ -24,9 +24,10 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
   retain missing features. Do not silently truncate, drop rows/classes or cap training rows.
 - The selected roster and method are in README/config. Microsoft is excluded. No new models
   or changes to open design choices without instruction. Use open weights where available.
-- Full extraction/benchmark switches remain disabled pending acceptance. Bounded GPU contracts
-  require explicit execution, staged pins, complete exact token evidence and a VSC allocation.
-  Do not submit allocations or perform paid calls as a side effect of cleanup.
+- Open-weight and encoder extraction has reviewed 0A acceptance. Full hosted Jev,
+  VSC 0B and benchmark execution require their separate stage authorizations. Bounded GPU
+  contracts require explicit execution, staged pins, complete exact token evidence and
+  a VSC allocation. Cleanup grants no authority to submit jobs or make paid calls.
 - Preserve tokenization.py and decision_tokenization.py byte-for-byte while audits use their
   fingerprints. Historical availability constants there do not select active providers.
 - Existing authorization for environment setup persists; verify the actual interpreter and

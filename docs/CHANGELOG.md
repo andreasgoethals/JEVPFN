@@ -2,6 +2,8 @@
 
 ## 04-11-2026
 
+- Streamline the README and runbook, order PCA preparation before 0B, and align
+  dataset and literature notes with the shared baseline and current benchmark design.
 - Reduce Experiment 2 to joint PCA64 and per-column PCA32 across all three encoders.
   Qualify both recipes in 0B and compare them on matching dataset cohorts in the figures.
 - Bind each benchmark fit to its exact 0B split, reject perfectly recoded class targets,

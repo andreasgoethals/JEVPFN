@@ -1,20 +1,16 @@
 # Literature review
 
-JEVPFN-specific research evidence and limits of interpretation, reviewed on
-**24 October 2026** (SII interface and statistical resolution clarified 26 October;
-native-text versions and controls 27 October). It is neither an execution report nor a
-list of future experiments. Methods: [README](../README.md); dataset meanings:
-[DATA_SOURCES](DATA_SOURCES.md); operations: [VSC](VSC.md).
+Research evidence reviewed 24–28 October 2026, with the benchmark description aligned
+to the 4 November design. The [README](../README.md) defines the protocol and
+[DATA_SOURCES](DATA_SOURCES.md) documents dataset semantics.
 
-Since 30 October new Jev calls pin **1.14.0**. The 1.13 evidence below is historical and
-does not claim that every documented behavior persists in 1.14; the 1.14 interface and
-sensitivity results were reviewed separately from saved responses
-([AGENTS_MEMORY](AGENTS_MEMORY.md)). The pins below identify the historical review.
-The current submodule revisions are recorded by Git.
+Hosted extraction pins **Jev 1.14.0**. The earlier 1.13 evidence applies to that version.
+The 1.14 interface and sensitivity checks are documented in the [operational record](AGENTS_MEMORY.md).
 
 ## 1. Evidence, scope and provenance
 
-The independent libraries remain read-only at these pins:
+These read-only library snapshots were the evidence base for the October review.
+`git submodule status` reports the current checkout pins.
 
 | Library | SHA used for this review | Relevant coverage |
 |---|---|---|
@@ -22,16 +18,9 @@ The independent libraries remain read-only at these pins:
 | [TFM Library](../tfm-library/README.md) | `702d9ab0b66f6639ba8d443ff9c4a91231964465` | Tabular predictors, text representations, benchmarks and source snapshots. |
 | [VSC Library](../vsc-library/README.md) | `3bcdf55e576d10161d6189b40ac39380bbba9eca` | Infrastructure documentation and execution examples; operational evidence is separate from scientific evidence. |
 
-On this review date the canonical DM Library and mounted submodule had the same clean
-HEAD. There were no newer canonical papers missing from this pin. The DM overview's
-introductory “seven web-only” count is stale: its actual web-source table contains fifteen.
-This upstream documentation discrepancy does not change the project roster.
-
-All sixteen filed DM research papers are **preprints**; no peer-reviewed venue is confirmed
-in the curated records. A publisher model card, benchmark claim and independent evaluation
-are different evidence types. The libraries contain a curated, dated collection, not an
-exhaustive global search. Filed paper versions and released checkpoints can differ; neither
-a release date nor a repository snapshot establishes a model's training cutoff.
+The DM research records in that snapshot were preprints. The curated collection distinguishes
+publisher claims, implementation evidence and independent evaluation. Paper versions and
+checkpoint releases can differ. Training cutoffs require separate provenance.
 
 Detailed summaries and source maps belong in [DM summaries](../dm-library/SUMMARIES.md),
 [DM synthesis](../dm-library/SYNTHESIS.md) and [DM implementations](../dm-library/REPOSITORIES.md).
@@ -116,7 +105,7 @@ mutable tables. Open-weight availability does not mean zero compute cost or unre
 
 | Selected extractor | Source behavior that must survive the adapter |
 |---|---|
-| [Jev](https://docs.typesafe.ai/api) (1.14.0; reviewed as 1.13) | Hosted Noul, Choice and Score. Pin the model; preserve usage/version and raw response. Organization throughput and context/billing bounds are separate concepts. |
+| [Jev](https://docs.typesafe.ai/api) 1.14.0 | Hosted Noul, Choice and Score. Preserve usage, model version and raw responses. Account throughput and per-request limits are tracked separately. |
 | [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Custom decision runtime, not ordinary generated chat. LFM Open License is a conditional open-weight licence, not a blanket permissive open-source claim; qualifying research permissions and redistribution conditions must be respected. |
 | [Liquid d1-2B](https://huggingface.co/LiquidAI/d1-2B) | Separate LFM3 successor, text-only in this study; same questions and explicit mean readout. Its new runtime/window need independent acceptance; vendor benchmark improvements are not downstream evidence. |
 | [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Native decision head, noncausal full attention and saved calibration temperature. Generic causal-LM next-token inference is not equivalent. |
@@ -174,8 +163,9 @@ to a median level, so `SelfHostedClient.evaluate` explicitly passes `score_reado
 `lfm3.py` registers the non-thinking answer lead; the CPU counter reads that exact registration
 without importing Torch. Images, multi-select and native numerical-estimation outputs are
 outside the approved comparison. Its pinned Transformers 5.19 runtime is isolated from the
-older counters. CPU rendering is verified locally; real B200 acceptance remains pending.
-This is a targeted official-source check beyond the dated library corpus, not a global refresh.
+older counters. The recorded 0A campaign includes its B200 acceptance. That evidence qualifies
+execution and the feature contract. Predictive gains are evaluated downstream.
+[0A evidence](AGENTS_MEMORY.md#experiment-0a-evidence)
 
 
 ## 5. MulTaBench, embeddings and native-text predictors
@@ -269,7 +259,7 @@ Raw categorical strings are not automatically semantic language encoding.
 |---|---|
 | TabPFN-3.5 local | Its selected interface uses our numeric/categorical features. TabPFN v9's optional `TextTransformer` uses skrub character TF-IDF/SVD; this is not the hosted Plus/Thinking semantic workflow, and is not exclusive to 3.5. |
 | TabICL v2 | Classification/regression checkpoints with numeric/categorical inputs; no native general-language encoder in the selected recipe. Many-class handling must retain every class. |
-| LimiX-2 | V2 numeric/categorical predictor, distinct from the older LimiX-2M. `RebalanceFeatureDistribution.fit_transform` already fits on training rows despite the confusing `quantile_norm_all_data` name. Other upstream filtering/category/polynomial steps inspect query rows; our declared training-only adaptation is documented in [README](../README.md#models-and-comparisons) and still requires real 0B validation. |
+| LimiX-2 | V2 numeric/categorical predictor. `RebalanceFeatureDistribution.fit_transform` already fits on training rows. JEVPFN also restricts filtering, category encoding and polynomial scaling to training rows. The adapter still requires real 0B validation. [Benchmark design](../README.md#benchmark-design) |
 | Kumo Tabular | NVIDIA SDM single-table model, not relational KumoRFM. The pinned recipe count-encodes some categories and selects at most 500 columns. JEVPFN rejects feature loss; 500 is a recipe bound, not a proven architectural maximum. |
 | CatBoost | Has separate native text tokenizers/dictionaries/calculators, but the selected main comparison uses numeric/categorical input plus the explicit representations. |
 | Linear/logistic regression | Requires fold-local imputation, categorical encoding and scaling; has no implicit language encoder. |
@@ -364,12 +354,10 @@ our pipeline, not a guarantee that pretrained weights never saw public labels.
 
 ### Comparisons and probability meaning
 
-Decision features receive target semantics; frozen E5/Qwen vectors do not. Comparing them
-estimates practical representation utility, not solely architecture superiority.
-The active benchmark does not include separate presence-only, text-length or shuffled-feature
-controls. Missingness is handled consistently, but the main comparisons do not isolate semantic
-content from length/availability cues. Claims concern predictive utility, not a causal mechanism.
-The owner also declined a lexical TF-IDF/SVD family.
+Decision features use target semantics. Frozen E5/Qwen vectors use general-purpose encoding.
+Their comparison estimates practical representation utility. The structured baseline and augmented
+arms share the same text-availability flags, so the paired gains measure added value beyond those
+flags. Text length, identifiers and categorical cues can still contribute to those gains.
 
 A binary value is evidence for a supplied class, not an empirically calibrated
 `P(dataset target | all original features)`. Multiclass probabilities concern the whole
@@ -453,10 +441,3 @@ mappings; reuse across folds is an amortization advantage, not repeated free inf
 A GPU or provider latency from a paper is not a throughput guarantee for this workload.
 Cached artifacts provide reproducible reuse even when repeated uncached inference is not
 deterministic. Operational timing and hardware evidence belong with the actual run.
-
-
-The owner narrowed the executable scope to Experiments 1–3 on 29 October. Separate
-question-ablation and representation-control experiments are removed; bounded 0A
-robustness diagnostics remain operational checks. No lexical or presence-only control
-is included. Improvements over the non-text arm can therefore reflect both text
-availability and content; this design cannot attribute gains solely to semantics.

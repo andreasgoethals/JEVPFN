@@ -1,13 +1,9 @@
 # VSC operations
 
-Commands and site rules in execution order. The design is in [README](../README.md);
-dated run evidence, job IDs and failures are in [AGENTS_MEMORY](AGENTS_MEMORY.md).
-
-0A is accepted and 36 Liquid/Strands dataset jobs completed. GPFS PROJECT is the
-accepted durable root. The old Lustre JEVPFN tree and twelve redundant GPFS working
-sets were retired after validation and consumer checks. The resumed dispatcher
-uses the frozen DATA checkout and includes all 54 encoder dataset partitions.
-Checksummed evidence is in `2. feature_creation/manifests/storage_migration/` on DATA.
+The [README](../README.md) defines the benchmark. The [operational record](AGENTS_MEMORY.md)
+holds dated job status, receipts and recovery history. For the active campaign, the next
+stage begins with [feature verification and 0B](#46-experiment-0b) after extraction and
+publication finish. Keep the DATA checkout frozen while it has consumers.
 
 ## 1. Access
 
@@ -17,21 +13,14 @@ The owner renews the shared Windows-agent certificate manually, only when access
 step ssh login --context VSC
 ```
 
-They approve KU Leuven Authenticator. Agents never initiate login, install another agent,
-copy keys or schedule reminders. Connect with native Windows OpenSSH
-(`C:\Windows\System32\OpenSSH\ssh.exe -F none -T`, strict host-key checking) and send a
-bounded LF Bash script on stdin, as in TEMPLATE.md. This gateway drops unredirected remote
-stderr, so the script starts with `exec 2>&1` and prints start/end/status markers; empty
-exit-0 output proves nothing. Git Bash's own `ssh` cannot reach the Windows agent.
+The owner approves KU Leuven Authenticator. Use native Windows OpenSSH with strict host-key
+checking and the bounded LF stdin probe in [TEMPLATE](TEMPLATE.md). The gateway drops
+unredirected stderr, so start the script with `exec 2>&1` and require both output markers
+and a successful exit. Git Bash's `ssh` cannot use the Windows agent.
 
-Access authorizes inspection of this project's files, logs, quotas and jobs only, not
-submissions, cancellations, migration or deletion. All checkouts use `main`; a frozen VSC
-checkout may lag GitHub while it has consumers. When idle, fast-forward it, verify the
-commit and rerun relevant checks before the next freeze; never force it.
-
-Authorized long campaigns get one temporary 30-minute monitor with a recorded ID, owner,
-jobs, source and completion criteria. It stays quiet without changes, pauses on expired
-credentials and is removed once all tracked work is terminal and assessed.
+Inspection and workload authorization are separate. When the checkout is idle, fast-forward
+`main`, verify the commit and rerun affected checks before freezing the next stage.
+Authentication and monitoring boundaries are in [AGENTS](../AGENTS.md).
 
 ## 2. Storage and hardware
 
@@ -39,55 +28,30 @@ credentials and is removed once all tracked work is terminal and assessed.
 |---|---|
 | Git checkout with `.git`, specs, compact logs/manifests | `$VSC_DATA/JEVPFN` (`/data/leuven/383/vsc38338/JEVPFN`) |
 | Authoritative data, questions, weights, containers, features, predictions, large results | `/gpfs1/project/prj_00013/JEVPFN` (PROJECT, GPFS) |
-| CPU controller image | `PROJECT/JEVPFN/containers/control-v1`, selected by `control.active.json` |
+| CPU controller image | `<allocation>/JEVPFN/containers/control-v1`, selected by `control.active.json` |
 | Active B200 working set, one per runtime | `$VSC_SCRATCH_GPFS1/jevpfn-work/<runtime>/JEVPFN` |
 | Notebooks and merged results | Local repository |
 
-- Private `.vsc-storage.local.json` selects the allocated durable shared root. It is
-  ignored by Git and read by `scripts/storage_environment.sh` before image activation.
-  Explicit `JEVPFN_DURABLE_ROOT`/`JEVPFN_PROJECT_ROOT` overrides remain supported;
-  no allocation is inferred from a cluster name. The resolver appends `JEVPFN`.
-  `JEVPFN_STAGING_ROOT` selects a separate mutable working set. Frozen runtime pins
-  include the resolved durable authority.
-- Mindwell B200 runs inference; Mindwell `batch_graniterapids` runs CPU staging,
-  downloads, builds, token counts and PCA. wICE is an explicitly selected compatibility
-  route requiring native Lustre staging or node-local transfer I/O, never GPFS SQLite
-  random I/O. A100 is excluded. No automatic H100 fallback.
-- GPFS PROJECT weights, images, raw inputs, questions and exact token databases are
-  shared directly. Per-runtime mutable response/embedding/evaluation databases and
-  temporary compiler caches remain isolated on native GPFS scratch; do not duplicate
-  immutable working sets. Four CPUs use the B200 default 32,000 MiB; fourteen use
-  112,000 MiB. CPU jobs use their partition's memory-per-core default.
-- Working sets publish committed SQLite data to GPFS PROJECT every 600 seconds and
-  on exit. Publication validates compatible unions under a per-destination extraction
-  lock and uses SQLite backup to commit them transactionally. It never replaces a
-  complete durable cache with a partial scratch copy. Resume restores completed folds.
-  New decision workspaces warm only their provider's records.
-- Publication locks each destination independently; a busy periodic target is deferred,
-  while final publication waits. Dataset jobs publish their own dataset store. Source
-  snapshots and temporary unions use declared node-local disk when available;
-  resumable working stores stay on GPFS scratch and final unions remain on PROJECT.
-  Generated Transformers modules and compiler caches are isolated per allocation.
-- During the PROJECT migration only, all admissions/writers stop and every old
-  workspace holds an exclusive lease. Closed SQLite stores are checkpointed and
-  copied under exclusive database locks; their validated unions are assembled once
-  per dataset on node-local disk. A checksummed, fsynced complete file is atomically
-  installed only after another consumer check. This quiescent protocol must never
-  replace the live periodic-publication protocol. Independent numerical backup and
-  terminal CPU/GPU/publication evidence are required before source retirement.
-- Scratch is not a backup: unused GPFS files are purged after 30 days and a killed node
-  loses work since the last publication. Keep an independent downloaded copy of features.
-- At most two runtime working sets are resident, within a 200 GiB application budget,
-  500 GiB personal allocation and 20 GiB headroom (`config/3. experiment_0/scheduling.yaml`).
-  Staging checks other projects' usage; check `myquota` for bytes and files. Free
-  filesystem space is not quota. Never delete another project's files.
-  In shared-asset mode, successful release also retires the published mutable
-  copies; workspace identity/lease records remain. Unknown files, mounts or
-  recovery snapshots prevent removal. Legacy mirror releases preserve their queues.
+- `scripts/storage_environment.sh` reads the ignored `.vsc-storage.local.json` or an
+  explicit `JEVPFN_DURABLE_ROOT`/`JEVPFN_PROJECT_ROOT`. Set the allocation parent. The
+  resolver appends `JEVPFN`. `JEVPFN_STAGING_ROOT` points to a separate working root.
+- Inference uses Mindwell B200. CPU staging, builds, token counts and PCA use
+  `batch_graniterapids` for this GPFS deployment. An explicitly selected wICE route needs
+  native Lustre staging or node-local transfer I/O. B200 uses 32,000 MiB for four CPUs
+  and 112,000 MiB for fourteen. CPU jobs use the partition default per core. A100 is excluded.
+- Jobs read immutable assets directly from GPFS PROJECT and isolate mutable stores on
+  native scratch. They publish compatible SQLite unions every 600 seconds and on exit
+  under per-destination locks. Periodic publication can defer a busy store. Final publication
+  waits. Dataset jobs publish their own store, and resumed work reuses committed records.
+- The [scheduling configuration](<../config/3. experiment_0/scheduling.yaml>) allows two
+  resident workspaces, a 200 GiB working budget and 20 GiB headroom in a 500 GiB scratch
+  allocation. Check both bytes and files with `myquota`. Retain an independent feature
+  copy because unused scratch files can be purged and failed jobs can lose unpublished work.
 
-Infrastructure references: current VSC Library pin `0ed4ffa89d312b9bb6411681b6a14f81672439f3`; historical reviews used VSC Library `3bcdf55e576d10161d6189b40ac39380bbba9eca`
-(hardware review, 23 October) and `1c29213086a0ae76b8f95cdd8eccbb9db8d6ca87` (storage and
-Slurm recheck, 27 October); see its `guides/SLURM.md`, `STORAGE.md`, `SOFTWARE.md`, `CLUSTERS.md`.
+The infrastructure references are the pinned [VSC Library](../vsc-library/README.md)
+guides. Check the current pin with `git submodule status vsc-library`. The completed
+Lustre-to-GPFS migration and its quiescent copy protocol are in the
+[operational record](AGENTS_MEMORY.md#gpfs-project-migration-and-resume-34-november).
 
 ## 3. Runtimes and containers
 
@@ -110,12 +74,21 @@ scratch. Keep old images only while a recorded run or rollback needs them.
   to bypass a failed pin.
 - **Model-image probes** inside a CPU-controller job use an overlapping host Slurm step;
   rebuildable compiler caches use a per-job scratch leaf removed on exit.
-- **Predictor runtimes.** Stage the assets in `config/4. experiment_1/models.yaml`
-  (`python -m src.cluster.predictor_assets --execute` writes checksummed offline Hugging
-  Face snapshots). AG-MM has its own environment; TabSTAR v1.1 has the `tabstar-v1p1` image.
+- **Predictor runtimes.** Review the checkpoint and runtime pins in
+  [models.yaml](<../config/4. experiment_1/models.yaml>). Before freezing 0B,
+  `python -m src.cluster.predictor_assets --execute` stages the pinned TabSTAR snapshots on
+  CPU. TabSTAR v1.1 uses `tabstar-v1p1`. AG-MM uses a separate image.
 - Question ZIPs install with `input_install.slurm`, which refuses other JEVPFN consumers.
 
 ### CPU environment parity
+
+For manual VSC commands below, activate the controller from the DATA checkout.
+
+```bash
+cd "$VSC_DATA/JEVPFN"
+export JEVPFN_CONDA_ENV=JEVPFN
+source scripts/activate_conda.sh
+```
 
 The Windows notebook venv and sealed Linux CPU image share exact versions for the
 packages listed in `config/3. experiment_0/control_runtime.yaml`. The `control`
@@ -142,13 +115,13 @@ its frozen checkout and sealed images through completion.
 
 ### 4.1 Reset and upload (future authorized campaign only)
 
-The completed 0A must not be restarted. A new campaign needs separate authorization, all
-JEVPFN jobs and writers stopped, failures understood and the same reviewed source on both
-machines. On VSC (`JEVPFN_PYTHON` is the controller interpreter):
+For a separately authorized new campaign, reconcile existing jobs, stop JEVPFN writers,
+and verify the reviewed source on both machines. Preview with
+`python -m src.utils.output_cleanup --include-archives` on each machine. Add `--tier both`
+on VSC. Review the listed targets before running the destructive reset below.
 
 ```bash
-"${JEVPFN_PYTHON:?}" -m src.utils.output_cleanup --tier both --include-archives
-"$JEVPFN_PYTHON" -m src.utils.output_cleanup --tier both --include-archives --apply --writers-stopped
+"${JEVPFN_PYTHON:?}" -m src.utils.output_cleanup --tier both --include-archives --apply --writers-stopped
 "$JEVPFN_PYTHON" -m src.cluster.setup --cluster mindwell
 mkdir -p /gpfs1/project/prj_00013/JEVPFN/uploads
 ```
@@ -164,7 +137,6 @@ features, accounting, weights, containers, environments and secrets. Locally:
         & .\.venv\Scripts\python.exe @args
         if ($LASTEXITCODE -ne 0) { throw 'Python failed; remaining steps stopped.' }
     }
-    Invoke-Jev -m src.utils.output_cleanup --include-archives
     Invoke-Jev -m src.utils.output_cleanup --include-archives --apply --writers-stopped
     Invoke-Jev -m src.data.prepare
     Invoke-Jev -m src.jev.preparation --rebuild
@@ -178,12 +150,13 @@ features, accounting, weights, containers, environments and secrets. Locally:
 ```
 
 The upload holds the 18 question stores and metadata, never credentials or weights.
-Install and freeze on VSC; installation validates every member, hash and row link before
-an atomic replacement, and freeze compares source and configuration (not notebook output):
+Install the question bank on Mindwell CPU and verify the matching freeze after the job
+passes. Installation checks bundle members, hashes and row links before replacement.
 
 ```bash
-"${JEVPFN_PYTHON:?}" -m src.cluster.input_transfer install /gpfs1/project/prj_00013/JEVPFN/uploads/decision_inputs_v3.zip --writers-stopped
-"$JEVPFN_PYTHON" -m src.cluster.freeze --record --expected-file /gpfs1/project/prj_00013/JEVPFN/uploads/frozen_revision.json
+mkdir -p "output_JEVPFN/3. experiment_0/logs"
+sbatch --wait scripts/slurm/input_install.slurm &&
+  "$JEVPFN_PYTHON" -m src.cluster.freeze --record --expected-file /gpfs1/project/prj_00013/JEVPFN/uploads/frozen_revision.json
 ```
 
 An idle, unfrozen setup for a later campaign runs `bash scripts/test_all.sh --execute --watch`:
@@ -237,9 +210,9 @@ then reconfigure and record a new freeze. Accepted evidence is never deleted at 
 
 ### 4.4 Open-weight and encoder extraction
 
-Enabled switches: `accepted_before_extraction_manifests` and `full_feature_creation_enabled`
-in `config/3. experiment_0/self_hosted.yaml`, and `config/2. feature_creation/text_embeddings.yaml`
-(recipes in `embedding_models.yaml`). From the frozen checkout:
+For a fresh, authorized campaign, configure `accepted_before_extraction_manifests` and
+`full_feature_creation_enabled` in `self_hosted.yaml` and enable `text_embeddings.yaml`.
+Run from the frozen checkout with the controller active.
 
 ```bash
 mkdir -p "output_JEVPFN/2. feature_creation/logs"
@@ -247,57 +220,36 @@ python -m src.cluster.feature_campaign
 python -u -m src.cluster.feature_campaign --execute --watch
 ```
 
-The original graph has 223 steps: 198 decision × dataset jobs, three full encoder jobs
-and eleven stage/release pairs. The original controller admits two datasets per runtime.
-Since the owner's 2 November parallelism request, `src.cluster.feature_admission` replaces
-that admission policy: all ready datasets can queue together, and three unsubmitted encoder
-jobs split into 54 independent dataset jobs (274 execution steps). Outputs remain 396
-decision blocks and 54 embedding stores. The next free workspace prioritizes Cloudflare
-staging, then its encoder jobs. Two resident workspaces, the 200 GiB working budget and
-one bulk-transfer writer remain storage safeguards. No Jev call or predictor is launched.
-Exact duplicates reuse saved outputs. The launcher resumes
-recorded job IDs; a step left `starting` without a job ID is ambiguous and must be
-checked in Slurm accounting before any resubmission. Never run two campaigns for one
-provider. Review publication receipts before downloading or marking a dataset complete;
-completed extraction still needs artifact validation and is not 0B.
+**Active campaign.** The reviewed `src.cluster.feature_admission` controller owns the
+expanded 274-step graph. It schedules 198 decision dataset jobs and 54 encoder dataset
+jobs, plus staging and release. The output roster is 396 decision blocks and 54 embedding
+stores. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
+limit still apply. See the [recorded handover](AGENTS_MEMORY.md#parallel-admission-2-november).
 
-Parallel admission binds `--expected-campaign`, `--expected-source` and `--reviewed-by`
-to the original frozen campaign. It archives the old receipt, preserves accepted IDs and
-records a separate execution identity and controller artifact SHA. The old controller
-refuses that changed execution identity, so it cannot accidentally launch the three
-unpartitioned encoders again. Each encoder shard uses the existing script's dataset
-argument and explicitly exports `JEVPFN_PUBLISH_DATASET` for scoped publication.
-When source has active consumers, deploy the reviewed companion as an immutable compact
-artifact under DATA output, running inside the sealed CPU image with the frozen checkout
-as its import root. Under the campaign lock, verify and stop only the old login controller;
-record the replacement's host/PID/start ticks and hash. GPU jobs, assets and frozen code
-are unchanged. This is an admission handover, not a new validation acceptance or migration.
-After the campaign ends, reconcile the DATA checkout with main before the next stage.
-On 2 November the live controller reports `lp_verbekelab` limits of 500 submitted and
-16 running jobs per user/account, shared across projects on Mindwell. These are measured
-site limits, not a hard-coded application preference; recheck them for a later campaign.
-At that snapshot all 500 slots were occupied. The dispatcher refills as capacity opens;
-unprepared work still waits for verified native staging. Arrays count each pending task.
+**Monitor and recover.** Reconcile the manifest, Slurm accounting, and publication receipts.
+A step marked `starting` without a job ID needs accounting review before retry. Named
+submission-limit refusals remain pending. Other policy errors or timeouts need review.
+The 2 November snapshot measured 500 submitted and 16 running slots per user/account
+on Mindwell. Arrays use one submission slot per pending task. Recheck site limits as needed.
 
-Named Slurm submission-ceiling refusals leave work pending and retry on the next poll;
-generic policy errors, timeouts or missing receipts remain ambiguous. For a reviewed
-operational repair, first confirm all existing jobs are terminal, preserve the old freeze,
-update and test the idle checkout, then record the new freeze. Recover the unchanged grid
-with `python -u -m src.cluster.feature_campaign --execute --watch --recover --reviewed-by NAME`.
-That command is for the original unpartitioned graph; do not use it after parallel
-admission. For the expanded graph use `src.cluster.feature_admission --recover-from OLD_EXECUTION_ID
---previous-freeze ARCHIVED_COMPLETED_REVISION --expected-source NEW_SOURCE --reviewed-by NAME
---execute --watch` after Linux recovery QA. The recovery refuses scientific/configuration or
-runtime-pin changes, preserves all completed job IDs and 54 encoder partitions, and retries
-only failed or unsubmitted work. Recovery reconciles every known ID and retains previous attempts.
-The CPU-only `feature_recovery_test.slurm` checks regressions, unchanged numerical source
-and saved feature blocks without replacing accepted 0A reports. Preserve scratch until
-recovered publication succeeds; do not restage over it or delete failed responses.
+For reviewed recovery, wait for all known jobs to become terminal, archive the freeze,
+test the idle checkout, and record the next freeze. `feature_recovery_test.slurm` checks
+saved features and numerical source without replacing 0A evidence. Choose the recovery
+entry point for the graph recorded in the manifest.
+
+| Graph | Recovery command |
+|---|---|
+| Original unpartitioned | `python -u -m src.cluster.feature_campaign --execute --watch --recover --reviewed-by NAME` |
+| Expanded parallel | `python -u -m src.cluster.feature_admission --recover-from OLD_EXECUTION_ID --previous-freeze ARCHIVED_COMPLETED_REVISION --expected-source NEW_SOURCE --reviewed-by NAME --execute --watch` |
+
+Recovery preserves completed IDs and numerical artifacts and refuses changes to scientific
+configuration or runtime pins. Keep the scratch recovery state until publication is verified.
 
 ### 4.5 Jev (local, owner-run)
 
-`secrets/typesafe.local.json` (Git-ignored) is loaded automatically; never upload it or
-print the key. An explicit `TYPESAFE_API_KEY` overrides it; remove stale overrides.
+The local CLI loads the ignored `secrets/typesafe.local.json`. `TYPESAFE_API_KEY` takes
+precedence. Keep credentials local. The following paid validation commands are for
+an authorized Jev validation stage.
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.jev.setup_pilot --check-account
@@ -321,14 +273,9 @@ print the key. An explicit `TYPESAFE_API_KEY` overrides it; remove stale overrid
   `python -m src.jev.recovery DATASET_ID` inspects stopped requests without calls;
   `--review FILE --apply --writers-stopped` transitions preserve charges and history.
 
-The first-100-source-rows validation (1,800 rows, 7,643 requests, USD 1 cumulative cap,
-validation-only artifacts excluded from benchmark inventory) is complete:
-
-```powershell
-.\.venv\Scripts\python.exe -m src.jev.prefix_pilot
-.\.venv\Scripts\python.exe -m src.jev.prefix_pilot --execute
-if ($LASTEXITCODE -ne 0) { throw 'Prefix pilot stopped; inspect its receipt before resuming.' }
-```
+The first-100-row validation passed on all 18 datasets. Its 7,643 requests produced
+validation-only artifacts. See the [Jev accounting record](AGENTS_MEMORY.md#jev-accounting).
+`python -m src.jev.prefix_pilot` previews a repeat.
 
 Full Jev needs a reviewed `jev_pilot` acceptance in the private config (checksummed
 reports, `settings_sha256`, `input_sets`, `context_envelope_sha256`) and a reviewed
@@ -351,59 +298,68 @@ The merge validates identities and preserves other providers. Restage predictor 
 
 ### 4.6 Experiment 0B
 
-After complete extraction and verified transfer, fill the benchmark `feature_selectors`
-with provider, model, version, question bank, question variant and `settings_sha256`.
-0B derives all required decision artifacts from those selectors. An optional
-`feature_artifacts` list in `debug.yaml` must match the selected artifact IDs exactly.
-Finish the encoder/PCA grid before preparing every dataset/encoder cache as described
-in §4.7. Prepare and verify the separate sealed predictor runtimes and their checkpoints.
+After extraction and publication finish, reconcile terminal jobs and verify the durable
+feature stores. Import the independent local copy using [the transfer procedure](#6-utilization-and-transfer).
+Include complete owner-run Jev features when qualifying the full roster.
 
-```bash
-python -m src.evaluation.qualification
-sbatch scripts/slurm/experiment_0_after.slurm
-sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 tabpfn_3_5
-```
+1. **Bind inputs.** Close the reviewed extraction stage using [the freeze procedure](#43-acceptance).
+   Set each benchmark `feature_selectors` entry to the provider, model,
+   version, question bank, question variant and `settings_sha256`. An optional
+   `feature_artifacts` list in `debug.yaml` must match the selected artifact IDs exactly.
+2. **Stage runtimes and prepare PCA.** Stage the reviewed predictor images and checkpoints.
+   Set the 0B fixture and profile switches (`predictor_execution_enabled` and
+   `full_fold_profile_enabled`), then record the 0B freeze. Submit one CPU preparation per
+   dataset and encoder (18 × 3). Each job writes joint PCA64 and separate PCA32 for the
+   exact outer and binary inner training partitions.
 
-The CPU preflight validates all selected datasets and decision blocks, all three encoder
-stores, every required outer/inner PCA key and its checksum, the shared CPU package
-lock, and the offline contracts. It reports exact feature-row overlap by fold and
-fails on exact raw target copies or class relabelings. The predictor contracts cover binary, multiclass,
-30-class and regression tasks, missing/categorical inputs, fixed class order and resume.
-They exercise joint PCA64 and separate PCA32 at both encoder widths. CPU predictor contracts use
-`experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on native Mindwell CPU nodes.
+   ```bash
+   mkdir -p "output_JEVPFN/5. experiment_2/logs"
+   sbatch scripts/slurm/prepare_pca.slurm REG_TEXT_ROTTEN_TOMATOES e5_small_v2
+   ```
 
-After enabling the separate `full_fold_profile_enabled` switch for 0B, generate
-`benchmark_jobs --profile-fold` arrays for each applicable phase and predictor. The
-profile plan picks the tallest and widest supported arm for each predictor and phase, covering both PCA
-recipes separately in Experiment 2. Ties prefer the larger encoder input width. After
-deduplication, the current grid requires 33 profiles.
-These jobs fit the full first outer fold, retain the binary inner-OOF predictions,
-and read back predictor widths, prediction row IDs and targets. Inspect the resource, publication,
-and independent transfer/restore evidence before accepting 0B. These profiles are
-resource checks on representative arms.
+3. **Run preflight and predictor contracts.** After PCA is published, submit the CPU
+   preflight and a contract job for each of the nine predictors. For each GPU runtime,
+   stage its working set first. This example uses TabPFN. CPU predictors use
+   `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX`.
 
-Put the current VSC preflight, all nine contract reports, and all required full-fold
-reports in the checksummed evidence list of the owner's reviewed acceptance. Verify
-that record with `python -m src.evaluation.qualification --acceptance FILE` in a CPU
-allocation against durable PROJECT. It reads and checks the published prediction
-records. The benchmark also checks that the loaded data, fold assignment, feature bytes and predictor
-runtime match the qualified identities.
+   ```bash
+   mkdir -p "output_JEVPFN/3. experiment_0/logs"
+   sbatch scripts/slurm/experiment_0_after.slurm
+   sbatch --wait scripts/slurm/experiment_0_scratch_stage.slurm tabpfn_3_5 &&
+     sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 tabpfn_3_5
+   ```
 
-### 4.7 PCA and benchmark
+   Preflight checks the dataset, feature and PCA identities and checksums, the CPU package
+   lock and the offline tests. It reports exact cross-fold feature-row overlap and rejects
+   exact target copies and class recodings. The predictor fixtures exercise binary,
+   multiclass including 30 classes, and regression tasks. They check missing and categorical
+   inputs, both PCA recipes at both encoder widths, class order and resume.
+4. **Profile full folds.** Keep each GPU working set through its contracts, profiles and
+   verified publication. Release it before staging beyond the workspace limit. List the required arms with
+   `python -m src.evaluation.qualification`. Generate the matching arrays for each phase
+   and predictor. The command prints a reviewed submission command.
 
-Prepare fold-specific PCA on CPU (repeat for 18 datasets × three encoders), then restage
-the predictor:
+   ```bash
+   python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --profile-fold --write
+   ```
 
-```bash
-mkdir -p "output_JEVPFN/5. experiment_2/logs"
-sbatch scripts/slurm/prepare_pca.slurm REG_TEXT_ROTTEN_TOMATOES e5_small_v2
-```
+   The 33 profiles cover the tall and wide extremes, including both Experiment 2 recipes.
+   Each fits the first outer fold at full size, retains binary inner-OOF predictions, and
+   verifies predictor width, row IDs and targets. Review resource use and publication.
+5. **Accept the stage.** Add the current preflight, nine contract reports and all required
+   profiles to the checksummed evidence list. Verify the owner's reviewed record with
+   `python -m src.evaluation.qualification --acceptance FILE` in a CPU allocation against
+   durable PROJECT. It reads the published predictions. Benchmark jobs require the same
+   dataset, folds, features and sealed predictor runtime that passed 0B.
+
+### 4.7 Benchmark
 
 After reviewed 0B acceptance (`stage: after_extraction`, `accepted: true`, `reviewed_by`,
-checksummed evidence and the `evaluation_identity` from the 0B reports), set only
-`experiment_0_acceptance` and the experiment's `enabled` switch. Changing the tested
-pipeline requires a new 0B acceptance; `python -m src.evaluation.acceptance` prints the
-current identity. Write an array plan (it prints, but does not submit, the command):
+checksummed evidence and the `evaluation_identity` from the 0B reports), close the 0B freeze.
+Set `experiment_0_acceptance` and the experiment's `enabled` switch, then freeze the
+benchmark stage. Changes to the tested pipeline require fresh acceptance.
+`python -m src.evaluation.acceptance` prints the current identity. Write an array plan
+to print its submission command.
 
 ```bash
 python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --concurrency 8 --write

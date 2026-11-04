@@ -1,10 +1,24 @@
 # Operational evidence
 
-Updated 4 November 2026. This file owns current run state, exact evidence and
-reusable failure lessons, newest first. Method: [README](../README.md); commands:
-[VSC](VSC.md); dataset meanings: [DATA_SOURCES](DATA_SOURCES.md); research evidence:
-[LITERATURE_REVIEW](LITERATURE_REVIEW.md); older detail: Git and [CHANGELOG](CHANGELOG.md).
-Submission is not completion. Preserve active or queued checkouts and recovery inputs.
+This is the dated record of campaign evidence and recovery. The [README](../README.md)
+defines the design and the [VSC runbook](VSC.md) gives commands. Job completion requires
+terminal accounting and the expected artifacts.
+
+## Latest verified status
+
+On 4 November 2026 at 13:53 CET, the VSC DATA checkout was frozen at `3f84d7e`.
+The [active extraction campaign](VSC.md#44-open-weight-and-encoder-extraction) records its
+state in `output_JEVPFN/2. feature_creation/manifests/open_weight_campaign.json` on DATA.
+It showed 42 completed steps (36 dataset jobs and six infrastructure steps),
+90 submitted, and 142 awaiting dispatch or prerequisites, with no failure recorded.
+Slurm showed all 90 submissions pending for priority. Each encoder had 18 queued jobs.
+
+The reviewed benchmark code now uses joint PCA64 and separate PCA32. The next stage
+requires verified published features, fold-local PCA and [0B evidence](VSC.md#46-experiment-0b),
+including 33 profiles. Local CPU package parity covers all 56 control pins. The raw
+input audit on 18 datasets found no exact target copies or class recodings. Exact
+feature-row overlap in held-out folds was 36.2% for Data Scientist Salary and 9.6% for
+Wine Review. These are diagnostics from the shuffled folds.
 
 ## Authority
 
@@ -72,21 +86,6 @@ migration records bind relocated seals and retain the previous identities. Eleve
 short independent B200 checks replace the cancelled, unstarted two-hour maintenance
 allocation 11767669. Normal B200 availability remains an external queue constraint;
 no other project's allocations/accounts are used.
-
-### Post-extraction preparation (4 November)
-
-At 12:18 CET, the live campaign had completed 36 dataset jobs and six infrastructure
-steps. All 54 encoder datasets and 36 Cloudflare/Perplexity datasets were submitted
-and waiting for priority on Mindwell. The other 126 decision dataset jobs were pending
-in the graph. The scheduler estimated starts for twelve submissions through 11 November.
-No new failure was recorded. The checkout remains frozen at `3f84d7e`.
-
-The next 0B gate qualifies exact artifacts, the CPU control lock, every real predictor
-fixture and tall/wide full-fold profiles. Local package parity covers all 56 control
-pins. Windows and Linux use different Python patches and platform binaries. Raw input
-audit on the 18 selected datasets found no exact target-copy feature, and found 36.2%
-exact feature-row overlap in held-out Data Scientist Salary rows and 9.6% in Wine Review.
-These are shuffled-CV diagnostics. See [VSC](VSC.md) for the remaining validation commands.
 
 ## Release recovery (3 November, before migration)
 
@@ -388,13 +387,6 @@ receipt `0A_local/20261030T081306Z_c9a72019.json`, review
   files were recycled; the owner did not delete them and no responsible process was found.
   Do not attribute it to another agent or claim a compromise. All sixty were restored from
   the Recycle Bin and hash-checked (`storage_cleanup/local_raw_restore_20261030T094200Z.json`).
-
-## Documentation scope
-
-TEMPLATE equals the canonical copy, SHA-256
-`9e113ac591a7d702bc61060a3bce703419cb7a296fcf9cf77283c1e5ffd27a20`. Library pins are
-unchanged; LITERATURE_REVIEW keeps its dated pins. Active science is Experiments 1–3 only;
-no winner-selected follow-ups or lexical baselines.
 
 ## Reusable failure lessons
 
