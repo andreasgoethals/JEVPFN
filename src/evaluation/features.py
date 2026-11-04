@@ -57,7 +57,7 @@ NATIVE_FEATURE_SETS = (
 
 
 def uses_embeddings(name):
-    return name in MAIN_FEATURE_SETS[4:]
+    return name in MAIN_FEATURE_SETS[4:] or name == "non_text_plus_tar"
 
 
 def decision_feature_set(name):

@@ -169,7 +169,7 @@ def completed(recipe, phase):
         roles.append(body["metadata"]["prediction_role"])
         result.append(ref)
     expected = {"outer_test"}
-    if recipe["task_type"] == "binary_classification":
+    if recipe["task_type"] == "binary_classification" and recipe.get("binary_threshold_policy", "inner_oof_f1") == "inner_oof_f1":
         expected.add("inner_oof_binary_threshold")
     if len(roles) != len(expected) or set(roles) != expected:
         raise ValueError("Fold prediction roles differ")

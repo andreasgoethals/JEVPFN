@@ -1,0 +1,20 @@
+extends: experiment_2/embeddings
+phase: experiment_3
+name: supervised_target_aware_embeddings
+enabled: false
+prepare_enabled: false
+encoders: [e5_small_v2_tar]
+candidate_combinations: [non_text_plus_tar]
+upstream_commit: bc9e87130df9884ccd49d04055599c0eda9f3238
+runtime: e5_tar
+base_encoder: e5_small_v2
+binary_threshold_policy: fixed_0_5
+inner_encoder_refits: 0
+training_row_cap: null
+validation: upstream_split_to_val_10_percent_max_1000
+text_input: 'passage: <column>: <value>'
+text_length_policy: upstream_512_token_truncation_recorded
+missing_text: upstream_missing_value_placeholder
+selection: prespecified_tar_with_two_pca_recipes
+coordinate_standardization: upstream_StandardScaler_outer_training_only
+pca_solver: sklearn_auto

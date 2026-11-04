@@ -174,6 +174,7 @@ def evaluate_cv(
     feature_set: str,
     allow_model_runs: bool = False,
     inner_folds: int = 3,
+    binary_threshold_policy: str = "inner_oof_f1",
     phase: str = "experiment_1",
     synchronize=None,
     device: str = "cpu",
@@ -198,6 +199,7 @@ def evaluate_cv(
         "experiment_1",
         "experiment_2",
         "experiment_3",
+        "experiment_4",
     }:
         raise ValueError("Evaluation requires an experiment phase")
     row_ids = [f"csv:{i}" for i in range(len(dataset.frame))]
@@ -229,6 +231,9 @@ def evaluate_cv(
     target = dataset.frame[dataset.metadata.target].reset_index(drop=True)
     metadata = dataset.metadata
     binary = metadata.task_type == "binary_classification"
+    if binary_threshold_policy not in {"inner_oof_f1", "fixed_0_5"}:
+        raise ValueError("Unknown binary threshold policy")
+    tune_threshold = binary and binary_threshold_policy == "inner_oof_f1"
     classes = metadata.classes
     positive = classes[-1] if binary else None
     text_ids = text_identities(dataset)
@@ -257,7 +262,8 @@ def evaluate_cv(
         "representation_recipe": representation_recipe,
         "estimator_settings": estimator_settings,
         "split_id": specification["split_id"],
-        "inner_folds": inner_folds if binary else None,
+        "inner_folds": inner_folds if tune_threshold else None,
+        "binary_threshold_policy": binary_threshold_policy,
         "text_overlap_version": OVERLAP_VERSION,
         "protocol_sha256": code_identity(
             [
@@ -291,9 +297,9 @@ def evaluate_cv(
                 warnings.simplefilter("always")
                 train, test = np.array(fold["train"]), np.array(fold["test"])
                 timer = PhaseTimer(device=device, synchronize=synchronize)
-                threshold, oof = None, None
+                threshold, oof = (0.5 if binary else None), None
                 pca_diagnostics = []
-                if binary:
+                if tune_threshold:
                     encoded = np.array([canonical_json(scalar(v)) for v in target.iloc[train]])
                     if pd.Series(encoded).value_counts().min() < inner_folds:
                         raise ValueError("Insufficient examples for binary inner stratified CV")
@@ -365,12 +371,13 @@ def evaluate_cv(
                     "outer_fold": number,
                     "split_id": specification["split_id"],
                     "n_train": len(train),
-                    "n_validation": len(train) if binary else 0,
+                    "n_validation": len(train) if tune_threshold else 0,
                     "target_scale": "original_dataset_target",
                     "class_order": list(classes),
                     "positive_class": positive,
                     "selected_threshold": threshold,
-                    "inner_folds": inner_folds if binary else None,
+                    "inner_folds": inner_folds if tune_threshold else None,
+                    "binary_threshold_policy": binary_threshold_policy,
                     "preprocessing": "inside_estimator_fit_training_partition_only",
                     "pca_diagnostics": pca_diagnostics,
                                 "single_text_representations_equivalent": len(metadata.text_columns) == 1,
@@ -378,7 +385,7 @@ def evaluate_cv(
                 }
                 for role, positions, predictions in [
                     ("outer_test", test, prediction),
-                    *([("inner_oof_binary_threshold", train, oof)] if binary else []),
+                    *([("inner_oof_binary_threshold", train, oof)] if tune_threshold else []),
                 ]:
                     table = pd.DataFrame(
                         {
@@ -396,13 +403,14 @@ def evaluate_cv(
                                 predictions,
                                 classes=classes,
                                 positive_class=positive,
-                                selected_threshold=threshold,
+                                selected_threshold=threshold if tune_threshold else None,
                             )
                             for i in range(len(classes)):
                                 table[f"p_c{i:03d}"] = predictions[:, i]
                             if binary:
                                 table["decision_default"] = predictions[:, -1] >= 0.5
-                                table["decision_selected"] = predictions[:, -1] >= threshold
+                                if tune_threshold:
+                                    table["decision_selected"] = predictions[:, -1] >= threshold
                         if role == "outer_test":
                             overlap = fold_overlap(text_ids, train, test)
                             for column in overlap:
@@ -412,7 +420,7 @@ def evaluate_cv(
                                 table.y_true,
                                 predictions,
                                 overlap,
-                                selected_threshold=threshold,
+                                selected_threshold=threshold if tune_threshold else None,
                             )
                     identity = {**base, "prediction_role": role}
                     records.append(

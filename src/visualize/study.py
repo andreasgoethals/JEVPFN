@@ -60,7 +60,7 @@ def coverage_figures(table, title):
 
 def native_figures(summary):
     """Headline score of each native system per dataset, one panel per task."""
-    data = summary[summary.phase.eq("experiment_3") & summary.defined_folds.eq(5)] if not summary.empty else summary
+    data = summary[summary.phase.eq("experiment_4") & summary.defined_folds.eq(5)] if not summary.empty else summary
     if data.empty:
         return
     if data.duplicated(["dataset_id", "model_id"]).any():
@@ -89,7 +89,7 @@ def native_figures(summary):
     yield fig, "native_systems", (
         "Headline score of each original-text system on every dataset with five defined outer "
         "folds (mean over folds; ROC-AUC, macro one-vs-rest ROC-AUC or R²), on the same splits as "
-        "Experiments 1 and 2. These systems change predictor and text treatment together, so their "
+        "Experiments 1–3. These systems change predictor and text treatment together, so their "
         "differences do not isolate a representation. Missing systems are absent, not zero; "
         "negative R² values are shown unmodified."
     )
@@ -124,7 +124,7 @@ def burden_figures(table):
     for ax in axes[:, 0]:
         ax.set_ylabel("fit time (s, log)", fontsize=7)
     names = {"experiment_1": "Decision features", "experiment_2": "Frozen embedding",
-             "experiment_3": "Native text"}
+             "experiment_3": "Supervised TAR", "experiment_4": "Native text"}
     handles = [Line2D([], [], linestyle="none", marker="o", markersize=4, color=c, label=names[p])
                for p, c in style.FAMILY_COLORS.items() if p in set(table.phase)]
     fig.legend(handles=handles, loc="outside upper center", ncols=len(handles), fontsize=7,
@@ -164,12 +164,12 @@ def cross_system_figures(contrasts):
         models = list(style.MAIN_PREDICTORS)
         fig, axes = plt.subplots(1, 3, figsize=style.DASHBOARD_SIZE, sharey=True, sharex=True)
         colors = {"Non-text": style.MEDIAN_COLOR, "Decision": style.FAMILY_COLORS["experiment_1"],
-                  "Embedding": style.FAMILY_COLORS["experiment_2"]}
+                  "Embedding": style.FAMILY_COLORS["experiment_2"], "TAR": style.FAMILY_COLORS["experiment_3"]}
         for ax, reference in zip(axes, style.NATIVE_COLORS):
             for model_pos, model in enumerate(models):
                 for family_pos, (family, color) in enumerate(colors.items()):
                     values = shown.loc[shown.model.eq(model) & shown.reference.eq(reference) & shown.family.eq(family), "effect"]
-                    ax.scatter(values, model_pos + (family_pos - 1)*0.16 + np.linspace(-0.035, 0.035, len(values)),
+                    ax.scatter(values, model_pos + (family_pos - 1.5)*0.16 + np.linspace(-0.035, 0.035, len(values)),
                                color=color, s=8, alpha=0.5)
             ax.axvline(0, color=style.GRID_COLOR)
             ax.set_title(style.PREDICTOR_LABELS[reference])
@@ -177,7 +177,7 @@ def cross_system_figures(contrasts):
             ax.set_xlabel("Fixed recipe − native")
         axes[0].invert_yaxis()
         fig.legend([Line2D([], [], color=c, marker="o", linestyle="none") for c in colors.values()],
-                   list(colors), loc="outside lower center", ncol=3)
+                   list(colors), loc="outside lower center", ncol=4)
         fig.suptitle(f"{layout.TASK_LABELS[task]} · {len(expected)} matched datasets · {LABELS[task_rows.metric.iloc[0]]} differences", fontsize=9)
         yield fig, f"cross_system_{task}", (
             "Descriptive comparison with each native-text reference, pairing the same datasets/splits/folds "

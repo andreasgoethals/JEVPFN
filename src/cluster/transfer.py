@@ -103,6 +103,8 @@ def export_bundle(*, include_token_counts=True) -> Path:
                     relative = source.relative_to(output_root)
                     if not source.is_file() or source.is_symlink():
                         continue
+                    if any(".incomplete_" in part for part in relative.parts):
+                        continue  # Unpublished TAR work is retained remotely for diagnosis.
                     if "token_audit" in relative.parts and "shards" in relative.parts:
                         continue  # Rebuildable CPU restart files; merged counts are exported.
                     if not include_token_counts and "token_audit" in relative.parts:
@@ -117,6 +119,7 @@ def export_bundle(*, include_token_counts=True) -> Path:
                             "experiment_1",
                             "experiment_2",
                             "experiment_3",
+                            "experiment_4",
                         )
                     }:
                         continue
@@ -144,6 +147,7 @@ def export_bundle(*, include_token_counts=True) -> Path:
                     "raw datasets",
                     "prepared inputs",
                     "token audit restart partitions",
+                    "incomplete TAR bundles",
                     *([] if include_token_counts else ["rebuildable merged token counts"]),
                     "credentials",
                 ],

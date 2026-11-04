@@ -107,8 +107,8 @@ def test_numbered_phases_keep_logical_config_ids_and_valid_folder_numbers(monkey
     import pytest
 
     assert paths.phase_folder("question_preparation") == "1. question_preparation"
-    assert paths.phase_folder("synthesis") == "7. synthesis"
-    for retired in ("experiment_4", "experiment_5"):
+    assert paths.phase_folder("synthesis") == "8. synthesis"
+    for retired in ("experiment_5", "experiment_6"):
         with pytest.raises(ValueError, match="Unknown research phase"):
             paths.phase_folder(retired)
     assert (

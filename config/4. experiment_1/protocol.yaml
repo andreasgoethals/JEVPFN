@@ -26,6 +26,7 @@ evaluation:
     primary_metric: roc_auc
     threshold_objective: f1
     threshold_source: inner_validation_predictions_only
+    experiment_3_threshold_policy: fixed_0_5_no_inner_encoder_refits
     test_threshold_tuning: forbidden
     positive_class: canonical_last  # Same fixed class orientation as Jev templates.
     tie_break_proposal: closest_to_0_5_then_larger_threshold
@@ -99,7 +100,7 @@ evaluation:
   preprocessing_fit_scope: training_partition_only
   model_tuning_budget: 0
   hyperparameters: pinned_library_defaults_with_explicit_seed_device_and_resource_settings
-  optional_finetuning: disabled  # Native models retain their required, fixed adaptation recipe.
+  optional_finetuning: disabled  # Native adaptation and Experiment 3 TAR are prespecified required methods.
   optional_automl_or_bagging: disabled
   native_epoch_averaging: TabSTAR_v1p1_three_internal_validation_epochs_as_published
   calibration: none

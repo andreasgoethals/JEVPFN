@@ -15,10 +15,23 @@ Slurm showed all 90 submissions pending for priority. Each encoder had 18 queued
 
 The reviewed benchmark code now uses joint PCA64 and separate PCA32. The next stage
 requires verified published features, fold-local PCA and [0B evidence](VSC.md#46-experiment-0b),
-including 33 profiles. Local CPU package parity covers all 56 control pins. The raw
+including the current generated profile plan. Local CPU package parity covers all 56 control pins. The raw
 input audit on 18 datasets found no exact target copies or class recodings. Exact
 feature-row overlap in held-out folds was 36.2% for Data Scientist Salary and 9.6% for
 Wine Review. These are diagnostics from the shuffled folds.
+
+## Local TAR addition (4 November)
+
+The owner added E5-small-v2 TAR as Experiment 3 and moved native text to Experiment 4.
+The pinned MIT training/encoding source is copied unchanged; details and explicit
+project differences are in [TAR.md](TAR.md). The grid now has 4,914 configurations,
+24,570 outer predictor fits and 90 shared encoder fits. This is a local implementation,
+not VSC acceptance: no running checkout was updated and no TAR jobs were submitted.
+The active feature-creation evidence above remains tied to its historical source.
+Local validation: 1,239 tests passed, 26 environment-dependent tests skipped;
+all twelve notebooks executed with fifteen figures and no error cells. Lint,
+changed-shell syntax, source hashes and current documentation links passed.
+TAR training, adapter replay and full-fold predictor profiles still require real B200 0B evidence.
 
 ## Authority
 

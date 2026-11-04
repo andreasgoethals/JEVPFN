@@ -20,7 +20,7 @@ def cache_path(dataset_id, encoder):
     return paths.results_dir("pca", phase="experiment_2") / encoder / f"{dataset_id}.sqlite3"
 
 
-def identity(x, group, components, scope, seed, artifacts):
+def identity(x, group, components, scope, seed, artifacts, *, standardize=False):
     import sklearn
 
     from src.utils.provenance import code_identity
@@ -30,6 +30,7 @@ def identity(x, group, components, scope, seed, artifacts):
     return digest(
         {
             "version": 1,
+            **({"standardize": True} if standardize else {}),
             "sklearn": sklearn.__version__,
             "implementation": code_identity(
                 ["src/evaluation/embedding_control.py", "src/evaluation/pca_cache.py"]
@@ -65,6 +66,9 @@ def read(path, key):
             pca.n_components_ = info["fitted_components"]
             pca.n_features_in_ = pca.components_.shape[1]
             pca.explained_variance_ = saved["variance"]
+            if "scaler_mean" in saved and saved["scaler_mean"].size:
+                pca.input_scaler_mean_ = saved["scaler_mean"]
+                pca.input_scaler_scale_ = saved["scaler_scale"]
         return pca, imputation, info["diagnostics"]
 
 
@@ -85,6 +89,8 @@ def write(path, key, pca, imputation, diagnostics):
         components=pca.components_ if pca else np.array([]),
         mean=pca.mean_ if pca else np.array([]),
         variance=pca.explained_variance_ if pca else np.array([]),
+        scaler_mean=getattr(pca, "input_scaler_mean_", np.array([])),
+        scaler_scale=getattr(pca, "input_scaler_scale_", np.array([])),
     )
     data = payload.getvalue()
     path.parent.mkdir(parents=True, exist_ok=True)

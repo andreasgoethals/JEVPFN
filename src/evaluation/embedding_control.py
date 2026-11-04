@@ -17,6 +17,8 @@ class EmbeddingControl:
         prepared_cache=None,
         embedding_artifacts=None,
         prepare=False,
+        encoded_missing=False,
+        standardize=False,
     ):
         self.estimator, self.groups = estimator, groups
         self.components, self.seed = components, seed
@@ -25,6 +27,8 @@ class EmbeddingControl:
         self.scope = scope
         self.prepared_cache, self.embedding_artifacts = prepared_cache, embedding_artifacts
         self.prepare = prepare
+        self.encoded_missing = encoded_missing
+        self.standardize = standardize
 
     def fit(self, x, y):
         self.schema = list(x.columns)
@@ -46,7 +50,8 @@ class EmbeddingControl:
                 from src.evaluation import pca_cache
 
                 key = pca_cache.identity(
-                    x, group, self.components, self.scope, self.seed, self.embedding_artifacts
+                    x, group, self.components, self.scope, self.seed, self.embedding_artifacts,
+                    standardize=self.standardize,
                 )
                 cached = pca_cache.read(self.prepared_cache, key)
                 if cached is not None:
@@ -81,9 +86,16 @@ class EmbeddingControl:
             count = min(self.components, int(present.sum()) - 1, len(group))
             pca = None
             if count > 0:
-                pca = PCA(n_components=count, svd_solver="randomized", random_state=self.seed).fit(
-                    matrix[present]
-                )
+                training = matrix[present]
+                scaler = None
+                if self.standardize:
+                    from sklearn.preprocessing import StandardScaler
+                    scaler = StandardScaler().fit(training)
+                    training = scaler.transform(training)
+                pca = PCA(n_components=count, svd_solver="auto" if self.standardize else "randomized", random_state=self.seed).fit(training)
+                if scaler is not None:
+                    pca.input_scaler_mean_ = scaler.mean_
+                    pca.input_scaler_scale_ = scaler.scale_
             self.pcas.append(pca)
             ratio = float(pca.explained_variance_ratio_.sum()) if pca is not None else float("nan")
             self.pca_diagnostics_.append(
@@ -119,9 +131,10 @@ class EmbeddingControl:
 
             name = missing_column(i)
             missing = (~np.isfinite(values).all(axis=1)).astype(int)
-            if name in result and not np.array_equal(result[name].to_numpy(), missing):
+            if not self.encoded_missing and name in result and not np.array_equal(result[name].to_numpy(), missing):
                 raise ValueError("Text presence and embedding availability disagree")
-            result[name] = missing
+            if name not in result or not self.encoded_missing:
+                result[name] = missing
         for i, (group, pca) in enumerate(zip(self.projected_groups, self.pcas)):
             matrix = x[group].to_numpy(dtype=float)
             if self.scope == "joint":
@@ -134,7 +147,10 @@ class EmbeddingControl:
             names = [f"e5_pca__{i:03d}__{j:03d}" for j in range(self.components)]
             values = np.full((len(x), self.components), np.nan)
             if pca is not None and present.any():
-                values[present, : pca.n_components_] = pca.transform(matrix[present])
+                data = matrix[present]
+                if hasattr(pca, "input_scaler_mean_"):
+                    data = (data - pca.input_scaler_mean_) / pca.input_scaler_scale_
+                values[present, : pca.n_components_] = pca.transform(data)
             addition = pd.DataFrame(values, index=x.index, columns=names)
             if set(addition) & set(result):
                 raise ValueError("Embedding PCA names collide with non-text columns")

@@ -140,6 +140,7 @@ PHASES = (
     "experiment_1",
     "experiment_2",
     "experiment_3",
+    "experiment_4",
     "synthesis",
 )
 
@@ -161,7 +162,7 @@ def phase_folder(phase: str) -> str:
     """Stable logical phase names; numbered folders shared by config/notebooks/output."""
     name = phase_name(phase)
     if name == "synthesis":
-        return "7. synthesis"
+        return "8. synthesis"
     index = (
         int(name.removeprefix("experiment_")) + 3
         if name.startswith("experiment_")
@@ -211,6 +212,16 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
     if selected in {"exploration", "feature_creation"}:
         return notebook_cache_dir(selected, "results", *parts)
     return large_outputs_dir().joinpath(phase_folder(selected), "results", *parts)
+
+
+def tar_results_dir(*parts: str) -> Path:
+    """Immutable fold vectors and sealed PCA are shared from native GPFS PROJECT."""
+    if on_vsc():
+        root = durable_project_override()
+        if root is None or not root.as_posix().startswith("/gpfs") or "/project/" not in root.as_posix():
+            raise ValueError("TAR requires an allocated native GPFS PROJECT root")
+        return _under(root, OUTPUT_DIR_NAME, phase_folder("experiment_3"), "results", *parts)
+    return results_dir(*parts, phase="experiment_3")
 
 
 def notebook_outputs_dir() -> Path:

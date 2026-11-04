@@ -80,7 +80,7 @@ def effect_matrix_figures(paired, phase="experiment_1"):
         else:
             sub = sub[sub.encoder.notna()]
             recipes = pca_grid()
-            rows = [(e, s, c) for e in ENCODER_LABELS for s, c in recipes]
+            rows = [(e, s, c) for e in ENCODER_LABELS if e in set(sub.encoder) for s, c in recipes]
             row_keys, panels = ["encoder", "pca_scope", "pca_components"], [None]
             row_labels = [f"{ENCODER_LABELS[e]} · {'P' if s == 'per_column' else 'J'}{c}"
                           for e, s, c in rows]
@@ -122,7 +122,7 @@ def effect_matrix_figures(paired, phase="experiment_1"):
         mappable = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(-limit, limit))
         fig.colorbar(mappable, ax=list(axes[0]), shrink=0.8, pad=0.02,
                      label=f"{unit} (mean over datasets)")
-        family = "decision features" if phase == "experiment_1" else "frozen embeddings"
+        family = "decision features" if phase == "experiment_1" else "supervised TAR" if phase == "experiment_3" else "frozen embeddings"
         yield fig, f"effect_matrix_{phase}_{task}", (
             f"{layout.TASK_LABELS[task]} datasets: effect of adding {family} to each fixed "
             "predictor, relative to the same predictor with non-text columns and presence flags "

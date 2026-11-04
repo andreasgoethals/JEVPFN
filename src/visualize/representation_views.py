@@ -9,7 +9,7 @@ from src.visualize.layout import TASK_LABELS
 from src.visualize.paired import METRIC_VIEWS, MODES, _dataset_effects
 
 
-def direct_comparison_figures(contrasts):
+def direct_comparison_figures(contrasts, *, family="frozen"):
     """Decision features against the selected embedding recipes, one page per task.
 
     Each cell pools every dataset × encoder × PCA recipe with equal weight, so no embedding
@@ -60,11 +60,11 @@ def direct_comparison_figures(contrasts):
         mappable = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(-limit, limit))
         fig.colorbar(mappable, ax=list(axes), shrink=0.8, pad=0.02,
                      label=unit.replace("augmented", "decision").replace("reference", "embedding"))
-        yield fig, f"decision_versus_embedding_{task}", (
-            f"{TASK_LABELS[task]} datasets: decision features against frozen embeddings in the same "
+        yield fig, f"decision_versus_{family}_embedding_{task}", (
+            f"{TASK_LABELS[task]} datasets: decision features against {family} embeddings in the same "
             "predictor, dataset and outer folds. Colour is the mean paired difference in the "
-            "prespecified endpoint over available datasets and the six embedding recipes (three encoders × two "
-            "PCA settings), weighted equally; the percentage is the share of these dataset × recipe "
+            "prespecified endpoint over available datasets and the explicitly selected encoder/PCA "
+            "recipes, weighted equally; the percentage is the share of these dataset × recipe "
             "pairs in which the decision features score higher. Positive favours decision features. "
             "Pairs need five defined folds; grey cells lack complete evidence. Descriptive, without "
             "selecting a recipe; the scale is clipped at the 95th percentile of |difference|."

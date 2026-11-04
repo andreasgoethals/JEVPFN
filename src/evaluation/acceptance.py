@@ -18,7 +18,8 @@ def evaluation_identity():
     phases = {"experiment_1": main}
     for phase, name in (
         ("experiment_2", "embeddings"),
-        ("experiment_3", "native_text"),
+        ("experiment_3", "tar"),
+        ("experiment_4", "native_text"),
     ):
         phases[phase] = load_yaml(phase + "/" + name)
     feature_fields = (
@@ -49,7 +50,9 @@ def evaluation_identity():
         "embeddings": {
             key: load_yaml("experiment_2/embeddings")[key] for key in ("encoders", "pca_grid")
         },
-        "native_models": load_yaml("experiment_3/native_text")["candidate_models"],
+        "tar": {k: v for k, v in load_yaml("experiment_3/tar").items()
+                if k not in {"enabled", "prepare_enabled", "experiment_0_acceptance"}},
+        "native_models": load_yaml("experiment_4/native_text")["candidate_models"],
         "encoder_definitions": {
             name: {key: value for key, value in cfg.items() if key != "enabled"}
             for name, cfg in load_yaml("feature_creation/embedding_models")["models"].items()

@@ -317,7 +317,9 @@ Include complete owner-run Jev features when qualifying the full roster.
    sbatch scripts/slurm/prepare_pca.slurm REG_TEXT_ROTTEN_TOMATOES e5_small_v2
    ```
 
-3. **Run preflight and predictor contracts.** After PCA is published, submit the CPU
+   **Prepare TAR before this preflight too.** Follow [the TAR setup](TAR.md#vsc-preparation-after-current-extraction-finishes): build its separate sealed image, prepare five adapters and both PCA recipes for each dataset. TAR uses native GPFS PROJECT directly for immutable bundles; Trainer temporary checkpoints use per-job scratch.
+
+3. **Run preflight and predictor contracts.** After PCA and TAR are published, submit the CPU
    preflight and a contract job for each of the nine predictors. For each GPU runtime,
    stage its working set first. This example uses TabPFN. CPU predictors use
    `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX`.
@@ -343,8 +345,10 @@ Include complete owner-run Jev features when qualifying the full roster.
    python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --profile-fold --write
    ```
 
-   The 33 profiles cover the tall and wide extremes, including both Experiment 2 recipes.
-   Each fits the first outer fold at full size, retains binary inner-OOF predictions, and
+   The generated profile plan covers the tall and wide extremes of every phase, including
+   both frozen and TAR PCA recipes. Use its current count rather than an old fixed total.
+   Each fits the first outer fold at full size, retains binary inner-OOF predictions
+   except for TAR’s fixed-threshold workflow, and
    verifies predictor width, row IDs and targets. Review resource use and publication.
 5. **Accept the stage.** Add the current preflight, nine contract reports and all required
    profiles to the checksummed evidence list. Verify the owner's reviewed record with

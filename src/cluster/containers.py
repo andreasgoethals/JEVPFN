@@ -35,7 +35,7 @@ PREDICTORS = (
     "contexttab",
     "ag_mm",
 )
-RUNTIMES = (*SELF_HOSTED, *PREDICTORS)
+RUNTIMES = (*SELF_HOSTED, *PREDICTORS, "e5_tar")
 
 
 def container_dir(provider, *, profile=None):

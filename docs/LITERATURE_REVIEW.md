@@ -191,20 +191,24 @@ instead measures TAR-over-frozen win frequency and is not a ranking of absolute 
 The paper uses AUC for classification (macro one-vs-rest for multiclass in its implementation)
 and R² for regression. The owner selected these headline metrics; all other scores remain
 recorded. We keep six fixed predictors and three native references, not every historical
-learner, image experiments, text-only arm or supervised TAR condition from the paper.
+learner, image experiment or text-only arm from the paper. Experiment 3 adds its supervised TAR approach.
 
 Appendix A.1's target-aware representation (TAR) shares E5-small across columns and adapts its
 last three layers with LoRA (rank 16, alpha 32, dropout 0.1). Column-name/value examples use
-training-row targets; an internal 90/10 split selects the checkpoint. Regression adaptation
+training-row targets; an internal holdout selects the checkpoint (10%, capped at 1,000; the source binary splitter adds two rows). Regression adaptation
 uses twenty equal-frequency target bins. This is valid supervised representation learning
 if bins, adaptation, selection and compression use only the relevant training partition.
-The paper describes outer-test isolation; this review does not certify every upstream line.
+The copied training sources are hash-bound to commit `bc9e87130df9884ccd49d04055599c0eda9f3238`; see [TAR implementation and deviations](TAR.md).
 
 JEVPFN's decision features use documentary target semantics without dataset-label fitting.
 Call this **task-conditioned feature extraction**, not supervised representation learning.
-Adding TAR would require training inside every applicable inner/outer partition, substantial
-additional compute and a separate experiment. Frozen controls therefore answer a narrower
-question than “better than every possible fine-tuned language pipeline.”
+Experiment 3 now uses one outer-fold TAR adapter shared across the six predictors and both
+PCA recipes. Like the upstream cached workflow, it has internal early stopping but no
+inner encoder refits. Fixed-0.5 binary secondary scores avoid tuning on in-sample supervised
+representations. Default-threshold scores are available in every arm; headline AUC is
+threshold-free. Upstream missing placeholders, column prefixes, 512-token truncation and
+coordinate standardization differ from Experiment 2. The comparison therefore measures
+complete representation pipelines, not the causal effect of fine-tuning alone.
 
 [STRABLE: Benchmarking Tabular Machine Learning with Strings](https://arxiv.org/abs/2605.12292)
 emphasizes that strings include names, codes, numbers, categories and prose. A compact
@@ -237,7 +241,7 @@ total width on two-text-column datasets. Elsewhere the comparison reflects both 
 and width. Explained variance measures retained variation, and predictive relevance is
 evaluated separately.
 
-Imputation and PCA fit on training rows only, including each inner threshold fold.
+Frozen-embedding imputation and PCA fit on training rows only, including each inner threshold fold. TAR uses outer-training standardization/PCA and no inner threshold fit.
 Validation/test rows are transformed by that fitted map and receive exactly the same
 output columns. Frozen embeddings can be cached across folds; fitted PCA cannot.
 See `src/data/text_embeddings.py` and
@@ -327,10 +331,11 @@ fixed questions and empty-input behavior; it cannot prove perfect linguistic int
 See `src/jev/question_audit.py:audit_dataset`.
 
 The main comparison uses the same outer splits across representations, with stratification
-for classification and shuffled KFold for regression. Binary thresholds maximize F1 using
-three-fold out-of-fold predictions from the outer training partition, followed by a refit
-on all outer training rows. PCA, preprocessing and any internal model validation remain
-inside their training partitions. Multiclass uses the full probability vector/argmax;
+for classification and shuffled KFold for regression. In Experiments 1, 2 and 4, binary
+thresholds maximize F1 using three-fold out-of-fold predictions from the outer training
+partition, followed by a refit on all outer training rows. TAR (Experiment 3) retains
+upstream early stopping and fixed-0.5 binary scores, without inner encoder refits. PCA
+and preprocessing use the corresponding training partition only. Multiclass uses the full probability vector/argmax;
 regression retains point predictions and applicable continuous-target metrics.
 [Threshold selection guidance](https://scikit-learn.org/stable/modules/classification_threshold.html),
 [Cawley and Talbot, 2010](https://jmlr.org/papers/v11/cawley10a.html)
@@ -369,7 +374,7 @@ Calibration claims require suitable labels, definitions and task-specific eviden
 [Guo et al., 2017](https://proceedings.mlr.press/v70/guo17a.html) does not imply that a
 provider's temperature automatically calibrates these new tasks.
 
-The primary representation families in Experiments 1–3 are prespecified. No selected-winner combinations are part of this paper. A future combination selected
+The primary representation families in Experiments 1–4 are prespecified. No selected-winner combinations are part of this paper. A future combination selected
 using these outer-test results would be descriptive/exploratory.
 Reusing the same test rows after selecting a winner cannot establish an independent
 confirmatory gain. Recording many metrics is useful, but a headline claim chosen afterward

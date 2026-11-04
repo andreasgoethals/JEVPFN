@@ -143,8 +143,9 @@ PREDICTOR_LABELS = {"catboost": "CatBoost", "tabpfn_3_5": "TabPFN-3.5", "tabicl_
                     "tabstar": "TabSTAR v1.1", "contexttab": "ConTextTab", "ag_mm": "AG-MM"}
 NATIVE_COLORS = {"tabstar": "#473B78", "contexttab": "#26736C", "ag_mm": "#9B6034"}
 NATIVE_MARKERS = {"tabstar": "o", "contexttab": "s", "ag_mm": "^"}
-FAMILY_COLORS = dict(zip(("experiment_1", "experiment_2", "experiment_3"), METHOD_COLORS))
-EMBEDDING_COLORS = {"e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
+FAMILY_COLORS = dict(zip(("experiment_1", "experiment_2", "experiment_4"), METHOD_COLORS))
+FAMILY_COLORS["experiment_3"] = "#9467BD"
+EMBEDDING_COLORS = {"e5_small_v2_tar": "#9467BD", "e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
                     "qwen3_embedding_0_6b": "#558B2F"}
 EFFECT_CMAP = "BrBG"  # Positive effect means improvement in the explicitly named contrast.
 COHORT_COLORS = {"seen_joint": "#72518A", "unseen_joint": "#27878E",

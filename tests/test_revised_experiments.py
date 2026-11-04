@@ -15,7 +15,8 @@ def test_primary_grid_and_widths():
     assert Counter(a["phase"] for a in plan) == {
         "experiment_1": 3996,
         "experiment_2": 648,
-        "experiment_3": 54,
+        "experiment_3": 216,
+        "experiment_4": 54,
     }
     assert all(a["provider"] is None for a in plan if a["phase"] != "experiment_1")
     assert all(a["width_status"] == "within_known_width_limit" for a in plan)
@@ -250,7 +251,7 @@ def test_retired_experiments_have_no_grid_or_configuration():
     assert EMBEDDING_FEATURE_SETS == ("non_text_plus_frozen_e5",)
     assert NATIVE_FEATURE_SETS == ("original_features",)
     assert not any(a.get("control") or a.get("selection_id") for a in benchmark_plan())
-    for phase in ("experiment_4", "experiment_5"):
+    for phase in ("experiment_5", "experiment_6"):
         with pytest.raises(ValueError, match="Unknown research phase"):
             load_yaml(phase + "/main")
     assert load_yaml("synthesis/analysis")["test"] == "two_sided_wilcoxon_signed_rank"

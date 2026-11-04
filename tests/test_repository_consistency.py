@@ -49,7 +49,7 @@ def test_execution_catalog_and_metric_version_match_implementation():
     for config, combinations in (
         ("experiment_1/main", DECISION_FEATURE_SETS),
         ("experiment_2/embeddings", EMBEDDING_FEATURE_SETS[:1]),
-        ("experiment_3/native_text", NATIVE_FEATURE_SETS[:1]),
+        ("experiment_4/native_text", NATIVE_FEATURE_SETS[:1]),
     ):
         assert tuple(load_yaml(config)["candidate_combinations"]) == combinations
     assert tuple(load_yaml("feature_creation/text_embeddings")["models"]) == MAIN_MODELS

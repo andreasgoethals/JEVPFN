@@ -98,9 +98,9 @@ def cross_system_contrasts(folds):
     counts = data.groupby("arm_id").value.count()
     data = data[data.arm_id.isin(counts[counts.eq(5)].index)]
     keys = ["dataset_id", "task_type", "split_id", "outer_fold", "metric"]
-    native = data[data.phase.eq("experiment_3") & data.feature_set.eq("original_features")]
+    native = data[data.phase.eq("experiment_4") & data.feature_set.eq("original_features")]
     other = data[(data.phase.eq("experiment_1") & data.feature_set.isin(DECISION_FEATURE_SETS))
-                 | data.phase.eq("experiment_2")]
+                 | data.phase.isin(["experiment_2", "experiment_3"])]
     if native.empty or other.empty:
         return pd.DataFrame()
     if native.duplicated(keys + ["model_id"]).any():
@@ -109,7 +109,7 @@ def cross_system_contrasts(folds):
         columns={"model_id": "reference_model", "checkpoint_id": "reference_checkpoint",
                  "value": "reference_value"}), on=keys, how="inner", validate="many_to_many")
     matched["difference"] = matched.value - matched.reference_value
-    matched["family"] = matched.phase.map({"experiment_1": "Decision", "experiment_2": "Embedding"})
+    matched["family"] = matched.phase.map({"experiment_1": "Decision", "experiment_2": "Embedding", "experiment_3": "TAR"})
     matched.loc[matched.feature_set.eq("non_text"), "family"] = "Non-text"
     return matched
 
@@ -154,7 +154,7 @@ def predictor_evidence():
             profiles[digest(body["arm"])] = body
     rows = []
     for model in (*load_yaml("experiment_1/main")["candidate_models"],
-                  *load_yaml("experiment_3/native_text")["candidate_models"]):
+                  *load_yaml("experiment_4/native_text")["candidate_models"]):
         reports = []
         for filename in folder.glob(f"predictor_{model}_*.json"):
             body = json.loads(filename.read_text(encoding="utf-8"))

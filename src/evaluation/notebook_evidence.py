@@ -28,7 +28,7 @@ def study_grid(plan):
         binary = sum(semantics[d]["task_type"] == "binary_classification" for d in part.dataset_id)
         rows.append({"experiment": phase, "datasets": part.dataset_id.nunique(),
                      "predictors": part.model.nunique(), "configurations": len(part),
-                     "outer_fits": 5 * len(part), "binary_inner_fits": 15 * binary})
+                     "outer_fits": 5 * len(part), "binary_inner_fits": 0 if phase == "experiment_3" else 15 * binary})
     return pd.DataFrame(rows)
 
 

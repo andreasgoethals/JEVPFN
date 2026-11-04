@@ -505,9 +505,16 @@ def run_preflight(
             )
         report["decision_artifacts"] = []
         report["embedding_artifacts"] = []
+        report["tar_artifacts"] = []
         if report["datasets"] and all(item["status"] == "passed" for item in report["datasets"]):
             report["decision_artifacts"] = decision_feature_checks(benchmark_cfg)
             report["embedding_artifacts"] = embedding_checks(benchmark_cfg, bind_artifact_ids=True)
+            from src.evaluation.tar import validate_dataset as validate_tar
+            for entry in selected_entries(load_catalog(), benchmark_cfg):
+                try:
+                    report["tar_artifacts"].append(validate_tar(load_dataset(entry, allow_download=False)))
+                except (OSError, ValueError, KeyError) as exc:
+                    report["failures"].append(f"TAR {entry['id']}: {type(exc).__name__}")
         report["feature_validation"] = "incomplete"
         try:
             _, decisions, _ = feature_evidence(report)

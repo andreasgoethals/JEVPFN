@@ -21,7 +21,7 @@ def fixture_folds():
     for task, metric in HEADLINES.items():
         dataset = next(d for d, s in load_yaml("dataset_semantics")["datasets"].items() if s["task_type"] == task)
         for model in ["catboost", "tabstar", "contexttab", "ag_mm"]:
-            phase = "experiment_1" if model == "catboost" else "experiment_3"
+            phase = "experiment_1" if model == "catboost" else "experiment_4"
             for fold in range(5):
                 base = dict(arm_id=f"{dataset}/{model}", phase=phase, dataset_id=dataset, task_type=task,
                             model_id=model, checkpoint_id=model, feature_set="non_text" if phase == "experiment_1" else "original_features",
@@ -73,7 +73,7 @@ def test_cross_system_pairing_is_explicit_and_split_bound():
     paired = study.cross_system_contrasts(frame)
     assert len(paired) == 45 and paired.reference_model.nunique() == 3
     assert np.allclose(paired.difference, 0)
-    frame.loc[frame.phase.eq("experiment_3"), "split_id"] = "other"
+    frame.loc[frame.phase.eq("experiment_4"), "split_id"] = "other"
     assert study.cross_system_contrasts(frame).empty
 
 
@@ -96,7 +96,7 @@ def test_no_empty_coverage_figures_before_results_exist():
 
 
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
-    for folder in [f"{i+3}. experiment_{i}" for i in range(4)] + ["7. synthesis"]:
+    for folder in [f"{i+3}. experiment_{i}" for i in range(5)] + ["8. synthesis"]:
         notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
         assert notebooks
         for filename in notebooks:
@@ -108,8 +108,8 @@ def test_every_experiment_has_thin_notebook_and_complete_printed_report():
 
 
 def test_synthesis_uses_general_notebook_output_without_fake_experiment():
-    assert paths.notebook_phase("7. synthesis/01_representation_comparison") == "synthesis"
-    assert paths.phase_folder("synthesis") == "7. synthesis"
+    assert paths.notebook_phase("8. synthesis/01_representation_comparison") == "synthesis"
+    assert paths.phase_folder("synthesis") == "8. synthesis"
 
 
 def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():

@@ -1,7 +1,7 @@
 # JEVPFN
 
 JEVPFN measures how much **label-free decision features from text** add to fixed tabular
-predictors. It compares those features with frozen text embeddings and native-text systems
+predictors. It compares those features with frozen embeddings, supervised target-aware embeddings and native-text systems
 on 18 of MulTaBench's 20 core text datasets.
 
 ## Project status
@@ -9,7 +9,8 @@ on 18 of MulTaBench's 20 core text datasets.
 Experiment 0A has been accepted for the eleven open-weight extractors and three encoders.
 The local Jev 1.14 pilot also passed on the first 100 rows of each dataset. Feature
 creation uses a frozen VSC checkout. Once it finishes, the next stage is to verify the
-published features, prepare fold-local PCA, and qualify the benchmark in 0B.
+published features, prepare fold-local PCA and TAR, and qualify the benchmark in 0B.
+TAR is implemented locally; its new runtime and training jobs still need real 0B validation.
 The owner runs full hosted Jev extraction separately. [Run evidence](docs/AGENTS_MEMORY.md) ·
 [VSC workflow](docs/VSC.md#46-experiment-0b)
 
@@ -44,10 +45,11 @@ Windows/Linux interpreter difference, see [CPU environment parity](docs/VSC.md#c
 |---|---|---:|
 | 1 | A shared structured baseline versus decision features from twelve extractors, using text jointly, per column, or both | 3,996 |
 | 2 | Three frozen encoders with joint PCA64 or separate PCA32 per text column, compared with the same structured baseline | 648 |
-| 3 | Three native-text systems on the original features | 54 |
+| 3 | E5-small-v2 TAR (LoRA), with the same two PCA recipes and six predictors | 216 |
+| 4 | Three native-text systems on the original features | 54 |
 
-One configuration is a dataset × predictor × representation. The grid contains **4,698
-configurations**, with **23,490 outer fits** and **11,745 binary inner fits**. The structured
+One configuration is a dataset × predictor × representation. The grid contains **4,914
+configurations**, with **24,570 outer fits** and **11,745 binary inner fits**. The structured
 baseline includes non-text features and the same text-availability flags as the decision
 and embedding arms. The experiments use fixed settings and prespecified recipes.
 
@@ -56,7 +58,7 @@ and embedding arms. The experiments use fixed settings and prespecified recipes.
 - **Three frozen encoders** — E5-small-v2, E5-large-v2, and Qwen3-Embedding-0.6B.
   Joint PCA yields 64 embedding features total. Separate PCA yields 32 per text column.
 - **Three native-text references** — TabSTAR v1.1, ConTextTab, and AutoGluon-Multimodal.
-  Experiment 3 compares complete systems descriptively.
+  Experiment 4 compares complete systems descriptively.
 
 [Predictor settings](<config/4. experiment_1/models.yaml>) ·
 [Embedding grid](<config/5. experiment_2/embeddings.yaml>) ·
@@ -83,13 +85,17 @@ TypeSafe. The eleven other extractors run on VSC B200. See the
 
 All arms use the same five shuffled outer folds, stratified for classification. PCA,
 imputation and other fitted preprocessing use training rows only. Binary F1 thresholds
-use out-of-fold predictions from three inner splits of the outer training partition.
+use out-of-fold predictions from three inner splits of the outer training partition in
+Experiments 1, 2 and 4. Experiment 3 preserves MulTaBench’s single encoder fit per outer
+fold with internal early stopping; binary secondary metrics use a fixed 0.5 threshold.
+TAR adds **90 shared encoder fits**, reused across predictors and PCA recipes. See
+[TAR provenance, differences and preparation](docs/TAR.md).
 
 Headline metrics are binary ROC-AUC, multiclass macro one-vs-rest ROC-AUC, and regression R².
 The benchmark retains predictions, probabilities, secondary metrics, timings and resources.
 Effects pair the same dataset, predictor and folds. Fold standard deviations describe
 variation. Optional Wilcoxon/Holm tests use one effect per dataset and require an approved
-[analysis plan](<config/7. synthesis/analysis.yaml>) before scores are inspected.
+[analysis plan](<config/8. synthesis/analysis.yaml>) before scores are inspected.
 
 Shuffled CV measures performance on held-out rows from the released datasets. Exact repeats
 can cross folds. The benchmark reports seen/unseen-text cohorts and 0B checks for exact
@@ -99,7 +105,7 @@ exposure require separate evidence. [Interpretation and limitations](docs/LITERA
 ## Workflow and outputs
 
 Prepare inputs, qualify them and the runtimes in **0A**, create features, then run **0B**
-on the complete stores and predictor runtimes. Experiments 1–3 require reviewed 0B evidence.
+on the complete stores and predictor runtimes. Experiments 1–4 require reviewed 0B evidence.
 The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 [operational record](docs/AGENTS_MEMORY.md) preserves dated receipts and recovery history.
 
@@ -126,7 +132,7 @@ Result figures appear as complete saved evidence becomes available.
 |---|---|
 | Explore and prepare | [Data](<notebooks/0. exploration/01_data_exploration.ipynb>), [input design](<notebooks/0. exploration/02_jev_input_design.ipynb>), [questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) |
 | Extract and validate | [Workload and feature widths](<notebooks/2. feature_creation/03_feature_creation.ipynb>), [decision features](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>), [0A](<notebooks/3. experiment_0/01_before_feature_creation.ipynb>), [0B](<notebooks/3. experiment_0/02_after_feature_creation.ipynb>) |
-| Evaluate | [Decision features](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>), [frozen embeddings](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>), [native text](<notebooks/6. experiment_3/01_native_text_systems.ipynb>), [synthesis](<notebooks/7. synthesis/01_representation_comparison.ipynb>) |
+| Evaluate | [Decision features](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>), [frozen embeddings](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>), [TAR](<notebooks/6. experiment_3/01_target_aware_embeddings.ipynb>), [native text](<notebooks/7. experiment_4/01_native_text_systems.ipynb>), [synthesis](<notebooks/8. synthesis/01_representation_comparison.ipynb>) |
 
 [Changelog](docs/CHANGELOG.md) · [Citation](CITATION.cff) · [License](LICENSE)
 

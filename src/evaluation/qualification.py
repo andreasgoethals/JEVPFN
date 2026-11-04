@@ -19,7 +19,8 @@ from src.utils.serialization import digest, write_json
 PHASE_CONFIGS = {
     "experiment_1": "experiment_1/main",
     "experiment_2": "experiment_2/embeddings",
-    "experiment_3": "experiment_3/native_text",
+    "experiment_3": "experiment_3/tar",
+    "experiment_4": "experiment_4/native_text",
 }
 
 
@@ -79,7 +80,7 @@ def profile_plan(arms=None):
             return arm["predictor_columns"]
 
         def encoder_width(arm):
-            return encoders[arm["encoder"]]["dimensions"] if arm.get("encoder") else 0
+            return encoders[arm["encoder"].removesuffix("_tar")]["dimensions"] if arm.get("encoder") else 0
 
         for arm in (
             max(group, key=lambda a: (height(a), width(a), encoder_width(a))),
@@ -131,7 +132,7 @@ def save_profile(arm, dataset, features, runtime, records):
     split = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
     fold = split["folds"][0]
     roles = {"outer_test": fold["test"]}
-    if dataset.metadata.task_type == "binary_classification":
+    if dataset.metadata.task_type == "binary_classification" and arm["phase"] != "experiment_3":
         roles["inner_oof_binary_threshold"] = fold["train"]
     verified = []
     for record in records:
@@ -229,6 +230,13 @@ def feature_evidence(report):
         for item in embeddings.values()
     ):
         raise ValueError("0B requires exact artifact IDs for both decision modes and every encoder")
+    from src.evaluation.tar import ENCODER
+    tar = _complete(report.get("tar_artifacts", []), ("dataset_id", "encoder_id"),
+                    {(d, ENCODER) for d in datasets}, "TAR fold feature")
+    for key, item in tar.items():
+        if len(set(item.get("artifact_ids", []))) != 5 or not item.get("prepared_pca_keys"):
+            raise ValueError("0B requires all five TAR folds and their PCA parameters")
+        embeddings[key] = item
     return data, decisions, embeddings
 
 
@@ -308,7 +316,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
         dataset = features[0][planned["dataset_id"],]
         expected_ids, expected_hashes = expected_artifacts(features, planned)
         roles = {"outer_test"}
-        if dataset["task_type"] == "binary_classification":
+        if dataset["task_type"] == "binary_classification" and planned["phase"] != "experiment_3":
             roles.add("inner_oof_binary_threshold")
         if (
             not report
@@ -363,6 +371,8 @@ def expected_artifacts(evidence, arm):
             v for k, v in item["artifact_ids"].items() if arm["feature_set"].endswith(("both", k))
         ]
         return ids, {i: item["artifact_checksums"][i] for i in ids}
+    if arm["phase"] == "experiment_3":
+        return embeddings[dataset_id, arm["encoder"]]["artifact_ids"], {}
     if arm.get("encoder"):
         return [embeddings[dataset_id, arm["encoder"]]["artifact_id"]], {}
     return [], {}

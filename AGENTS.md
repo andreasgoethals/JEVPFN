@@ -18,7 +18,7 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
 - Credentials must never enter tracked code/configuration, notebooks, reports or tool output.
   The owner explicitly authorized the Git-ignored local secrets/typesafe.local.json file.
   Local Jev commands load it automatically; never copy it to VSC or include it in transfers.
-- Main inputs are deterministic and label-free: no generative questions, non-text row values,
+- Decision-model inputs are deterministic and label-free: no generative questions, non-text row values,
   true row targets, class frequencies, target statistics or model feedback. Keep original
   class vocabularies; source meanings live in dataset_semantics.yaml. Skip empty text and
   retain missing features. Do not silently truncate, drop rows/classes or cap training rows.
@@ -54,9 +54,12 @@ or alter scientific inputs to change queue admission. The desktop monitor remain
 
 ## Layout and operations
 
-The active research scope is Experiments 1–3, with prerequisite 0A/0B and a synthesis
-notebook. Experiments 4/5 and selected-winner combinations are removed. Do not reinstate
-them without an explicit request. Keep 0A input-robustness diagnostics and the main
+The active research scope is Experiments 1–4: decisions, frozen embeddings, supervised
+TAR and native-text systems, with prerequisite 0A/0B and synthesis. The owner explicitly
+added TAR on 4 November; earlier Experiments 4/5 ablations remain retired. No selected-winner
+combinations are approved. TAR alone fits labels inside each outer training partition;
+use the pinned, unmodified vendor files and documented exceptions in docs/TAR.md.
+Do not deploy these changes into the active VSC extraction checkout. Keep 0A input-robustness diagnostics and the main
 benchmark's statistical analysis in scope.
 
 VSC authentication is shared and manual. Reuse the owner's native Windows OpenSSH agent.

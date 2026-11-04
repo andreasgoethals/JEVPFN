@@ -2,7 +2,12 @@
 jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
 source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || exit 2
 # Host bootstrap; no downloads/copies occur while a GPU waits.
-if [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && ( "${SLURM_JOB_PARTITION:-}" == gpu* || "${JEVPFN_STORAGE_MODE:-}" == scratch_mirror ) ]]; then
+if [[ "${JEVPFN_STORAGE_MODE:-}" == tar_preparation ]]; then
+    [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && "${JEVPFN_CONDA_ENV:-}" == e5_tar && "${JEVPFN_DURABLE_ROOT:-}" == /gpfs*/project/* ]] || { echo 'TAR requires its sealed Mindwell runtime and native GPFS PROJECT.' >&2; return 2; }
+    export JEVPFN_SHARED_IMMUTABLES=1 JEVPFN_RUNTIME_PROFILE=blackwell-cu130
+    export JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
+    # Fold-specific immutable bundles publish atomically; Trainer checkpoints use native scratch.
+elif [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && ( "${SLURM_JOB_PARTITION:-}" == gpu* || "${JEVPFN_STORAGE_MODE:-}" == scratch_mirror ) ]]; then
     export JEVPFN_STORAGE_MODE=scratch_mirror JEVPFN_RUNTIME_PROFILE=blackwell-cu130
     export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}"
     if [[ "$JEVPFN_DURABLE_ROOT" == /gpfs*/project/* ]]; then

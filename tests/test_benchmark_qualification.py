@@ -67,6 +67,7 @@ def reports(monkeypatch):
             }
         ],
     }
+    preflight["tar_artifacts"] = [{"dataset_id": "data", "encoder_id": "e5_small_v2_tar", "status": "passed", "artifact_ids": [f"tar{i}" for i in range(5)], "prepared_pca_keys": ["pca"]}]
     runtime = {"container_id": "seal"}
     predictors = [
         {

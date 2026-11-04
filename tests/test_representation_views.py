@@ -80,3 +80,25 @@ def test_new_panels_require_real_evidence_and_render_at_paper_width():
             assert caption and not any("index" in ax.get_xlabel().lower() for ax in fig.axes)
         finally:
             plt.close(fig)
+
+
+def test_tar_contrasts_retain_split_pairing_and_exclude_incomplete_folds():
+    from src.evaluation.representation_views import tar_vs_frozen
+    source = fixture_folds()
+    adapted = source[source.phase.eq("experiment_2")].copy()
+    adapted["phase"] = "experiment_3"
+    adapted["encoder"] = "e5_small_v2_tar"
+    adapted["arm_id"] += "/tar"
+    adapted["comparison_id"] += "/tar"
+    adapted["value"] += .02
+    paired = tar_vs_frozen(pd.concat([source, adapted]))
+    assert len(paired) == 3 * 5 * 2
+    assert (paired.difference - .02).abs().max() < 1e-12
+    assert len(decision_vs_embedding(pd.concat([source, adapted]), phase="experiment_3")) == 3*5*12*3*2
+    wrong = adapted.copy()
+    wrong["split_id"] += "different"
+    assert tar_vs_frozen(pd.concat([source, wrong])).empty
+    partial = adapted[adapted.outer_fold.ne(4)]
+    assert tar_vs_frozen(pd.concat([source, partial])).empty
+    with pytest.raises(ValueError, match="Multiple"):
+        tar_vs_frozen(pd.concat([source, adapted, adapted]))

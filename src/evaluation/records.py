@@ -104,7 +104,7 @@ def completed_fold(recipe, phase):
             raise ValueError("Completed CV predictions are missing or corrupt")
         result.append(record)
     expected_roles = {"outer_test"}
-    if recipe["task_type"] == "binary_classification":
+    if recipe["task_type"] == "binary_classification" and recipe.get("binary_threshold_policy", "inner_oof_f1") == "inner_oof_f1":
         expected_roles.add("inner_oof_binary_threshold")
     roles = [
         json.loads(p.read_text(encoding="utf-8"))["metadata"]["prediction_role"] for p in result

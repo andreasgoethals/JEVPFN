@@ -83,7 +83,7 @@ def test_primary_results_pair_exact_predictors_and_keep_native_references(isolat
         ("catboost", "experiment_1", "non_text_plus_joint", 1.5, "liquid"),
         ("catboost", "experiment_2", "non_text_plus_frozen_e5", 2, None),
         ("catboost", "experiment_2", "non_text_plus_frozen_e5", 4, None),
-        ("tabstar", "experiment_3", "original_features", 1, None),
+        ("tabstar", "experiment_4", "original_features", 1, None),
     ):
         evaluate_cv(data, matrix,
             lambda error=error: SimpleNamespace(fit=lambda x,y: None, predict=lambda x: x.x.to_numpy()+error),

@@ -43,8 +43,9 @@ from src.utils.serialization import digest, write_json
 
 def benchmark_plan(main=None, text=None):
     main = main or load_yaml("experiment_1/main")
-    text = text or load_yaml("experiment_3/native_text")
+    text = text or load_yaml("experiment_4/native_text")
     embedding = load_yaml("experiment_2/embeddings")
+    tar = load_yaml("experiment_3/tar")
     if (
         tuple(main["candidate_models"]) != MAIN_MODELS
         or tuple(text["candidate_models"]) != TEXT_MODELS
@@ -55,12 +56,15 @@ def benchmark_plan(main=None, text=None):
     if tuple(main["candidate_combinations"]) != DECISION_FEATURE_SETS:
         raise ValueError("Experiment 1 has exactly four decision feature configurations")
     selected = selected_entries(load_catalog(), main)
-    for config in (embedding, text):
+    for config in (embedding, tar, text):
         if (
             config["random_seed"] != main["random_seed"]
             or selected_entries(load_catalog(), config) != selected
         ):
             raise ValueError("Benchmark phases must share the same datasets and split seed")
+    if (tar["encoders"] != ["e5_small_v2_tar"] or tar["pca_grid"] != embedding["pca_grid"]
+            or tar["binary_threshold_policy"] != "fixed_0_5" or tar["inner_encoder_refits"] != 0):
+        raise ValueError("TAR must use the reviewed encoder, matched PCA grid and fixed threshold")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
     from src.evaluation.design import pca_grid
@@ -92,8 +96,12 @@ def benchmark_plan(main=None, text=None):
                 for model in MAIN_MODELS:
                     extra = dict(encoder=encoder, pca_scope=scope, pca_components=components)
                     add(entry, model, EMBEDDING_FEATURE_SETS[0], "experiment_2", **extra)
+        for scope, components in pca_grid():
+            for model in MAIN_MODELS:
+                add(entry, model, "non_text_plus_tar", "experiment_3",
+                    encoder="e5_small_v2_tar", pca_scope=scope, pca_components=components)
         for model in TEXT_MODELS:
-            add(entry, model, NATIVE_FEATURE_SETS[0], "experiment_3")
+            add(entry, model, NATIVE_FEATURE_SETS[0], "experiment_4")
     from types import SimpleNamespace
 
     from src.evaluation.widths import width_status
@@ -116,7 +124,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     config_names = {
         "experiment_1": "main",
         "experiment_2": "embeddings",
-        "experiment_3": "native_text",
+        "experiment_3": "tar",
+        "experiment_4": "native_text",
     }
     cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
     enabled = (
@@ -156,6 +165,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             "src/evaluation/design.py",
             "src/evaluation/pca_cache.py",
             "src/evaluation/prepare_pca.py",
+            "src/evaluation/tar.py",
         ]
     )
     entry = next(e for e in load_catalog()["datasets"] if e["id"] == arm["dataset_id"])
@@ -198,7 +208,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     features = combine_representations(base, additions) if additions else base
     selector = selectors.get(arm["provider"]) if arm["provider"] else selectors or None
     embedding_cfg = None
-    if uses_embeddings(arm["feature_set"]):
+    tar_arm = arm["phase"] == "experiment_3"
+    if uses_embeddings(arm["feature_set"]) and not tar_arm:
         from src.data.text_embeddings import encoder_config, load
 
         embedding_cfg = encoder_config(arm["encoder"])
@@ -214,6 +225,10 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     features.attrs["decision_artifact_checksums"] = checksums
     settings["execution_runtime"] = execution_runtime()
     specification = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
+    if tar_arm:
+        from src.evaluation.tar import read_bundle
+        bundles = [read_bundle(dataset, specification, i) for i in range(5)]
+        features.attrs["feature_artifact_ids"] = [b["artifact_id"] for b in bundles]
     if not profile:
         verify_inputs(
             qualified, dataset, features, arm, settings["execution_runtime"],
@@ -248,6 +263,17 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
                 embedding_artifacts=embedding_artifacts,
             )
 
+    if tar_arm:
+        from src.evaluation.tar import TarControl
+        base_factory = factory
+        def factory():
+            return TarControl(base_factory(), dataset, specification, bundles, arm)
+        representation["embedding"] = {
+            "encoder_id": arm["encoder"], "model": "intfloat/e5-small-v2",
+            "pca_scope": arm["pca_scope"], "pca_components_per_column": arm["pca_components"],
+            "training": "multabench_lora_outer_partition_only",
+            "input_policy": cfg["text_input"], "length_policy": cfg["text_length_policy"],
+        }
     synchronize = None
     if settings["device"].startswith("cuda"):
         import torch
@@ -267,6 +293,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             feature_set=arm["feature_set"],
             allow_model_runs=True,
             inner_folds=3,
+            binary_threshold_policy="fixed_0_5" if tar_arm else "inner_oof_f1",
             phase=phase,
             synchronize=synchronize,
             device=settings["device"],
@@ -297,14 +324,14 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
-    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3"))
+    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4"))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
     parser.add_argument("--pca-scope", choices=("per_column", "joint"))
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
     parser.add_argument(
         "--feature-set",
-        choices=MAIN_FEATURE_SETS + NATIVE_FEATURE_SETS,
+        choices=MAIN_FEATURE_SETS + NATIVE_FEATURE_SETS + ("non_text_plus_tar",),
     )
     parser.add_argument("--provider", choices=tuple(load_yaml("extractors")["candidates"]))
     parser.add_argument("--execute", action="store_true")
@@ -346,7 +373,8 @@ def main():
                     "feature_sets_by_experiment": {
                         "experiment_1": DECISION_FEATURE_SETS,
                         "experiment_2": EMBEDDING_FEATURE_SETS,
-                        "experiment_3": NATIVE_FEATURE_SETS,
+                        "experiment_3": ("non_text_plus_tar",),
+                        "experiment_4": NATIVE_FEATURE_SETS,
                     },
                     "configurations_by_experiment": {
                         phase: sum(a["phase"] == phase for a in selected)
@@ -354,7 +382,8 @@ def main():
                     },
                     "original_text_models": TEXT_MODELS,
                     "outer_folds": 5,
-                    "inner_binary_threshold_folds": 3,
+                    "inner_binary_threshold_folds_by_phase": {"experiment_1": 3, "experiment_2": 3,
+                                                               "experiment_3": 0, "experiment_4": 3},
                     "selected_arm_count": len(selected),
                     "unsupported_width_arms": sum(
                         a["width_status"] == "unsupported_width" for a in selected

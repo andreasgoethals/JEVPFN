@@ -15,7 +15,7 @@ from src.utils import paths
 from src.utils.serialization import digest, write_json
 
 
-def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
+def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4")):
     rows = []
     for phase in phases:
         legacy = [
@@ -52,6 +52,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
                     "pca_scope": (
                         (recipe.get("representation_recipe") or {}).get("embedding") or {}
                     ).get("pca_scope"),
+                    "binary_threshold_policy": recipe.get("binary_threshold_policy", "inner_oof_f1"),
                     "embedding_recipe_id": digest(
                         (recipe.get("representation_recipe") or {}).get("embedding")
                     ),
@@ -137,6 +138,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3")):
         "feature_artifact_ids",
         "provider",
         "inference_status",
+        "binary_threshold_policy",
         "embedding_recipe_id",
         "encoder",
         "pca_components",

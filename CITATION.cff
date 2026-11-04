@@ -12,7 +12,8 @@ url: https://github.com/andreasgoethals/JEVPFN
 license: MIT
 abstract: >-
   Research software comparing frozen task-conditioned decision-model features,
-  frozen text embeddings with training-fold PCA, and native-text predictors on
+  frozen text embeddings, supervised target-aware E5 embeddings with training-fold
+  PCA, and native-text predictors on
   18 selected MulTaBench text datasets. Decision-feature construction excludes
   row labels and non-text row values. Cached per-column and joint representations
   support paired comparisons within fixed predictors and cross-validation splits.

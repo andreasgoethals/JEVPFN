@@ -7,7 +7,6 @@ from textwrap import fill
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.utils.config import load_yaml
 from src.visualize import layout, style
 from src.visualize.decision_comparison import LABELS
 
@@ -18,62 +17,34 @@ VARIANTS = {
     "option_order": "Reversed options",
 }
 ENCODER_LABELS = {"e5_small_v2": "E5-small-v2", "e5_large_v2": "E5-large-v2",
-                  "qwen3_embedding_0_6b": "Qwen3-Embedding-0.6B"}
+                  "qwen3_embedding_0_6b": "Qwen3-Embedding-0.6B", "e5_small_v2_tar": "TAR E5-small-v2"}
 
 
 def study_grid_figure(grid):
-    """Research questions, controlled comparisons and grid sizes of the three experiments."""
-    from matplotlib.patches import FancyBboxPatch
-
+    """Four research questions at A4 print width, with measured plan counts."""
     counts = grid.set_index("experiment")
-    extractors = len(load_yaml("experiment_1/main")["candidate_extractors"])
-    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 3.3))
-    # A pure schematic: fixed axes, so long text lines never shrink the drawing area.
-    fig.set_layout_engine("none")
-    ax.set_position([0.01, 0.01, 0.98, 0.98])
-    ax.set_axis_off()
-    ax.set(xlim=(0, 1), ylim=(0, 1))
-    experiments = [
-        ("experiment_1", "Experiment 1 · RQ1", "Do decision features add\ninformation to a fixed predictor?",
-         ["non-text columns and presence flags,", f"with or without {extractors} decision models",
-          "asked per column, jointly or both"], "6 predictors"),
-        ("experiment_2", "Experiment 2 · RQ2", "How do they compare with\nfrozen general embeddings?",
-         ["E5-small, E5-large or Qwen3", "embeddings, PCA to 32 per column", "or 64 jointly"],
-         "same 6 predictors"),
-        ("experiment_3", "Experiment 3 · RQ3", "How do the pipelines compare\nwith native text systems?",
-         ["TabSTAR v1.1, ConTextTab and", "AutoGluon-Multimodal read the", "raw text themselves"],
-         "3 complete systems"),
+    fig, axes = plt.subplots(2, 2, figsize=(style.WIDTH_FULL, 5.0))
+    rows = [
+        ("experiment_1", "Decision features", "Twelve extractors; per-column, joint or both.\nOne shared non-text reference; six predictors."),
+        ("experiment_2", "Frozen embeddings", "Three pretrained encoders; six predictors.\nPer-column PCA32 and joint PCA64."),
+        ("experiment_3", "Supervised TAR", "E5-small-v2 LoRA using training labels.\nSame six predictors and two PCA recipes."),
+        ("experiment_4", "Native text systems", "TabSTAR v1.1, ConTextTab and AG-MM.\nText and structured inputs, end-to-end."),
     ]
-    for k, (phase, head, question, body, predictor) in enumerate(experiments):
-        x, color = 0.005 + k * 0.333, style.FAMILY_COLORS[phase]
-        row = counts.loc[phase]
-        ax.add_patch(FancyBboxPatch((x, 0.2), 0.32, 0.62, boxstyle="round,pad=0,rounding_size=0.015",
-                                    facecolor=style.BACKGROUND_COLOR, edgecolor=color, linewidth=1.1))
-        ax.add_patch(FancyBboxPatch((x, 0.69), 0.32, 0.13, boxstyle="round,pad=0,rounding_size=0.015",
-                                    facecolor=color, edgecolor=color, linewidth=1.1))
-        ax.text(x + 0.16, 0.755, head, ha="center", va="center", color=style.BACKGROUND_COLOR,
-                weight="bold", fontsize=8)
-        ax.text(x + 0.015, 0.665, question, va="top", fontsize=7.2, weight="bold", linespacing=1.15)
-        ax.text(x + 0.015, 0.55, "\n".join(body), va="top", fontsize=6.8, linespacing=1.25)
-        ax.text(x + 0.015, 0.335, predictor, va="top", fontsize=6.8, color=color, weight="bold")
-        ax.text(x + 0.015, 0.265, f"{row.configurations:,} configurations · "
-                f"{row.outer_fits:,} outer fits", va="top", fontsize=6.8)
-    ax.text(0.005, 0.95, "0A runtime gates  →  full extraction  →  0B feature and predictor "
-            "checks  →  experiments", fontsize=7, color=style.QUANTITY_COLOR, va="center")
-    ax.text(0.005, 0.1, "Shared protocol: 18 MulTaBench text datasets · the same 5 shuffled "
-            "outer folds · ROC-AUC, macro OvR ROC-AUC or R² · paired per dataset",
-            fontsize=6.8, va="center")
-    ax.text(0.005, 0.03, f"Total {grid.configurations.sum():,} configurations · "
-            f"{grid.outer_fits.sum():,} outer fits + {grid.binary_inner_fits.sum():,} binary inner "
-            "fits for F1 thresholds", fontsize=6.8, va="center", color=style.QUANTITY_COLOR)
+    for ax, (phase, name, detail) in zip(axes.flat, rows):
+        ax.set_axis_off()
+        color, row = style.FAMILY_COLORS[phase], counts.loc[phase]
+        ax.text(0, .9, f"Experiment {phase[-1]} · {name}", color=color, weight="bold", fontsize=9)
+        ax.text(0, .68, detail, fontsize=8, va="top", linespacing=1.5)
+        ax.text(0, .33, f"{row.configurations:,} configurations\n{row.outer_fits:,} outer predictor fits",
+                fontsize=8, va="top", linespacing=1.5)
+    fig.suptitle("Four comparisons on the same 18 datasets and five outer folds", fontsize=10)
     return fig, "study_map", (
-        "Design of the three experiments. Each answers one research question with the rows, "
-        "splits and endpoint held fixed. Experiment 1 shares one baseline of non-text columns "
-        "and text presence flags per predictor "
-        "across the decision models; Experiment 2 holds the same predictors fixed and swaps the "
-        "text representation; Experiment 3 changes the whole system. Configurations are planned "
-        "before width exclusions (Kumo refuses inputs above 500 columns); one configuration is "
-        "one dataset × predictor × representation, each with five outer fits."
+        "Experiments 1–3 hold the downstream predictor fixed; Experiment 4 compares complete "
+        "systems. PCA uses outer-training rows only; frozen embeddings additionally refit PCA "
+        "inside binary threshold folds. TAR trains 90 shared fold-specific adapters, uses "
+        "upstream early stopping and a fixed binary threshold, with no inner encoder refits. "
+        "Counts precede capacity exclusions and exclude encoder preparation. Headline metrics "
+        "are binary ROC-AUC, multiclass macro OvR ROC-AUC and regression R²."
     )
 
 

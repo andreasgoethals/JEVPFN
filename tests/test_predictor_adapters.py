@@ -131,13 +131,13 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
         estimator_factory("tabpfn_3_5", dataset.metadata, {})
 
 
-def test_plan_three_families_six_engines_three_original_text_baselines():
+def test_plan_four_families_six_engines_three_original_text_baselines():
     plan = benchmark_plan()
     assert len({a["dataset_id"] for a in plan}) == 18
-    assert len(plan) == 4698
+    assert len(plan) == 4914
     for model in MAIN_MODELS:
         row = [a for a in plan if a["dataset_id"] == plan[0]["dataset_id"] and a["model"] == model]
-        assert len([a for a in row if a["provider"] is None]) == 7
+        assert len([a for a in row if a["provider"] is None]) == 9
         for provider in load_yaml("extractors")["candidates"]:
             assert len([a for a in row if a["provider"] == provider]) == 3
     text = [a for a in plan if a["model"] in TEXT_MODELS]
@@ -200,7 +200,7 @@ def test_constructor_contracts_and_full_context(monkeypatch, tmp_path):
     output_one = calls[-1]["output_dir"]
     _backend("tabstar", "binary_classification", settings, encoder, 9000)
     assert calls[-1]["output_dir"] != output_one
-    assert "6. experiment_3" in output_one
+    assert "7. experiment_4" in output_one
     _backend(
         "tabstar",
         "binary_classification",

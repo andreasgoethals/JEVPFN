@@ -66,7 +66,7 @@ def test_new_container_avoids_conflicting_historical_tokenizer_extra():
     assert "transformers==5.19.0" in deps["liquid-lfm3"]
     assert "tokenizers==0.23.3" in deps["liquid-lfm3"]
     script = (paths.REPO_ROOT / "scripts/build_decision_container.sh").read_text(encoding="utf-8")
-    branch = script.split("elif provider in {'tabstar', 'liquid_lfm3'}:")[1].split("\nelse:")[0]
+    branch = script.split("elif provider in {'tabstar', 'liquid_lfm3', 'e5_tar'}:")[1].split("\nelse:")[0]
     assert "token-audit" not in branch and ".[dev,{extra}]" in branch
     audit = (paths.REPO_ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text(encoding="utf-8")
     assert 'if [[ "${2:-}" == liquid_lfm3 ]]' in audit

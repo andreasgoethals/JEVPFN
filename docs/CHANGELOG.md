@@ -2,6 +2,15 @@
 
 ## 04-11-2026
 
+- Add pinned MulTaBench E5-small-v2 LoRA TAR as Experiment 3, sharing each outer-fold
+  adapter across six predictors and per-column PCA32/joint PCA64. Preserve upstream
+  standardization and early stopping; fixed-threshold binary scoring avoids inner
+  encoder refits. Bind 0B to all 90 bundles, PCA and real-runtime evidence.
+- Move native-text comparison to Experiment 4 and synthesis to folder 8; update the
+  notebooks, array routes, storage checks and provenance. Keep the active VSC source frozen.
+- Validate locally with 1,239 passing tests (26 environment-dependent skips), twelve
+  executed notebooks, lint and shell syntax checks; real TAR B200 acceptance remains pending.
+
 - Streamline the README and runbook, order PCA preparation before 0B, and align
   dataset and literature notes with the shared baseline and current benchmark design.
 - Reduce Experiment 2 to joint PCA64 and per-column PCA32 across all three encoders.
