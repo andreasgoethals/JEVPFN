@@ -6,13 +6,13 @@ about the text of each row. Their probabilities are added to the non-text featur
 tabular predictors and compared with frozen general embeddings and native text systems on
 18 MulTaBench TEXT datasets.
 
-## Status (3 November 2026)
+## Status (4 November 2026)
 
 | Stage | State |
 |---|---|
 | Exploration, question preparation | Complete: all 20 core datasets explored; 18 selected; question v3 frozen. |
 | Experiment 0A (before extraction) | Accepted. VSC 192/192 steps passed; signed acceptance for eleven open-weight providers and three encoders. Local Jev 1.14 0A and its first-100-rows pilot passed (validation only). |
-| Open-weight and encoder extraction | Liquid and Strands completed all 18 datasets each (36/198 decision jobs). Recovery publication is verified; admissions are paused for GPFS PROJECT relocation checks. The old Lustre copy remains protected until acceptance. Embeddings remain 54 dataset jobs ([AGENTS_MEMORY](docs/AGENTS_MEMORY.md)). |
+| Open-weight and encoder extraction | Liquid and Strands completed all 18 datasets each (36/198 decision jobs). GPFS PROJECT migration passed and redundant copies were retired. The resumed dispatcher includes 162 remaining decision jobs and 54 encoder dataset jobs ([AGENTS_MEMORY](docs/AGENTS_MEMORY.md)). |
 | Full Jev extraction, 0B, Experiments 1–3 | Disabled until separately reviewed and authorized. |
 
 Exact receipts, job IDs and failures: [AGENTS_MEMORY](docs/AGENTS_MEMORY.md). Commands:

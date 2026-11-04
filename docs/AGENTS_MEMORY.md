@@ -1,6 +1,6 @@
 # Operational evidence
 
-Updated 3 November 2026. This file owns current run state, exact evidence and
+Updated 4 November 2026. This file owns current run state, exact evidence and
 reusable failure lessons, newest first. Method: [README](../README.md); commands:
 [VSC](VSC.md); dataset meanings: [DATA_SOURCES](DATA_SOURCES.md); research evidence:
 [LITERATURE_REVIEW](LITERATURE_REVIEW.md); older detail: Git and [CHANGELOG](CHANGELOG.md).
@@ -22,7 +22,7 @@ Submission is not completion. Preserve active or queued checkouts and recovery i
 - Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
 
-## GPFS PROJECT migration (3 November, in progress)
+## GPFS PROJECT migration and resume (3–4 November)
 
 The owner-approved cutover stops admissions before changing roots. Controller
 806752/start ticks 121562803 on tier2-p-login-3 was verified and stopped under the
@@ -49,9 +49,21 @@ Historical failed/interrupted maintenance logs remain provenance, not science fa
 Measured pre-cutover allocated usage: old PROJECT 495.211 GiB, DATA checkout
 0.756 GiB, owned GPFS working sets 108.445 GiB. Destination group is lp_verbekelab
 with inherited moderator ACLs and no public access. No owned jevpfn-prefixed build
-directory remained on Lustre scratch; other projects are untouched. All admissions
-and scientific writers remain stopped. Native B200 relocation checks, acceptance
-and retirement are still pending; copying/CPU success alone is not acceptance.
+directory remained on Lustre scratch.
+
+All eleven recorded B200 jobs passed with the old host root hidden. The Cloudflare
+allocation 11767880 also validated all three encoder contracts. Migration acceptance
+checksummed 21 evidence files. Mindwell job 11769258 completed 0:0 and retired twelve
+published native working sets. wICE job 62551120 completed 0:0 in 18m10s, verified
+the old inventory and removed the old JEVPFN subtree, including 582 output files
+(80.025 GiB logical). The shared Lustre allocation remained. A transient Slurm
+accounting outage cleared before terminal verification.
+
+The rebound 274-step graph reused 36 finished dataset jobs and four completed
+stage/release steps. Dispatcher 1239565 (start ticks 130594300) on tier2-p-login-4
+started 4 November at 10:15 CET on frozen commit `3f84d7e`. Cloudflare staging
+11769300 was the first new submission. The graph includes all 162 remaining
+decision dataset jobs and 54 encoder dataset jobs.
 
 Records: `2. feature_creation/manifests/storage_migration/` on DATA. New routing uses
 native GPFS PROJECT immutables directly, isolated GPFS scratch mutable stores, and
