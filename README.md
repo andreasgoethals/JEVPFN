@@ -108,8 +108,8 @@ replication of MulTaBench's supervised target-aware embeddings.
 - The structured baseline and both augmentation families share identical per-column text
   availability flags. The paired effect measures added representation signal beyond availability.
 - Shuffled splits measure within-dataset interpolation. 0B counts exact repeated feature rows across
-  train and test and rejects exact target copies. Semantic target proxies and foundation-model
-  pretraining overlap still require provenance review.
+  train and test and rejects exact target copies and exact class relabelings. Benchmark fits use
+  the qualified split. Semantic target proxies and pretraining overlap require provenance review.
 
 ## Workflow and notebooks
 

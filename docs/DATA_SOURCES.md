@@ -5,7 +5,7 @@ audit. Methodology is in [README](../README.md); execution commands are in [VSC]
 Sections run from provenance and the text definition, through statistics and reuse, to
 dataset selection, question semantics and interpretation caveats. Experiment 0B
 reports exact repeated feature rows across training and test and rejects exact copies
-of the target in the predictors. Provenance review still matters for semantic proxies.
+or exact class relabelings of the target. Provenance review still matters for semantic proxies.
 
 ## Primary sources and pins
 
@@ -229,6 +229,10 @@ categorical signal without requiring language understanding. Text missingness ca
 signal. The statistics/permutation controls address some of these alternatives; they do not
 replace a reviewed numeric-as-text/categorical sensitivity analysis. CLEAR's formula-related
 non-text inputs and Montgomery's previous salary can leave little headroom for text gains.
+Prediction-time availability depends on the intended use. Jigsaw includes comment reaction
+counts, Women's Clothing includes recommendation and feedback fields, and US Accidents
+includes end times. A prospective use case would need to establish when these fields become
+available and prespecify which inputs it can use.
 
 Exact text repeats can cross the selected shuffled row folds. This is not target leakage
 in extraction, but it changes the interpretation of gains: repeated names/categories may

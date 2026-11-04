@@ -2,6 +2,8 @@
 
 ## 04-11-2026
 
+- Bind each benchmark fit to its exact 0B split, reject perfectly recoded class targets,
+  and reject duplicate dataset results when aggregating a contrast across datasets.
 - Qualify benchmark runs with complete selected features, fold-specific PCA coverage,
   current predictor contracts, and full-fold prediction readback tied to sealed runtimes.
 - Give each structured arm the same text-availability flags and report exact row overlap

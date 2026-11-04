@@ -85,7 +85,7 @@ def profile_plan(arms=None):
 
 
 def source_leakage_diagnostics(dataset, splits):
-    """Count exact feature-row overlap and flag exact raw target copies."""
+    """Count exact feature-row overlap and flag copies or renamed class labels."""
     import pandas as pd
 
     predictors = dataset.features
@@ -95,10 +95,23 @@ def source_leakage_diagnostics(dataset, splits):
         int(identities.iloc[fold["test"]].isin(identities.iloc[fold["train"]]).sum())
         for fold in splits["folds"]
     ]
+    target_values = target.astype(object)
+    classes = target.nunique() if dataset.metadata.task_type != "regression" else 0
+    copies, recodings = [], []
+    for name, column in predictors.items():
+        if column.astype(object).eq(target_values).all():
+            copies.append(str(name))
+        elif (
+            classes > 1
+            and not column.isna().any()
+            and column.nunique() == classes
+            and len(pd.DataFrame({"predictor": column, "target": target}).drop_duplicates())
+            == classes
+        ):
+            recodings.append(str(name))
     return {
-        "exact_target_copies": [
-            str(name) for name in predictors if predictors[name].eq(target).fillna(False).all()
-        ],
+        "exact_target_copies": copies,
+        "exact_class_target_recodings": recodings,
         "exact_feature_row_overlap_by_fold": overlap,
         "test_rows_by_fold": [len(fold["test"]) for fold in splits["folds"]],
     }
@@ -312,14 +325,17 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
     return features, predictors[arm["model"]]["runtime_identity"]
 
 
-def verify_inputs(evidence, dataset, features, arm, runtime):
-    """Reject a changed dataset, artifact or sealed predictor before fitting."""
+def verify_inputs(evidence, dataset, features, arm, runtime, *, specification):
+    """Reject a changed dataset, partition, artifact or sealed predictor before fitting."""
     (data, decisions, embeddings), expected_runtime = evidence
     dataset_id = arm["dataset_id"]
     if runtime != expected_runtime or not runtime.get("container_id"):
         raise ValueError("Predictor runtime differs from the qualified 0B image")
-    if dataset.source["data_identity"] != data[dataset_id,]["data_identity"]:
+    qualified = data[dataset_id,]
+    if dataset.source["data_identity"] != qualified["data_identity"]:
         raise ValueError("Dataset differs from the qualified 0B input")
+    if specification["split_id"] != qualified["split_id"]:
+        raise ValueError("Split differs from the qualified 0B partition")
     ids, checksums = expected_artifacts((data, decisions, embeddings), arm)
     if (
         sorted(features.attrs["feature_artifact_ids"]) != sorted(ids)

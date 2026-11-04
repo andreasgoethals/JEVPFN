@@ -143,9 +143,10 @@ def dataset_checks(cfg: dict, *, review_overlap=False) -> list[dict]:
             if review_overlap:
                 from src.evaluation.qualification import source_leakage_diagnostics
 
-                item["leakage_diagnostics"] = source_leakage_diagnostics(dataset, splits)
-                if item["leakage_diagnostics"]["exact_target_copies"]:
-                    raise ValueError("A raw predictor column exactly copies the target")
+                diagnostics = source_leakage_diagnostics(dataset, splits)
+                item["leakage_diagnostics"] = diagnostics
+                if diagnostics["exact_target_copies"] or diagnostics["exact_class_target_recodings"]:
+                    raise ValueError("A raw predictor column copies or exactly recodes the target")
         except Exception as exc:
             item["status"] = "failed"
             # Report the dataset failure and continue, without dumping raw records.

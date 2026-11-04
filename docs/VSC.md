@@ -367,7 +367,7 @@ sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 tabpfn_3_5
 The CPU preflight validates all selected datasets and decision blocks, all three encoder
 stores, every required outer/inner PCA key and its checksum, the shared CPU package
 lock, and the offline contracts. It reports exact feature-row overlap by fold and
-fails on exact raw target copies. The predictor contracts cover binary, multiclass,
+fails on exact raw target copies or class relabelings. The predictor contracts cover binary, multiclass,
 30-class and regression tasks, missing/categorical inputs, representation modes, fixed
 class order and resume. CPU predictor contracts use
 `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on native Mindwell CPU nodes.
@@ -385,8 +385,8 @@ reports in the checksummed evidence list of the owner's reviewed acceptance. Ver
 that record with `python -m src.evaluation.qualification --acceptance FILE` in a CPU
 allocation against durable PROJECT. It reads and checks the published prediction
 records. The
-benchmark also checks that the loaded data, feature bytes and predictor runtime
-match the qualified identities.
+benchmark also checks that the loaded data, fold assignment, feature bytes and predictor
+runtime match the qualified identities.
 
 ### 4.7 PCA and benchmark
 

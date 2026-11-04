@@ -200,10 +200,16 @@ def test_qualified_content_and_runtime_checked_before_benchmark_fit(tmp_path, re
         feature_artifact_ids=["columns", "joint"],
         decision_artifact_checksums={"columns": "c", "joint": "j"},
     )
-    q.verify_inputs(evidence, dataset, features, arm, {"container_id": "seal"})
+    runtime = {"container_id": "seal"}
+    split = {"split_id": "split"}
+    q.verify_inputs(evidence, dataset, features, arm, runtime, specification=split)
+    with pytest.raises(ValueError, match="qualified 0B partition"):
+        q.verify_inputs(
+            evidence, dataset, features, arm, runtime, specification={"split_id": "other"}
+        )
     features.attrs["decision_artifact_checksums"]["joint"] = "changed"
     with pytest.raises(ValueError, match="Feature artifacts"):
-        q.verify_inputs(evidence, dataset, features, arm, {"container_id": "seal"})
+        q.verify_inputs(evidence, dataset, features, arm, runtime, specification=split)
 
 
 def test_missing_text_signal_is_available_to_the_structured_baseline():
@@ -220,15 +226,20 @@ def test_missing_text_signal_is_available_to_the_structured_baseline():
     assert matrix[missing_column(0)].tolist() == [0, 1]
 
 
-def test_raw_copy_and_duplicate_rows_are_reported_separately():
-    frame = pd.DataFrame({"x": [1, 1, 2, 3], "copy": [0, 0, 1, 1], "target": [0, 0, 1, 1]})
+def test_raw_copies_recodings_and_duplicate_rows_are_reported_separately():
+    frame = pd.DataFrame({
+        "x": [1, 1, 2, 3], "copy": [0, 0, 1, 1], "inverse": [1, 1, 0, 0],
+        "alias": pd.Categorical(["a", "a", "b", "b"]), "noisy": [0, 0, 1, 0],
+        "target": pd.Categorical([0, 0, 1, 1]),
+    })
     dataset = SimpleNamespace(
         frame=frame,
         features=frame.drop(columns="target"),
-        metadata=SimpleNamespace(target="target"),
+        metadata=SimpleNamespace(target="target", task_type="binary_classification"),
     )
     audit = q.source_leakage_diagnostics(dataset, {"folds": [{"train": [0, 2], "test": [1, 3]}]})
     assert audit["exact_target_copies"] == ["copy"]
+    assert audit["exact_class_target_recodings"] == ["inverse", "alias"]
     assert audit["exact_feature_row_overlap_by_fold"] == [1]
     assert audit["test_rows_by_fold"] == [2]
 

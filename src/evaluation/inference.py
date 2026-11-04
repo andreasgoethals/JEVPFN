@@ -87,6 +87,8 @@ def across_datasets(datasets):
         )
     records = []
     for key, group in datasets.groupby(GROUP, dropna=False):
+        if group.dataset_id.duplicated().any():
+            raise ValueError("Multiple results for one dataset and contrast; select one campaign")
         values = group.loc[group.complete, "mean_difference"]
         comparable = key[-1].split(".")[-1] in DIMENSIONLESS
         records.append(

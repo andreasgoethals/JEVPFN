@@ -213,8 +213,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
     features.attrs["decision_artifact_checksums"] = checksums
     settings["execution_runtime"] = execution_runtime()
+    specification = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
     if not profile:
-        verify_inputs(qualified, dataset, features, arm, settings["execution_runtime"])
+        verify_inputs(
+            qualified, dataset, features, arm, settings["execution_runtime"],
+            specification=specification,
+        )
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     representation = {
         "missingness_policy": features.attrs.get("missingness_policy"),
@@ -257,7 +261,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             dataset,
             features,
             factory,
-            specification=shared_splits(dataset, seed=cfg["random_seed"], folds=5),
+            specification=specification,
             model_id=arm["model"],
             checkpoint_id=predictor_settings_identity(settings),
             feature_set=arm["feature_set"],

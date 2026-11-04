@@ -57,6 +57,14 @@ def test_inference_requires_prespecified_complete_dataset_family():
     assert set(base) == set(GROUP)
 
 
+def test_descriptive_aggregation_refuses_to_count_one_dataset_twice():
+    _, rows = example()
+    repeat = rows[rows.dataset_id.eq("data0")].assign(split_id="another_split")
+    datasets = dataset_differences(pd.concat([rows, repeat], ignore_index=True))
+    with pytest.raises(ValueError, match="one dataset and contrast"):
+        across_datasets(datasets)
+
+
 def test_primary_results_pair_exact_predictors_and_keep_native_references(isolated_output):
     from types import SimpleNamespace
 
