@@ -278,13 +278,14 @@ def test_combined_join_preserves_both_artifact_identities_and_missingness():
     "model", ["catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear"]
 )
 def test_campaign_embedding_factory_for_every_predictor(
-    isolated_output, monkeypatch, model, pca_ablation=None
+    isolated_output, monkeypatch, model, scope="per_column"
 ):
     from types import SimpleNamespace
 
     from src.evaluation import campaign
 
     dataset = fixture_data()
+    components = 64 if scope == "joint" else 32
     name = "non_text_plus_frozen_e5"
     arm = dict(
         dataset_id="fixture",
@@ -293,8 +294,8 @@ def test_campaign_embedding_factory_for_every_predictor(
         feature_set=name,
         phase="experiment_2",
         encoder="e5_small_v2",
-        pca_components=pca_ablation or 32,
-        pca_scope="per_column",
+        pca_components=components,
+        pca_scope=scope,
     )
     real_load = campaign.load_yaml
     def config(name):
@@ -335,7 +336,8 @@ def test_campaign_embedding_factory_for_every_predictor(
     EmbeddingControl(
         None,
         encoded.attrs["embedding_groups"],
-        components=pca_ablation or 32,
+        components=components,
+        scope=scope,
         seed=real_load("experiment_1/main")["random_seed"],
         prepared_cache=cache_path("fixture", "e5_small_v2"),
         embedding_artifacts=["e5-artifact"],
@@ -360,9 +362,9 @@ def test_campaign_embedding_factory_for_every_predictor(
         assert kw["representation_recipe"]["provider"] == arm["provider"]
         wrapped = factory().fit(features.iloc[:3], data.frame.y.iloc[:3])
         np.testing.assert_allclose(wrapped.pcas[0].mean_, [1, 3])
-        assert len([c for c in received[0] if c.startswith("e5_pca")]) == (pca_ablation or 32)
+        assert len([c for c in received[0] if c.startswith("e5_pca")]) == (components)
         assert kw["representation_recipe"]["embedding"]["pca_components_per_column"] == (
-            pca_ablation or 32
+            components
         )
         assert received[0]["text_presence__000__missing"].tolist() == [0, 0, 1]
         assert not any(c.startswith("e0") or c.startswith("e1") for c in received[0])
@@ -378,13 +380,13 @@ def test_campaign_embedding_factory_for_every_predictor(
 @pytest.mark.parametrize(
     "model", ["catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear"]
 )
-@pytest.mark.parametrize("dimension", [8, 16])
-def test_pca_ablation_applies_reduction_to_the_same_cached_vectors(
-    isolated_output, monkeypatch, model, dimension
+
+def test_joint_pca_applies_reduction_to_the_same_cached_vectors(
+    isolated_output, monkeypatch, model
 ):
     test_campaign_embedding_factory_for_every_predictor(
         isolated_output,
         monkeypatch,
         model,
-        pca_ablation=dimension,
+        scope="joint",
     )

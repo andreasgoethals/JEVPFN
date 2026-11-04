@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from src.evaluation.design import pca_grid
 from src.visualize import layout, style
 from src.visualize.decision_comparison import LABELS
 from src.visualize.research import ENCODER_LABELS
@@ -24,7 +25,6 @@ REFERENCE_LABELS = {
     "same_decision_features_without_e5": "same decision features alone",
     "original_text_without_decision_features": "original text alone",
 }
-JOINT_WIDTHS = (8, 16, 32, 64, 128, 256)
 
 
 def _dataset_effects(group, keys, task, direction):
@@ -79,7 +79,7 @@ def effect_matrix_figures(paired, phase="experiment_1"):
             row_labels = [LABELS[p] for p in rows]
         else:
             sub = sub[sub.encoder.notna()]
-            recipes = [("per_column", 32), *[("joint", w) for w in sorted(JOINT_WIDTHS, reverse=True)]]
+            recipes = pca_grid()
             rows = [(e, s, c) for e in ENCODER_LABELS for s, c in recipes]
             row_keys, panels = ["encoder", "pca_scope", "pca_components"], [None]
             row_labels = [f"{ENCODER_LABELS[e]} · {'P' if s == 'per_column' else 'J'}{c}"
@@ -194,64 +194,54 @@ def paired_effect_figures(paired):
 def embedding_effect_figures(paired):
     if paired.empty:
         return
+    recipes = pca_grid()
+    current = np.logical_or.reduce([
+        paired.pca_scope.eq(scope) & paired.pca_components.eq(count) for scope, count in recipes
+    ])
     for task, (metric, direction, unit) in METRIC_VIEWS.items():
-        selected = paired[paired.phase.eq("experiment_2") & paired.task_type.eq(task)
+        selected = paired[current & paired.phase.eq("experiment_2") & paired.task_type.eq(task)
                           & paired.metric.eq(metric)]
         for (model, reference), group in selected.groupby(["model_id", "reference"], sort=False):
-            keys = ["dataset_id", "split_id", "encoder", "pca_scope", "pca_components", "arm_id"]
+            keys = ["dataset_id", "split_id", "checkpoint_id", "encoder", "pca_scope",
+                    "pca_components", "arm_id"]
             datasets = _dataset_effects(group, keys, task, direction)
             if datasets.empty:
                 continue
-            fig, axes = plt.subplots(1, 2, figsize=style.DASHBOARD_SIZE, sharey=True,
-                                      gridspec_kw={"width_ratios": [2, 1]})
-            for encoder, part in datasets.groupby("encoder", sort=False):
-                color = style.EMBEDDING_COLORS[encoder]
-                joint_rows = part[part.pca_scope.eq("joint")
-                                  & part.pca_components.isin(JOINT_WIDTHS)]
-                # A curve must compare the same dataset/split at every width.
-                # Otherwise a newly completed easy dataset can look like a PCA benefit.
-                complete = joint_rows.groupby(["dataset_id", "split_id"]).filter(
-                    lambda frame: len(frame) == len(JOINT_WIDTHS)
-                    and set(frame.pca_components) == set(JOINT_WIDTHS)
-                )
-                joint = complete.groupby("pca_components").effect.mean()
-                if not joint.empty:
-                    axes[0].plot(joint.index, joint, color=color, marker="o",
-                                 label=f"{ENCODER_LABELS[encoder]} (n={complete.dataset_id.nunique()})",
-                                 markersize=4)
-                separate = part[part.pca_scope.eq("per_column")].effect
-                if not separate.empty:
+            matches = datasets.groupby(["dataset_id", "split_id", "checkpoint_id", "encoder"]).filter(
+                lambda frame: len(frame) == len(recipes)
+                and set(zip(frame.pca_scope, frame.pca_components)) == set(recipes)
+            )
+            if matches.empty:
+                continue
+            if matches.duplicated(["dataset_id", "encoder", "pca_scope", "pca_components"]).any():
+                raise ValueError("Multiple splits or checkpoints match the PCA comparison")
+            fig, axes = plt.subplots(1, len(recipes), figsize=style.DASHBOARD_SIZE, sharey=True)
+            for ax, (scope, count) in zip(axes, recipes):
+                selected_recipe = matches[
+                    matches.pca_scope.eq(scope) & matches.pca_components.eq(count)
+                ]
+                for encoder, part in selected_recipe.groupby("encoder", sort=False):
                     position = list(ENCODER_LABELS).index(encoder)
-                    axes[1].scatter(position + np.linspace(-0.1, 0.1, len(separate)), separate,
-                                    color=color, alpha=0.4, s=12)
-                    axes[1].scatter(position, separate.mean(), color=color, marker="D", s=25)
-            for ax in axes:
+                    color = style.EMBEDDING_COLORS[encoder]
+                    values = part.effect
+                    ax.scatter(position + np.linspace(-0.1, 0.1, len(values)), values,
+                               color=color, alpha=0.4, s=12)
+                    ax.scatter(position, values.mean(), color=color, marker="D", s=25)
                 ax.axhline(0, color=style.GRID_COLOR)
                 ax.set_ylabel(unit, fontsize=7)
-            axes[0].set_xscale("log", base=2)
-            axes[0].set_xticks([8, 16, 32, 64, 128, 256], [8, 16, 32, 64, 128, 256])
-            axes[0].set_xlabel("Joint PCA: total dimensions")
-            handles, _ = axes[0].get_legend_handles_labels()
-            if handles:
-                axes[0].legend(fontsize=7)
-            else:
-                axes[0].text(0.5, 0.5, "Awaiting datasets with all six widths",
-                             transform=axes[0].transAxes, ha="center", fontsize=8)
-            axes[1].set_xticks(range(3), ["Small\nE5", "Large\nE5", "Qwen"], fontsize=7)
-            axes[1].set_title("Per-column PCA32", fontsize=8)
+                ax.set_xticks(range(3), ["Small E5", "Large E5", "Qwen"], fontsize=7)
+                ax.set_title(f"{scope.replace('_', '-').capitalize()} PCA{count}", fontsize=8)
             fig.suptitle(f"{style.PREDICTOR_LABELS[model]} · {layout.TASK_LABELS[task]} · frozen embeddings"
                          f" · reference: {REFERENCE_LABELS.get(reference, reference)}", fontsize=9)
             yield fig, f"embedding_effect_{model}_{task}_{reference}", (
-                "Paired frozen-embedding effects within a fixed predictor. Each joint curve "
-                "uses only dataset/split pairs with five defined paired folds at all six joint "
-                "widths, then averages their dataset-level effects. Legend n is this fixed "
-                "cohort size; cohorts may differ between encoders. Per-column "
-                "points are individual dataset differences and diamonds their means. Exact counts "
-                "and identities remain in the tables; missing/unsupported arms are not imputed. "
-                "Positive values indicate improvement in the named AUC or R² metric. Per-column32 "
-                "has 32 coordinates per text field, not 32 total; the panels are not equal-budget "
-                "grouping comparisons. PCA is fitted within the corresponding training partition."
+                "Paired frozen-embedding gains over the shared structured reference. For each "
+                "encoder, both panels use the same datasets and splits with five defined "
+                "paired folds for both recipes. Small points are dataset effects and diamonds "
+                "are their means. Positive values indicate gains in AUC or R². Separate PCA32 "
+                "uses 32 coordinates per text field and joint PCA64 uses 64 total. These "
+                "recipes have equal width for datasets with two text fields."
             )
+
 
 
 def pca_variance_figures(table):
@@ -260,17 +250,17 @@ def pca_variance_figures(table):
     for encoder, part in table.groupby("encoder", sort=False):
         fig, axes = plt.subplots(1, 2, figsize=style.DASHBOARD_SIZE,
                                   gridspec_kw={"width_ratios": [2, 1]})
-        joint = part[part.pca_scope.eq("joint")]
-        for _, group in joint.groupby("dataset_id"):
-            mean = group.groupby("requested_components").training_explained_variance_fraction.mean()
-            axes[0].plot(mean.index, mean, color=style.MEDIAN_COLOR, alpha=0.45, marker="o", markersize=3)
-        separate = part[part.pca_scope.eq("per_column")]
+        joint = part[part.pca_scope.eq("joint") & part.requested_components.eq(64)]
+        if not joint.empty:
+            means = joint.groupby("dataset_id").training_explained_variance_fraction.mean()
+            axes[0].scatter(np.linspace(-0.2, 0.2, len(means)), means,
+                            color=style.MEDIAN_COLOR, s=15, alpha=0.6)
+        separate = part[part.pca_scope.eq("per_column") & part.requested_components.eq(32)]
         if not separate.empty:
             means = separate.groupby(["dataset_id", "text_group"]).training_explained_variance_fraction.mean()
             axes[1].scatter(np.linspace(-0.2, 0.2, len(means)), means, color=style.P95_COLOR, s=15, alpha=0.6)
-        axes[0].set_xscale("log", base=2)
-        axes[0].set_xticks([8, 16, 32, 64, 128, 256], [8, 16, 32, 64, 128, 256])
-        axes[0].set(xlabel="Joint PCA: requested total dimensions", ylabel="Training explained-variance fraction")
+        axes[0].set(xticks=[0], xticklabels=["Joint PCA64"], xlim=(-0.4, 0.4),
+                    ylabel="Training explained-variance fraction")
         axes[1].set(xticks=[0], xticklabels=["Per-column PCA32"], xlim=(-0.4, 0.4))
         for ax in axes:
             ax.set_ylim(0, 1.02)
@@ -281,7 +271,7 @@ def pca_variance_figures(table):
         fig.suptitle(f"{ENCODER_LABELS.get(encoder, encoder)} · observed training-only compression")
         yield fig, f"pca_training_variance_{encoder}", (
             "Training-only cumulative PCA explained-variance fractions, averaged over available "
-            "outer-training folds. Each joint curve is one dataset; each per-column point is one "
+            "outer-training folds. Each joint point is one dataset; each per-column point is one "
             "dataset/text column. Reuse across predictors and metric records is counted once. "
             "Requested and fitted rank remain in the table. Variance is not task information "
             "or predictive utility, and fractions across encoders do not define a common "

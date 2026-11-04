@@ -134,10 +134,10 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
 def test_plan_three_families_six_engines_three_original_text_baselines():
     plan = benchmark_plan()
     assert len({a["dataset_id"] for a in plan}) == 18
-    assert len(plan) == 6318
+    assert len(plan) == 4698
     for model in MAIN_MODELS:
         row = [a for a in plan if a["dataset_id"] == plan[0]["dataset_id"] and a["model"] == model]
-        assert len([a for a in row if a["provider"] is None]) == 22
+        assert len([a for a in row if a["provider"] is None]) == 7
         for provider in load_yaml("extractors")["candidates"]:
             assert len([a for a in row if a["provider"] == provider]) == 3
     text = [a for a in plan if a["model"] in TEXT_MODELS]

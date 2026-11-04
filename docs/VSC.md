@@ -368,15 +368,17 @@ The CPU preflight validates all selected datasets and decision blocks, all three
 stores, every required outer/inner PCA key and its checksum, the shared CPU package
 lock, and the offline contracts. It reports exact feature-row overlap by fold and
 fails on exact raw target copies or class relabelings. The predictor contracts cover binary, multiclass,
-30-class and regression tasks, missing/categorical inputs, representation modes, fixed
-class order and resume. CPU predictor contracts use
+30-class and regression tasks, missing/categorical inputs, fixed class order and resume.
+They exercise joint PCA64 and separate PCA32 at both encoder widths. CPU predictor contracts use
 `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on native Mindwell CPU nodes.
 
 After enabling the separate `full_fold_profile_enabled` switch for 0B, generate
 `benchmark_jobs --profile-fold` arrays for each applicable phase and predictor. The
-profile plan picks the tallest and widest supported arm in each group, deduplicated.
+profile plan picks the tallest and widest supported arm for each predictor and phase, covering both PCA
+recipes separately in Experiment 2. Ties prefer the larger encoder input width. After
+deduplication, the current grid requires 33 profiles.
 These jobs fit the full first outer fold, retain the binary inner-OOF predictions,
-and read back prediction row IDs and targets. Inspect the resource, publication,
+and read back predictor widths, prediction row IDs and targets. Inspect the resource, publication,
 and independent transfer/restore evidence before accepting 0B. These profiles are
 resource checks on representative arms.
 
@@ -384,8 +386,7 @@ Put the current VSC preflight, all nine contract reports, and all required full-
 reports in the checksummed evidence list of the owner's reviewed acceptance. Verify
 that record with `python -m src.evaluation.qualification --acceptance FILE` in a CPU
 allocation against durable PROJECT. It reads and checks the published prediction
-records. The
-benchmark also checks that the loaded data, fold assignment, feature bytes and predictor
+records. The benchmark also checks that the loaded data, fold assignment, feature bytes and predictor
 runtime match the qualified identities.
 
 ### 4.7 PCA and benchmark

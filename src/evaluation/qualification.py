@@ -58,14 +58,16 @@ def execution_runtime():
 
 
 def profile_plan(arms=None):
-    """Profile the tall and wide extremes for each predictor/representation phase."""
+    """Profile the tall and wide extremes for each predictor, phase and PCA recipe."""
     from src.evaluation.campaign import benchmark_plan
 
     rows = {e["id"]: e["paper_summary"]["rows"] for e in load_catalog()["datasets"]}
+    encoders = load_yaml("feature_creation/embedding_models")["models"]
     groups = {}
     for arm in benchmark_plan() if arms is None else arms:
         if arm["width_status"] != "unsupported_width":
-            groups.setdefault((arm["phase"], arm["model"]), []).append(arm)
+            key = (arm["phase"], arm["model"], arm.get("pca_scope"), arm.get("pca_components"))
+            groups.setdefault(key, []).append(arm)
 
     selected = {}
     for group in groups.values():
@@ -76,9 +78,12 @@ def profile_plan(arms=None):
         def width(arm):
             return arm["predictor_columns"]
 
+        def encoder_width(arm):
+            return encoders[arm["encoder"]]["dimensions"] if arm.get("encoder") else 0
+
         for arm in (
-            max(group, key=lambda a: (height(a), width(a))),
-            max(group, key=lambda a: (width(a), height(a))),
+            max(group, key=lambda a: (height(a), width(a), encoder_width(a))),
+            max(group, key=lambda a: (width(a), height(a), encoder_width(a))),
         ):
             selected[digest(arm)] = arm
     return list(selected.values())
@@ -135,6 +140,8 @@ def save_profile(arm, dataset, features, runtime, records):
         role = meta["prediction_role"]
         positions = roles.pop(role)
         table = read_predictions(record)
+        if meta.get("representation_feature_count") != arm["predictor_columns"]:
+            raise ValueError("Full-fold profile predictor width differs from the planned recipe")
         if (
             meta["split_id"] != split["split_id"]
             or meta["outer_fold"] != 0
@@ -166,6 +173,7 @@ def save_profile(arm, dataset, features, runtime, records):
         "decision_artifact_checksums": features.attrs["decision_artifact_checksums"],
         "split_id": split["split_id"],
         "training_rows": len(fold["train"]),
+        "predictor_columns": arm["predictor_columns"],
         "roles": verified,
         "created_at": datetime.now(UTC).isoformat(),
     }
@@ -237,6 +245,7 @@ def verify_published_profile(report):
         if (
             saved["metadata"]["prediction_role"] != item["role"]
             or saved["metadata"]["split_id"] != report["split_id"]
+            or saved["metadata"].get("representation_feature_count") != report["predictor_columns"]
             or saved["predictions"]["sha256"] != item["prediction_sha256"]
             or len(read_predictions(record)) != item["rows"]
         ):
@@ -245,7 +254,7 @@ def verify_published_profile(report):
 
 def benchmark_evidence(filename, arm, *, verify_publication=False):
     """Checksums alone cannot make a partial or synthetic-only report into acceptance."""
-    from src.cluster.predictor_contracts import required_fixture_cases
+    from src.cluster.predictor_contracts import CONTRACT_VERSION, required_fixture_cases
     from src.evaluation.models import MAIN_MODELS, TEXT_MODELS
 
     current = evaluation_identity()
@@ -278,7 +287,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
         for r in live
         if (
             r.get("status") == "predictor_contracts_passed_requires_full_fold_profile"
-            and r.get("contract_version") == 6
+            and r.get("contract_version") == CONTRACT_VERSION
             and r.get("fixtures")
             and all(f.get("resume_without_refitting") for f in r["fixtures"])
         )
@@ -307,6 +316,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
             != predictors[planned["model"]].get("runtime_identity")
             or report.get("data_identity") != dataset["data_identity"]
             or report.get("split_id") != dataset["split_id"]
+            or report.get("predictor_columns") != planned["predictor_columns"]
             or sorted(report.get("feature_artifact_ids", [])) != sorted(expected_ids)
             or report.get("decision_artifact_checksums") != expected_hashes
             or len(report.get("roles", [])) != len(roles)

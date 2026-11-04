@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from src.cluster.predictor_contracts import required_fixture_cases
+from src.cluster.predictor_contracts import CONTRACT_VERSION, required_fixture_cases
 from src.evaluation import qualification as q
 from src.evaluation.features import assemble_feature_set, missing_column
 from src.evaluation.models import MAIN_MODELS, TEXT_MODELS
@@ -22,6 +22,7 @@ def reports(monkeypatch):
         "dataset_id": "data",
         "provider": "provider",
         "feature_set": "non_text_plus_both",
+        "predictor_columns": 4,
     }
     monkeypatch.setattr(q, "evaluation_identity", lambda: "current")
     monkeypatch.setattr(q, "profile_plan", lambda: [arm])
@@ -71,7 +72,7 @@ def reports(monkeypatch):
         {
             "model": m,
             "status": "predictor_contracts_passed_requires_full_fold_profile",
-            "contract_version": 6,
+            "contract_version": CONTRACT_VERSION,
             "runtime_identity": runtime,
             "fixtures": [
                 {
@@ -93,6 +94,7 @@ def reports(monkeypatch):
         "split_id": "split",
         "feature_artifact_ids": ["joint", "columns"],
         "decision_artifact_checksums": {"joint": "j", "columns": "c"},
+        "predictor_columns": 4,
         "roles": [{"role": "outer_test", "rows": 2, "record_id": "test", "prediction_sha256": "sha"}],
     }
     return arm, [preflight, *predictors, profile]
@@ -135,6 +137,7 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     arm = {
         "phase": "experiment_1", "model": "linear", "feature_set": "non_text",
         "dataset_id": dataset.metadata.dataset_id,
+        "predictor_columns": features.shape[1],
     }
     split = shared_splits(dataset, seed=q.load_yaml("experiment_1/main")["random_seed"])
     records = evaluate_cv(
@@ -145,6 +148,8 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     )
     with pytest.raises(ValueError, match="lacks required prediction roles"):
         q.save_profile(arm, dataset, features, {"container_id": "test"}, records[:1])
+    with pytest.raises(ValueError, match="predictor width"):
+        q.save_profile(arm | {"predictor_columns": 1}, dataset, features, {}, records)
     q.save_profile(arm, dataset, features, {"container_id": "test"}, records)
     path, = (paths.manifests_dir("experiment_0") / "after_extraction").glob("profile_*.json")
     report = json.loads(path.read_text(encoding="utf-8"))

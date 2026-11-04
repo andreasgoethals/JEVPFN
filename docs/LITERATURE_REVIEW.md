@@ -240,12 +240,12 @@ Nonoverlapping chunks, content-token-weighted aggregation and normalization cove
 text. This is a declared project policy, not equivalence to full-window contextualization
 or MulTaBench's original preprocessing. Qwen's chunk length is below its native window.
 
-Per-column PCA32 preserves separate column blocks; joint PCA256/128/64/32/16/8 compresses
+Per-column PCA32 preserves separate column blocks; joint PCA64 compresses
 the concatenated text vectors. Non-text features bypass PCA. Joint PCA can capture
-cross-column covariance but high-variance columns can dominate. Per-column versus joint
-at the same component count also changes total width; it is a grouping/compression
-comparison, not an isolated grouping effect. Explained variance does not establish
-predictive relevance, and none of these dimensions is assumed optimal.
+cross-column covariance, and high-variance columns can dominate. The recipes have equal
+total width on two-text-column datasets. Elsewhere the comparison reflects both grouping
+and width. Explained variance measures retained variation, and predictive relevance is
+evaluated separately.
 
 Imputation and PCA fit on training rows only, including each inner threshold fold.
 Validation/test rows are transformed by that fitted map and receive exactly the same

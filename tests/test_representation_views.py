@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 
+from src.evaluation.design import pca_grid
 from src.evaluation.representation_views import decision_vs_embedding
 from src.visualize import style
 from src.visualize.decision_comparison import LABELS
 from src.visualize.paired import MODES
 from src.visualize.representation_views import (
-    RECIPES,
     direct_comparison_figures,
     overlap_figures,
 )
@@ -27,7 +27,7 @@ def fixture_folds():
                     rows.append(dict(base, phase="experiment_1", provider=provider, feature_set=mode,
                                      arm_id=f"{dataset}/{provider}/{mode}", comparison_id=f"{provider}/{mode}",
                                      value=0.65 + 0.013*i + 0.01*j + 0.005*dataset, encoder=None, pca_scope=None, pca_components=None))
-            for scope, width in RECIPES:
+            for scope, width in pca_grid():
                 rows.append(dict(base, phase="experiment_2", provider=None, feature_set="non_text_plus_frozen_e5",
                                  arm_id=f"{dataset}/e5/{scope}/{width}", comparison_id=f"e5/{scope}/{width}",
                                  value=0.70 + width/6000, encoder="e5_small_v2", pca_scope=scope, pca_components=width))
@@ -51,7 +51,7 @@ def fixture_paired():
 def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
     folds = fixture_folds()
     paired = decision_vs_embedding(folds)
-    assert len(paired) == 3 * 5 * 12 * 3 * 7
+    assert len(paired) == 3 * 5 * 12 * 3 * 2
     assert (paired.difference == paired.value - paired.reference_value).all()
     bad = folds.copy()
     bad.loc[bad.phase.eq("experiment_2"), "checkpoint_id"] = "different"

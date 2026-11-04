@@ -14,14 +14,14 @@ def test_primary_grid_and_widths():
     plan = benchmark_plan()
     assert Counter(a["phase"] for a in plan) == {
         "experiment_1": 3996,
-        "experiment_2": 2268,
+        "experiment_2": 648,
         "experiment_3": 54,
     }
     assert all(a["provider"] is None for a in plan if a["phase"] != "experiment_1")
     assert all(a["width_status"] == "within_known_width_limit" for a in plan)
     table = pca_width_table()
     assert table.per_column_32.max() == 431
-    assert table.joint_256.max() == 300
+    assert table.joint_64.max() == 108
     assert table.max_embedding_columns.max() == 431
     assert table.conservative_kumo_upper_bound.max() == 433
 
@@ -98,25 +98,28 @@ def test_verify_prepared_pca_checks_all_inner_and_outer_keys(tmp_path, monkeypat
     path = tmp_path / "pca.sqlite3"
     seed = prepare_pca.load_yaml("experiment_2/embeddings")["random_seed"]
     monkeypatch.setattr(prepare_pca, "cache_path", lambda *_: path)
-    monkeypatch.setattr(prepare_pca, "pca_grid", lambda: [("joint", 2)])
     encoder = {"encoder_id": "fixture", "dimensions": 2}
-    columns = [["frozen_e5__text_000__000", "frozen_e5__text_000__001"]]
+    columns = [[f"frozen_e5__text_{i:03d}__{j:03d}" for j in range(2)] for i in range(2)]
     frame = pd.DataFrame(
-        np.random.default_rng(5).normal(size=(len(dataset.frame), 2)),
-        columns=columns[0],
+        np.random.default_rng(5).normal(size=(len(dataset.frame), 4)),
+        columns=columns[0] + columns[1],
         index=[f"csv:{i}" for i in range(len(dataset.frame))],
     )
     partitions = list(prepare_pca.training_partitions(dataset, shared_splits(dataset, seed=seed)))
-    control = EmbeddingControl(
-        None, columns, components=2, scope="joint", seed=seed, prepare=True,
-        embedding_artifacts=["artifact"], prepared_cache=path,
-    )
-    for rows in partitions[:-1]:
-        control.fit(frame.iloc[rows], None)
-    with pytest.raises(ValueError, match="Missing 1 of 20"):
+
+    def prepare(scope, count):
+        control = EmbeddingControl(
+            None, columns, components=count, scope=scope, seed=seed, prepare=True,
+            embedding_artifacts=["artifact"], prepared_cache=path,
+        )
+        for rows in partitions:
+            control.fit(frame.iloc[rows], None)
+
+    prepare("joint", 64)
+    with pytest.raises(ValueError, match="Missing 40 of 60"):
         prepare_pca.verify_prepared(dataset, encoder, "artifact")
-    control.fit(frame.iloc[partitions[-1]], None)
-    assert prepare_pca.verify_prepared(dataset, encoder, "artifact") == 20
+    prepare("per_column", 32)
+    assert prepare_pca.verify_prepared(dataset, encoder, "artifact") == 60
     with closing(sqlite3.connect(path)) as db, db:
         db.execute("UPDATE parameters SET sha256 = 'invalid'")
     with pytest.raises(ValueError, match="Corrupt prepared PCA"):

@@ -1,7 +1,5 @@
 import copy
 
-import numpy as np
-
 from src.cluster import predictor_contracts, preflight
 from src.evaluation.campaign import benchmark_plan
 from src.evaluation.models import MAIN_MODELS, TEXT_MODELS
@@ -10,17 +8,20 @@ from src.utils.config import load_yaml
 
 def test_all_encoders_dimensions_and_providers_are_prespecified():
     main = [a for a in benchmark_plan() if a["phase"] == "experiment_2"]
-    assert len(main) == 18 * 6 * 3 * 7
+    assert len(main) == 18 * 6 * 3 * 2
     assert {a["model"] for a in main} == set(MAIN_MODELS)
-    assert {a["pca_components"] for a in main} == {8, 16, 32, 64, 128, 256}
-    assert {a["pca_scope"] for a in main} == {"per_column", "joint"}
+    assert {(a["pca_scope"], a["pca_components"]) for a in main} == {
+        ("per_column", 32), ("joint", 64),
+    }
     assert len({a["encoder"] for a in main}) == 3
-    optional = [
-        a
-        for a in benchmark_plan()
-        if a["phase"] == "experiment_2" and a["pca_scope"] == "joint"
-    ]
-    assert len(optional) == 18 * 6 * 3 * 6
+    from src.evaluation.qualification import profile_plan
+
+    profiles = profile_plan(main)
+    assert {a["encoder"] for a in profiles} <= {"e5_large_v2", "qwen3_embedding_0_6b"}
+    assert {(a["model"], a["pca_scope"], a["pca_components"]) for a in profiles} == {
+        (model, scope, count) for model in MAIN_MODELS
+        for scope, count in (("per_column", 32), ("joint", 64))
+    }
     assert all(a["provider"] is None for a in main)
     assert load_yaml("experiment_2/embeddings")["enabled"] is False
 
@@ -32,23 +33,30 @@ def test_actual_predictor_fixtures_exercise_both_pca_widths_and_combined_feature
 
     for dataset in predictor_contracts.fixtures():
         cases = list(predictor_contracts.feature_cases(dataset, MAIN_MODELS[0]))
-        assert len(cases) == 12
+        assert len(cases) == 8
+        assert {
+            (dataset.metadata.task_type, len(dataset.metadata.classes), name)
+            for name, _, _ in cases
+        } == {
+            case for case in predictor_contracts.required_fixture_cases(MAIN_MODELS[0])
+            if case[:2] == (dataset.metadata.task_type, len(dataset.metadata.classes))
+        }
         # These are interface fixtures, not claimed real E5 vectors or dataset predictions.
-        for name, features, width in cases:
-            assert "text" not in features and "target" not in features
+        for _, features, width in cases:
+            assert not {"text", "notes", "target"} & set(features)
             if width is None:
                 continue
             factory = predictor_contracts.case_factory(Model, features, width)
-            train = features.iloc[:450]
-            wrapped = factory().fit(train, dataset.frame.target.iloc[:450])
-            assert wrapped.pcas[0].n_components_ == width
-            assert len([c for c in wrapped.estimator.values if c.startswith("e5_pca__")]) == width
-            assert wrapped.estimator.values.iloc[0].filter(like="e5_pca__").isna().all()
-            heldout = wrapped.transform(features.iloc[450:])
+            train = features.iloc[:144]
+            wrapped = factory().fit(train, dataset.frame.target.iloc[:144])
+            joint = features.attrs["pca_scope"] == "joint"
+            assert [p.n_components_ for p in wrapped.pcas] == [width] * (1 if joint else 2)
+            projected = wrapped.estimator.values.filter(like="e5_pca__")
+            assert projected.shape[1] == 64
+            assert projected.iloc[0].isna().all()
+            assert projected.iloc[17].isna().sum() == (0 if joint else 32)
+            heldout = wrapped.transform(features.iloc[144:])
             assert list(heldout) == list(wrapped.estimator.values)
-            if "both" in name:
-                for c in features.filter(like="synthetic_decision__"):
-                    np.testing.assert_allclose(heldout[c], features.iloc[450:][c], equal_nan=True)
         # Changing labels cannot alter the constructed feature fixtures.
         changed = copy.deepcopy(dataset)
         changed.frame["target"] = changed.frame["target"].iloc[::-1].to_numpy()

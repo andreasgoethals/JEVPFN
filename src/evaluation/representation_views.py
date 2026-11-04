@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+from src.evaluation.design import pca_grid
 from src.evaluation.endpoints import HEADLINES
 
 PAIR_KEYS = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id", "outer_fold", "metric"]
@@ -22,6 +23,8 @@ def decision_vs_embedding(folds):
     chosen = chosen[chosen.metric.eq(metric)]
     decisions = chosen[chosen.phase.eq("experiment_1") & chosen.feature_set.isin(MODES)]
     embeddings = chosen[chosen.phase.eq("experiment_2") & chosen.encoder.notna()]
+    embedding_recipe = pd.MultiIndex.from_frame(embeddings[["pca_scope", "pca_components"]])
+    embeddings = embeddings[embedding_recipe.isin(pca_grid())]
     if decisions.empty or embeddings.empty:
         return pd.DataFrame()
     for table in (decisions, embeddings):

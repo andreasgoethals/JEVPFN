@@ -23,12 +23,12 @@ Exact receipts, job IDs and failures: [AGENTS_MEMORY](docs/AGENTS_MEMORY.md). Co
 | Experiment | Question | Configurations |
 |---|---|---|
 | 1 (RQ1) | Do decision features improve each of six fixed predictors over non-text columns and text-presence flags? Twelve extractors × per-column, joint or both. | 3,996 |
-| 2 (RQ2) | How do they compare with three frozen encoders (E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B), PCA-reduced per column (32) or jointly (256/128/64/32/16/8)? | 2,268 |
+| 2 (RQ2) | How do they compare with three frozen encoders (E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B), PCA-reduced per column (32) or jointly (64)? | 648 |
 | 3 (RQ3) | Where do native text systems sit: TabSTAR v1.1, ConTextTab and AutoGluon-Multimodal? | 54 |
 
 A configuration is one dataset × predictor × representation over five outer folds:
-31,590 outer fits plus 15,795 binary inner fits. Experiment 1 shares its baseline
-across extractors; Experiment 2 has seven PCA recipes per encoder; Experiment 3 has one
+23,490 outer fits plus 11,745 binary inner fits. Experiment 1 shares its baseline
+across extractors; Experiment 2 has two PCA recipes per encoder; Experiment 3 has one
 original-feature setting per system. No winner is selected and no outcome-selected
 combination is run. Experiment 0A (input/runtime acceptance, including robustness
 diagnostics) precedes extraction; 0B (complete features, all nine predictors, full-fold
@@ -129,7 +129,7 @@ printed report. Figures are A4 PDFs in `output_JEVPFN/figures/<phase>/<notebook>
 | [3 · 0A evidence](<notebooks/3. experiment_0/01_before_feature_creation.ipynb>) | Runtime gates and B200 resources; pilot output profiles and agreement of all twelve models; robustness. |
 | [3 · 0B evidence](<notebooks/3. experiment_0/02_after_feature_creation.ipynb>) | Representation inventory and predictor readiness. |
 | [4 · Experiment 1](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>) | Coverage, effect matrices, paired effects, seen/unseen text, fit burden. |
-| [5 · Experiment 2](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>) | Effect matrices, gain against PCA width, retained variance, fit burden. |
+| [5 · Experiment 2](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>) | Effect matrices, gain by PCA recipe, retained variance, fit burden. |
 | [6 · Experiment 3](<notebooks/6. experiment_3/01_native_text_systems.ipynb>) | Coverage and native-system scores. |
 | [7 · Synthesis](<notebooks/7. synthesis/01_representation_comparison.ipynb>) | Study design; decision versus embedding per task; pipelines versus native systems. |
 

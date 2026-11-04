@@ -2,6 +2,8 @@
 
 ## 04-11-2026
 
+- Reduce Experiment 2 to joint PCA64 and per-column PCA32 across all three encoders.
+  Qualify both recipes in 0B and compare them on matching dataset cohorts in the figures.
 - Bind each benchmark fit to its exact 0B split, reject perfectly recoded class targets,
   and reject duplicate dataset results when aggregating a contrast across datasets.
 - Qualify benchmark runs with complete selected features, fold-specific PCA coverage,

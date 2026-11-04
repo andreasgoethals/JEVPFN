@@ -38,7 +38,7 @@ def study_grid_figure(grid):
          ["non-text columns and presence flags,", f"with or without {extractors} decision models",
           "asked per column, jointly or both"], "6 predictors"),
         ("experiment_2", "Experiment 2 · RQ2", "How do they compare with\nfrozen general embeddings?",
-         ["E5-small, E5-large or Qwen3", "embeddings, PCA to 32 per column", "or 256 … 8 jointly"],
+         ["E5-small, E5-large or Qwen3", "embeddings, PCA to 32 per column", "or 64 jointly"],
          "same 6 predictors"),
         ("experiment_3", "Experiment 3 · RQ3", "How do the pipelines compare\nwith native text systems?",
          ["TabSTAR v1.1, ConTextTab and", "AutoGluon-Multimodal read the", "raw text themselves"],

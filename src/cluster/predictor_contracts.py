@@ -14,6 +14,7 @@ import pandas as pd
 
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
+from src.evaluation.design import pca_grid
 from src.evaluation.embedding_control import EmbeddingControl
 from src.evaluation.features import add_embeddings, add_text_presence, original_features
 from src.evaluation.models import (
@@ -28,6 +29,18 @@ from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
 FIXTURE_CLASSES = {"binary": 2, "multiclass": 3, "wide_multiclass": 30, "regression": 0}
+CONTRACT_VERSION = 7
+
+
+def embedding_fixture_recipes():
+    encoders = load_yaml("experiment_2/embeddings")["encoders"]
+    configs = load_yaml("feature_creation/embedding_models")["models"]
+    dimensions = sorted({configs[encoder]["dimensions"] for encoder in encoders})
+    return [
+        (f"embedding_{width}_{scope}_pca_{count}", width, scope, count)
+        for width in dimensions
+        for scope, count in pca_grid()
+    ]
 
 
 def required_fixture_cases(model):
@@ -36,12 +49,10 @@ def required_fixture_cases(model):
         if model in TEXT_MODELS
         else (
             "non_text",
-            "e5_pca_32",
-            "embedding_1024_pca_64",
             "decision_per_column",
             "decision_joint",
             "decision_both",
-            *(f"embedding_joint_pca_{k}" for k in (256, 128, 64, 32, 16, 8)),
+            *(case for case, *_ in embedding_fixture_recipes()),
         )
     )
     return {
@@ -58,30 +69,33 @@ def required_fixture_cases(model):
 
 def fixtures():
     for kind, classes in FIXTURE_CLASSES.items():
-        # Binary inner-training partitions must have enough present rows for PCA256.
-        count = max(540, 6 * classes)
+        # Binary inner training must have more than 64 rows after missing blocks.
+        count = max(180, 6 * classes)
         values = np.arange(count)
         frame = pd.DataFrame(
             {
                 "number": values.astype(float),
                 "category": ["a" if i % 2 else "b" for i in values],
                 "text": [f"Description of observation {i}." for i in values],
+                "notes": [f"Notes on observation {i}." for i in values],
                 "target": values % classes if classes else values * 0.1,
             }
         )
         frame.loc[::11, "number"] = np.nan
         frame.loc[::13, "category"] = None
         frame.loc[::17, "text"] = None
+        frame.loc[::19, "notes"] = None
         official = {"target": "target", "task_type": "cls" if classes else "reg"}
         meta = extract_metadata(
             frame,
             official,
             dataset_id=f"EXP0_PREDICTOR_{kind}",
             dataset_name=kind,
-            text_columns=["text"],
+            text_columns=["text", "notes"],
         )
         yield LoadedDataset(
-            frame, meta, official, {"data_identity": digest({"fixture": kind, "version": 5})}, []
+            frame, meta, official,
+            {"data_identity": digest({"fixture": kind, "version": CONTRACT_VERSION})}, [],
         )
 
 
@@ -95,50 +109,41 @@ def feature_cases(dataset, model):
     base.attrs["feature_artifact_ids"] = []
     yield "non_text", base, None
     rng = np.random.default_rng(20260929)
-    names = [f"frozen_e5__text_000__{i:03d}" for i in range(384)]
-    vectors = rng.normal(size=(len(base), 384)).astype("float32")
-    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
-    missing = dataset.frame["text"].isna().to_numpy()
-    vectors[missing] = np.nan
-    encoded = pd.DataFrame(vectors, index=base.index, columns=names)
-    encoded.attrs.update(feature_artifact_ids=[], embedding_groups=[names])
-    combined = add_embeddings(base, encoded)
-    for count in (32,):
-        yield f"e5_pca_{count}", combined, count
-    second = encoded.copy()
-    second.columns = [c.replace("text_000", "text_001") for c in second]
-    second.iloc[1] = np.nan
-    two_groups = encoded.join(second)
-    two_groups.attrs.update(feature_artifact_ids=[], embedding_groups=[names, list(second)])
-    joint = add_embeddings(base, two_groups)
-    joint.attrs["pca_scope"] = "joint"
-    for count in (256, 128, 64, 32, 16, 8):
-        yield f"embedding_joint_pca_{count}", joint, count
-    # 1024-dimensional encoders share the downstream contract, independently of weights.
-    wide = pd.DataFrame(
-        rng.normal(size=(len(base), 1024)),
-        index=base.index,
-        columns=[f"wide__{i}" for i in range(1024)],
-    )
-    wide.loc[missing, :] = np.nan
-    wide.attrs.update(feature_artifact_ids=[], embedding_groups=[list(wide)])
-    yield "embedding_1024_pca_64", add_embeddings(base, wide), 64
+    recipes = embedding_fixture_recipes()
+    for width in sorted({width for _, width, _, _ in recipes}):
+        groups = []
+        for i, text in enumerate(dataset.metadata.text_columns):
+            names = [f"frozen_e5__text_{i:03d}__{j:03d}" for j in range(width)]
+            vectors = rng.normal(size=(len(base), width)).astype("float32")
+            vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+            vectors[dataset.frame[text].isna().to_numpy()] = np.nan
+            groups.append(pd.DataFrame(vectors, index=base.index, columns=names))
+        encoded = pd.concat(groups, axis=1)
+        encoded.attrs.update(feature_artifact_ids=[], embedding_groups=[list(g) for g in groups])
+        combined = add_embeddings(base, encoded)
+        for case, expected_width, scope, count in recipes:
+            if expected_width == width:
+                features = combined.copy(deep=False)
+                features.attrs["pca_scope"] = scope
+                yield case, features, count
     # Decision-only fixtures exercise the three actual Experiment 1 augmentations.
     blocks = {}
+    text_missing = dataset.frame[list(dataset.metadata.text_columns)].isna().to_numpy()
+    task = dataset.metadata.task_type
+    width = len(dataset.metadata.classes) if task == "multiclass_classification" else 1
     for mode in ("per_column", "joint"):
-        task = dataset.metadata.task_type
-        width = len(dataset.metadata.classes) if task == "multiclass_classification" else 1
-        values = rng.uniform(size=(len(base), width))
-        if task == "multiclass_classification":
-            values /= values.sum(axis=1, keepdims=True)
-        elif task == "regression":
-            values = values * 8 - 4
-        values[missing] = np.nan
-        blocks[mode] = pd.DataFrame(
-            values,
-            index=base.index,
-            columns=[f"synthetic_decision__{mode}__{i}" for i in range(width)],
-        )
+        masks = text_missing.T if mode == "per_column" else [text_missing.all(axis=1)]
+        columns = {}
+        for group, missing in enumerate(masks):
+            values = rng.uniform(size=(len(base), width))
+            if task == "multiclass_classification":
+                values /= values.sum(axis=1, keepdims=True)
+            elif task == "regression":
+                values = values * 8 - 4
+            values[missing] = np.nan
+            columns.update({f"synthetic_decision__{mode}__{group}_{i}": values[:, i]
+                            for i in range(width)})
+        blocks[mode] = pd.DataFrame(columns, index=base.index)
         result = base.join(blocks[mode])
         result.attrs.update(feature_artifact_ids=[])
         yield "decision_" + mode, result, None
@@ -179,7 +184,7 @@ def run(model, *, execute=False):
         "fixtures": [],
         "full_dataset_profile": False,
         "embedding_vectors": "synthetic_interface_fixtures_not_real_E5_encoding",
-        "contract_version": 6,
+        "contract_version": CONTRACT_VERSION,
         "job_id": os.environ.get("SLURM_JOB_ID"),
         "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
     }
@@ -214,7 +219,7 @@ def run(model, *, execute=False):
                 checkpoint_id=predictor_settings_identity(settings),
                 feature_set=f"predictor_fixture__{case}",
                 representation_recipe={
-                    "contract_version": 6,
+                    "contract_version": CONTRACT_VERSION,
                     "pca_components": components,
                     "synthetic_vectors": components is not None,
                 },
@@ -264,7 +269,10 @@ def main():
         run(args.model, execute=True)
     else:
         print(
-            "Disabled: four tasks; main predictors test non-text, per-column PCA32, joint PCA256/128/64/32/16/8, 1024-dimensional vectors and decision-only features; native-text models test original text. Five-fold CV, inner binary thresholds and resume checks. No inference performed."
+            "Disabled: four tasks; main predictors test non-text, per-column PCA32 and joint "
+            "PCA64 on two text fields at each encoder width, plus decision-only features. "
+            "Native-text models test original text. Five-fold CV, inner binary thresholds and "
+            "resume checks. No inference performed."
         )
 
 

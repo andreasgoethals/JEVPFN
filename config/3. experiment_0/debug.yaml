@@ -75,7 +75,7 @@ acceptance_checks:
     evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.
   - id: predictor_task_compatibility
     site: vsc_compute_node
-    evidence: All six main engines fit non-text, per-column PCA32 and joint PCA256/128/64/32/16/8 and separate decision-only fixtures for binary, multiclass, 30-class and regression tasks; TabSTAR/ConTextTab/AG-MM fit original-text fixtures. Missing values, class order and cache reuse pass. Synthetic vectors test the downstream interface; separate real-encoder contracts and cache checks validate real embeddings.
+    evidence: All six main engines fit non-text, per-column PCA32 and joint PCA64 on two text fields at both encoder widths (384 and 1,024) and separate decision-only fixtures for binary, multiclass, 30-class and regression tasks; TabSTAR/ConTextTab/AG-MM fit original-text fixtures. Missing values, class order and cache reuse pass. Synthetic vectors test the downstream interface; separate real-encoder contracts and cache checks validate real embeddings.
   - id: predictive_pipeline_boundaries
     site: local_and_vsc
     evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds, fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.

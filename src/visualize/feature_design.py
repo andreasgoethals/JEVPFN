@@ -20,8 +20,7 @@ def predictor_width_figure(plan, summary):
     embedding = rows[rows.phase.eq("experiment_2") & rows.encoder.eq("e5_small_v2")]
     width = {key: frame.set_index("dataset_id").predictor_columns
              for key, frame in decision.groupby("feature_set")}
-    joint = embedding[embedding.pca_scope.eq("joint")].pivot(
-        index="dataset_id", columns="pca_components", values="predictor_columns")
+    joint = embedding[embedding.pca_scope.eq("joint")].set_index("dataset_id").predictor_columns
     separate = embedding[embedding.pca_scope.eq("per_column")].set_index("dataset_id") \
         .predictor_columns
     limit = 500
@@ -29,10 +28,7 @@ def predictor_width_figure(plan, summary):
     y = np.arange(len(order))
     ids = order.dataset_id
     family = style.FAMILY_COLORS["experiment_2"]
-    ax.hlines(y, joint.reindex(ids).min(axis=1), joint.reindex(ids).max(axis=1),
-              color=family, linewidth=2.4, alpha=0.35, zorder=1)
-    for components in joint.columns:
-        ax.scatter(joint.reindex(ids)[components], y, marker="|", s=26, color=family, zorder=2)
+    ax.scatter(joint.reindex(ids), y, marker="|", s=36, color=family, zorder=4)
     ax.scatter(separate.reindex(ids), y, marker="s", s=16, color=family, zorder=3)
     ax.scatter(width["non_text"].reindex(ids), y, s=16, color=style.QUANTITY_COLOR, zorder=4)
     offsets = {"non_text_plus_joint": "joint", "non_text_plus_per_column": "per_column",
@@ -57,8 +53,8 @@ def predictor_width_figure(plan, summary):
           for m, label in (("joint", "joint"), ("per_column", "per-column"), ("both", "both"))],
         Line2D([], [], linestyle="none", marker="s", markersize=4, color=family,
                label="+ embedding, per-column PCA32"),
-        Line2D([], [], color=family, marker="|", markersize=6, linewidth=2.4, alpha=0.6,
-               label="+ embedding, joint PCA 8–256"),
+        Line2D([], [], color=family, linestyle="none", marker="|", markersize=7,
+               label="+ embedding, joint PCA64"),
     ]
     fig.legend(handles=handles, loc="outside upper center", ncols=3, fontsize=7, frameon=False)
     return (
@@ -68,7 +64,7 @@ def predictor_width_figure(plan, summary):
         "Every structured arm includes one missing-text flag per text column. "
         "Decision widths are the same for all twelve extractors (1 feature per request for "
         "binary and regression, K for multiclass) and embedding widths the same for all three "
-        "encoders; ticks on the joint-PCA bar mark 8, 16, 32, 64, 128 and 256 components. Arms "
+        "encoders. Separate PCA adds 32 coordinates per text column; joint PCA adds 64 total. Arms "
         "wider than 500 columns are excluded for Kumo rather than silently reduced.",
     )
 

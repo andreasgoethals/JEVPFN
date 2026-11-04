@@ -8,11 +8,9 @@ from src.visualize.decision_comparison import LABELS
 from src.visualize.layout import TASK_LABELS
 from src.visualize.paired import METRIC_VIEWS, MODES, _dataset_effects
 
-RECIPES = [("joint", n) for n in (8, 16, 32, 64, 128, 256)] + [("per_column", 32)]
-
 
 def direct_comparison_figures(contrasts):
-    """Decision features against all 21 embedding recipes, one page per task.
+    """Decision features against the selected embedding recipes, one page per task.
 
     Each cell pools every dataset × encoder × PCA recipe with equal weight, so no embedding
     recipe is selected; per-encoder and per-recipe detail stays in the contrast tables.
@@ -65,7 +63,7 @@ def direct_comparison_figures(contrasts):
         yield fig, f"decision_versus_embedding_{task}", (
             f"{TASK_LABELS[task]} datasets: decision features against frozen embeddings in the same "
             "predictor, dataset and outer folds. Colour is the mean paired difference in the "
-            "prespecified endpoint over every dataset and all 21 embedding recipes (3 encoders × 7 "
+            "prespecified endpoint over available datasets and the six embedding recipes (three encoders × two "
             "PCA settings), weighted equally; the percentage is the share of these dataset × recipe "
             "pairs in which the decision features score higher. Positive favours decision features. "
             "Pairs need five defined folds; grey cells lack complete evidence. Descriptive, without "

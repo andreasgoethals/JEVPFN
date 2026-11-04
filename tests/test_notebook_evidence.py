@@ -161,43 +161,47 @@ def test_embedding_plot_preserves_metric_direction_and_complete_paired_folds(tas
     from src.visualize.paired import embedding_effect_figures
 
     rows = []
-    for scope, width in [("joint", w) for w in (8, 16, 32, 64, 128, 256)] + [("per_column", 32)]:
+    for scope, width in [("joint", 64), ("per_column", 32)]:
         for dataset in ["complete", "incomplete"]:
             for fold in range(5 if dataset == "complete" else 4):
                 rows.append({"task_type": task, "metric": metric, "phase": "experiment_2",
                              "model_id": "catboost", "reference": "non_text", "dataset_id": dataset,
-                             "split_id": "shared", "encoder": "e5_small_v2", "pca_scope": scope,
+                             "split_id": "shared", "checkpoint_id": "pin", "encoder": "e5_small_v2",
+                             "pca_scope": scope,
                              "pca_components": width, "arm_id": f"{dataset}_{scope}_{width}",
                              "outer_fold": fold, "reference_value": 1,
                              "difference": difference if dataset == "complete" else 100})
     fig, _, caption = next(embedding_effect_figures(pd.DataFrame(rows)))
     expected = 0.1
-    assert np.allclose(fig.axes[0].lines[0].get_ydata(), [expected] * 6)
+    assert all(np.allclose(ax.collections[0].get_offsets()[:, 1], [expected]) for ax in fig.axes)
     assert fig.axes[0].get_ylim() == fig.axes[1].get_ylim()
-    assert "not equal-budget" in caption and "missing/unsupported arms are not imputed" in caption
+    assert "equal width" in caption and "same datasets and splits" in caption
     plt.close(fig)
 
 
-def test_embedding_curves_cannot_turn_changing_dataset_coverage_into_a_width_effect():
+def test_embedding_panels_require_the_same_dataset_coverage_for_both_recipes():
     import matplotlib.pyplot as plt
 
     from src.visualize.paired import embedding_effect_figures
 
     rows = []
-    for dataset, widths, effect in [("matched", (8, 16, 32, 64, 128, 256), 0.1),
-                                    ("partial_easy", (8,), 0.9)]:
-        for width in widths:
+    for dataset, recipes, effect in [
+        ("matched", (("joint", 64), ("per_column", 32), ("joint", 8)), 0.1),
+        ("partial_easy", (("joint", 64),), 0.9),
+        ("changed_checkpoint", (("joint", 64), ("per_column", 32)), 0.9),
+    ]:
+        for scope, width in recipes:
             for fold in range(5):
                 rows.append({"task_type": "binary_classification", "metric": "roc_auc",
                              "phase": "experiment_2", "model_id": "catboost",
                              "reference": "non_text", "dataset_id": dataset,
-                             "split_id": "shared", "encoder": "e5_small_v2", "pca_scope": "joint",
-                             "pca_components": width, "arm_id": f"{dataset}_{width}",
+                             "split_id": "shared", "encoder": "e5_small_v2", "pca_scope": scope,
+                             "checkpoint_id": scope if dataset == "changed_checkpoint" else "pin",
+                             "pca_components": width, "arm_id": f"{dataset}_{scope}_{width}",
                              "outer_fold": fold, "difference": effect})
     fig, _, caption = next(embedding_effect_figures(pd.DataFrame(rows)))
-    assert np.allclose(fig.axes[0].lines[0].get_ydata(), [0.1] * 6)
-    assert "n=1" in fig.axes[0].lines[0].get_label()
-    assert "fixed cohort" in caption
+    assert all(np.allclose(ax.collections[0].get_offsets()[:, 1], [0.1]) for ax in fig.axes)
+    assert "same datasets and splits" in caption
     plt.close(fig)
 
 
