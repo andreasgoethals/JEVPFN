@@ -9,8 +9,8 @@ list of future experiments. Methods: [README](../README.md); dataset meanings:
 Since 30 October new Jev calls pin **1.14.0**. The 1.13 evidence below is historical and
 does not claim that every documented behavior persists in 1.14; the 1.14 interface and
 sensitivity results were reviewed separately from saved responses
-([AGENTS_MEMORY](AGENTS_MEMORY.md)). Protocol and library pins are unchanged. A source
-review or passing interface test does not establish real GPU compatibility.
+([AGENTS_MEMORY](AGENTS_MEMORY.md)). The pins below identify the historical review.
+The current submodule revisions are recorded by Git.
 
 ## 1. Evidence, scope and provenance
 

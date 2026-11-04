@@ -27,15 +27,14 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False):
     if not gpu and route.get("storage_mode") == "scratch_mirror":
         # CPU predictors run natively against PROJECT; they have no GPU scratch
         # staging dependency and must not receive an uncreated GPU working set.
-        route = {**route, "staging_root": route["durable_root"],
-                 "partition": "batch_graniterapids"}
+        route = {**route, "staging_root": route["durable_root"], "partition": "batch_graniterapids"}
         route.pop("storage_mode")
-    candidates = [
-        a
-        for a in benchmark_plan()
-        if a["phase"] == phase and a["model"] == model
-    ]
+    candidates = [a for a in benchmark_plan() if a["phase"] == phase and a["model"] == model]
     arms = [a for a in candidates if a["width_status"] != "unsupported_width"]
+    if profile_fold:
+        from src.evaluation.qualification import profile_plan
+
+        arms = profile_plan(arms)
     excluded = [a for a in candidates if a["width_status"] == "unsupported_width"]
     if not arms:
         raise ValueError("No supported arms for this phase/model")
@@ -101,7 +100,7 @@ def write_plan(body):
     }
 
 
-def execute(path, expected, index):
+def array_item(path, expected, index):
     from pathlib import Path
 
     from src.cluster.freeze import check_if_present
@@ -115,7 +114,12 @@ def execute(path, expected, index):
         raise ValueError("Array launched on a different cluster")
     if not 0 <= index < len(body["arms"]):
         raise ValueError("Invalid array item")
-    return run_arm(body["arms"][index], allow_model_runs=True, profile=body["profile_fold"])
+    return body["arms"][index], body["profile_fold"]
+
+
+def execute(path, expected, index):
+    arm, profile = array_item(path, expected, index)
+    return run_arm(arm, allow_model_runs=True, profile=profile)
 
 
 def main():
@@ -129,7 +133,12 @@ def main():
     parser.add_argument("--run-manifest")
     parser.add_argument("--sha256")
     parser.add_argument("--index", type=int)
+    parser.add_argument("--dataset-for-index", action="store_true")
     args = parser.parse_args()
+    if args.dataset_for_index:
+        arm, _ = array_item(args.run_manifest, args.sha256, args.index)
+        print(arm["dataset_id"])
+        return
     if args.run_manifest:
         execute(args.run_manifest, args.sha256, args.index)
         return

@@ -24,7 +24,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.26,<3.0",
     "pandas>=2.1,<3.0",
-    "pyyaml>=6.0",            # config/*.yaml â€” the template's config idiom
+    "pyyaml>=6.0",            # YAML experiment configurations.
     "matplotlib>=3.8",        # src/visualize/
     "tqdm>=4.66",
     "pyarrow==25.0.1",        # Versioned, reusable feature tables (Parquet).
@@ -49,7 +49,14 @@ notebooks = [
 ]
 jev = ["typesafe-sdk==0.7.2"]  # Guarded local transport; live execution is disabled by default.
 models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the reviewed CUDA 13.0 wheel first for B200.
-evaluation = ["scikit-learn==1.9.1"]  # Score saved predictions without model packages.
+evaluation = ["scikit-learn==1.9.1", "scipy>=1.13"]  # Metrics and paired dataset inference.
+# Shared scientific/tooling versions from the sealed CPU control lock.
+# This extra uses Python 3.12. The full transitive lock lives under config.
+control = [
+    "numpy==2.5.4", "pandas==2.3.3", "PyYAML==6.0.3", "matplotlib==3.11.2",
+    "tqdm==4.70.1", "pyarrow==25.0.1", "psutil==7.2.2", "scipy==1.18.1",
+    "scikit-learn==1.9.1", "pytest==9.1.1", "ruff==0.17.0",
+]
 staging = ["huggingface-hub>=1.5,<2"]  # Explicit, separately authorized checkpoint staging.
 embeddings = ["transformers==5.17.0", "torch==2.12.1", "scikit-learn==1.9.1"]
 token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  # CPU rendering, including publisher chat templates; no weights.

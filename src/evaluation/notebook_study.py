@@ -140,9 +140,18 @@ def contrast_summary(table):
 
 def predictor_evidence():
     from src.evaluation.acceptance import evaluation_identity
+    from src.evaluation.qualification import profile_plan
+    from src.utils.serialization import digest
+
     current = evaluation_identity()
     catalog = load_yaml("experiment_1/models")["models"]
     folder = paths.manifests_dir("experiment_0") / "after_extraction"
+    required = profile_plan()
+    profiles = {}
+    for path in folder.glob("profile_*.json"):
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if body.get("evaluation_identity") == current and body.get("status") == "full_fold_profile_passed":
+            profiles[digest(body["arm"])] = body
     rows = []
     for model in (*load_yaml("experiment_1/main")["candidate_models"],
                   *load_yaml("experiment_3/native_text")["candidate_models"]):
@@ -153,9 +162,20 @@ def predictor_evidence():
         matching = [(p, b) for p, b in reports if b.get("evaluation_identity") == current]
         chosen = max(matching or reports, key=lambda r: r[0].stat().st_mtime_ns) if reports else (None, {})
         path, body = chosen
-        rows.append({"model": model, "configured_packages": json.dumps(catalog[model]["runtime"]["packages"]),
-                     "contract_status": body.get("status", "not found locally"),
-                     "current_evaluation_identity": body.get("evaluation_identity") == current if body else None,
-                     "full_fold_profile": body.get("full_dataset_profile", False),
-                     "source": str(path) if path else None})
+        needed = {digest(arm) for arm in required if arm["model"] == model}
+        passed = sum(
+            key in profiles and profiles[key].get("runtime_identity") == body.get("runtime_identity")
+            for key in needed
+        )
+        rows.append({
+            "model": model,
+            "configured_packages": json.dumps(catalog[model]["runtime"]["packages"]),
+            "contract_status": body.get("status", "not found locally"),
+            "current_evaluation_identity": body.get("evaluation_identity") == current if body else None,
+            "contract_passed": bool(matching) and body.get("status") == "predictor_contracts_passed_requires_full_fold_profile",
+            "profiles_passed": passed,
+            "profiles_required": len(needed),
+            "full_fold_profile": bool(needed) and passed == len(needed),
+            "source": str(path) if path else None,
+        })
     return pd.DataFrame(rows)

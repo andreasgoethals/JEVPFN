@@ -17,4 +17,7 @@ export JEVPFN_STAGING_ROOT="${4:?Pass native project allocation}"
 export JEVPFN_PHASE="${5:?Pass output phase}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
+# Periodic and final publication cover only this array item's dataset.
+JEVPFN_PUBLISH_DATASET="$("$JEVPFN_PYTHON" -m src.cluster.benchmark_jobs --dataset-for-index --run-manifest "$JEVPFN_MANIFEST" --sha256 "$JEVPFN_MANIFEST_HASH" --index "${SLURM_ARRAY_TASK_ID:?}")"
+export JEVPFN_PUBLISH_DATASET
 jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.cluster.benchmark_jobs --run-manifest "$JEVPFN_MANIFEST" --sha256 "$JEVPFN_MANIFEST_HASH" --index "${SLURM_ARRAY_TASK_ID:?}"

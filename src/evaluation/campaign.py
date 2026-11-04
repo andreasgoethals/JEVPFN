@@ -35,7 +35,6 @@ from src.evaluation.models import (
 )
 from src.evaluation.protocol import evaluate_cv, shared_splits
 from src.utils import paths
-from src.utils.acceptance import reviewed_acceptance
 from src.utils.config import load_yaml
 from src.utils.events import append_event
 from src.utils.provenance import code_identity
@@ -55,6 +54,13 @@ def benchmark_plan(main=None, text=None):
         )
     if tuple(main["candidate_combinations"]) != DECISION_FEATURE_SETS:
         raise ValueError("Experiment 1 has exactly four decision feature configurations")
+    selected = selected_entries(load_catalog(), main)
+    for config in (embedding, text):
+        if (
+            config["random_seed"] != main["random_seed"]
+            or selected_entries(load_catalog(), config) != selected
+        ):
+            raise ValueError("Benchmark phases must share the same datasets and split seed")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
     from src.evaluation.design import pca_grid
@@ -79,7 +85,7 @@ def benchmark_plan(main=None, text=None):
                     add(entry, model, feature_set, phase, **extra)
                     rows[-1]["provider"] = provider
 
-    for entry in selected_entries(load_catalog(), main):
+    for entry in selected:
         arms(entry, MAIN_MODELS, DECISION_FEATURE_SETS, "experiment_1")
         for encoder in embedding["encoders"]:
             for scope, components in pca_grid():
@@ -92,7 +98,7 @@ def benchmark_plan(main=None, text=None):
 
     from src.evaluation.widths import width_status
 
-    entries = {e["id"]: e for e in selected_entries(load_catalog(), main)}
+    entries = {e["id"]: e for e in selected}
     for row in rows:
         entry = entries[row["dataset_id"]]
         stats, task = entry["paper_summary"], semantics[row["dataset_id"]]
@@ -122,12 +128,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
     check_if_present()
     if not profile:
-        from src.evaluation.acceptance import evaluation_identity
+        from src.evaluation.qualification import benchmark_evidence
 
-        reviewed_acceptance(
-            cfg.get("experiment_0_acceptance"), stage="after_extraction",
-            expected={"evaluation_identity": evaluation_identity()},
-        )
+        qualified = benchmark_evidence(cfg.get("experiment_0_acceptance"), arm)
     if arm not in benchmark_plan():
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     catalog = load_yaml("experiment_1/models")
@@ -164,18 +167,11 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         raise ValueError(f"Unsupported width: {status}; no columns are silently discarded")
     decision_set = decision_feature_set(arm["feature_set"])
     providers = [arm["provider"]] if arm["provider"] else []
-    selectors, additions = {}, []
+    from src.evaluation.qualification import decision_selector
+
+    selectors, additions, checksums = {}, [], {}
     for provider in providers:
-        selector = cfg["feature_selectors"].get(provider)
-        if not selector or any(
-            selector.get(k) is None
-            for k in ("provider", "model", "version", "question_bank_id", "question_variant")
-        ):
-            raise ValueError(
-                "Select an exact completed provider/checkpoint/question feature recipe"
-            )
-        if selector["provider"] != provider:
-            raise ValueError("Feature selector provider differs from requested arm")
+        selector = decision_selector(cfg, provider)
         modes = (
             ("per_column", "joint")
             if decision_set == "non_text_plus_both"
@@ -184,6 +180,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             else ("per_column",)
         )
         blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector, modes)
+        checksums.update({b.manifest["artifact_id"]: digest(b.manifest["sha256"]) for b in blocks})
         additions.append(
             (
                 provider,
@@ -212,6 +209,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         if arm["model"] not in embedding_cfg["models"]:
             raise ValueError("Predictor is not enabled for the embedding feature configurations")
         features = add_embeddings(features, embeddings)
+    from src.evaluation.qualification import execution_runtime, verify_inputs
+
+    features.attrs["decision_artifact_checksums"] = checksums
+    settings["execution_runtime"] = execution_runtime()
+    if not profile:
+        verify_inputs(qualified, dataset, features, arm, settings["execution_runtime"])
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     representation = {
         "missingness_policy": features.attrs.get("missingness_policy"),
@@ -279,6 +282,10 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         write_json(paths.manifests_dir(phase) / "failures" / f"{digest(failure)}.json", failure)
         append_event(log, "arm_failed", error_type=type(exc).__name__, **arm)
         raise
+    if profile:
+        from src.evaluation.qualification import save_profile
+
+        save_profile(arm, dataset, features, settings["execution_runtime"], records)
     append_event(log, "arm_completed", records=len(records), **arm)
     return records
 
@@ -286,9 +293,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
-    parser.add_argument(
-        "--phase", choices=("experiment_1", "experiment_2", "experiment_3")
-    )
+    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3"))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
     parser.add_argument("--pca-scope", choices=("per_column", "joint"))

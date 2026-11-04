@@ -3,7 +3,9 @@
 The frozen MulTaBench release below defines the datasets, their text columns and the
 audit. Methodology is in [README](../README.md); execution commands are in [VSC](VSC.md).
 Sections run from provenance and the text definition, through statistics and reuse, to
-dataset selection, question semantics and interpretation caveats.
+dataset selection, question semantics and interpretation caveats. Experiment 0B
+reports exact repeated feature rows across training and test and rejects exact copies
+of the target in the predictors. Provenance review still matters for semantic proxies.
 
 ## Primary sources and pins
 

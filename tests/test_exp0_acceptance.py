@@ -9,13 +9,14 @@ import pandas as pd
 import pytest
 
 from src.cluster import preflight
-from src.evaluation import acceptance
+from src.evaluation import acceptance, qualification
 from src.utils import paths
 
 
 @pytest.fixture
 def local_preflight(tmp_path, monkeypatch):
     cfg = deepcopy(preflight.load_yaml("experiment_0/debug"))
+    control = preflight.load_yaml("experiment_0/control_runtime")
     cfg["dataset_selection"]["exclude"] = []
     monkeypatch.setenv("JEVPFN_PHASE", "experiment_0")
     for variable in (
@@ -29,7 +30,11 @@ def local_preflight(tmp_path, monkeypatch):
     ):
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(preflight, "load_yaml", lambda _name: cfg)
+    monkeypatch.setattr(
+        preflight, "load_yaml", lambda name: control if name.endswith("/control_runtime") else cfg
+    )
+    monkeypatch.setattr(qualification, "load_yaml", lambda name: cfg)
+    monkeypatch.setattr(qualification, "load_catalog", lambda: {"datasets": []})
     monkeypatch.setattr(preflight, "load_catalog", lambda: {"datasets": []})
     # This fixture intentionally has no benchmark configuration/source tree.
     # The real identity's drift/activation rules are tested separately.

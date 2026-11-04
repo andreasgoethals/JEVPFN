@@ -115,6 +115,29 @@ scratch. Keep old images only while a recorded run or rollback needs them.
   Face snapshots). AG-MM has its own environment; TabSTAR v1.1 has the `tabstar-v1p1` image.
 - Question ZIPs install with `input_install.slurm`, which refuses other JEVPFN consumers.
 
+### CPU environment parity
+
+The Windows notebook venv and sealed Linux CPU image share exact versions for the
+packages listed in `config/3. experiment_0/control_runtime.yaml`. The `control`
+extra in `pyproject.toml` pins the scientific subset. To reproduce the full shared
+package set in an existing local Python 3.12 venv, generate a temporary requirements
+file from the lock and install it into that venv.
+
+```powershell
+$jevControlLock = Join-Path $env:TEMP 'jevpfn-control-requirements.txt'
+.\.venv\Scripts\python.exe -c "from src.utils.config import load_yaml; print('\n'.join(f'{k}=={v}' for k,v in load_yaml('experiment_0/control_runtime')['packages'].items()))" | Set-Content -Encoding ascii $jevControlLock
+.\.venv\Scripts\python.exe -m pip install -r $jevControlLock
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m src.cluster.preflight --runtime-parity
+```
+
+The verifier reports package parity separately from interpreter parity. Windows
+currently uses CPython 3.12.10 and Windows wheels. The VSC CPU image uses Linux
+CPython 3.12.15. Notebook and hosted API extras are local. The sealed, model-specific
+Linux/CUDA images provide the benchmark runtimes. An active VSC campaign keeps
+its frozen checkout and sealed images through completion.
+
+
 ## 4. Pipeline
 
 ### 4.1 Reset and upload (future authorized campaign only)
@@ -328,22 +351,42 @@ The merge validates identities and preserves other providers. Restage predictor 
 
 ### 4.6 Experiment 0B
 
-Fill `feature_artifacts` in `config/3. experiment_0/debug.yaml` and the benchmark
-`feature_selectors` with immutable selections; finalize predictor settings and PCA
-recipes. 0B validates row IDs, source hashes, provider/encoder coverage, transfer/resume
-and preprocessing boundaries:
+After complete extraction and verified transfer, fill the benchmark `feature_selectors`
+with provider, model, version, question bank, question variant and `settings_sha256`.
+0B derives all required decision artifacts from those selectors. An optional
+`feature_artifacts` list in `debug.yaml` must match the selected artifact IDs exactly.
+Finish the encoder/PCA grid before preparing every dataset/encoder cache as described
+in §4.7. Prepare and verify the separate sealed predictor runtimes and their checkpoints.
 
 ```bash
+python -m src.evaluation.qualification
 sbatch scripts/slurm/experiment_0_after.slurm
 sbatch scripts/slurm/experiment_0_predictor.slurm tabpfn_3_5 tabpfn_3_5
 ```
 
-GPU predictor contracts need their staged image, checkpoints and working set; CatBoost and
-linear use `experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on wICE. All nine
-predictors need real binary, multiclass, 30-class, regression, PCA-width, native-text and
-restart contracts, and the separate `full_fold_profile_enabled` test must show that all
-rows fit without sampling. `predictor_execution_enabled` permits only bounded fixtures.
-No training runs on login nodes.
+The CPU preflight validates all selected datasets and decision blocks, all three encoder
+stores, every required outer/inner PCA key and its checksum, the shared CPU package
+lock, and the offline contracts. It reports exact feature-row overlap by fold and
+fails on exact raw target copies. The predictor contracts cover binary, multiclass,
+30-class and regression tasks, missing/categorical inputs, representation modes, fixed
+class order and resume. CPU predictor contracts use
+`experiment_0_predictor_cpu.slurm MODEL ENV_PREFIX` on native Mindwell CPU nodes.
+
+After enabling the separate `full_fold_profile_enabled` switch for 0B, generate
+`benchmark_jobs --profile-fold` arrays for each applicable phase and predictor. The
+profile plan picks the tallest and widest supported arm in each group, deduplicated.
+These jobs fit the full first outer fold, retain the binary inner-OOF predictions,
+and read back prediction row IDs and targets. Inspect the resource, publication,
+and independent transfer/restore evidence before accepting 0B. These profiles are
+resource checks on representative arms.
+
+Put the current VSC preflight, all nine contract reports, and all required full-fold
+reports in the checksummed evidence list of the owner's reviewed acceptance. Verify
+that record with `python -m src.evaluation.qualification --acceptance FILE` in a CPU
+allocation against durable PROJECT. It reads and checks the published prediction
+records. The
+benchmark also checks that the loaded data, feature bytes and predictor runtime
+match the qualified identities.
 
 ### 4.7 PCA and benchmark
 

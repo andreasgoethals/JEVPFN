@@ -73,6 +73,21 @@ short independent B200 checks replace the cancelled, unstarted two-hour maintena
 allocation 11767669. Normal B200 availability remains an external queue constraint;
 no other project's allocations/accounts are used.
 
+### Post-extraction preparation (4 November)
+
+At 12:18 CET, the live campaign had completed 36 dataset jobs and six infrastructure
+steps. All 54 encoder datasets and 36 Cloudflare/Perplexity datasets were submitted
+and waiting for priority on Mindwell. The other 126 decision dataset jobs were pending
+in the graph. The scheduler estimated starts for twelve submissions through 11 November.
+No new failure was recorded. The checkout remains frozen at `3f84d7e`.
+
+The next 0B gate qualifies exact artifacts, the CPU control lock, every real predictor
+fixture and tall/wide full-fold profiles. Local package parity covers all 56 control
+pins. Windows and Linux use different Python patches and platform binaries. Raw input
+audit on the 18 selected datasets found no exact target-copy feature, and found 36.2%
+exact feature-row overlap in held-out Data Scientist Salary rows and 9.6% in Wine Review.
+These are shuffled-CV diagnostics. See [VSC](VSC.md) for the remaining validation commands.
+
 ## Release recovery (3 November, before migration)
 
 Read all 615 available text logs (101,767 lines) and reconciled every campaign ID.

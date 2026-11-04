@@ -1,5 +1,14 @@
 # Changelog
 
+## 04-11-2026
+
+- Qualify benchmark runs with complete selected features, fold-specific PCA coverage,
+  current predictor contracts, and full-fold prediction readback tied to sealed runtimes.
+- Give each structured arm the same text-availability flags and report exact row overlap
+  and direct target copies during 0B. Scope benchmark array publication to its dataset.
+- Match local shared packages to the sealed VSC control lock and report interpreter
+  parity separately. Add a 0B notebook panel for predictor and profile evidence.
+
 ## 03-11-2026
 
 - Add explicit GPFS PROJECT deployment authority, consistent migration verification,

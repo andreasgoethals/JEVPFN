@@ -9,8 +9,10 @@ def feature_width(metadata, arm):
     name = decision_feature_set(arm["feature_set"])
     if arm["feature_set"].startswith("original_features"):
         base += texts
-    if name == "non_text" or arm["feature_set"] == "original_features":
+    if arm["feature_set"] == "original_features":
         width = base
+    elif name == "non_text":
+        width = base + texts
     else:
         width = base + texts  # shared missing-text flags, only once
         per_input = (
@@ -35,8 +37,6 @@ def feature_width(metadata, arm):
         providers = arm.get("providers") or ([arm["provider"]] if arm.get("provider") else [])
         width += len(providers) * groups * per_input
     if uses_embeddings(arm["feature_set"]):
-        if name == "non_text":
-            width += texts
         width += arm["pca_components"] * (texts if arm["pca_scope"] == "per_column" else 1)
     return max(width, 1)
 

@@ -11,7 +11,7 @@ cluster:
   cpu: {name: wice, partition: interactive}
   gpu: {name: mindwell, partition: gpu_b200, gpus: 1}
 environment: JEVPFN
-feature_artifacts: []  # Populate after hosted-local and self-hosted-VSC extraction/validation.
+feature_artifacts: []  # Optional exact cross-check of the benchmark's immutable feature selectors.
 requires: []  # Infrastructure and tokenizer checks must run BEFORE features exist.
 stages:
   before_extraction:

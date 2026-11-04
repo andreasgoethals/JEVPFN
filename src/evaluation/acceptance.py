@@ -30,7 +30,10 @@ def evaluation_identity():
         "dataset_selection",
     )
     body = {
-        "schema": "jevpfn.evaluation_contract.v1",
+        "schema": "jevpfn.evaluation_contract.v2",
+        "dataset_catalog": load_yaml("datasets")["datasets"],
+        "dataset_semantics": load_yaml("dataset_semantics")["datasets"],
+        "environment": source_hash(paths.REPO_ROOT / "pyproject.toml"),
         "source": {
             p.relative_to(paths.REPO_ROOT).as_posix(): source_hash(p)
             for p in sorted((paths.REPO_ROOT / "src").rglob("*.py"))

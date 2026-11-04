@@ -35,7 +35,7 @@ def study_grid_figure(grid):
     ax.set(xlim=(0, 1), ylim=(0, 1))
     experiments = [
         ("experiment_1", "Experiment 1 · RQ1", "Do decision features add\ninformation to a fixed predictor?",
-         ["non-text columns, alone or with", f"decision features from {extractors} models,",
+         ["non-text columns and presence flags,", f"with or without {extractors} decision models",
           "asked per column, jointly or both"], "6 predictors"),
         ("experiment_2", "Experiment 2 · RQ2", "How do they compare with\nfrozen general embeddings?",
          ["E5-small, E5-large or Qwen3", "embeddings, PCA to 32 per column", "or 256 … 8 jointly"],
@@ -68,7 +68,8 @@ def study_grid_figure(grid):
             "fits for F1 thresholds", fontsize=6.8, va="center", color=style.QUANTITY_COLOR)
     return fig, "study_map", (
         "Design of the three experiments. Each answers one research question with the rows, "
-        "splits and endpoint held fixed. Experiment 1 shares one non-text baseline per predictor "
+        "splits and endpoint held fixed. Experiment 1 shares one baseline of non-text columns "
+        "and text presence flags per predictor "
         "across the decision models; Experiment 2 holds the same predictors fixed and swaps the "
         "text representation; Experiment 3 changes the whole system. Configurations are planned "
         "before width exclusions (Kumo refuses inputs above 500 columns); one configuration is "

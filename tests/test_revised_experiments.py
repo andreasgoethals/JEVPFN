@@ -86,6 +86,43 @@ def test_training_partitions_exclude_outer_test_rows():
                 assert not set(train) & set(fold["test"])
 
 
+def test_verify_prepared_pca_checks_all_inner_and_outer_keys(tmp_path, monkeypatch):
+    import sqlite3
+    from contextlib import closing
+
+    from src.cluster.predictor_contracts import fixtures
+    from src.evaluation import prepare_pca
+    from src.evaluation.protocol import shared_splits
+
+    dataset = next(d for d in fixtures() if d.metadata.task_type == "binary_classification")
+    path = tmp_path / "pca.sqlite3"
+    seed = prepare_pca.load_yaml("experiment_2/embeddings")["random_seed"]
+    monkeypatch.setattr(prepare_pca, "cache_path", lambda *_: path)
+    monkeypatch.setattr(prepare_pca, "pca_grid", lambda: [("joint", 2)])
+    encoder = {"encoder_id": "fixture", "dimensions": 2}
+    columns = [["frozen_e5__text_000__000", "frozen_e5__text_000__001"]]
+    frame = pd.DataFrame(
+        np.random.default_rng(5).normal(size=(len(dataset.frame), 2)),
+        columns=columns[0],
+        index=[f"csv:{i}" for i in range(len(dataset.frame))],
+    )
+    partitions = list(prepare_pca.training_partitions(dataset, shared_splits(dataset, seed=seed)))
+    control = EmbeddingControl(
+        None, columns, components=2, scope="joint", seed=seed, prepare=True,
+        embedding_artifacts=["artifact"], prepared_cache=path,
+    )
+    for rows in partitions[:-1]:
+        control.fit(frame.iloc[rows], None)
+    with pytest.raises(ValueError, match="Missing 1 of 20"):
+        prepare_pca.verify_prepared(dataset, encoder, "artifact")
+    control.fit(frame.iloc[partitions[-1]], None)
+    assert prepare_pca.verify_prepared(dataset, encoder, "artifact") == 20
+    with closing(sqlite3.connect(path)) as db, db:
+        db.execute("UPDATE parameters SET sha256 = 'invalid'")
+    with pytest.raises(ValueError, match="Corrupt prepared PCA"):
+        prepare_pca.verify_prepared(dataset, encoder, "artifact")
+
+
 def test_gpu_routes_use_native_scratch_and_cpu_plan_has_no_gpu():
     from src.cluster.benchmark_jobs import plan
     from src.cluster.scheduling import gpu_profile

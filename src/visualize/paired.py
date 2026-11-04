@@ -18,7 +18,7 @@ MODES = {"non_text_plus_joint": "Joint", "non_text_plus_per_column": "Per-column
 MODE_KEYS = {"non_text_plus_joint": "joint", "non_text_plus_per_column": "per_column",
              "non_text_plus_both": "both"}
 REFERENCE_LABELS = {
-    "non_text": "non-text",
+    "non_text": "non-text + text presence",
     "non_text_plus_presence": "non-text + missing-text flags",
     "frozen_e5": "frozen embedding alone",
     "same_decision_features_without_e5": "same decision features alone",
@@ -125,7 +125,8 @@ def effect_matrix_figures(paired, phase="experiment_1"):
         family = "decision features" if phase == "experiment_1" else "frozen embeddings"
         yield fig, f"effect_matrix_{phase}_{task}", (
             f"{layout.TASK_LABELS[task]} datasets: effect of adding {family} to each fixed "
-            "predictor, relative to the same predictor on non-text columns, dataset and outer "
+            "predictor, relative to the same predictor with non-text columns and presence flags "
+            "on the same dataset and outer "
             "folds held fixed. Colour is the unweighted mean over datasets of the five-fold mean "
             "paired difference in the prespecified endpoint; text gives the datasets with a "
             "positive difference over those with five defined folds. Grey cells lack complete "

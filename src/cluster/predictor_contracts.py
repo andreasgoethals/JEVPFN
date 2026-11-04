@@ -15,7 +15,7 @@ import pandas as pd
 from src.data.loaders import LoadedDataset
 from src.data.metadata import extract_metadata
 from src.evaluation.embedding_control import EmbeddingControl
-from src.evaluation.features import add_embeddings, original_features
+from src.evaluation.features import add_embeddings, add_text_presence, original_features
 from src.evaluation.models import (
     MAIN_MODELS,
     TEXT_MODELS,
@@ -27,14 +27,37 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
+FIXTURE_CLASSES = {"binary": 2, "multiclass": 3, "wide_multiclass": 30, "regression": 0}
+
+
+def required_fixture_cases(model):
+    cases = (
+        ("original_text",)
+        if model in TEXT_MODELS
+        else (
+            "non_text",
+            "e5_pca_32",
+            "embedding_1024_pca_64",
+            "decision_per_column",
+            "decision_joint",
+            "decision_both",
+            *(f"embedding_joint_pca_{k}" for k in (256, 128, 64, 32, 16, 8)),
+        )
+    )
+    return {
+        (task, classes, case)
+        for task, classes in (
+            ("binary_classification", 2),
+            ("multiclass_classification", 3),
+            ("multiclass_classification", 30),
+            ("regression", 0),
+        )
+        for case in cases
+    }
+
 
 def fixtures():
-    for kind, classes in (
-        ("binary", 2),
-        ("multiclass", 3),
-        ("wide_multiclass", 30),
-        ("regression", 0),
-    ):
+    for kind, classes in FIXTURE_CLASSES.items():
         # Binary inner-training partitions must have enough present rows for PCA256.
         count = max(540, 6 * classes)
         values = np.arange(count)
@@ -68,7 +91,7 @@ def feature_cases(dataset, model):
     if model in TEXT_MODELS:
         yield "original_text", original, None
         return
-    base = original.drop(columns=list(dataset.metadata.text_columns))
+    base = add_text_presence(original.drop(columns=list(dataset.metadata.text_columns)), dataset)
     base.attrs["feature_artifact_ids"] = []
     yield "non_text", base, None
     rng = np.random.default_rng(20260929)
@@ -111,8 +134,11 @@ def feature_cases(dataset, model):
         elif task == "regression":
             values = values * 8 - 4
         values[missing] = np.nan
-        blocks[mode] = pd.DataFrame(values, index=base.index,
-            columns=[f"synthetic_decision__{mode}__{i}" for i in range(width)])
+        blocks[mode] = pd.DataFrame(
+            values,
+            index=base.index,
+            columns=[f"synthetic_decision__{mode}__{i}" for i in range(width)],
+        )
         result = base.join(blocks[mode])
         result.attrs.update(feature_artifact_ids=[])
         yield "decision_" + mode, result, None
@@ -153,12 +179,16 @@ def run(model, *, execute=False):
         "fixtures": [],
         "full_dataset_profile": False,
         "embedding_vectors": "synthetic_interface_fixtures_not_real_E5_encoding",
-        "contract_version": 5,
+        "contract_version": 6,
+        "job_id": os.environ.get("SLURM_JOB_ID"),
+        "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
     }
     from src.cluster.containers import active_identity
     from src.cluster.evidence import current_identity
+    from src.evaluation.qualification import execution_runtime
 
     report["execution_container"] = active_identity() or {}
+    report["runtime_identity"] = execution_runtime()
     report["settings_sha256"] = digest(settings)
     report["validation_identity"] = current_identity()
     from src.evaluation.acceptance import evaluation_identity
@@ -184,7 +214,7 @@ def run(model, *, execute=False):
                 checkpoint_id=predictor_settings_identity(settings),
                 feature_set=f"predictor_fixture__{case}",
                 representation_recipe={
-                    "contract_version": 5,
+                    "contract_version": 6,
                     "pca_components": components,
                     "synthetic_vectors": components is not None,
                 },

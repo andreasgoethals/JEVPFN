@@ -167,6 +167,14 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
                 if kind == "outputs" and "results" not in relative.parts:
                     continue
                 if (
+                    dataset_id is not None
+                    and kind == "outputs"
+                    and source.suffix == ".sqlite3"
+                    and "evaluation" in relative.parts
+                    and source.stem != dataset_id
+                ):
+                    continue
+                if (
                     periodic
                     and kind == "outputs"
                     and not (source.suffix == ".sqlite3" and "evaluation" in relative.parts)

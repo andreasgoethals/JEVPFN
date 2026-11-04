@@ -19,6 +19,8 @@ def configuration(monkeypatch):
         "experiment_2/embeddings",
         "experiment_3/native_text",
         "feature_creation/embedding_models",
+        "datasets",
+        "dataset_semantics",
     ]
     configs = {name: copy.deepcopy(original(name)) for name in names}
     monkeypatch.setattr(acceptance, "load_yaml", lambda name: configs[name])
@@ -62,6 +64,7 @@ def test_changed_code_invalidates_0b_identity(configuration, monkeypatch, tmp_pa
     (root / "src").mkdir(parents=True)
     source = root / "src" / "pipeline.py"
     source.write_text("pass\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
     monkeypatch.setattr(acceptance.paths, "REPO_ROOT", root)
     before = acceptance.evaluation_identity()
     source.write_bytes(b"pass\r\n")

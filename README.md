@@ -22,12 +22,12 @@ Exact receipts, job IDs and failures: [AGENTS_MEMORY](docs/AGENTS_MEMORY.md). Co
 
 | Experiment | Question | Configurations |
 |---|---|---|
-| 1 (RQ1) | Do decision features improve each of six fixed predictors over the non-text baseline? Twelve extractors × per-column, joint or both. | 3,996 |
+| 1 (RQ1) | Do decision features improve each of six fixed predictors over non-text columns and text-presence flags? Twelve extractors × per-column, joint or both. | 3,996 |
 | 2 (RQ2) | How do they compare with three frozen encoders (E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B), PCA-reduced per column (32) or jointly (256/128/64/32/16/8)? | 2,268 |
 | 3 (RQ3) | Where do native text systems sit: TabSTAR v1.1, ConTextTab and AutoGluon-Multimodal? | 54 |
 
 A configuration is one dataset × predictor × representation over five outer folds:
-31,590 outer fits plus 15,795 binary inner fits. Experiment 1 shares its non-text baseline
+31,590 outer fits plus 15,795 binary inner fits. Experiment 1 shares its baseline
 across extractors; Experiment 2 has seven PCA recipes per encoder; Experiment 3 has one
 original-feature setting per system. No winner is selected and no outcome-selected
 combination is run. Experiment 0A (input/runtime acceptance, including robustness
@@ -105,8 +105,11 @@ replication of MulTaBench's supervised target-aware embeddings.
 - Effects are paired within dataset and predictor, including cohorts of test rows whose
   text was or was not seen in training. Optional Wilcoxon/Holm contrasts require
   prespecification (`config/7. synthesis/`). Protocol settings: `config/4. experiment_1/`.
-- Limits: gains over non-text may include text-availability signal; "label-free" describes
-  extraction inputs, not pretraining; no lexical, presence-only or shuffled controls.
+- The structured baseline and both augmentation families share identical per-column text
+  availability flags. The paired effect measures added representation signal beyond availability.
+- Shuffled splits measure within-dataset interpolation. 0B counts exact repeated feature rows across
+  train and test and rejects exact target copies. Semantic target proxies and foundation-model
+  pretraining overlap still require provenance review.
 
 ## Workflow and notebooks
 
@@ -139,11 +142,15 @@ New environment only (Windows PowerShell, from this repository):
 
 ```powershell
 py -3.12 -m venv --prompt JEVPFN .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev,notebooks]"
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,notebooks,control]"
 .\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
 ```
 
-Prepare data and questions, audit them and run the notebooks:
+The `control` extra pins the common scientific stack for Python 3.12. The sealed VSC
+CPU lock also includes transitive packages and tooling. See [VSC](docs/VSC.md#cpu-environment-parity)
+for exact shared package verification and the Windows/Linux interpreter distinction.
+
+Prepare data and questions, audit them and run the notebooks.
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.data.prepare

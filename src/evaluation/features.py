@@ -7,7 +7,7 @@ import pandas as pd
 
 from src.utils.serialization import text_value
 
-MISSINGNESS_VERSION = "shared_text_missing_v1"
+MISSINGNESS_VERSION = "shared_text_missing_v2"
 
 
 def missing_column(index):
@@ -256,6 +256,4 @@ def assemble_feature_set(dataset, blocks, name: str, *, view="main", selector=No
             matrix = matrix.drop(columns=right.columns)
     # pandas joins can discard attrs, including the baseline's explicit empty list.
     matrix.attrs["feature_artifact_ids"] = [b.manifest["artifact_id"] for b in selected]
-    if modes[name]:
-        matrix = add_text_presence(matrix, dataset)
-    return matrix
+    return add_text_presence(matrix, dataset)

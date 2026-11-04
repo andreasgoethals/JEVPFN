@@ -28,7 +28,7 @@ from src.data.selection import selected_entries
 from src.jev.features import load_block
 from src.utils import paths
 from src.utils.config import load_yaml
-from src.utils.serialization import write_json
+from src.utils.serialization import digest, write_json
 
 
 def network_probe(timeout: float = 15) -> dict:
@@ -97,16 +97,23 @@ def storage_policy_failures(cluster: str | None = None) -> list[str]:
         from src.cluster.scratch_stage import MARKER
 
         durable = os.environ.get("JEVPFN_DURABLE_ROOT", "")
-        if not durable or not Path(durable).is_dir() or not any(
-            durable.startswith(prefix) and "/project/" in durable for prefix in ("/gpfs", "/lustre")
+        if (
+            not durable
+            or not Path(durable).is_dir()
+            or not any(
+                durable.startswith(prefix) and "/project/" in durable
+                for prefix in ("/gpfs", "/lustre")
+            )
         ):
-            failures.append("B200 scratch needs an explicitly selected existing durable PROJECT allocation.")
+            failures.append(
+                "B200 scratch needs an explicitly selected existing durable PROJECT allocation."
+            )
         if not (project / "JEVPFN" / MARKER).is_file():
             failures.append("B200 working set has not been CPU-staged and fingerprinted.")
     return failures
 
 
-def dataset_checks(cfg: dict) -> list[dict]:
+def dataset_checks(cfg: dict, *, review_overlap=False) -> list[dict]:
     """Load selected cached data, verify hashes and construct CV partitions without fitting."""
     from src.evaluation.protocol import shared_splits, validate_splits
 
@@ -115,7 +122,7 @@ def dataset_checks(cfg: dict) -> list[dict]:
         item = {"dataset_id": entry["id"], "status": "failed"}
         try:
             dataset = load_dataset(entry, allow_download=False)
-            splits = shared_splits(dataset)
+            splits = shared_splits(dataset, seed=cfg.get("random_seed", 20260929))
             validate_splits(dataset, splits)
             if dataset.metadata.task_type == "binary_classification":
                 target = dataset.frame[dataset.metadata.target]
@@ -133,7 +140,14 @@ def dataset_checks(cfg: dict) -> list[dict]:
                 outer_folds=len(splits["folds"]),
                 issues=dataset.issues,
             )
+            if review_overlap:
+                from src.evaluation.qualification import source_leakage_diagnostics
+
+                item["leakage_diagnostics"] = source_leakage_diagnostics(dataset, splits)
+                if item["leakage_diagnostics"]["exact_target_copies"]:
+                    raise ValueError("A raw predictor column exactly copies the target")
         except Exception as exc:
+            item["status"] = "failed"
             # Report the dataset failure and continue, without dumping raw records.
             item["error_type"] = type(exc).__name__
             item["error"] = str(exc)
@@ -195,7 +209,113 @@ def contract_tests(run_id: str) -> dict:
     }
 
 
-def embedding_checks(cfg: dict) -> list[dict]:
+def runtime_parity():
+    """Compare the shared scientific stack against the installed-control lock."""
+    lock = load_yaml("experiment_0/control_runtime")
+    expected = lock["packages"]
+    actual = {}
+    for name in expected:
+        try:
+            actual[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            actual[name] = None
+    python = platform.python_version()
+    return {
+        "platform": platform.system(),
+        "python": python,
+        "control_python": lock["python"],
+        "expected": expected,
+        "installed": actual,
+        "packages_match": actual == expected,
+        "matches_control": actual == expected and python == lock["python"],
+    }
+
+
+def decision_feature_checks(cfg):
+    """Exercise the exact production decision selector and combined matrix for every pair."""
+    import numpy as np
+
+    from src.evaluation.features import assemble_feature_set, load_feature_selection, missing_column
+    from src.evaluation.qualification import decision_selector
+    from src.jev.features import feature_view
+
+    results = []
+    for entry in selected_entries(load_catalog(), cfg):
+        dataset = load_dataset(entry, allow_download=False)
+        meta = dataset.metadata
+        base = assemble_feature_set(dataset, [], "non_text")
+        missing = base[[missing_column(i) for i in range(len(meta.text_columns))]].astype(bool)
+        for provider in cfg["candidate_extractors"]:
+            item = {"dataset_id": entry["id"], "provider": provider, "status": "failed"}
+            try:
+                selector = decision_selector(cfg, provider)
+                blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector)
+                assemble_feature_set(dataset, blocks, "non_text_plus_both", selector=selector)
+                ids, checksums = {}, {}
+                for block in blocks:
+                    manifest = block.manifest
+                    mode = manifest["identity"]["representation"]
+                    if manifest["text_columns"] != list(meta.text_columns) or manifest[
+                        "class_labels"
+                    ] != list(meta.classes):
+                        raise ValueError(
+                            "Decision artifact text/class schema differs from raw data"
+                        )
+                    groups = (
+                        {"all_text": missing.all(axis=1)}
+                        if mode == "joint"
+                        else {
+                            f"text_{i:03d}": missing[missing_column(i)]
+                            for i in range(len(meta.text_columns))
+                        }
+                    )
+                    values = (
+                        feature_view(block, meta.task_type).set_index("row_id").reindex(base.index)
+                    )
+                    for group, expected_missing in groups.items():
+                        refs = block.requests.loc[block.requests.group.eq(group)].set_index(
+                            "row_id"
+                        )
+                        seen = refs.status.reindex(base.index).eq("missing_text")
+                        if not seen.equals(expected_missing):
+                            raise ValueError("Decision request availability differs from raw text")
+                        scores = values.loc[
+                            ~expected_missing, [f"__{group}__" in c for c in values]
+                        ]
+                        width = (
+                            len(meta.classes)
+                            if meta.task_type == "multiclass_classification"
+                            else 1
+                        )
+                        low, high = (-4, 4) if meta.task_type == "regression" else (0, 1)
+                        array = scores.to_numpy(dtype=float)
+                        if (
+                            array.shape[1] != width
+                            or not np.isfinite(array).all()
+                            or ((array < low) | (array > high)).any()
+                            or (
+                                width > 1
+                                and not np.allclose(array.sum(axis=1), 1, atol=1e-5, rtol=0)
+                            )
+                        ):
+                            raise ValueError(
+                                "Decision feature values violate the benchmark input contract"
+                            )
+                    ids[mode] = manifest["artifact_id"]
+                    checksums[ids[mode]] = digest(manifest["sha256"])
+                item.update(
+                    status="passed",
+                    artifact_ids=ids,
+                    artifact_checksums=checksums,
+                    rows=len(dataset.frame),
+                )
+            except Exception as exc:
+                item.update(error_type=type(exc).__name__, error=str(exc))
+            results.append(item)
+    return results
+
+
+def embedding_checks(cfg: dict, *, bind_artifact_ids=False) -> list[dict]:
     """Experiment 0B must validate all saved encoder/dataset stores, not just an encoder smoke test."""
     from src.data.text_embeddings import cache_path, encoder_config, validate_dataset
 
@@ -220,6 +340,23 @@ def embedding_checks(cfg: dict) -> list[dict]:
                     results.append(item)
                     continue
                 recipe = validate_dataset(dataset, encoder)
+                if bind_artifact_ids:
+                    import sqlite3
+                    from contextlib import closing
+
+                    with closing(
+                        sqlite3.connect(
+                            Path(item["path"]).resolve().as_uri() + "?mode=ro", uri=True
+                        )
+                    ) as db:
+                        (item["artifact_id"],) = db.execute(
+                            "SELECT value FROM metadata WHERE key='artifact_id'"
+                        ).fetchone()
+                    from src.evaluation.prepare_pca import verify_prepared
+
+                    item["prepared_pca_keys"] = verify_prepared(
+                        dataset, encoder, item["artifact_id"]
+                    )
                 item.update(
                     status="passed", rows=recipe["rows"], text_columns=recipe["text_columns"]
                 )
@@ -342,8 +479,11 @@ def run_preflight(
             }
         except (ImportError, RuntimeError, AttributeError, OSError) as exc:
             report["failures"].append(f"GPU/package preflight: {type(exc).__name__}")
-    if verify_data:
-        report["datasets"] = dataset_checks(cfg)
+    benchmark_cfg = load_yaml("experiment_1/main") if stage == "after_extraction" else cfg
+    if verify_data or stage == "after_extraction":
+        report["datasets"] = dataset_checks(
+            benchmark_cfg, review_overlap=stage == "after_extraction"
+        )
         failed = sum(item["status"] != "passed" for item in report["datasets"])
         if failed:
             report["failures"].append(
@@ -352,32 +492,52 @@ def run_preflight(
     _validate_artifacts(cfg, report)
     if stage == "after_extraction":
         from src.evaluation.acceptance import evaluation_identity
+        from src.evaluation.qualification import feature_evidence
 
         report["evaluation_identity"] = evaluation_identity()
-        report["embedding_artifacts"] = embedding_checks(cfg)
-        failed = sum(item["status"] != "passed" for item in report["embedding_artifacts"])
-        if failed:
+        report["runtime_parity"] = runtime_parity()
+        if not report["runtime_parity"]["packages_match"] or (
+            not local and not report["runtime_parity"]["matches_control"]
+        ):
             report["failures"].append(
-                f"{failed} E5 dataset cache(s) failed complete artifact/row validation."
+                "The shared scientific environment differs from the control lock."
             )
-    if stage == "after_extraction" and not cfg["feature_artifacts"]:
-        report["failures"].append(
-            "Experiment 0B requires explicit complete feature artifact selections."
+        report["decision_artifacts"] = []
+        report["embedding_artifacts"] = []
+        if report["datasets"] and all(item["status"] == "passed" for item in report["datasets"]):
+            report["decision_artifacts"] = decision_feature_checks(benchmark_cfg)
+            report["embedding_artifacts"] = embedding_checks(benchmark_cfg, bind_artifact_ids=True)
+        report["feature_validation"] = "incomplete"
+        try:
+            _, decisions, _ = feature_evidence(report)
+            if cfg["feature_artifacts"]:
+                selected = {
+                    (item["dataset_id"], artifact)
+                    for item in decisions.values()
+                    for artifact in item["artifact_ids"].values()
+                }
+                requested = {
+                    (ref["dataset_id"], ref["artifact_id"]) for ref in cfg["feature_artifacts"]
+                }
+                if selected != requested or len(requested) != len(cfg["feature_artifacts"]):
+                    raise ValueError("Explicit feature list differs from benchmark selectors")
+            report["feature_validation"] = "complete_benchmark_inputs"
+        except ValueError as exc:
+            report["failures"].append(f"Experiment 0B requires complete benchmark inputs. {exc}")
+    else:
+        report["feature_validation"] = (
+            "see_per_artifact_results_not_full_campaign_acceptance"
+            if cfg["feature_artifacts"]
+            else "not_required_before_extraction"
         )
-    report["feature_validation"] = (
-        "see_per_artifact_results_not_full_campaign_acceptance"
-        if cfg["feature_artifacts"]
-        else "not_required_before_extraction"
-        if stage == "before_extraction"
-        else "pending_complete_features"
-    )
     if tests:
         report["contract_tests"] = contract_tests(report["run_id"])
         if report["contract_tests"]["status"] != "passed":
             report["failures"].append("Offline contract tests failed; inspect the saved log.")
     report["performed_checks"] = {
         "package_metadata_and_output_writes": True,
-        "selected_dataset_hashes_schema_and_cv_feasibility": verify_data,
+        "selected_dataset_hashes_schema_and_cv_feasibility": verify_data
+        or stage == "after_extraction",
         "synthetic_contract_suite": tests,
         "unauthenticated_https_head": network,
         "cuda_tensor_and_tabpfn_import": gpu and predictor_imports,
@@ -385,7 +545,8 @@ def run_preflight(
         "model_weights_loaded": False,
         "live_decision_inference": False,
         "predictive_models_fitted": False,
-        "complete_E5_artifacts_against_raw_rows": stage == "after_extraction",
+        "complete_benchmark_artifacts_against_raw_rows": report["feature_validation"]
+        == "complete_benchmark_inputs",
     }
     report["status"] = "failed" if report["failures"] else "preflight_passed"
     return report
@@ -393,6 +554,11 @@ def run_preflight(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--runtime-parity",
+        action="store_true",
+        help="Report shared package and Python versions without running preflight",
+    )
     parser.add_argument("--network", action="store_true")
     parser.add_argument("--gpu", action="store_true")
     parser.add_argument("--local", action="store_true", help="Offline preparation on a local host")
@@ -409,6 +575,12 @@ def main() -> int:
         help="Also import TabPFN in its own model environment",
     )
     args = parser.parse_args()
+    if args.runtime_parity:
+        parity = runtime_parity()
+        print(json.dumps(parity, indent=2))
+        return int(
+            not parity["packages_match"] or (paths.on_vsc() and not parity["matches_control"])
+        )
     report = run_preflight(
         network=args.network,
         gpu=args.gpu,

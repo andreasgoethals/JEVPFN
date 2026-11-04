@@ -187,3 +187,25 @@ def cross_system_figures(contrasts):
             "families; points are not independent samples, error bars or a statistical test. Positive favors "
             "the fixed recipe. Incomplete task-wide comparisons are retained in tables but not plotted."
         )
+
+
+def qualification_figure(table):
+    """Show observed contract/profile coverage separately from predictor performance."""
+    from matplotlib.colors import ListedColormap
+
+    fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_FULL, 0.54))
+    evidence = np.column_stack((table.contract_passed, table.full_fold_profile)).astype(int)
+    ax.imshow(
+        evidence, aspect="auto", vmin=0, vmax=1,
+        cmap=ListedColormap([style.EVIDENCE_COLORS["unknown"], style.EVIDENCE_COLORS["observed"]]),
+    )
+    ax.set_xticks([0, 1], ["Predictor contract", "Full-fold profiles"])
+    ax.xaxis.tick_top()
+    ax.set_yticks(range(len(table)), [style.PREDICTOR_LABELS[m] for m in table.model])
+    ax.tick_params(length=0)
+    for i, row in enumerate(table.itertuples()):
+        ax.text(0, i, "Passed" if row.contract_passed else "Evidence pending", ha="center", va="center")
+        ax.text(1, i, f"{row.profiles_passed} / {row.profiles_required}", ha="center", va="center")
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    return fig

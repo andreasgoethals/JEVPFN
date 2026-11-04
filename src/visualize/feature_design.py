@@ -51,7 +51,7 @@ def predictor_width_figure(plan, summary):
     layout.dataset_axis(ax, list(order.dataset), order.task_type, fontsize=7)
     handles = [
         Line2D([], [], linestyle="none", marker="o", markersize=4, color=style.QUANTITY_COLOR,
-               label="Non-text"),
+               label="Non-text + presence"),
         *[Line2D([], [], linestyle="none", marker="D", markersize=3.5,
                  color=style.MODE_COLORS[m], label=f"+ {label}")
           for m, label in (("joint", "joint"), ("per_column", "per-column"), ("both", "both"))],
@@ -65,7 +65,7 @@ def predictor_width_figure(plan, summary):
         fig,
         "predictor_input_widths",
         "Planned number of predictor input columns for each Experiment 1 and Experiment 2 arm. "
-        "Augmented arms add one missing-text flag per text column to the non-text columns. "
+        "Every structured arm includes one missing-text flag per text column. "
         "Decision widths are the same for all twelve extractors (1 feature per request for "
         "binary and regression, K for multiclass) and embedding widths the same for all three "
         "encoders; ticks on the joint-PCA bar mark 8, 16, 32, 64, 128 and 256 components. Arms "
@@ -134,7 +134,7 @@ def input_design_figure():
     ax.text(0, 0.46, "b  Predictor input for a row with T = 2 text columns (f features per request)",
             weight="bold", fontsize=8, va="top", transform=ax.transAxes)
     arms = [
-        ("Non-text baseline", [("non-text columns", 0.34, style.MISSING_COLOR)]),
+        ("Baseline", [("non-text columns", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint)]),
         ("+ joint", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
                      ("joint · f", 0.09, joint)]),
         ("+ per-column", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
@@ -167,7 +167,7 @@ def input_design_figure():
         "returns. Every extractor receives the same task context, question, options and named "
         "text; adapters differ only in native prompt framing and readout. (b) Column blocks "
         "entering the six fixed predictors for a row with two text columns. Flags mark missing "
-        "text and are shared by every augmented arm; f is 1 for binary and regression and K for "
+        "text and are shared by every arm shown. The value f is 1 for binary and regression and K for "
         "multiclass. Identical requests are answered once and reused across rows. With a single "
         "text column the joint block equals the per-column block and is included once.",
     )
