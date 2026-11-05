@@ -29,6 +29,10 @@ and an idle checkout, archives the old freeze, fast-forwards only to reviewed
 Failure preserves evidence and stops; no speculative retry or full Jev/0B execution.
 The replacement controller log is `logs/open_weight_recovery_watch_20261105.log`.
 Do not claim deployment or resubmission until those receipts show actual progress.
+At 10:20 CET the continuation's host PID/start identity was reverified; publication
+was running and had finished its first six dataset stores. Both QA jobs were terminal
+0:0. Their logs were checksummed into the canonical DATA output before retiring the
+44,061,325-byte temporary DATA clone; `qa_checkout_retirement.json` records checks.
 
 On 5 November 2026 the DATA checkout remained clean and frozen at `3f84d7e`.
 A read-only audit inspected all 774 available text logs (918,359 lines), reconciled
