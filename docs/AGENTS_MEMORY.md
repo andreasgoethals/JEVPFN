@@ -11,11 +11,24 @@ Stopped the verified login-4 controller (Python PID 1239677, wrapper 1239565) un
 the campaign lock and verified its controller lease was released. Withdrew only
 PENDING H2O IDs 11772705–11772722; Slurm reports cancellation with zero runtime.
 Clef publication 11772829 remains running and its checkout remains untouched.
-Local recovery validation passed 1,264 tests (26 environment/asset skips), lint and
-Bash syntax. Native GPFS QA can use an isolated DATA checkout while publication
-finishes. The exact-hash source review permits co-deploying disabled future TAR
-code only with unchanged extraction inputs, inference, installed pins and job grid.
-Do not claim recovery deployment or resubmission until the resulting receipts exist.
+Recovery revision `f89688a` passed 1,265 local tests (26 environment/asset skips),
+lint and Bash syntax. Native GPFS QA `11772948` passed 169 tests and isolated
+publication/union/warm-cache checks, COMPLETED 0:0 in 37 seconds. It also fixes
+restaging after a failed batch's workspace was already retired. Successful inference
+remains reusable. The exact-hash source review permits co-deploying disabled future
+TAR code only with unchanged extraction inputs, inference, installed pins and grid.
+
+At 10:18 CET, the guarded one-time continuation was live on tier2-p-login-1,
+PID 716941/start ticks 138774836, waiting for successful publication `11772829`.
+Its source is `manifests/recovery_20261105/handover.py`, SHA-256
+`703077a0ffb7a85772d25f3a5e08827db75f5ae29dc7873c959732db5d248184`.
+The same directory holds exact source review, local validation, process identity
+and `handover_status.json`. It holds the controller lease, requires successful QA
+and an idle checkout, archives the old freeze, fast-forwards only to reviewed
+`f89688a`, checks runtime seals/grid, and starts the recovered feature controller.
+Failure preserves evidence and stops; no speculative retry or full Jev/0B execution.
+The replacement controller log is `logs/open_weight_recovery_watch_20261105.log`.
+Do not claim deployment or resubmission until those receipts show actual progress.
 
 On 5 November 2026 the DATA checkout remained clean and frozen at `3f84d7e`.
 A read-only audit inspected all 774 available text logs (918,359 lines), reconciled
