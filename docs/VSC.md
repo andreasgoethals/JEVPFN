@@ -242,8 +242,15 @@ entry point for the graph recorded in the manifest.
 | Original unpartitioned | `python -u -m src.cluster.feature_campaign --execute --watch --recover --reviewed-by NAME` |
 | Expanded parallel | `python -u -m src.cluster.feature_admission --recover-from OLD_EXECUTION_ID --previous-freeze ARCHIVED_COMPLETED_REVISION --expected-source NEW_SOURCE --reviewed-by NAME --execute --watch` |
 
-Recovery preserves completed IDs and numerical artifacts and refuses changes to scientific
-configuration or runtime pins. Keep the scratch recovery state until publication is verified.
+Recovery preserves completed IDs and numerical artifacts and refuses changed extraction
+inputs, inference or runtime pins. When the same revision also contains reviewed future
+benchmark work, `--source-review FILE` requires a named review of every changed source hash,
+bound to the exact old/new source identities; the original extraction grid and runtime
+seals must still match. This is an idle cutover, never a patch under running jobs.
+Stop the identified controller first. Pending jobs may be withdrawn and resubmitted
+after review; let running publications finish. An isolated DATA checkout can run
+`feature_recovery_test.slurm CHECKOUT` meanwhile. Keep scratch recovery state until
+publication is verified, and preserve failed attempts as history rather than erasing them.
 Perplexity needs at least 112,000 MiB host memory: on the verified B200 partition this
 means fourteen CPUs at the default 8,000 MiB/CPU. The guard supports both per-node and
 per-CPU Slurm variables. Warm-cache staging shares publication's extraction lock;

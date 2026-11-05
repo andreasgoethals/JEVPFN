@@ -63,6 +63,11 @@ the established scratch/publication workflow. Temporary Trainer checkpoints use 
 job's owned native scratch cache. Standard result export includes completed durable
 TAR assets; interrupted bundles stay on PROJECT for diagnosis and are not exported.
 
+TAR preparation is part of the 0B stage: train one adapter for each of 18 datasets ×
+5 outer folds, then validate it. Each adapter sees only that fold's outer-training rows
+and is reused by all six predictors and both PCA recipes. These 90 fits are retained
+for the benchmark; 0B does not require training them again for every predictor.
+
 0B must validate all 90 real bundles, disjoint internal training/validation membership,
 complete finite unit-length vectors, adapter save/reload agreement on **every text column**, both PCA recipes,
 and the dedicated sealed `e5_tar` runtime. Reload probes include missing/blank text,

@@ -222,3 +222,36 @@ def test_source_recovery_refuses_unapproved_scientific_changes_before_accounting
     with pytest.raises(ValueError, match="changed science"):
         dispatch.recover_campaign(previous_identity="any", previous_freeze=old,
                                   expected_source="frozen-source", reviewed_by="fixture")
+
+
+@pytest.mark.parametrize("name", ["src/jev/self_hosted.py", "src/data/text_embeddings.py",
+                                  "config/2. feature_creation/embedding_models.yaml",
+                                  "config/3. experiment_0/self_hosted.yaml",
+                                  "src/cluster/feature_campaign.py"])
+def test_explicit_review_cannot_override_extraction_science(tmp_path, name):
+    old = {"files": {name: "a"}, "source_sha256": "old"}
+    new = {"files": {name: "b"}, "source_sha256": "new"}
+    p = tmp_path / "review.json"
+    write_json(p, {"schema": "jevpfn.extraction-source-review.v1", "reviewed_by": "reviewer",
+                   "previous_source": "old", "next_source": "new", "rationale": "reviewed",
+                   "changes": {name: {"before": "a", "after": "b"}}})
+    with pytest.raises(ValueError, match="changed extraction science"):
+        dispatch.validate_source_review(old, new, {name}, p, "reviewer")
+
+
+def test_exact_review_accepts_future_benchmark_code_but_rejects_stale_delta(tmp_path):
+    name = "src/evaluation/tar.py"
+    old = {"files": {}, "source_sha256": "old"}
+    new = {"files": {name: "a"}, "source_sha256": "new"}
+    p = tmp_path / "review.json"
+    write_json(p, {"schema": "jevpfn.extraction-source-review.v1", "reviewed_by": "reviewer",
+                   "previous_source": "old", "next_source": "new",
+                   "rationale": "Future TAR remains disabled; extraction unchanged",
+                   "changes": {name: {"before": None, "after": "a"}}})
+    result = dispatch.validate_source_review(old, new, {name}, p, "reviewer")
+    assert len(result["sha256"]) == 64
+    with pytest.raises(ValueError, match="exact reviewed transition"):
+        dispatch.validate_source_review(old, new, {name}, p, "another reviewer")
+    new["files"][name] = "unreviewed-edit"
+    with pytest.raises(ValueError, match="exact reviewed transition"):
+        dispatch.validate_source_review(old, new, {name}, p, "reviewer")

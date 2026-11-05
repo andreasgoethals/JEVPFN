@@ -6,6 +6,17 @@ terminal accounting and the expected artifacts.
 
 ## Latest verified status
 
+Recovery on 5 November: the owner explicitly requested deployment/resubmission.
+Stopped the verified login-4 controller (Python PID 1239677, wrapper 1239565) under
+the campaign lock and verified its controller lease was released. Withdrew only
+PENDING H2O IDs 11772705–11772722; Slurm reports cancellation with zero runtime.
+Clef publication 11772829 remains running and its checkout remains untouched.
+Local recovery validation passed 1,264 tests (26 environment/asset skips), lint and
+Bash syntax. Native GPFS QA can use an isolated DATA checkout while publication
+finishes. The exact-hash source review permits co-deploying disabled future TAR
+code only with unchanged extraction inputs, inference, installed pins and job grid.
+Do not claim recovery deployment or resubmission until the resulting receipts exist.
+
 On 5 November 2026 the DATA checkout remained clean and frozen at `3f84d7e`.
 A read-only audit inspected all 774 available text logs (918,359 lines), reconciled
 campaign IDs with Slurm, and checked durable embedding metadata. Liquid, Strands

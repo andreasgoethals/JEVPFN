@@ -137,7 +137,45 @@ def submit_step(step, *, save, policy_sha256):
     print(f"Submitted {step['name']}: {step['job_id']} ({step['cluster']})", flush=True)
 
 
-def recover_campaign(*, previous_identity, previous_freeze, expected_source, reviewed_by):
+def validate_source_review(old, current, changed, review_path, reviewed_by):
+    """Bind an exceptional idle cutover to the exact manually reviewed file delta.
+
+    Later benchmark work can coexist with an unchanged extraction campaign. It
+    never licenses changing extraction inputs, inference or installed runtimes.
+    The caller separately verifies every runtime seal and the complete job grid.
+    """
+    review = json.loads(Path(review_path).read_text(encoding="utf-8"))
+    expected = {name: {"before": old["files"].get(name), "after": current["files"].get(name)}
+                for name in sorted(changed)}
+    if (review.get("schema") != "jevpfn.extraction-source-review.v1"
+            or review.get("reviewed_by") != reviewed_by
+            or review.get("previous_source") != old["source_sha256"]
+            or review.get("next_source") != current["source_sha256"]
+            or review.get("changes") != expected or not review.get("rationale")):
+        raise ValueError("Source review does not match the exact reviewed transition")
+    protected = (
+        "src/jev/", "src/data/", "config/0. exploration/",
+        "config/1. question_preparation/", "config/2. feature_creation/",
+    )
+    core = {
+        "src/cluster/freeze.py", "src/cluster/feature_campaign.py",
+        "src/cluster/job_graph.py", "src/cluster/runtime_profiles.py",
+        "src/utils/locking.py", "src/utils/acceptance.py", "src/utils/config.py",
+        "src/utils/serialization.py", "scripts/storage_environment.sh",
+        "scripts/activate_conda.sh", "scripts/slurm/embedding_creation.slurm",
+    }
+    forbidden = {name for name in changed if name.startswith(protected) or name in core
+                 or (name.startswith("config/3. experiment_0/")
+                     and name != "config/3. experiment_0/debug.yaml")}
+    if forbidden:
+        raise ValueError("Source review cannot authorize changed extraction science: "
+                         + ", ".join(sorted(forbidden)))
+    return {"path": str(review_path), "sha256": file_sha256(Path(review_path)),
+            "rationale": review["rationale"]}
+
+
+def recover_campaign(*, previous_identity, previous_freeze, expected_source, reviewed_by,
+                     source_review=None):
     """Rebind an idle expanded grid after a reviewed operational-only source repair."""
     require_idle_vsc()
     frozen = check_if_present()
@@ -156,8 +194,16 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
         "tests/test_feature_admission.py", "tests/test_scratch_stage.py",
         "tests/test_scratch_capacity.py",
         "scripts/slurm/feature_recovery_test.slurm",
+        "scripts/slurm/_provider_memory.sh", "scripts/slurm/feature_creation.slurm",
+        "scripts/slurm/experiment_0_decision_contracts.slurm",
+        "scripts/slurm/experiment_0_decision_pilot.slurm", "tests/test_shell_environment.py",
     }
-    if changed - allowed or old_freeze["runtime_pins"] != runtime_pins():
+    reviewed_delta = None
+    if old_freeze["runtime_pins"] != runtime_pins():
+        raise ValueError("Recovery cannot authorize changed science/configuration/runtime pins")
+    if source_review:
+        reviewed_delta = validate_source_review(old_freeze, current, changed, source_review, reviewed_by)
+    elif changed - allowed:
         raise ValueError("Recovery cannot authorize changed science/configuration/runtime pins")
     receipt = paths.manifests_dir("feature_creation") / "open_weight_campaign.json"
     report = json.loads(receipt.read_text())
@@ -204,6 +250,7 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
                                "approved_utc": datetime.now(UTC).isoformat(), "previous_receipt": str(history)},
         "recovery": {"reviewed_by": reviewed_by, "previous_receipt": str(history),
                      "previous_freeze": str(previous_freeze), "operational_files_changed": sorted(changed),
+                     "source_review": reviewed_delta,
                      "created_utc": datetime.now(UTC).isoformat()},
     })
     return identity
@@ -307,6 +354,7 @@ def main():
     parser.add_argument("--reviewed-by")
     parser.add_argument("--recover-from", help="Exact prior expanded identity; requires an idle checkout")
     parser.add_argument("--previous-freeze", type=Path, help="Archived completed-revision receipt")
+    parser.add_argument("--source-review", type=Path, help="Exact reviewed idle source transition")
     args = parser.parse_args()
     if args.watch and not args.execute:
         parser.error("--watch requires --execute")
@@ -321,7 +369,8 @@ def main():
             with file_lock(root / ".campaign.lock", timeout=45):
                 args.expected_campaign = recover_campaign(
                     previous_identity=args.recover_from, previous_freeze=args.previous_freeze,
-                    expected_source=args.expected_source, reviewed_by=args.reviewed_by)
+                    expected_source=args.expected_source, reviewed_by=args.reviewed_by,
+                    source_review=args.source_review)
         while True:
             with file_lock(root / ".campaign.lock", timeout=45):
                 report = run(execute=True, expected_campaign=args.expected_campaign,
