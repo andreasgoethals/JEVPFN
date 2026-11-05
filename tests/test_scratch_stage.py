@@ -203,6 +203,39 @@ def test_provider_warm_cache_keeps_only_matching_responses_origins_and_features(
     assert target.stat().st_size <= provider_cache_bound(source.path, "intern")
 
 
+def test_provider_warm_cache_waits_for_publisher_before_reading_identity(roots, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from src.utils.locking import file_lock
+
+    durable, work = roots
+    marker(durable, work)
+    source = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    entered, reading = Event(), Event()
+    original = stage._provider_cache_locked
+
+    def checked(*args):
+        reading.set()
+        return original(*args)
+
+    def warm():
+        entered.set()
+        return stage._provider_cache(source.path, work / "warm.sqlite3", "intern")
+
+    monkeypatch.setattr(stage, "_provider_cache_locked", checked)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with file_lock(source.path.with_suffix(".extraction.lock")), closing(sqlite3.connect(source.path)) as db:
+            db.execute("BEGIN EXCLUSIVE")
+            future = pool.submit(warm)
+            assert entered.wait(5)
+            assert not reading.wait(.2)  # It must not even open the live source yet.
+            db.rollback()
+        result = future.result(timeout=10)
+    assert reading.is_set()
+    assert cache(result).get(request("intern"), kind="verified_response") == response()
+
+
 def test_publication_discards_each_store_snapshot_before_starting_the_next(roots, monkeypatch):
     durable, work = roots
     marker(durable, work)

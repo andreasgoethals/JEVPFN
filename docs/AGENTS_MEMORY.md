@@ -6,12 +6,26 @@ terminal accounting and the expected artifacts.
 
 ## Latest verified status
 
-On 4 November 2026 at 13:53 CET, the VSC DATA checkout was frozen at `3f84d7e`.
-The [active extraction campaign](VSC.md#44-open-weight-and-encoder-extraction) records its
-state in `output_JEVPFN/2. feature_creation/manifests/open_weight_campaign.json` on DATA.
-It showed 42 completed steps (36 dataset jobs and six infrastructure steps),
-90 submitted, and 142 awaiting dispatch or prerequisites, with no failure recorded.
-Slurm showed all 90 submissions pending for priority. Each encoder had 18 queued jobs.
+On 5 November 2026 the DATA checkout remained clean and frozen at `3f84d7e`.
+A read-only audit inspected all 774 available text logs (918,359 lines), reconciled
+campaign IDs with Slurm, and checked durable embedding metadata. Liquid, Strands
+and Clef completed all eighteen datasets each; Clef's final job `11769377` completed
+0:0 in 4h17m06s. All 54 frozen-encoder jobs completed and logged publication; the 54
+durable stores have completion identities. Full numerical transfer/0B validation remains.
+At 09:25 CET, H2O's eighteen dataset jobs were queued and Clef workspace release
+`11772829` was running; later provider batches were not yet admitted.
+
+Nineteen failed steps have two causes: eighteen Perplexity jobs rejected their valid
+112,000 MiB allocation because the guard only read `SLURM_MEM_PER_NODE`; Intern stage
+`11772686` read a durable cache while publication held its database lock. Local fixes
+accept per-CPU allocations and acquire the existing extraction lock before warm-cache
+reads. They are not deployed into the active checkout. Preserve failed logs/receipts
+and reconcile consumers before reviewed recovery; no active work was cancelled.
+
+Allocation usage was 556.1 GiB/2 TiB on GPFS PROJECT and 50.57 GiB/500 GiB on GPFS scratch,
+with 9,002/300,000 PROJECT files. These include other projects. No quota exhaustion
+was observed. The large embedding progress log records per-batch events; it is not
+an error or grounds to change the active encoder's fingerprint.
 
 The reviewed benchmark code now uses joint PCA64 and separate PCA32. The next stage
 requires verified published features, fold-local PCA and [0B evidence](VSC.md#46-experiment-0b),
@@ -32,6 +46,13 @@ Local validation: 1,239 tests passed, 26 environment-dependent tests skipped;
 all twelve notebooks executed with fifteen figures and no error cells. Lint,
 changed-shell syntax, source hashes and current documentation links passed.
 TAR training, adapter replay and full-fold predictor profiles still require real B200 0B evidence.
+On 5 November, fresh official-source downloads matched all twelve vendor hashes.
+0B replay now covers every text column, difficult input cases and reordered single-item
+batches, and rejects missing adapters or another runtime. Offline tests also exercise
+the actual upstream binary/30-class/regression example construction and split.
+Validation: 1,258 local tests passed, 26 environment-dependent skips; all twelve notebooks
+executed and saved fifteen figures without error cells. Lint and the four changed Bash
+entry points passed. The study map and 0B qualification panel were visually inspected.
 
 ## Authority
 

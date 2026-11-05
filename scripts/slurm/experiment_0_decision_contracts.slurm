@@ -18,11 +18,8 @@ export JEVPFN_PHASE=experiment_0
 export JEVPFN_PROVIDER="${1:?Usage: sbatch script.slurm PROVIDER [ENV_PREFIX] [PROJECT_ROOT]}"
 export JEVPFN_STAGING_ROOT="${3:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
 export JEVPFN_CONDA_ENV="${2:-$JEVPFN_STAGING_ROOT/JEVPFN/environments/$JEVPFN_PROVIDER}"
-if [[ "$JEVPFN_PROVIDER" == perplexity && "${SLURM_MEM_PER_NODE:-0}" -lt 112000 ]]; then
-    echo "Perplexity 27B has a larger initial host-memory profile: sbatch --mem=112000M script.slurm perplexity ..." >&2
-    exit 2
-fi
 cd "${VSC_DATA:?}/JEVPFN"
+source scripts/slurm/_provider_memory.sh
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.preflight --gpu --stage before_extraction
 jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.cluster.gpu_contracts --provider "$JEVPFN_PROVIDER" --execute

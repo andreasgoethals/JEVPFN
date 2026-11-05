@@ -8,7 +8,9 @@ on 18 of MulTaBench's 20 core text datasets.
 
 Experiment 0A has been accepted for the eleven open-weight extractors and three encoders.
 The local Jev 1.14 pilot also passed on the first 100 rows of each dataset. Feature
-creation uses a frozen VSC checkout. Once it finishes, the next stage is to verify the
+creation uses a frozen VSC checkout. The 5 November audit found all frozen embeddings
+and three open-weight providers complete; Perplexity and Intern need operational recovery.
+Once extraction finishes, the next stage is to verify the
 published features, prepare fold-local PCA and TAR, and qualify the benchmark in 0B.
 TAR is implemented locally; its new runtime and training jobs still need real 0B validation.
 The owner runs full hosted Jev extraction separately. [Run evidence](docs/AGENTS_MEMORY.md) ·

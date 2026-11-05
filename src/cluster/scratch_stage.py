@@ -302,6 +302,14 @@ def _provider_cache(source, destination, provider):
     scratch queues are preserved by the caller's validated union. Predictor
     staging still receives every representation through its original path.
     """
+    # Publication backs up the durable union under this same extraction lock.
+    # Hold it before even reading identity, through the complete filtered copy;
+    # SQLite's short busy timeout cannot span a multi-minute publication.
+    with file_lock(source.with_suffix(".extraction.lock"), timeout=3600):
+        return _provider_cache_locked(source, destination, provider)
+
+
+def _provider_cache_locked(source, destination, provider):
     from src.jev.cache import ResponseCache
     from src.jev.merge import ARTIFACT_SQL, validate_cache
 

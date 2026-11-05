@@ -12,7 +12,7 @@ The MIT-licensed training, encoding and dependency files in
 `SOURCE.json` records every file hash; `tar.upstream()` verifies them before import.
 The integration is in `src/evaluation/tar.py`. The relevant upstream path is
 `embeddings/compute.py::_finetune` → `finetune_e5` → `finetune_with_lora`, followed
-by `encode_texts_with_e5` and `column_encoders.py::ColumnEncoder.fit`.
+by `encode_texts_with_e5` and `encoders/column_encoders.py::ColumnEncoder.fit`.
 
 For each of the five shared outer folds, one E5 adapter is trained jointly across
 the sorted text-column names. Only outer-training rows and their targets enter training.
@@ -64,11 +64,18 @@ job's owned native scratch cache. Standard result export includes completed dura
 TAR assets; interrupted bundles stay on PROJECT for diagnosis and are not exported.
 
 0B must validate all 90 real bundles, disjoint internal training/validation membership,
-complete finite unit-length vectors, adapter save/reload agreement, both PCA recipes,
-and sealed runtime evidence. Its generated
+complete finite unit-length vectors, adapter save/reload agreement on **every text column**, both PCA recipes,
+and the dedicated sealed `e5_tar` runtime. Reload probes include missing/blank text,
+Unicode, duplicates and the longest tokenized input, and compare reordered single-item
+inference with batched inference. Both serialized adapter weights and configuration
+must exist; a partial save or missing column cannot pass. Its generated
 full-fold profiles include TAR for every predictor and PCA recipe. Local tests exercise
 identity/corruption rejection, row alignment, unchanged held-out transforms, cached
-scaling, missing flags, fixed-threshold scoring and resume without refitting.
+scaling against an independent sklearn transform, missing flags, fixed-threshold scoring
+and resume without refitting. The actual upstream example construction and internal split
+are exercised for binary, 30-class and regression targets with a substituted trainer;
+these local checks do not train weights. A fresh comparison on 5 November verified all
+12 vendored files against the official pinned source byte-for-byte.
 These tests do not substitute for B200 training and predictor acceptance.
 
 ## VSC preparation after current extraction finishes

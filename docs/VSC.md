@@ -244,6 +244,12 @@ entry point for the graph recorded in the manifest.
 
 Recovery preserves completed IDs and numerical artifacts and refuses changes to scientific
 configuration or runtime pins. Keep the scratch recovery state until publication is verified.
+Perplexity needs at least 112,000 MiB host memory: on the verified B200 partition this
+means fourteen CPUs at the default 8,000 MiB/CPU. The guard supports both per-node and
+per-CPU Slurm variables. Warm-cache staging shares publication's extraction lock;
+a busy durable store must finish publication before its next reader starts.
+Do not pull the local TAR/benchmark changes into active feature jobs. A recovery
+handover must distinguish operational fixes from the later scientific grid update.
 
 ### 4.5 Jev (local, owner-run)
 

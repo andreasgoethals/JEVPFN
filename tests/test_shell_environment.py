@@ -25,6 +25,30 @@ def bash_executable():
     return bash
 
 
+@pytest.mark.parametrize("allocation,passed", [
+    ({"SLURM_MEM_PER_NODE": "112000"}, True),
+    ({"SLURM_MEM_PER_CPU": "8000", "SLURM_CPUS_ON_NODE": "14"}, True),
+    ({"SLURM_MEM_PER_CPU": "8000", "SLURM_CPUS_PER_TASK": "14"}, True),
+    ({"SLURM_MEM_PER_CPU": "8000", "SLURM_CPUS_ON_NODE": "4"}, False),
+    ({"SLURM_MEM_PER_NODE": "28000", "SLURM_MEM_PER_CPU": "8000", "SLURM_CPUS_ON_NODE": "14"}, False),
+    ({"SLURM_MEM_PER_NODE": "0"}, False),
+    ({"SLURM_MEM_PER_NODE": "unknown"}, False),
+    ({}, False),
+])
+def test_perplexity_guard_accepts_actual_per_cpu_or_per_node_memory(allocation, passed):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SLURM_")}
+    env.update(allocation, JEVPFN_PROVIDER="perplexity")
+    result = subprocess.run([bash_executable(), "scripts/slurm/_provider_memory.sh"],
+                            cwd=ROOT, env=env, capture_output=True, text=True, timeout=10)
+    assert result.returncode == (0 if passed else 2), result.stderr
+    if passed:
+        assert "112000 MiB allocated" in result.stdout
+    for name in ("feature_creation", "experiment_0_decision_contracts", "experiment_0_decision_pilot"):
+        source = (ROOT / "scripts/slurm" / (name + ".slurm")).read_text()
+        assert "source scripts/slurm/_provider_memory.sh" in source
+        assert "SLURM_MEM_PER_NODE" not in source
+
+
 def test_new_conda_container_cannot_inherit_host_environment_directory(tmp_path):
     image, host = tmp_path / "image root", tmp_path / "personal DATA"
     image.mkdir()

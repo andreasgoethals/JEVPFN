@@ -77,7 +77,8 @@ def read_bundle(dataset, split, fold):
     if body["artifact_id"] != digest({k: v for k, v in body.items() if k != "artifact_id"}):
         raise ValueError("TAR manifest checksum differs")
     required = {f"text_{i}.npy" for i in range(len(dataset.metadata.text_columns))}
-    if not required.issubset(body["files"]) or not any(n.startswith("adapter/") for n in body["files"]):
+    required.update({"adapter/adapter_config.json", "adapter/adapter_model.safetensors"})
+    if not required.issubset(body["files"]):
         raise ValueError("TAR bundle lacks its vectors or saved adapter")
     for name, checksum in body["files"].items():
         file = (folder / name).resolve()
@@ -91,6 +92,35 @@ def read_bundle(dataset, split, fold):
     return body
 
 
+def replay_indices(raw, texts, token_lengths):
+    """Bounded, label-free coverage of every column's difficult inputs and row mapping."""
+    selected = set(range(min(8, len(texts)))) | {len(texts) - 1}
+    masks = [raw.isna(), texts.str.strip().eq(""), texts.duplicated(keep=False),
+             texts.map(lambda value: not value.isascii())]
+    for mask in masks:
+        selected.update(np.flatnonzero(mask.to_numpy())[:2].tolist())
+    selected.add(int(np.argmax([token_lengths[value] for value in texts])))
+    return sorted(selected)
+
+
+def check_adapter_replay(raw, texts, folder, token_lengths, encode):
+    """Compare saved row vectors against a reloaded adapter, reordered and one at a time."""
+    report = {}
+    for number, col in enumerate(texts):
+        rows = replay_indices(raw[col], texts[col], token_lengths[col])
+        probes = texts[col].iloc[rows].tolist()
+        expected = np.load(folder / f"text_{number}.npy", mmap_mode="r", allow_pickle=False)[rows]
+        batch = encode(probes, col, 32)
+        reversed_single = encode(list(reversed(probes)), col, 1)[::-1]
+        if any(values.shape != expected.shape or not np.allclose(values, expected, atol=1e-5, rtol=1e-4)
+               for values in (batch, reversed_single)):
+            raise ValueError(f"Reloaded TAR adapter does not reproduce row/batch order for {col}")
+        report[col] = {"rows": rows, "batch_order_checked": True,
+                       "max_absolute_difference": float(max(np.max(np.abs(batch - expected)),
+                                                            np.max(np.abs(reversed_single - expected))))}
+    return report
+
+
 def prepare(dataset, fold, *, execute=False):
     cfg = load_yaml("experiment_3/tar")
     if not execute or cfg["prepare_enabled"] is not True:
@@ -100,8 +130,10 @@ def prepare(dataset, fold, *, execute=False):
 
     check_if_present()
     runtime = execution_runtime()
-    if not runtime.get("container_id") or not os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_CLUSTER_NAME") != "mindwell":
+    if (not runtime.get("container_id") or os.environ.get("JEVPFN_CONTAINER_PROVIDER") != "e5_tar"
+            or not os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_CLUSTER_NAME") != "mindwell"):
         raise RuntimeError("TAR training requires the reviewed Mindwell allocation")
+    runtime["provider"] = "e5_tar"
     split = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
     folder = paths.require_project_output(directory(dataset.metadata.dataset_id, fold))
     folder.parent.mkdir(parents=True, exist_ok=True)
@@ -145,10 +177,11 @@ def prepare(dataset, fold, *, execute=False):
         torch.cuda.synchronize()
         fit_seconds = time.perf_counter() - start
         model.save_pretrained(temporary / "adapter")
-        encoding, truncation = {}, {}
+        encoding, truncation, token_lengths = {}, {}, {}
         for number, col in enumerate(columns):
             unique = list(dict.fromkeys(texts[col].tolist()))
             lengths = [len(tokenizer(format_e5_passage(col, v), truncation=False)["input_ids"]) for v in unique]
+            token_lengths[col] = dict(zip(unique, lengths))
             truncation[col] = {"unique_inputs": len(unique), "over_512_tokens": sum(n > 512 for n in lengths),
                                "maximum_tokens": max(lengths, default=0)}
             start = time.perf_counter()
@@ -162,14 +195,13 @@ def prepare(dataset, fold, *, execute=False):
         from transformers import AutoModel
         restored = PeftModel.from_pretrained(AutoModel.from_pretrained(str(checkpoint)), temporary / "adapter")
         restored.to("cuda").eval()
-        probe_column = columns[0]
-        probes = texts[probe_column].iloc[:16].tolist()
-        replay = encode_texts_with_e5(probes, probe_column, restored, tokenizer, "cuda")
-        expected = np.load(temporary / "text_0.npy", mmap_mode="r")[:len(probes)]
-        if not np.allclose(replay, expected, atol=1e-5, rtol=1e-4):
-            raise ValueError("Reloaded TAR adapter does not reproduce its vectors")
+        replay = check_adapter_replay(
+            dataset.frame[columns], texts, temporary, token_lengths,
+            lambda values, col, batch: encode_texts_with_e5(values, col, restored, tokenizer, "cuda", batch_size=batch),
+        )
         body = {
             "adapter_roundtrip_checked": True,
+            "adapter_replay": replay,
             "status": "complete", "recipe": recipe(dataset, split, fold),
             "runtime": runtime, "job_id": os.environ["SLURM_JOB_ID"],
             "optimizer_rows": fit_x.index.tolist(), "early_stopping_rows": val_x.index.tolist(),
@@ -222,6 +254,18 @@ def validate_dataset(dataset):
         body = read_bundle(dataset, split, fold)
         if not body.get("job_id") or not body.get("runtime", {}).get("container_id") or body.get("adapter_roundtrip_checked") is not True:
             raise ValueError("TAR requires sealed runtime and real training evidence")
+        if body["runtime"].get("provider") != "e5_tar":
+            raise ValueError("TAR requires its dedicated e5_tar runtime")
+        replay = body.get("adapter_replay", {})
+        if set(replay) != set(dataset.metadata.text_columns) or any(
+            not v.get("rows") or v.get("batch_order_checked") is not True
+            or not np.isfinite(v.get("max_absolute_difference", float("nan")))
+            or not 0 <= v["max_absolute_difference"] <= 1.1e-4
+            or len(set(v["rows"])) != len(v["rows"])
+            or any(type(i) is not int or not 0 <= i < len(dataset.frame) for i in v["rows"])
+            for v in replay.values()
+        ):
+            raise ValueError("TAR requires per-column row/batch replay evidence")
         train = split["folds"][fold]["train"]
         optimizer, validation = body["optimizer_rows"], body["early_stopping_rows"]
         if set(optimizer) & set(validation) or sorted(optimizer + validation) != sorted(train):

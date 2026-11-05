@@ -1,5 +1,19 @@
 # Changelog
 
+## 05-11-2026
+
+- Fix Perplexity host-memory checks for per-CPU Slurm allocations in full extraction
+  and both bounded GPU entry points; keep the real 112,000 MiB requirement.
+- Serialize provider warm-cache reads with durable publication using the existing
+  extraction lock; preserve consistent provider filtering and recovery copies.
+- Reverify all twelve pinned MulTaBench files against official source. Strengthen
+  TAR 0B acceptance with all-column adapter replay, reordered single-item batches,
+  serialized-adapter checks and the dedicated runtime. Extend offline tests for
+  binary/30-class/regression upstream splits and training-only PCA equivalence.
+- Refresh operational evidence and notebook scope; preserve the active VSC source
+  and historical diagnostics until consumer-safe recovery. Validate with 1,258 passing
+  tests (26 environment-dependent skips), twelve executed notebooks, lint and Bash checks.
+
 ## 04-11-2026
 
 - Add pinned MulTaBench E5-small-v2 LoRA TAR as Experiment 3, sharing each outer-fold
