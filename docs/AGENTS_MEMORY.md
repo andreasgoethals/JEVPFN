@@ -6,6 +6,20 @@ terminal accounting and the expected artifacts.
 
 ## Latest verified status
 
+Local Jev on 5 November: 1,698,127 distinct prepared requests, 7,820 matching cached
+responses and 1,690,307 remaining. Pilot-token/serialized-size ratios project 1.394
+billion further input tokens (about USD 58.56 at USD 0.042/M); this is an estimate,
+not an exact tokenizer count. Existing dataset charges are USD 0.271475568 with no
+reservations. The owner authorized using the existing EUR 5 allowance only, not the
+proposed USD 75 cap. Keep the USD 5.50 cumulative ceiling and existing dataset
+allocations. Faster server-enforced token pacing retains hard monetary reservations
+and shared 429 backoff. Partial funded output must not be reported as full features.
+All 7,820 reusable Jev 1.14 responses and all eighteen raw/prepared identities passed
+local preflight. Validation: 1,285 tests passed, 26 platform/asset skips, and lint passed.
+The private `feature_creation/jev_funded.local` configuration targets 20 RPS/eight
+workers with the existing allocations. Read its hosted/process receipts for actual
+execution, spending and terminal status; these offline checks do not prove live throughput.
+
 Recovery on 5 November: the owner explicitly requested deployment/resubmission.
 Stopped the verified login-4 controller (Python PID 1239677, wrapper 1239565) under
 the campaign lock and verified its controller lease was released. Withdrew only
@@ -95,7 +109,9 @@ entry points passed. The study map and 0B qualification panel were visually insp
   to `/gpfs1/project/prj_00013/JEVPFN`, superseding the earlier hold. Preserve source
   on DATA, quiesce consumers, validate relocation/publication/resume, then retire
   verified old JEVPFN copies without touching other projects or allocation roots.
-- Not authorized: full Jev extraction, 0B and benchmarks. Never touch another project's
+- 5 November: local Jev feature creation within the existing EUR 5 allowance, including
+  faster verified pacing and safe credit-stop handling. No larger budget or top-up.
+- Not authorized: additional Jev funding, 0B and benchmarks. Never touch another project's
   jobs, files or runtimes.
 
 ## GPFS PROJECT migration and resume (3–4 November)

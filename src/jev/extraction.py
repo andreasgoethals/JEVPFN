@@ -15,7 +15,7 @@ import time
 import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from threading import Lock
+from threading import Event, Lock
 
 from src.jev.provider import api_preview, response_features
 from src.jev.spending import register_policy
@@ -31,6 +31,38 @@ class RejectedRetryable(RuntimeError):
     def __init__(self, message="Rate-limit rejection", retry_after_seconds=None):
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+
+
+class AccountCreditError(RuntimeError):
+    """A payment/credit rejection; billing is unresolved until explicitly reviewed.
+
+    TypeSafe does not document an exhausted-balance response or an unbilled guarantee.
+    Recognize HTTP 402 and explicit structured credit codes conservatively. Never log
+    the provider's free-form message, which could contain credentials or source text.
+    """
+
+    CODES = frozenset({
+        "insufficient_credits", "insufficient_balance", "credit_balance_exhausted",
+        "credits_exhausted", "out_of_credits", "payment_required",
+    })
+
+    def __init__(self, *, http_status=None, code=None):
+        super().__init__("Account payment or credit limit requires review before resuming")
+        self.http_status = http_status if type(http_status) is int else None
+        self.code = code if code in self.CODES else None
+
+    @classmethod
+    def from_api_error(cls, error):
+        body = error.body
+        nested = body.get("error") if isinstance(body, dict) else None
+        candidates = [body.get("code")] if isinstance(body, dict) else []
+        if isinstance(nested, dict):
+            candidates += [nested.get("code"), nested.get("type")]
+        code = next((c.lower() for c in candidates
+                     if isinstance(c, str) and c.lower() in cls.CODES), None)
+        if error.status == 402 or code is not None:
+            return cls(http_status=error.status, code=code)
+        return None
 
 
 @dataclass(frozen=True)
@@ -97,17 +129,18 @@ def campaign_limits(cfg):
 
 
 class RateGate:
-    """Conservative non-bursting gate; share ONE instance across concurrent datasets.
+    """Non-bursting request gate; share ONE instance across concurrent datasets.
 
-    Reserve the full verified billing-token upper bound, not the char/4 approximation.
-    Server account limits must be supplied, never taken from hypothetical review config.
+    Default pacing uses the full billing-token upper bound. An explicitly reviewed
+    faster mode lets the server enforce TPS, with shared rejection backoff. This does
+    not lower the monetary reservation or turn a character estimate into a token bound.
     """
 
-    def __init__(self, limits, *, sleep=time.sleep, clock=time.monotonic):
-        self.interval = max(
-            1 / limits.requests_per_second,
-            limits.max_billed_input_tokens / limits.tokens_per_second,
-        )
+    def __init__(self, limits, *, sleep=time.sleep, clock=time.monotonic,
+                 provider_enforced_tokens=False):
+        self.interval = 1 / limits.requests_per_second
+        if not provider_enforced_tokens:
+            self.interval = max(self.interval, limits.max_billed_input_tokens / limits.tokens_per_second)
         self.sleep, self.clock = sleep, clock
         self.lock, self.next_start = Lock(), 0.0
 
@@ -118,6 +151,11 @@ class RateGate:
             if delay:
                 self.sleep(delay)
             self.next_start = self.clock() + self.interval
+
+    def defer(self, seconds):
+        """Share server backoff across workers instead of each continuing to dispatch."""
+        with self.lock:
+            self.next_start = max(self.next_start, self.clock() + seconds)
 
 
 class TypeSafeTransport:
@@ -164,6 +202,9 @@ class TypeSafeTransport:
         try:
             result = self.client.system_one(body["state"], body["questions"])
         except TypeSafeAPIError as exc:
+            credit_error = AccountCreditError.from_api_error(exc)
+            if credit_error is not None:
+                raise credit_error from exc
             # Only a known rejected request is retried; unknown billing stays reserved.
             if exc.status == 429:
                 retry_after = exc.headers.get("retry-after")
@@ -203,12 +244,43 @@ class DatasetExtractor:
         self.gate = gate or RateGate(limits)
         self.validate_context = validate_context
         self.sleep = sleep
+        self.account_stopped = Event()
+        self.stop_details = None
+        self._stop_lock = Lock()
         self.session_id = uuid.uuid4().hex
         self.timings = timings or TimingJournal("jev", phase=phase, run_id=self.session_id)
         self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.log"
         self.policy_sha256 = register_policy(
             cache, limits, revision_manifest=policy_revision_manifest, stage=phase
         )
+
+    def _stop_account(self, request, error=None):
+        self.account_stopped.set()
+        with self._stop_lock:
+            if self.stop_details is None:
+                self.stop_details = {
+                    "reason": "account_credit_or_payment_required",
+                    "request_key": request.cache_key,
+                    "http_status": error.http_status if error else None,
+                    "provider_code": error.code if error else None,
+                    "billing": "unresolved_reservation_preserved",
+                    "next_action": "Check balance and billing, reconcile the blocked request, then resume",
+                }
+                append_event(self.log, "account_stopped", **self.stop_details)
+
+    def _release_unsent(self, request):
+        """A sibling hit the account stop while this worker waited; no call was made."""
+        with self.cache._connect() as db:
+            cursor = db.execute(
+                "UPDATE extraction_jobs SET status='pending',reserved_usd=0,"
+                "attempts=attempts-1,owner_session=NULL WHERE request_key=? "
+                "AND status='sending' AND owner_session=? AND attempts>0",
+                (request.cache_key, self.session_id),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("Cannot release an unsent reservation no longer owned by this worker")
+        append_event(self.log, "account_stopped_before_dispatch", request_key=request.cache_key)
+        return "account_stopped"
 
     def _reserve(self, request):
         reservation = (
@@ -292,9 +364,12 @@ class DatasetExtractor:
             return "cache_hit"
         with self.cache._connect() as db:
             saved = db.execute(
-                "SELECT status,raw_response_json FROM extraction_jobs WHERE request_key=?",
+                "SELECT status,raw_response_json,error_type FROM extraction_jobs WHERE request_key=?",
                 (request.cache_key,),
             ).fetchone()
+        if saved and saved[0] == "ambiguous" and saved[2] == "AccountCreditError":
+            self._stop_account(request)
+            return "ambiguous"
         if saved and saved[0] in {"received", "completed", "invalid_response"} and saved[1]:
             # A crash after recording usage/raw response must not require another paid call.
             # Revalidate a paid response after a decoder fix; never dispatch it again.
@@ -311,6 +386,8 @@ class DatasetExtractor:
         api_preview(request)
         self.validate_context(request)  # Fails BEFORE reserving money or calling a client.
         for attempt in range(self.limits.max_attempts):
+            if self.account_stopped.is_set():
+                return "account_stopped"
             status = self._reserve(request)
             if status != "claimed":
                 append_event(self.log, status, request_key=request.cache_key)
@@ -319,6 +396,8 @@ class DatasetExtractor:
             try:
                 with self.timings.measure("rate_limit_wait", dataset_id=self.cache.dataset_id):
                     self.gate.acquire()
+                if self.account_stopped.is_set():
+                    return self._release_unsent(request)
                 append_event(
                     self.log,
                     "request_started",
@@ -328,6 +407,17 @@ class DatasetExtractor:
                 started = time.perf_counter()
                 response = self.client.evaluate(request)
                 seconds = time.perf_counter() - started
+            except AccountCreditError as exc:
+                self._stop_account(request, exc)
+                # A top-up alone must never silently repay an uncertain attempt.
+                status = self._update(request, "ambiguous", error="AccountCreditError")
+                if started is not None:
+                    self.timings.record(
+                        "api_request", dataset_id=self.cache.dataset_id,
+                        item_keys=[request.cache_key], seconds=time.perf_counter() - started,
+                        error_type="AccountCreditError",
+                    )
+                return status
             except RejectedRetryable as exc:
                 self._update(request, "pending", rejected=True, error="RejectedRetryable")
                 self.timings.record(
@@ -342,10 +432,17 @@ class DatasetExtractor:
                     )
                     if exc.retry_after_seconds is not None:
                         delay = max(delay, exc.retry_after_seconds)
-                    self.sleep(delay)
+                    if callable(getattr(self.gate, "defer", None)):
+                        self.gate.defer(delay)
+                    else:
+                        self.sleep(delay)
                 continue
             except Exception as exc:
                 status = self._update(request, "ambiguous", error=type(exc).__name__)
+                http_status = getattr(exc, "status", None)
+                if type(http_status) is int:
+                    append_event(self.log, "api_error", request_key=request.cache_key,
+                                 http_status=http_status, error_type=type(exc).__name__)
                 if started is not None:
                     self.timings.record(
                         "api_request", dataset_id=self.cache.dataset_id,
@@ -392,6 +489,7 @@ class DatasetExtractor:
                     counts[status] = counts.get(status, 0) + 1
                     stop |= status in {
                         "budget_stop",
+                        "account_stopped",
                         "ambiguous",
                         "ambiguous_usage",
                         "billing_bound_exceeded",

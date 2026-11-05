@@ -66,6 +66,27 @@ class ReviewedContextEnvelope:
             raise ValueError("Request exceeds the reviewed body-size ceiling; no truncation")
 
 
+def rate_gate(review, limits):
+    """Separate the hard monetary reservation from optional server TPS enforcement.
+
+    The faster mode caps client request rate and shares 429 backoff. It cannot
+    promise to avoid every TPS rejection without an exact Jev tokenizer.
+    """
+    mode = review.get("token_rate_policy", "reserved_upper_bound")
+    if mode not in {"reserved_upper_bound", "provider_enforced"}:
+        raise ValueError("Unknown token rate policy")
+    if mode == "provider_enforced":
+        if review.get("account_limits_verified") is not True:
+            raise ValueError("Provider-enforced pacing needs verified account limits")
+        for requested, verified in (("requests_per_second", "verified_account_requests_per_second"),
+                                    ("input_tokens_per_second", "verified_account_input_tokens_per_second")):
+            bound = review.get(verified)
+            if not isinstance(bound, (int, float)) or not 0 < review[requested] <= bound:
+                raise ValueError("Requested pace exceeds the verified account limit")
+        return RateGate(limits, provider_enforced_tokens=True)
+    return RateGate(limits)
+
+
 def pilot_input_numbers(path, input_set_id):
     """First/middle/last rows and the longest stored text group; no label access."""
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
@@ -111,6 +132,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
         raise ValueError("Full Jev extraction requires accepted pilot evidence and its own switch")
     validator = ReviewedContextEnvelope(cfg)
     limits = campaign_limits(cfg)
+    gate = rate_gate(review, next(iter(limits.values())))
     items = selected_inputs()
     if dataset_ids:
         if set(dataset_ids) - {i["dataset_id"] for i in items}:
@@ -172,7 +194,6 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
     )
     manifest = paths.manifests_dir(phase) / "hosted" / f"{run_id}.json"
     write_json(manifest, report)
-    gate = RateGate(next(iter(limits.values())))
     client = None
     # One local campaign owns the account rate gate; merges wait for dataset writers.
     try:
@@ -231,6 +252,14 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                     print(f"{dataset_id}: {counts}", flush=True)
                     if set(counts) - {"completed", "cache_hit", "recovered_response"}:
                         report["status"] = "stopped_requires_review"
+                        if extractor.stop_details:
+                            report["stop_details"] = {"dataset_id": dataset_id, **extractor.stop_details}
+                            print(canonical_json(report["stop_details"]), flush=True)
+                        if (full and review.get("continue_on_dataset_budget_stop") is True
+                                and set(counts) - {"completed", "cache_hit", "recovered_response"} == {"budget_stop"}):
+                            report.setdefault("budget_stopped_datasets", []).append(dataset_id)
+                            report["status"] = "running"
+                            continue
                         break
                     if full:
                         from src.jev.self_hosted import _materialize
@@ -244,7 +273,9 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         )
                         write_json(manifest, report)
             else:
-                report["status"] = "completed_prefix_pilot_requires_review" if prefix_policy else "completed_requires_review"
+                report["status"] = ("stopped_requires_budget" if report.get("budget_stopped_datasets")
+                                    else "completed_prefix_pilot_requires_review" if prefix_policy
+                                    else "completed_requires_review")
     except BaseException as exc:
         report.update(status="failed", error_type=type(exc).__name__)
         raise

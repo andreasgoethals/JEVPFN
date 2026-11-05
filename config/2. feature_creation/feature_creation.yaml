@@ -63,6 +63,8 @@ live_extraction:
   requests_per_second: null
   input_tokens_per_second: null
   workers: 1
+  token_rate_policy: reserved_upper_bound  # Explicit provider_enforced mode caps RPS and shares 429 backoff; never lowers billing reservations.
+  continue_on_dataset_budget_stop: false  # Full-mode opt-in: use other approved allocations; incomplete datasets are not materialized.
   reservation_ledger: each_dataset_sqlite_file
   ambiguous_response_policy: stop_and_review_never_automatically_repay
   dispatcher: src.jev.extraction

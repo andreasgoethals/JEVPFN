@@ -130,6 +130,29 @@ def approval(extractor, tmp_path, action, **values):
     return write_json(tmp_path / f"review_{action}.json", body)
 
 
+def test_credit_stop_requires_review_then_new_session_can_resume(extraction, tmp_path):
+    from src.jev.extraction import AccountCreditError
+
+    extractor, client, request = extraction
+    normal = client.evaluate
+
+    def no_credit(_):
+        client.calls += 1
+        raise AccountCreditError(http_status=402)
+
+    client.evaluate = no_credit
+    assert extractor.evaluate(request) == "ambiguous" and client.calls == 1
+    review = approval(extractor, tmp_path, "reconcile_billing", charged_usd=0,
+                      input_tokens=0, retry_if_response_missing=True)
+    resolve(extractor.cache.path, review, apply=True, writers_stopped=True)
+    client.evaluate = normal
+    resumed = DatasetExtractor(extractor.cache, client, extractor.limits, gate=Gate(),
+                               validate_context=lambda _: None)
+    assert resumed.evaluate(request) == "completed" and client.calls == 2
+    assert resumed.evaluate(request) == "cache_hit" and client.calls == 2
+    validate_cache(extractor.cache.path)
+
+
 def test_three_unbilled_rejections_require_review_then_can_resume(extraction, tmp_path):
     extractor, client, request = extraction
     client.mode = "429"

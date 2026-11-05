@@ -287,6 +287,11 @@ an authorized Jev validation stage.
 - Durable reservations, bounded 429 handling and timeout stops prevent repeat billing.
   `python -m src.jev.recovery DATASET_ID` inspects stopped requests without calls;
   `--review FILE --apply --writers-stopped` transitions preserve charges and history.
+- HTTP 402 or recognized structured credit codes stop the account's dispatch. Completed
+  responses stay reusable; the uncertain request remains reserved. Top up, review its
+  billing through `src.jev.recovery`, then resume the same command. TypeSafe does not
+  document its exact exhausted-balance response or guarantee it was unbilled. Unknown
+  API failures also stop; logs retain status codes without provider messages or secrets.
 
 The first-100-row validation passed on all 18 datasets. Its 7,643 requests produced
 validation-only artifacts. See the [Jev accounting record](AGENTS_MEMORY.md#jev-accounting).
@@ -296,7 +301,24 @@ Full Jev needs a reviewed `jev_pilot` acceptance in the private config (checksum
 reports, `settings_sha256`, `input_sets`, `context_envelope_sha256`) and a reviewed
 cumulative spending/throughput policy, then
 `python -m src.jev.hosted --config feature_creation/jev.local --execute --full`.
-References checked 30 October: [models](https://docs.typesafe.ai/models),
+The optional `token_rate_policy: provider_enforced` uses the verified request limit
+with shared 429 backoff, leaving TPS enforcement to TypeSafe. It does not guarantee
+zero rejections or lower the 64k monetary reservation. Default pacing reserves that
+upper bound for TPS too. The faster policy must be explicitly reviewed before use.
+With `continue_on_dataset_budget_stop: true`, full mode spends each existing dataset
+allocation and continues to the next; partial datasets remain cached responses only.
+The final status is `stopped_requires_budget`, never a full-feature success. Account,
+decoder and uncertain-billing failures still stop the whole run.
+The owner-authorized existing-balance run uses the ignored `jev_funded.local` config:
+
+```powershell
+.\.venv\Scripts\python.exe -u -m src.jev.hosted --config feature_creation/jev_funded.local --execute --full
+```
+
+Use one process only. Check its process/hosted receipt before starting or resuming;
+the computer must remain awake and connected. A stopped budget needs an approved
+allocation revision; a top-up does not itself change the spending ceiling.
+References checked 5 November: [models](https://docs.typesafe.ai/models),
 [request errors](https://docs.typesafe.ai/api/errors).
 
 To add local Jev responses to VSC, upload closed SQLite snapshots to PROJECT

@@ -2,6 +2,12 @@
 
 ## 05-11-2026
 
+- Handle Jev payment/credit failures explicitly, preserve unresolved billing, stop queued
+  dispatch and reuse completed responses after recovery. Add SDK-mocked failure tests.
+  Separate optional server-enforced token pacing from monetary reservations, share
+  rate-limit backoff, and allow approved dataset allocations to finish independently
+  without presenting partial responses as complete features. Validate with 1,285 local
+  tests (26 platform/asset skips), lint and revalidation of 7,820 cached Jev responses.
 - Add an exact-source reviewed recovery route for an idle extraction checkout containing
   later benchmark work; keep extraction inputs, runtime seals and the full grid fixed.
   Replace the obsolete recovery probe's retired Liquid workspace with isolated GPFS

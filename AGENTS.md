@@ -24,8 +24,10 @@ repository, and follow docs/TEMPLATE.md with the project deviations recorded in 
   retain missing features. Do not silently truncate, drop rows/classes or cap training rows.
 - The selected roster and method are in README/config. Microsoft is excluded. No new models
   or changes to open design choices without instruction. Use open weights where available.
-- Open-weight and encoder extraction has reviewed 0A acceptance. Full hosted Jev,
-  VSC 0B and benchmark execution require their separate stage authorizations. Bounded GPU
+- Open-weight and encoder extraction has reviewed 0A acceptance. Local hosted Jev may
+  consume only the owner's existing EUR 5 allocation authorized on 5 November; no
+  top-ups or larger campaign budget are approved. VSC 0B and benchmark execution
+  require their separate stage authorizations. Bounded GPU
   contracts require explicit execution, staged pins, complete exact token evidence and
   a VSC allocation. Cleanup grants no authority to submit jobs or make paid calls.
 - Preserve tokenization.py and decision_tokenization.py byte-for-byte while audits use their
@@ -44,6 +46,11 @@ On 30 October the owner authorized switching new Jev calls to pinned 1.14 and
 revalidating it before a local first-100-source-rows pilot for all eighteen datasets.
 This bounded pilot must preserve earlier 1.13 ledgers and the cumulative budget;
 it does not authorize full Jev extraction.
+On 5 November the owner authorized beginning local feature creation using the existing
+EUR 5 allowance only, and requested faster dispatch. Preserve the existing cumulative
+USD 5.50 ceiling and historical charges, verify the accepted 1.14 inputs, and test
+credit exhaustion and server-enforced rate backoff before dispatch. This funds partial
+coverage, not the estimated USD 59 full workload; no automatic top-up is authorized.
 On 2 November the owner requested maximum parallel admission of remaining feature and
 embedding work. Use feature_admission: all ready datasets per staged runtime, encoders
 partitioned by dataset, embedding staging at the next free storage slot. Preserve the

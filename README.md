@@ -13,7 +13,8 @@ and three open-weight providers complete; Perplexity and Intern need operational
 Once extraction finishes, the next stage is to verify the
 published features, prepare fold-local PCA and TAR, and qualify the benchmark in 0B.
 TAR is implemented locally; its new runtime and training jobs still need real 0B validation.
-The owner runs full hosted Jev extraction separately. [Run evidence](docs/AGENTS_MEMORY.md) ·
+Local Jev extraction is authorized within the existing EUR 5 allowance; full coverage
+will need additional funding. [Run evidence](docs/AGENTS_MEMORY.md) ·
 [VSC workflow](docs/VSC.md#46-experiment-0b)
 
 ## Local setup
