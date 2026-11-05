@@ -224,6 +224,38 @@ def test_source_recovery_refuses_unapproved_scientific_changes_before_accounting
                                   expected_source="frozen-source", reviewed_by="fixture")
 
 
+def test_recovery_restages_a_retired_runtime_without_repeating_successful_inference(campaign, monkeypatch):
+    from src.cluster import freeze
+
+    monkeypatch.setattr(dispatch.subprocess, "run", lambda command, **kw:
+                        subprocess.CompletedProcess(command, 0, stdout="1000;mindwell", stderr=""))
+    execute(campaign)
+    report = json.loads(campaign[0].read_text())
+    for step in report["steps"]:
+        if step.get("pool") == "perplexity":
+            step.update(status="failed", job_id="failed-" + step["name"])
+        if step["name"] in {"perplexity_scratch", "perplexity_release", "perplexity_dataset_0"}:
+            step.update(status="completed", job_id="done-" + step["name"])
+    write_json(campaign[0], report)
+    old_freeze = campaign[0].parent / "completed.json"
+    write_json(old_freeze, {"frozen_receipt": {"files": {}, "runtime_pins": {}, "source_sha256": "frozen-source"}})
+    monkeypatch.setattr(dispatch, "require_idle_vsc", lambda: None)
+    monkeypatch.setattr(freeze, "source_snapshot", lambda: {"files": {}})
+    monkeypatch.setattr(dispatch, "scheduler_state", lambda job, **kw:
+                        ("FAILED", "2:0") if job.startswith("failed-") else ("COMPLETED", "0:0"))
+    dispatch.recover_campaign(previous_identity=report["identity"], previous_freeze=old_freeze,
+                             expected_source="frozen-source", reviewed_by="fixture")
+    steps = {s["name"]: s for s in json.loads(campaign[0].read_text())["steps"]}
+    for name in ("perplexity_scratch", "perplexity_release"):
+        assert steps[name].get("status", "pending") == "pending"
+        assert "job_id" not in steps[name]
+        assert steps[name]["previous_attempt"]["job_id"] == "done-" + name
+    assert steps["perplexity_dataset_0"]["status"] == "completed"
+    assert steps["perplexity_dataset_1"].get("status", "pending") == "pending"
+    # Already resident, unfinished Liquid/Strands sets retain their staging receipts.
+    assert steps["liquid_scratch"]["status"] == "completed"
+
+
 @pytest.mark.parametrize("name", ["src/jev/self_hosted.py", "src/data/text_embeddings.py",
                                   "config/2. feature_creation/embedding_models.yaml",
                                   "config/3. experiment_0/self_hosted.yaml",

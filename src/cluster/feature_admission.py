@@ -214,6 +214,7 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
     original = plan()
     selected = report["parallel_admission"]["policy"]["split_encoders"]
     expanded = partition_encoders(original, selected)
+    templates = copy.deepcopy(expanded)
     if not same_grid(report["origin_steps"], original) or not same_grid(report["steps"], expanded):
         raise ValueError("Recovery cannot change the original grid or encoder partitions")
     # Review ALL accepted IDs; queue absence alone never establishes completion.
@@ -234,6 +235,23 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
             step.update(old)
         elif old.get("job_id") or old.get("previous_attempt"):
             step["previous_attempt"] = old
+    # A failed GPU batch may already have run its terminal cleanup. Reusing its
+    # old successful staging/release receipts would launch retries into a retired
+    # working set and bypass the resident-workspace admission limit.
+    for stage in expanded:
+        runtime = stage.get("workspace_stage")
+        if not runtime:
+            continue
+        release = next(s for s in expanded if s.get("workspace_release") == runtime)
+        consumers = [s for s in expanded if stage["name"] in s.get("depends_on", [])]
+        if release.get("status") == "completed" and any(
+            s.get("status") != "completed" for s in consumers
+        ):
+            for step in (stage, release):
+                previous_attempt = copy.deepcopy(step)
+                template = next(s for s in templates if s["name"] == step["name"])
+                step.clear()
+                step.update(template, previous_attempt=previous_attempt)
     base = load_yaml("experiment_0/scheduling")
     legacy = {**base, "test_pool_limits": {**base["test_pool_limits"], **dict.fromkeys(SELF_HOSTED, 2)}}
     identity = digest(dict(frozen=frozen, runtime_pins=runtime_pins(), steps=original, settings=legacy))

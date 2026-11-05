@@ -6,6 +6,8 @@
   later benchmark work; keep extraction inputs, runtime seals and the full grid fixed.
   Replace the obsolete recovery probe's retired Liquid workspace with isolated GPFS
   publication/union/reuse fixtures. Clarify that the 90 TAR adapters are prepared in 0B.
+- Restage a retired runtime before retrying its failed dataset jobs; invalidate its
+  completed cleanup receipt while preserving successful inference and prior attempts.
 - Fix Perplexity host-memory checks for per-CPU Slurm allocations in full extraction
   and both bounded GPU entry points; keep the real 112,000 MiB requirement.
 - Serialize provider warm-cache reads with durable publication using the existing

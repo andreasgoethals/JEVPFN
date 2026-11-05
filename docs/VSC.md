@@ -251,6 +251,8 @@ Stop the identified controller first. Pending jobs may be withdrawn and resubmit
 after review; let running publications finish. An isolated DATA checkout can run
 `feature_recovery_test.slurm CHECKOUT` meanwhile. Keep scratch recovery state until
 publication is verified, and preserve failed attempts as history rather than erasing them.
+If a failed batch already retired its workspace, recovery reruns staging and its eventual
+release; completed dataset inference remains reusable and is not submitted again.
 Perplexity needs at least 112,000 MiB host memory: on the verified B200 partition this
 means fourteen CPUs at the default 8,000 MiB/CPU. The guard supports both per-node and
 per-CPU Slurm variables. Warm-cache staging shares publication's extraction lock;
