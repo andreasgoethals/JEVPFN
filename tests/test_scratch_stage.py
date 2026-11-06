@@ -549,3 +549,50 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
     with stage.staging_environment(durable):
         assert len(list(recipes(phase))) == 3
     assert len(list((work / "output_JEVPFN").glob("*/results/evaluation/*.sqlite3"))) == 1
+
+
+def test_interrupted_publication_resumes_verified_dataset_and_preserves_new_rows(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    first = cache(work / "data/jev_cache/one.sqlite3", request("intern"))
+    cache(work / "data/jev_cache/two.sqlite3", request("intern"))
+    original = stage._merge_native_decision
+    calls = []
+
+    def interrupt(incoming, destination, root):
+        calls.append(destination.name)
+        if destination.name == "two.sqlite3":
+            raise TimeoutError("fixture timeout")
+        return original(incoming, destination, root)
+
+    monkeypatch.setattr(stage, "_merge_native_decision", interrupt)
+    with pytest.raises(TimeoutError, match="fixture timeout"):
+        stage._publish(durable, work, resume=True)
+    assert calls == ["one.sqlite3", "two.sqlite3"]
+
+    def record(incoming, destination, root):
+        calls.append(destination.name)
+        return original(incoming, destination, root)
+
+    monkeypatch.setattr(stage, "_merge_native_decision", record)
+    calls.clear()
+    assert stage._publish(durable, work, resume=True)["decision_stores"] == 2
+    assert calls == ["two.sqlite3"]
+    new = request("intern", text="later response")
+    first.put(new, response(), kind="verified_response")
+    calls.clear()
+    assert stage._publish(durable, work, resume=True)["decision_stores"] == 2
+    assert calls == ["one.sqlite3"]
+    with closing(sqlite3.connect(durable / "data/jev_cache/one.sqlite3")) as db:
+        assert db.execute("SELECT COUNT(*) FROM responses").fetchone() == (2,)
+
+
+def test_unchanged_union_avoids_rewriting_durable_database(roots):
+    durable, work = roots
+    marker(durable, work)
+    target = durable / "data/jev_cache/fixture.sqlite3"
+    cache(target)
+    cache(work / "data/jev_cache/fixture.sqlite3")
+    before = stage._closed_db_identity(target)
+    assert stage._publish(durable, work, resume=True)["decision_stores"] == 1
+    assert stage._closed_db_identity(target) == before

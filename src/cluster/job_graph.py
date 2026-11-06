@@ -105,7 +105,7 @@ def summary(steps):
     }
 
 
-def advance(steps, *, settings, state, submit, save):
+def advance(steps, *, settings, state, submit, save, retry=None):
     """One resumable pass. Unknown accounting remains active and never becomes a pass."""
     validate(steps, settings)
     if any(s.get("status") == "starting" and not s.get("job_id") for s in steps):
@@ -146,6 +146,8 @@ def advance(steps, *, settings, state, submit, save):
                     f"{step['name']}: {step['status']} ({step['job_id']}, {result[0]}, {result[1]})",
                     flush=True,
                 )
+                if retry is not None and step["status"] == "failed":
+                    retry(step)
                 save()
     # Propagate a failure to descendants only, including graphs not in topological order.
     while True:
@@ -184,7 +186,8 @@ def advance(steps, *, settings, state, submit, save):
     resident = {
         s["workspace_stage"]
         for s in steps
-        if s.get("workspace_stage") and s.get("job_id") and s["workspace_stage"] not in released
+        if s.get("workspace_stage") and (s.get("job_id") or s.get("scheduler_retries"))
+        and s["workspace_stage"] not in released
     }
     active = Counter(pool(s) for s in steps if s.get("job_id") and s.get("status") not in TERMINAL)
     # CPU token jobs cannot fill the GPU/build/transfer pools. Counts include queued jobs.
@@ -199,6 +202,7 @@ def advance(steps, *, settings, state, submit, save):
             or not set(step.get("terminal_dependencies", [])) <= terminal
             or (
                 step.get("workspace_stage")
+                and step["workspace_stage"] not in resident
                 and len(resident) >= settings.get("max_resident_workspaces", 2)
             )
         ):

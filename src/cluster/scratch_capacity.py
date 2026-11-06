@@ -321,7 +321,7 @@ def release(runtime, *, apply=False):
             return report
         require_runtime_idle(runtime)
         report["snapshot_retirement"] = retire_publication_snapshots(work)
-        report["publication"] = _publish(durable, work)
+        report["publication"] = _publish(durable, work, resume=True)
         # A conflict or failed publication above leaves every input copy intact.
         if marker.get("shared_immutable_root") == str(durable):
             if report["snapshot_retirement"]["retained_requires_review"]:
@@ -349,7 +349,7 @@ def retire_published_mutable(work):
     stores. Retain their identity/lease, and refuse any file outside published data
     namespaces before removing anything. Legacy mirror release remains unchanged.
     """
-    from src.cluster.scratch_stage import MARKER
+    from src.cluster.scratch_stage import MARKER, PUBLICATION_PROGRESS
 
     candidates = []
     if work.is_mount():
@@ -360,7 +360,7 @@ def retire_published_mutable(work):
         if not p.is_file():
             continue
         relative = p.relative_to(work)
-        if relative.as_posix() in {MARKER, ".workspace.lock"}:
+        if relative.as_posix() in {MARKER, PUBLICATION_PROGRESS, ".workspace.lock"}:
             continue
         dataset = (len(relative.parts) >= 3 and relative.parts[:2] in {
             ("data", "jev_cache"), ("data", "text_embeddings")}

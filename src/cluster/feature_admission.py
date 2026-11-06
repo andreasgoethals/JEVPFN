@@ -35,6 +35,29 @@ from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
 
+RETRYABLE_STATES = frozenset({"TIMEOUT", "NODE_FAIL", "BOOT_FAIL", "PREEMPTED"})
+MAX_SCHEDULER_RETRIES = 2
+
+
+def retry_interrupted(step):
+    """Resubmit only known transient terminal attempts from their durable workspaces."""
+    if step["scheduler_state"] not in RETRYABLE_STATES:
+        return
+    attempts = step.setdefault("scheduler_retries", [])
+    if len(attempts) >= MAX_SCHEDULER_RETRIES:
+        return
+    attempt = {"retried_utc": datetime.now(UTC).isoformat()}
+    for key in (
+        "job_id", "scheduler_state", "exit_code", "submission_started_utc",
+        "submission_diagnostics", "submission_policy_sha256", "accounting_diagnostics",
+    ):
+        if key in step:
+            attempt[key] = step.pop(key)
+    attempts.append(attempt)
+    step["status"] = "pending"
+    print(f"Retry queued for {step['name']} after {attempt['scheduler_state']} "
+          f"({attempt['job_id']}, retry {len(attempts)}/{MAX_SCHEDULER_RETRIES})", flush=True)
+
 
 def admission_settings(base, steps):
     """A finite plan is the ceiling; Slurm governs actual account admission."""
@@ -190,6 +213,7 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
     allowed = {
         "AGENTS.md",  # Previously reviewed operational companion policy, no scientific inputs.
         "src/cluster/feature_admission.py", "src/cluster/scratch_stage.py",
+        "src/cluster/job_graph.py", "scripts/slurm/experiment_0_scratch_stage.slurm",
         "src/cluster/scratch_capacity.py", "scripts/slurm/experiment_0_scratch_release.slurm",
         "tests/test_feature_admission.py", "tests/test_scratch_stage.py",
         "tests/test_scratch_capacity.py",
@@ -348,7 +372,7 @@ def run(*, execute=False, expected_campaign=None, expected_source=None, reviewed
         save()
     try:
         result = advance(dispatch_order(report["steps"]), settings=settings,
-                         state=scheduler_state, save=save,
+                         state=scheduler_state, save=save, retry=retry_interrupted,
                          submit=lambda step: submit_step(step, save=save, policy_sha256=policy_sha256))
     except BaseException as exc:
         report.update(status="stopped_requires_review", dispatcher_error={

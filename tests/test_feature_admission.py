@@ -287,3 +287,47 @@ def test_exact_review_accepts_future_benchmark_code_but_rejects_stale_delta(tmp_
     new["files"][name] = "unreviewed-edit"
     with pytest.raises(ValueError, match="exact reviewed transition"):
         dispatch.validate_source_review(old, new, {name}, p, "reviewer")
+
+
+def test_timeout_retries_staging_before_consumers_and_preserves_attempts():
+    steps = [
+        dict(name="intern_scratch", cluster="mindwell", workspace_stage="intern",
+             status="submitted", job_id="1"),
+        dict(name="intern_data", cluster="mindwell", pool="intern",
+             depends_on=["intern_scratch"]),
+    ]
+    settings = {"max_active_jobs": 2, "max_resident_workspaces": 1,
+                "test_pool_limits": {"transfer": 1, "intern": 1}}
+    outcomes = {"1": ("TIMEOUT", "0:0")}
+    receipts = []
+    calls = []
+
+    def submit(step):
+        calls.append(step["name"])
+        step.update(status="submitted", job_id=str(len(calls) + 1))
+
+    def poll():
+        return advance(steps, settings=settings, state=lambda job, **_: outcomes.get(job),
+                       retry=dispatch.retry_interrupted, submit=submit,
+                       save=lambda: receipts.append(copy.deepcopy(steps)))
+
+    poll()
+    assert calls == ["intern_scratch"]
+    assert any(record[0].get("status") == "pending" and "job_id" not in record[0]
+               for record in receipts)
+    assert steps[0]["scheduler_retries"][0]["job_id"] == "1"
+    outcomes["2"] = ("COMPLETED", "0:0")
+    poll()
+    assert calls == ["intern_scratch", "intern_data"]
+    poll()
+    assert calls == ["intern_scratch", "intern_data"]
+
+
+@pytest.mark.parametrize("state", ["FAILED", "OUT_OF_MEMORY", "CANCELLED", "TIMEOUT"])
+def test_retry_exhaustion_and_permanent_failures_are_terminal(state):
+    step = {"status": "failed", "job_id": "3", "name": "intern_scratch",
+            "scheduler_state": state, "exit_code": "1:0",
+            "scheduler_retries": [{"job_id": "1"}, {"job_id": "2"}] if state == "TIMEOUT" else []}
+    before = copy.deepcopy(step)
+    dispatch.retry_interrupted(step)
+    assert step == before

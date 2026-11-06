@@ -23,6 +23,7 @@ from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
 
 MARKER = "_JEVPFN_WORKSPACE.json"
+PUBLICATION_PROGRESS = "_JEVPFN_PUBLICATION_PROGRESS.json"
 
 
 def roots(runtime):
@@ -132,7 +133,26 @@ def _copy(source, destination, *, snapshot_sqlite=True):
         return sha
 
 
-def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision_stores=True):
+def _closed_db_identity(path):
+    if not path.is_file() or any(
+        sidecar.is_file() and sidecar.stat().st_size
+        for sidecar in (path.with_name(path.name + suffix) for suffix in ("-wal", "-journal"))
+    ):
+        return None
+    info = path.stat()
+    return [info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+
+
+def _recover_rollback(path):
+    """Let SQLite roll back an interrupted write under the existing writer lease."""
+    journal = path.with_name(path.name + "-journal")
+    if journal.is_file() and journal.stat().st_size:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=rw", uri=True)) as db:
+            db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+
+
+def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision_stores=True,
+             resume=False):
     """Never replace a durable response DB with a partial scratch copy."""
     from src.cluster.transfer import _publish_file
     from src.data.text_embeddings import merge as merge_embeddings
@@ -144,6 +164,15 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
     staged = (
         json.loads((work / MARKER).read_text()).get("files", {}) if (work / MARKER).exists() else {}
     )
+    # Only staging and release own the exclusive workspace lease needed for
+    # restart receipts. Dataset/periodic publishers retain their separate locks.
+    progress_path = reject_links(work / PUBLICATION_PROGRESS)
+    progress = {}
+    if resume and progress_path.is_file():
+        prior = json.loads(progress_path.read_text())
+        if prior["durable_root"] != str(durable):
+            raise ValueError("Publication checkpoint belongs to another durable root")
+        progress = prior["stores"]
     durable.mkdir(parents=True, exist_ok=True)
     with staging_environment(durable):
         for kind, folder, merger in (
@@ -200,6 +229,22 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
                             raise
                         counts["busy_skipped"] += 1
                         continue
+                    relative_key = relative.as_posix()
+                    source_sha = None
+                    if resume and kind == "decision_stores":
+                        _recover_rollback(source)
+                        if _closed_db_identity(source) is not None:
+                            source_sha = file_sha256(source)
+                            saved = progress.get(relative_key)
+                            if saved and saved["source_sha256"] == source_sha:
+                                with file_lock(destination.with_suffix(".extraction.lock"), timeout=3600,
+                                               shared=True):
+                                    destination_identity = _closed_db_identity(destination)
+                                if destination_identity is not None and saved["destination"] == destination_identity:
+                                    counts[kind] += 1
+                                    print(json.dumps({"event": "publication_reused", "path": relative_key}),
+                                          flush=True)
+                                    continue
                     started = time.monotonic()
                     print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
                                       "periodic": periodic,
@@ -214,7 +259,10 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
                         else:
                             shutil.copyfile(source, copied)
                         if kind == "decision_stores":
-                            _merge_native_decision(copied, destination, work)
+                            identity = _merge_native_decision(copied, destination, work)
+                            if source_sha is not None and identity is not None:
+                                progress[relative_key] = {"source_sha256": source_sha, "destination": identity}
+                                write_json(progress_path, {"durable_root": str(durable), "stores": progress})
                         elif merger is not None:
                             merger(copied, destination)
                         elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
@@ -259,10 +307,16 @@ def _merge_native_decision(incoming, destination, work):
         native_root = Path(temporary) / "JEVPFN"
         native = native_root / "data/jev_cache" / destination.name
         native.parent.mkdir(parents=True)
-        if destination.exists():
+        existed = destination.exists()
+        if existed:
+            _recover_rollback(destination)
             snapshot(destination, native)
         with staging_environment(native_root):
-            merge_cache(incoming, native, backup_destination=False, deduplicate_ledger=True)
+            merged = merge_cache(incoming, native, backup_destination=False, deduplicate_ledger=True)
+        if existed and not any(value for key, value in merged.items() if key.endswith("_added")):
+            # The validated merge proved all incoming records already durable.
+            # Avoid rewriting a multi-GB database and its rollback journal.
+            return _closed_db_identity(destination)
         with (
             closing(sqlite3.connect(native.as_uri() + "?mode=ro", uri=True)) as src,
             closing(sqlite3.connect(destination)) as dst,
@@ -275,6 +329,7 @@ def _merge_native_decision(incoming, destination, work):
         snapshot(destination, verified)
         if _backup_page_identity(native) != _backup_page_identity(verified):
             raise ValueError("Published SQLite readback differs from the validated union")
+        return _closed_db_identity(destination)
 
 
 def _backup_page_identity(path):
@@ -306,6 +361,7 @@ def _provider_cache(source, destination, provider):
     # Hold it before even reading identity, through the complete filtered copy;
     # SQLite's short busy timeout cannot span a multi-minute publication.
     with file_lock(source.with_suffix(".extraction.lock"), timeout=3600):
+        _recover_rollback(source)
         return _provider_cache_locked(source, destination, provider)
 
 
@@ -368,17 +424,18 @@ def stage(runtime):
             previous = json.loads((work / MARKER).read_text())
             if previous.get("runtime") != runtime or previous.get("durable_root") != str(durable):
                 raise ValueError("Workspace publication destination differs from its stage receipt")
-            _publish(durable, work)  # Preserve committed results before updating any inputs.
-        write_json(
-            work / MARKER,
-            {
-                "runtime": runtime,
-                "runtime_profile": selected(),
-                "durable_root": str(durable),
-                "status": "staging",
-                "files": previous.get("files", {}),
-            },
-        )
+            if previous.get("status") != "staging":
+                _publish(durable, work, resume=True)  # Protect earlier inference before restaging.
+        warm = previous.get("warm_cache_progress", {}) if previous.get("status") == "staging" else {}
+        staging_marker = {
+            "runtime": runtime,
+            "runtime_profile": selected(),
+            "durable_root": str(durable),
+            "status": "staging",
+            "files": previous.get("files", {}),
+            "warm_cache_progress": warm,
+        }
+        write_json(work / MARKER, staging_marker)
         inputs = ["data/raw", "data/decision_inputs", "data/jev_cache"]
         if runtime == "cloudflare" or runtime not in containers.SELF_HOSTED:
             inputs += ["data/text_embeddings"]
@@ -504,12 +561,25 @@ def stage(runtime):
             if relative.parts[:2] == ("data", "jev_cache") and runtime in containers.SELF_HOSTED:
                 # A new runtime must not copy all previous models' multi-GB
                 # response histories into every native workspace.
+                key = relative.as_posix()
+                before = _closed_db_identity(source)
+                saved = warm.get(key)
+                if (before is not None and saved and saved["source"] == before
+                        and _closed_db_identity(destination) is not None
+                        and file_sha256(destination) == saved["sha256"]):
+                    files[key] = saved["sha256"]
+                    continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
+                with file_lock(destination.with_suffix(".extraction.lock"), timeout=3600):
+                    _recover_rollback(destination)
                 with tempfile.TemporaryDirectory(prefix=".warm-", dir=destination.parent) as temp:
                     incoming = _provider_cache(source, Path(temp) / source.name, runtime)
                     with staging_environment(work):
                         merge_cache(incoming, destination, backup_destination=False, deduplicate_ledger=True)
-                files[relative.as_posix()] = file_sha256(destination)
+                files[key] = file_sha256(destination)
+                if before is not None and before == _closed_db_identity(source):
+                    warm[key] = {"source": before, "sha256": files[key]}
+                    write_json(work / MARKER, staging_marker)
             elif relative.parts[:2] == ("data", "jev_cache") and destination.is_file():
                 with (
                     staging_environment(work),
