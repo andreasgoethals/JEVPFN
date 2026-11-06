@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -167,6 +168,28 @@ def test_queued_consumers_are_protected_and_other_runtime_does_not_block(
             cap.require_runtime_idle("intern")
     else:
         cap.require_runtime_idle("intern")
+
+
+@pytest.mark.parametrize("failing_command", ["squeue", "scontrol"])
+def test_release_defers_when_slurm_cannot_verify_idle(roots, monkeypatch, failing_command):
+    from src.cluster import scheduling
+
+    durable, work = roots
+    copied_assets(durable, work)
+    monkeypatch.setattr(stage, "roots", lambda runtime: (durable, work))
+    monkeypatch.setattr(paths, "on_vsc", lambda: True)
+    monkeypatch.setattr(scheduling, "require_cpu_staging", lambda: None)
+    monkeypatch.setenv("SLURM_JOB_ID", "456")
+    monkeypatch.setattr("sys.argv", ["scratch_capacity", "--runtime", "intern", "--apply"])
+
+    def output(argv, **kwargs):
+        if argv[0] == failing_command:
+            raise subprocess.CalledProcessError(1, argv)
+        return "123|jevpfn-exp0-contracts|/data/JEVPFN\n"
+
+    monkeypatch.setattr(cap.subprocess, "check_output", output)
+    assert cap.main() == cap.QUEUE_CHECK_UNAVAILABLE
+    assert (work / "checkpoints/model.bin").is_file()
 
 
 def test_capacity_limits_count_resident_sets_not_just_active_copies(roots, monkeypatch):

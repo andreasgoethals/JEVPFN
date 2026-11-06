@@ -19,6 +19,11 @@ from src.utils.locking import file_lock
 from src.utils.serialization import write_json
 
 GIB = 1024**3
+QUEUE_CHECK_UNAVAILABLE = 75
+
+
+class QueueCheckUnavailable(RuntimeError):
+    """The scheduler could not confirm that a scratch workspace is idle."""
 
 
 def tree_bytes(root):
@@ -144,6 +149,13 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
         raise OSError("GPFS filesystem has insufficient free capacity for staging")
 
 
+def _scheduler_read(command):
+    try:
+        return subprocess.check_output(command, text=True, timeout=30)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise QueueCheckUnavailable(f"Cannot verify scratch consumers: {command}: {exc}") from exc
+
+
 def require_runtime_idle(runtime):
     """Protect queued consumers too: file leases alone only protect running workers."""
     if not paths.on_vsc():
@@ -151,10 +163,8 @@ def require_runtime_idle(runtime):
     from src.cluster.containers import RUNTIMES
 
     for cluster in ("wice", "mindwell"):
-        listing = subprocess.check_output(
-            ["squeue", "--clusters=" + cluster, "--me", "--noheader", "--format=%i|%j|%Z"],
-            text=True,
-            timeout=30,
+        listing = _scheduler_read(
+            ["squeue", "--clusters=" + cluster, "--me", "--noheader", "--format=%i|%j|%Z"]
         )
         for line in listing.splitlines():
             if not line.strip() or line.startswith("CLUSTER:"):
@@ -169,11 +179,7 @@ def require_runtime_idle(runtime):
                 continue
             if not name.startswith("jevpfn") and "JEVPFN" not in directory:
                 continue
-            detail = subprocess.check_output(
-                ["scontrol", "--clusters=" + cluster, "show", "job", job, "-o"],
-                text=True,
-                timeout=30,
-            )
+            detail = _scheduler_read(["scontrol", "--clusters=" + cluster, "show", "job", job, "-o"])
             tokens = shlex.split(detail)
             # These exact project entrypoints never consume a GPFS working set.
             # Unrelated CPU preparation can continue while a finished runtime releases.
@@ -393,8 +399,12 @@ def main():
     if args.apply and paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Publish/release large working sets in a CPU allocation")
     for runtime in RUNTIMES if args.all else [args.runtime]:
-        print(json.dumps(release(runtime, apply=args.apply)), flush=True)
+        try:
+            print(json.dumps(release(runtime, apply=args.apply)), flush=True)
+        except QueueCheckUnavailable as exc:
+            print(exc, flush=True)
+            return QUEUE_CHECK_UNAVAILABLE
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

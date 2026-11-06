@@ -331,3 +331,16 @@ def test_retry_exhaustion_and_permanent_failures_are_terminal(state):
     before = copy.deepcopy(step)
     dispatch.retry_interrupted(step)
     assert step == before
+
+
+@pytest.mark.parametrize("release", [None, "perplexity"])
+def test_retry_queue_inspection_failure_only_for_workspace_release(release):
+    step = {"status": "failed", "job_id": "7", "name": "perplexity_release",
+            "workspace_release": release, "scheduler_state": "FAILED",
+            "exit_code": f"{dispatch.QUEUE_CHECK_UNAVAILABLE}:0"}
+    dispatch.retry_interrupted(step)
+    if release:
+        assert step["status"] == "pending"
+        assert step["scheduler_retries"][0]["job_id"] == "7"
+    else:
+        assert step["status"] == "failed"

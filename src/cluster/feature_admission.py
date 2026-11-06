@@ -28,6 +28,7 @@ from src.cluster.feature_campaign import capacity_rejection, plan
 from src.cluster.freeze import check_if_present, runtime_pins
 from src.cluster.job_graph import SubmissionDeferred, advance, pool
 from src.cluster.maintenance import require_idle_vsc
+from src.cluster.scratch_capacity import QUEUE_CHECK_UNAVAILABLE
 from src.jev.catalog import SELF_HOSTED
 from src.utils import paths
 from src.utils.acceptance import reviewed_acceptance
@@ -41,7 +42,12 @@ MAX_SCHEDULER_RETRIES = 2
 
 def retry_interrupted(step):
     """Resubmit only known transient terminal attempts from their durable workspaces."""
-    if step["scheduler_state"] not in RETRYABLE_STATES:
+    queue_check_failed = (
+        step.get("workspace_release")
+        and step["scheduler_state"] == "FAILED"
+        and step["exit_code"] == f"{QUEUE_CHECK_UNAVAILABLE}:0"
+    )
+    if step["scheduler_state"] not in RETRYABLE_STATES and not queue_check_failed:
         return
     attempts = step.setdefault("scheduler_retries", [])
     if len(attempts) >= MAX_SCHEDULER_RETRIES:
