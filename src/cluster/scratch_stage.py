@@ -328,8 +328,9 @@ def _retire_stale_fallbacks(root):
     if not root.is_dir() or root.is_symlink():
         return []
     own = os.environ.get("SLURM_JOB_ID")
-    stale = [p for p in root.iterdir()
-             if p.name.isdigit() and p.name != own and p.is_dir() and not p.is_symlink()]
+    stale = sorted((p for p in root.iterdir()
+                    if p.name.isdigit() and p.name != own and p.is_dir() and not p.is_symlink()),
+                   key=lambda p: int(p.name))
     if not stale:
         return []
     try:
