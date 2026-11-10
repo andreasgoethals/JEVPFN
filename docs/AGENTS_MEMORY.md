@@ -92,8 +92,31 @@ Job outcomes:
 - Kev release `11784791` failed with exit 76, a publication-lock timeout during that
   Kickstarter publication. The dispatcher's retry `11784836` reused two published stores.
 
-The local fix (GPFS scratch fallback with per-job cleanup) is not yet deployed. Commit
-`283922d` was pushed before the owner asked to hold pushes; the follow-up stays local.
+Commit `283922d` was pushed before the owner asked to hold pushes. The owner then
+approved pushing; the deployable source is `6f299b0`.
+
+Cutover preparation (owner-authorized, 10 November):
+
+- **Controller stopped at 12:21 CET.** On login-3, PIDs 3838367/3837469 were stopped
+  while holding `.campaign.lock`. The campaign file was unchanged (227 completed,
+  2 submitted, 41 pending, 4 failed). Receipt: `reviews/controller_stop_20261110.json`.
+  Running jobs `11781957` and `11784836` were left untouched.
+- **QA ran in an isolated DATA checkout:** `f89688a`, plus the live uncommitted patches
+  reproduced byte-for-byte, plus patch `838d3e1fbb18…`.
+  - Recovery QA `11784949` passed 184 tests.
+  - Real GPFS fallback QA `11784950` passed. The union ran in
+    `publication-temporary/11784950` and the directory was removed; the leftover of
+    FAILED `11781804` was retired and that of RUNNING `11781957` was kept.
+  - Attempt `11784944` failed only because a test assumed directory order; it is
+    retained as history.
+  - The QA logs were copied to DATA logs and the QA checkout was removed.
+- **Next source:** `80491e04…`, changing only `src/cluster/scratch_stage.py` and two test files.
+- **Cutover tool:** `controller_tools/publication_fallback_cutover_838d3e1fbb18.py`. A
+  rehearsal refused at `require_idle_vsc` and left the source and freeze unchanged.
+- **Detached waiter:** `publication_fallback_waiter_838d3e1fbb18.sh`, PID 3976274 on
+  login-3, bounded to 30 h. Once both jobs are terminal and no JEVPFN job is queued, it
+  runs the launcher: cutover, source review, then `feature_admission --recover-from 48373214…`.
+  Log: `logs/publication_fallback_recovery_838d3e1fbb18.log`.
 
 ### Intern publication recovery on 9 November
 
