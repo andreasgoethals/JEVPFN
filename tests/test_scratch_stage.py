@@ -95,6 +95,37 @@ def test_periodic_publication_ignores_historical_backups_and_does_not_multiply_f
         assert db.execute("SELECT COUNT(*) FROM imported_extraction_records").fetchone() == (1,)
 
 
+def test_unchanged_store_is_not_republished_but_any_new_write_is(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    cache(durable / "data/jev_cache/fixture.sqlite3")
+    remote = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    monkeypatch.setattr(stage, "_PUBLISHED_IDENTITIES", {})
+    merges = []
+    real = stage._merge_native_decision
+    monkeypatch.setattr(stage, "_merge_native_decision",
+                        lambda *a: merges.append(a) or real(*a))
+    assert stage._publish(durable, work, periodic=True)["decision_stores"] == 1
+    again = stage._publish(durable, work)  # Final publication after an idle interval.
+    assert again["decision_stores"] == 1 and again["unchanged_skipped"] == 1 and len(merges) == 1
+    remote.put(request("intern", text="new"), response(), kind="verified_response")
+    after = stage._publish(durable, work)
+    assert after["unchanged_skipped"] == 0 and len(merges) == 2
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern", text="new"), kind="verified_response") == response()
+
+
+def test_unchanged_skip_never_applies_to_a_missing_destination(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    monkeypatch.setattr(stage, "_PUBLISHED_IDENTITIES", {})
+    stage._publish(durable, work)
+    (durable / "data/jev_cache/fixture.sqlite3").unlink()
+    assert stage._publish(durable, work)["unchanged_skipped"] == 0
+    assert (durable / "data/jev_cache/fixture.sqlite3").is_file()
+
+
 def test_periodic_busy_target_does_not_block_another_dataset(roots):
     from src.utils.locking import file_lock
     from src.utils.serialization import digest

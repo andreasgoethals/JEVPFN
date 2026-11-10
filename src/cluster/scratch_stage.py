@@ -23,6 +23,8 @@ from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
 
 MARKER = "_JEVPFN_WORKSPACE.json"
+# (durable root, relative path) -> closed source identity published by THIS process.
+_PUBLISHED_IDENTITIES = {}
 PUBLICATION_PROGRESS = "_JEVPFN_PUBLICATION_PROGRESS.json"
 
 
@@ -173,7 +175,8 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
     from src.data.text_embeddings import merge as merge_embeddings
     from src.evaluation.store import merge as merge_evaluations
 
-    counts = {"decision_stores": 0, "embedding_stores": 0, "outputs": 0, "busy_skipped": 0}
+    counts = {"decision_stores": 0, "embedding_stores": 0, "outputs": 0, "busy_skipped": 0,
+              "unchanged_skipped": 0}
     if dataset_id is not None:
         dataset_id = paths.output_component(dataset_id)
     staged = (
@@ -233,6 +236,19 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                     and file_sha256(source) == staged[relative.as_posix()]
                 ):
                     continue
+                # A closed SQLite store this process already published, unchanged
+                # since (same inode, size, mtime and ctime, no journal), is durable:
+                # durable stores only grow by validated unions.
+                published_key = (str(durable), relative.as_posix())
+                if source.suffix == ".sqlite3":
+                    unchanged = _closed_db_identity(source)
+                    if (unchanged is not None and destination.is_file()
+                            and _PUBLISHED_IDENTITIES.get(published_key) == unchanged):
+                        counts[kind] += 1
+                        counts["unchanged_skipped"] += 1
+                        print(json.dumps({"event": "publication_unchanged", "path": relative.as_posix(),
+                                          "periodic": periodic}), flush=True)
+                        continue
                 # Unrelated datasets must publish concurrently. A periodic writer
                 # can defer a busy destination; final publication must acquire it.
                 lock = durable / ".publication-locks" / (digest(relative.as_posix()) + ".lock")
@@ -275,6 +291,7 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                                       "temporary_storage": str(temporary_root)}), flush=True)
                     # Bound temporary bytes to ONE store, rather than retaining
                     # all eighteen snapshots until the release process exits.
+                    before_snapshot = _closed_db_identity(source) if source.suffix == ".sqlite3" else None
                     with tempfile.TemporaryDirectory(prefix=".publish-", dir=temporary_root) as temporary:
                         copied = Path(temporary) / relative
                         copied.parent.mkdir(parents=True, exist_ok=True)
@@ -293,6 +310,10 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                             merge_evaluations(copied, destination)
                         else:
                             _publish_file(copied, destination)
+                    # Remember only a source that stayed closed and unchanged across
+                    # the whole snapshot and merge; any later write changes its identity.
+                    if before_snapshot is not None and _closed_db_identity(source) == before_snapshot:
+                        _PUBLISHED_IDENTITIES[published_key] = before_snapshot
                     counts[kind] += 1
                     print(json.dumps({"event": "publication_completed", "path": relative.as_posix(),
                                       "seconds": time.monotonic() - started}), flush=True)
