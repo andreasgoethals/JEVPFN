@@ -273,6 +273,32 @@ def test_wice_publication_merges_on_node_local_disk_not_cross_mounted_gpfs(roots
     assert source.path.is_file() and not list(local.iterdir())
 
 
+def test_mindwell_publication_uses_native_scratch_when_node_disk_cannot_hold_union(roots, monkeypatch, tmp_path):
+    durable, work = roots
+    marker(durable, work)
+    source = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    local = tmp_path / "node-local"
+    local.mkdir()
+    fallback = work.parents[2] / "jevpfn-transfers" / "publication-temporary"
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    monkeypatch.setenv("SLURM_JOB_ID", "gpu-fixture")
+    monkeypatch.setenv("VSC_SCRATCH_NODE", str(local))
+    # The shared node disk is nearly full; native scratch has room.
+    monkeypatch.setattr(stage.shutil, "disk_usage", lambda p: SimpleNamespace(
+        free=1024 if Path(p).is_relative_to(local) else 10**15))
+    real = stage.merge_cache
+
+    def scratch_merge(incoming, destination, **kwargs):
+        assert incoming.is_relative_to(fallback) and destination.is_relative_to(fallback)
+        return real(incoming, destination, **kwargs)
+
+    monkeypatch.setattr(stage, "merge_cache", scratch_merge)
+    assert stage.publish("intern")["decision_stores"] == 1
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern"), kind="verified_response") == response()
+    assert source.path.is_file() and not list(fallback.iterdir()) and not list(local.iterdir())
+
+
 def test_copy_snapshots_committed_wal_without_copying_open_journal(tmp_path):
     source = tmp_path / "source.sqlite3"
     with sqlite3.connect(source) as db:

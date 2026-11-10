@@ -2,6 +2,8 @@
 
 import copy
 import json
+import shutil
+from pathlib import Path
 
 import pytest
 
@@ -41,6 +43,56 @@ def test_mindwell_publication_uses_declared_node_disk_for_temporary_unions(tmp_p
     monkeypatch.setenv("SLURM_JOB_ID", "99")
     monkeypatch.setenv("VSC_SCRATCH_NODE", str(local))
     assert _publication_temporary_root(tmp_path / "shared_work") == local
+
+
+def _node_with_free(tmp_path, monkeypatch, cluster, free_by_root):
+    from collections import namedtuple
+
+    from src.cluster import scratch_stage
+
+    local = tmp_path / "node"
+    local.mkdir()
+    scratch = tmp_path / "scratch"
+    work = scratch / "jevpfn-work" / "kev" / "JEVPFN"
+    work.mkdir(parents=True)
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", cluster)
+    monkeypatch.setenv("SLURM_JOB_ID", "99")
+    monkeypatch.setenv("VSC_SCRATCH_NODE", str(local))
+    usage = namedtuple("usage", "total used free")
+    real = shutil.disk_usage
+
+    def disk_usage(path):
+        for root, free in free_by_root(local, scratch).items():
+            if Path(path).is_relative_to(root):
+                return usage(free, 0, free)
+        return real(path)
+
+    monkeypatch.setattr(scratch_stage.shutil, "disk_usage", disk_usage)
+    return scratch_stage, local, scratch, work
+
+
+def test_publication_union_falls_back_to_native_scratch_when_node_disk_is_too_small(tmp_path, monkeypatch):
+    stage, local, scratch, work = _node_with_free(
+        tmp_path, monkeypatch, "mindwell", lambda local, scratch: {local: 2**30, scratch: 2**42})
+    assert stage._publication_temporary_root(work, 2**29) == local
+    fallback = stage._publication_temporary_root(work, 140 * 2**30)
+    assert fallback == scratch / "jevpfn-transfers" / "publication-temporary"
+    assert not fallback.is_relative_to(work.parent.parent)  # Outside every workspace.
+    assert stage._publication_temporary_root(work) == local  # Unsized callers are unchanged.
+
+
+def test_publication_union_fallback_respects_the_personal_scratch_budget(tmp_path, monkeypatch):
+    stage, _, _, work = _node_with_free(
+        tmp_path, monkeypatch, "mindwell", lambda local, scratch: {local: 2**30, scratch: 2**42})
+    with pytest.raises(OSError, match="Insufficient native space"):
+        stage._publication_temporary_root(work, 600 * 2**30)  # Above the 500 GiB allocation.
+
+
+def test_wice_publication_never_falls_back_to_cross_mounted_scratch(tmp_path, monkeypatch):
+    stage, _, _, work = _node_with_free(
+        tmp_path, monkeypatch, "wice", lambda local, scratch: {local: 2**30, scratch: 2**42})
+    with pytest.raises(OSError, match="Insufficient native space"):
+        stage._publication_temporary_root(work, 140 * 2**30)
 
 
 def test_explicit_durable_authority_wins_over_old_project_alias(tmp_path, monkeypatch):

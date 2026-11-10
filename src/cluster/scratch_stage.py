@@ -252,12 +252,19 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
                                           flush=True)
                                     continue
                     started = time.monotonic()
+                    # The incoming snapshot and its union share one temporary root
+                    # whenever that root can hold both.
+                    needed = source.stat().st_size + (
+                        _union_bytes(source.stat().st_size, destination)
+                        if kind == "decision_stores" else 0
+                    )
+                    temporary_root = _publication_temporary_root(work, needed)
                     print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
                                       "periodic": periodic,
-                                      "temporary_storage": str(_publication_temporary_root(work))}), flush=True)
+                                      "temporary_storage": str(temporary_root)}), flush=True)
                     # Bound temporary bytes to ONE store, rather than retaining
                     # all eighteen snapshots until the release process exits.
-                    with tempfile.TemporaryDirectory(prefix=".publish-", dir=_publication_temporary_root(work)) as temporary:
+                    with tempfile.TemporaryDirectory(prefix=".publish-", dir=temporary_root) as temporary:
                         copied = Path(temporary) / relative
                         copied.parent.mkdir(parents=True, exist_ok=True)
                         if source.suffix == ".sqlite3":
@@ -281,15 +288,54 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
     return counts
 
 
-def _publication_temporary_root(work):
-    """Temporary unions use declared node-local disk; resumable stores stay on GPFS."""
+def _union_bytes(incoming_bytes, destination):
+    """Temporary bytes for one validated union: its two snapshots plus SQLite slack."""
+    existing = destination.stat().st_size if destination.exists() else 0
+    return 2 * (incoming_bytes + existing) + 512 * 2**20
+
+
+def _native_scratch_fallback(work, required):
+    """Node-local disk is shared and unreserved on Mindwell (TmpDisk=0).
+
+    Durable stores grow with every provider, so a union can outgrow it. Native
+    GPFS scratch then holds the temporary union outside every workspace, within the
+    personal scratch allocation; it never falls back to PROJECT or cross-mounted storage.
+    """
+    from src.cluster.scratch_capacity import GIB, tree_bytes
+    from src.utils.config import load_yaml
+
+    if os.environ.get("SLURM_CLUSTER_NAME") == "wice":
+        return None  # WICE reaches Mindwell GPFS only through a cross-mount.
+    scratch = work.parents[2]
+    if not str(scratch).startswith("/gpfs") and paths.on_vsc():
+        return None
+    settings = load_yaml("experiment_0/scheduling")
+    budget = (settings["scratch_allocation_gib"] - settings["scratch_headroom_gib"]) * GIB
+    if tree_bytes(scratch) + required > budget or shutil.disk_usage(scratch).free < required:
+        return None
+    fallback = scratch / "jevpfn-transfers" / "publication-temporary"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return reject_links(fallback)
+
+
+def _publication_temporary_root(work, required=0):
+    """Temporary unions use declared node-local disk; resumable stores stay on GPFS.
+
+    When the node-local disk cannot hold ``required`` bytes, a native GPFS scratch
+    directory outside the workspaces is used instead of failing a finished job.
+    """
     cluster = os.environ.get("SLURM_CLUSTER_NAME")
     declared = os.environ.get("VSC_SCRATCH_NODE") or os.environ.get("SLURM_TMPDIR")
     if os.environ.get("SLURM_JOB_ID") and (declared or cluster == "wice"):
         local = Path(declared or "/tmp")
         if not local.is_absolute() or not local.is_dir() or local.is_relative_to(paths.data_root()):
             raise ValueError("Publication needs a verified node-local temporary directory")
-        return local
+        if not required or shutil.disk_usage(local).free >= required:
+            return local
+        fallback = _native_scratch_fallback(work, required)
+        if fallback is None:
+            raise OSError("Insufficient native space for a validated publication union")
+        return fallback
     return work
 
 
@@ -302,9 +348,9 @@ def _merge_native_decision(incoming, destination, work):
     A failed native merge never writes the durable destination.
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_root = _publication_temporary_root(work)
-    required = incoming.stat().st_size + (destination.stat().st_size if destination.exists() else 0)
-    if shutil.disk_usage(temporary_root).free < 2 * required + 512 * 2**20:
+    required = _union_bytes(incoming.stat().st_size, destination)
+    temporary_root = _publication_temporary_root(work, required)
+    if shutil.disk_usage(temporary_root).free < required:
         raise OSError("Insufficient native space for a validated publication union")
     with (
         file_lock(destination.with_suffix(".extraction.lock"), timeout=3600),
