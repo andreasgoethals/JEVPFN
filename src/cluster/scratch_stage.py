@@ -13,7 +13,7 @@ import shutil
 import sqlite3
 import tempfile
 import time
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager, suppress
 from pathlib import Path
 
 from src.cluster.maintenance import reject_links
@@ -155,8 +155,19 @@ def _recover_rollback(path):
             db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
 
 
-def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision_stores=True,
-             resume=False):
+def _publish(durable, work, **options):
+    """Publish, then remove this job's empty GPFS scratch fallback directory."""
+    try:
+        return _publish_stores(durable, work, **options)
+    finally:
+        job_root = _fallback_job_root(work)
+        if job_root is not None and job_root.is_dir() and not job_root.is_symlink():
+            with suppress(OSError):  # Kept only if a crash left a union in it.
+                job_root.rmdir()
+
+
+def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
+                    include_decision_stores=True, resume=False):
     """Never replace a durable response DB with a partial scratch copy."""
     from src.cluster.transfer import _publish_file
     from src.data.text_embeddings import merge as merge_embeddings
@@ -294,28 +305,74 @@ def _union_bytes(incoming_bytes, destination):
     return 2 * (incoming_bytes + existing) + 512 * 2**20
 
 
-def _native_scratch_fallback(work, required):
-    """Node-local disk is shared and unreserved on Mindwell (TmpDisk=0).
+FALLBACK_PARTS = ("jevpfn-transfers", "publication-temporary")
+TERMINAL_STATES = ("BOOT_FAIL", "CANCELLED", "COMPLETED", "DEADLINE", "FAILED", "NODE_FAIL",
+                   "OUT_OF_MEMORY", "PREEMPTED", "TIMEOUT")
 
-    Durable stores grow with every provider, so a union can outgrow it. Native
-    GPFS scratch then holds the temporary union outside every workspace, within the
-    personal scratch allocation; it never falls back to PROJECT or cross-mounted storage.
+
+def _fallback_job_root(work):
+    """This job's own directory; only Mindwell jobs own a GPFS scratch fallback."""
+    job = os.environ.get("SLURM_JOB_ID")
+    if not job or not job.isdigit() or os.environ.get("SLURM_CLUSTER_NAME") == "wice":
+        return None
+    return work.parents[2].joinpath(*FALLBACK_PARTS, job)
+
+
+def _retire_stale_fallbacks(root):
+    """Remove unions left by killed jobs, only after Slurm reports them terminal.
+
+    Normal exits remove their own directory. Unknown or unverifiable jobs are kept.
+    """
+    from src.cluster.scratch_capacity import QueueCheckUnavailable, _scheduler_read
+
+    if not root.is_dir() or root.is_symlink():
+        return []
+    own = os.environ.get("SLURM_JOB_ID")
+    stale = [p for p in root.iterdir()
+             if p.name.isdigit() and p.name != own and p.is_dir() and not p.is_symlink()]
+    if not stale:
+        return []
+    try:
+        listing = _scheduler_read(["sacct", "--clusters=mindwell", "--noheader", "--parsable2",
+                                   "--allocations", "--format=JobIDRaw,State",
+                                   "--jobs=" + ",".join(p.name for p in stale)])
+    except QueueCheckUnavailable:
+        return []
+    states = dict(line.split("|", 1) for line in listing.splitlines() if line.count("|") == 1)
+    retired = []
+    for p in stale:
+        if states.get(p.name, "").split(" ")[0] in TERMINAL_STATES:
+            if p.resolve().parent != root.resolve():
+                raise ValueError("Fallback cleanup escaped its owned directory")
+            shutil.rmtree(p)
+            retired.append(p.name)
+    return retired
+
+
+def _native_scratch_fallback(work, required):
+    """Node-local /tmp is shared and unreserved on Mindwell B200 nodes (TmpDisk=0).
+
+    Durable stores grow with every provider, so a union can outgrow the space
+    other jobs leave. Mindwell's native GPFS scratch then holds it in this job's
+    own directory, outside every workspace and within the personal allocation.
+    The directory is removed after publication; it never falls back to PROJECT.
     """
     from src.cluster.scratch_capacity import GIB, tree_bytes
     from src.utils.config import load_yaml
 
-    if os.environ.get("SLURM_CLUSTER_NAME") == "wice":
+    job_root = _fallback_job_root(work)
+    if job_root is None:
         return None  # WICE reaches Mindwell GPFS only through a cross-mount.
     scratch = work.parents[2]
     if not str(scratch).startswith("/gpfs") and paths.on_vsc():
         return None
+    _retire_stale_fallbacks(job_root.parent)
     settings = load_yaml("experiment_0/scheduling")
     budget = (settings["scratch_allocation_gib"] - settings["scratch_headroom_gib"]) * GIB
     if tree_bytes(scratch) + required > budget or shutil.disk_usage(scratch).free < required:
         return None
-    fallback = scratch / "jevpfn-transfers" / "publication-temporary"
-    fallback.mkdir(parents=True, exist_ok=True)
-    return reject_links(fallback)
+    job_root.mkdir(parents=True, exist_ok=True)
+    return reject_links(job_root)
 
 
 def _publication_temporary_root(work, required=0):

@@ -77,6 +77,24 @@ publication union` (`scratch_stage._merge_native_decision`):
 These failures need review before retry. Nimble and Liquid LFM3 have not started. No new
 complete decision model has appeared since export `11780780`.
 
+Space diagnosis (12:00 CET):
+
+- Running job `11781957` showed B200 `/tmp` as a 590 GiB node-local volume with 212 GiB
+  used by co-located jobs. `VSC_SCRATCH_NODE` was unset in the probe step.
+- Durable stores reach 62 GiB (Kickstarter, Mercari), so a union needs about 140 GiB.
+- Personal GPFS scratch held 77 of 500 GiB; GPFS PROJECT `prj_00013` held 798 GiB of 2 TiB.
+- Kev SCImago (3.0 GiB, 119,101 responses) stores 2.1 GiB of repeated `settings_json`,
+  about 17.6 KiB per row. Most of that is the execution-container file manifest.
+
+Job outcomes:
+
+- Decision3 Kickstarter `11781945` completed.
+- Kev release `11784791` failed with exit 76, a publication-lock timeout during that
+  Kickstarter publication. The dispatcher's retry `11784836` reused two published stores.
+
+The local fix (GPFS scratch fallback with per-job cleanup) is not yet deployed. Commit
+`283922d` was pushed before the owner asked to hold pushes; the follow-up stays local.
+
 ### Intern publication recovery on 9 November
 
 Perplexity release `11778676` passed. Intern staging `11778900` and all 18 Intern

@@ -458,6 +458,16 @@ and an exclusive lease, refuses on unknown scheduler state and never cleans the 
 root. A released runtime must be restaged before GPU work; durable checkpoints and images
 need no rebuild.
 
+**Publication unions.** Publishing a decision store builds and validates the merged copy
+before backing it up to PROJECT. That needs 2 × (durable store + incoming) + 0.5 GiB of
+temporary space, about 140 GiB for a 62 GiB store. On Mindwell B200 nodes, `/tmp` is a
+590 GiB node-local volume shared by every job on the node (`TmpDisk=0`, nothing reserved).
+When it cannot hold the union, publication uses this job's own directory on Mindwell GPFS
+scratch: `$VSC_SCRATCH_GPFS1/jevpfn-transfers/publication-temporary/<jobid>`. That use is
+bounded by the personal scratch allocation minus headroom. A normal exit removes the
+directory. Directories left by killed jobs are removed only after `sacct` reports those jobs
+terminal; unknown or unverifiable jobs are kept. wICE never uses this fallback.
+
 Retention recorded at migration acceptance (3–4 November); check current manifests and
 consumers before retirement. These are documented exceptions, not a claim that scratch
 is empty or that every retained file is still needed today:

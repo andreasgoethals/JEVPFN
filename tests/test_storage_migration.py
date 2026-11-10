@@ -76,7 +76,7 @@ def test_publication_union_falls_back_to_native_scratch_when_node_disk_is_too_sm
         tmp_path, monkeypatch, "mindwell", lambda local, scratch: {local: 2**30, scratch: 2**42})
     assert stage._publication_temporary_root(work, 2**29) == local
     fallback = stage._publication_temporary_root(work, 140 * 2**30)
-    assert fallback == scratch / "jevpfn-transfers" / "publication-temporary"
+    assert fallback == scratch / "jevpfn-transfers" / "publication-temporary" / "99"
     assert not fallback.is_relative_to(work.parent.parent)  # Outside every workspace.
     assert stage._publication_temporary_root(work) == local  # Unsized callers are unchanged.
 
@@ -86,6 +86,44 @@ def test_publication_union_fallback_respects_the_personal_scratch_budget(tmp_pat
         tmp_path, monkeypatch, "mindwell", lambda local, scratch: {local: 2**30, scratch: 2**42})
     with pytest.raises(OSError, match="Insufficient native space"):
         stage._publication_temporary_root(work, 600 * 2**30)  # Above the 500 GiB allocation.
+
+
+def test_stale_fallbacks_are_removed_only_for_terminal_jobs(tmp_path, monkeypatch):
+    from src.cluster import scratch_capacity
+
+    stage, _, scratch, work = _node_with_free(
+        tmp_path, monkeypatch, "mindwell", lambda local, scratch: {local: 2**30, scratch: 2**42})
+    root = scratch / "jevpfn-transfers" / "publication-temporary"
+    for job in ("11", "12", "13", "99"):
+        (root / job / ".union-x").mkdir(parents=True)
+    (root / "notes").mkdir()
+    calls = []
+
+    def sacct(command):
+        calls.append(command)
+        return "11|COMPLETED\n12|RUNNING\n13|CANCELLED by 1\n"
+
+    monkeypatch.setattr(scratch_capacity, "_scheduler_read", sacct)
+    assert stage._publication_temporary_root(work, 140 * 2**30) == root / "99"
+    # Terminal jobs are retired; running, own and unrecognized entries stay.
+    assert sorted(p.name for p in root.iterdir()) == ["12", "99", "notes"]
+    assert "--jobs=11,12,13" in calls[0] and "--clusters=mindwell" in calls[0]
+
+
+def test_stale_fallbacks_stay_when_slurm_cannot_be_queried(tmp_path, monkeypatch):
+    from src.cluster import scratch_capacity
+
+    stage, _, scratch, work = _node_with_free(
+        tmp_path, monkeypatch, "mindwell", lambda local, scratch: {local: 2**30, scratch: 2**42})
+    stale = scratch / "jevpfn-transfers" / "publication-temporary" / "11"
+    stale.mkdir(parents=True)
+
+    def unavailable(command):
+        raise scratch_capacity.QueueCheckUnavailable("down")
+
+    monkeypatch.setattr(scratch_capacity, "_scheduler_read", unavailable)
+    stage._publication_temporary_root(work, 140 * 2**30)
+    assert stale.is_dir()
 
 
 def test_wice_publication_never_falls_back_to_cross_mounted_scratch(tmp_path, monkeypatch):

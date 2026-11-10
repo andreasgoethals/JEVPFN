@@ -5,6 +5,13 @@ date; old model rosters, grids, paths and pending statuses are not current instr
 Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for commands and
 [Operational evidence](AGENTS_MEMORY.md) for dated campaign outcomes.
 
+## 10-11-2026
+
+- Publish oversized decision-store unions on Mindwell GPFS scratch when the shared B200
+  `/tmp` cannot hold them. Before this, four finished dataset jobs failed at final
+  publication. Each job's fallback directory is removed after publication; leftovers from
+  killed jobs are removed only once Slurm reports those jobs terminal (see [VSC](VSC.md)).
+
 ## 09-11-2026
 
 - Restore the local checkout after Google Drive for desktop mirrored a cloud trash of the

@@ -281,7 +281,7 @@ def test_mindwell_publication_uses_native_scratch_when_node_disk_cannot_hold_uni
     local.mkdir()
     fallback = work.parents[2] / "jevpfn-transfers" / "publication-temporary"
     monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
-    monkeypatch.setenv("SLURM_JOB_ID", "gpu-fixture")
+    monkeypatch.setenv("SLURM_JOB_ID", "4242")
     monkeypatch.setenv("VSC_SCRATCH_NODE", str(local))
     # The shared node disk is nearly full; native scratch has room.
     monkeypatch.setattr(stage.shutil, "disk_usage", lambda p: SimpleNamespace(
@@ -289,13 +289,14 @@ def test_mindwell_publication_uses_native_scratch_when_node_disk_cannot_hold_uni
     real = stage.merge_cache
 
     def scratch_merge(incoming, destination, **kwargs):
-        assert incoming.is_relative_to(fallback) and destination.is_relative_to(fallback)
+        assert incoming.is_relative_to(fallback / "4242") and destination.is_relative_to(fallback / "4242")
         return real(incoming, destination, **kwargs)
 
     monkeypatch.setattr(stage, "merge_cache", scratch_merge)
     assert stage.publish("intern")["decision_stores"] == 1
     assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
         request("intern"), kind="verified_response") == response()
+    # This job's directory is removed after publication; scratch stays clear.
     assert source.path.is_file() and not list(fallback.iterdir()) and not list(local.iterdir())
 
 
