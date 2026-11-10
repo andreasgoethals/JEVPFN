@@ -1,46 +1,25 @@
 # JEVPFN
 
-JEVPFN measures how much **label-free decision features from text** add to fixed tabular
-predictors. It compares those features with frozen embeddings, supervised target-aware embeddings and native-text systems
-on 18 of MulTaBench's 20 core text datasets.
+JEVPFN compares **task-conditioned decision features, frozen embeddings, supervised
+target-aware embeddings and native-text systems** on 18 selected MulTaBench datasets.
+The study asks how these representations help fixed tabular predictors on shared
+cross-validation splits. Decision features use fixed task definitions and row text
+without fitting to dataset labels; TAR is a separate supervised comparison.
 
 ## Project status
 
-Experiment 0A has been accepted for the eleven open-weight extractors and three encoders.
+**Last recorded evidence: 6 November 2026.** Experiment 0A was accepted for eleven
+open-weight extractors and three frozen encoders.
 The local Jev 1.14 pilot also passed on the first 100 rows of each dataset. Feature
-creation uses a frozen VSC checkout. The 5 November audit found all frozen embeddings
-and three open-weight providers complete; Perplexity and Intern need operational recovery.
-Once extraction finishes, the next stage is to verify the
-published features, prepare fold-local PCA and TAR, and qualify the benchmark in 0B.
+creation uses a frozen VSC checkout. The 6 November audit found all frozen embeddings
+and five open-weight providers complete. Database recovery passed; the detached VSC
+dispatcher resumes the remaining six providers after verified workspace publication.
+This is a dated observation, not a live job status. Next: verify complete published
+features, prepare fold-specific PCA and TAR, and qualify the benchmark in 0B.
 TAR is implemented locally; its new runtime and training jobs still need real 0B validation.
 Local Jev extraction is authorized within the existing EUR 5 allowance; full coverage
 will need additional funding. [Run evidence](docs/AGENTS_MEMORY.md) ·
 [VSC workflow](docs/VSC.md#46-experiment-0b)
-
-## Local setup
-
-From the repository root in Windows PowerShell, create a Python 3.12 environment once.
-
-```powershell
-py -3.12 -m venv --prompt JEVPFN .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev,notebooks,control]"
-.\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
-```
-
-Prepare the pinned data and questions, audit the inputs, and run the notebooks.
-
-```powershell
-.\.venv\Scripts\python.exe -m src.data.prepare
-.\.venv\Scripts\python.exe -m src.jev.preparation
-.\.venv\Scripts\python.exe -m src.jev.question_audit
-.\.venv\Scripts\python.exe -m src.utils.run_notebooks
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-Check `$LASTEXITCODE` after each command. Preparation reuses verified downloads.
-`src.jev.preparation --rebuild` regenerates the question stores transactionally while
-preserving paid responses and features. For the full shared package lock and the
-Windows/Linux interpreter difference, see [CPU environment parity](docs/VSC.md#cpu-environment-parity).
 
 ## Benchmark design
 
@@ -67,43 +46,38 @@ and embedding arms. The experiments use fixed settings and prespecified recipes.
 [Embedding grid](<config/5. experiment_2/embeddings.yaml>) ·
 [Model interfaces and prior work](docs/LITERATURE_REVIEW.md)
 
-### Decision features
+The full [experiment guide](docs/EXPERIMENTS.md) explains the grid arithmetic, feature
+schemas, missing inputs, training boundaries, metrics and acceptance gates. It is the
+single reference for the current scientific design. [TAR](docs/TAR.md) records exact
+upstream provenance and declared differences; the [literature review](docs/LITERATURE_REVIEW.md)
+explains the model choices and limits of the contribution.
 
-Each frozen decision model answers a fixed question using task and class definitions
-plus one named text field or all available text fields. Requests exclude row targets,
-class frequencies, non-text row values and model feedback. A binary response contributes
-the positive-class probability, multiclass contributes the complete probability vector,
-and regression contributes the probability-weighted mean of nine evidence levels from −4
-to +4. These scores express the model's evidence. Regression scores use the rubric scale,
-and calibration on benchmark targets requires separate evidence.
+## Local setup
 
-Empty text yields missing features. Identical requests reuse the stored response, including
-joint/per-column matches. Context overflow stops decision extraction. Frozen encoders cover
-long text in chunks and cache their vectors before PCA. Jev 1.14.0 runs locally through
-TypeSafe. The eleven other extractors run on VSC B200. See the
-[extractor roster and pins](<config/2. feature_creation/extractors.yaml>) and
-[dataset and question definitions](docs/DATA_SOURCES.md).
+From the repository root in Windows PowerShell, create a Python 3.12 environment once.
+These dependencies support local inspection and tests; model runtimes are separate.
 
-### Evaluation and interpretation
+```powershell
+py -3.12 -m venv --prompt JEVPFN .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,notebooks,control]"
+.\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
+```
 
-All arms use the same five shuffled outer folds, stratified for classification. PCA,
-imputation and other fitted preprocessing use training rows only. Binary F1 thresholds
-use out-of-fold predictions from three inner splits of the outer training partition in
-Experiments 1, 2 and 4. Experiment 3 preserves MulTaBench’s single encoder fit per outer
-fold with internal early stopping; binary secondary metrics use a fixed 0.5 threshold.
-TAR adds **90 shared encoder fits**, reused across predictors and PCA recipes. See
-[TAR provenance, differences and preparation](docs/TAR.md).
+Prepare the pinned data and questions, audit the inputs, and run the notebooks.
 
-Headline metrics are binary ROC-AUC, multiclass macro one-vs-rest ROC-AUC, and regression R².
-The benchmark retains predictions, probabilities, secondary metrics, timings and resources.
-Effects pair the same dataset, predictor and folds. Fold standard deviations describe
-variation. Optional Wilcoxon/Holm tests use one effect per dataset and require an approved
-[analysis plan](<config/8. synthesis/analysis.yaml>) before scores are inspected.
+```powershell
+.\.venv\Scripts\python.exe -m src.data.prepare
+.\.venv\Scripts\python.exe -m src.jev.preparation
+.\.venv\Scripts\python.exe -m src.jev.question_audit
+.\.venv\Scripts\python.exe -m src.utils.run_notebooks
+.\.venv\Scripts\python.exe -m pytest -q
+```
 
-Shuffled CV measures performance on held-out rows from the released datasets. Exact repeats
-can cross folds. The benchmark reports seen/unseen-text cohorts and 0B checks for exact
-target copies and class recodings. Prospective feature availability and pretrained model
-exposure require separate evidence. [Interpretation and limitations](docs/LITERATURE_REVIEW.md#6-leakage-protection-uncertainty-and-valid-interpretation)
+Check `$LASTEXITCODE` after each command and stop on failure. These commands do not launch
+paid API calls or VSC inference. Preparation reuses verified downloads.
+`src.jev.preparation --rebuild` regenerates the question stores transactionally while
+preserving paid responses and features. For the full shared package lock and the
+Windows/Linux interpreter difference, see [CPU environment parity](docs/VSC.md#cpu-environment-parity).
 
 ## Workflow and outputs
 
@@ -117,6 +91,7 @@ The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 | `data/raw/` | Pinned source datasets and provenance |
 | `data/decision_inputs/` | One versioned question SQLite store per selected dataset |
 | `data/jev_cache/` | Permanent response, accounting and feature stores, plus Jev diagnostic ledgers |
+| `data/decision_features/` | Verified portable snapshots of complete models for local analysis |
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
 | `output_JEVPFN/<phase>/` | Validation evidence, logs, PCA parameters and resumable prediction records |
 
@@ -131,14 +106,39 @@ Notebooks run locally and write paper-width PDFs and printed reports. The runner
 `output_JEVPFN/figures/`, and the aggregate report is `output_JEVPFN/All Results.md`.
 Result figures appear as complete saved evidence becomes available.
 
+The feature-comparison notebook examines row-level vote splits, matching-class
+correlations, full probability differences, confidence, text grouping and exact reuse.
+It includes hash-verified source examples and exports all joint rows to compressed
+Parquet. Only fully downloaded extractors enter comparisons; agreement is not accuracy.
+
 | Stage | Notebooks |
 |---|---|
 | Explore and prepare | [Data](<notebooks/0. exploration/01_data_exploration.ipynb>), [input design](<notebooks/0. exploration/02_jev_input_design.ipynb>), [questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) |
 | Extract and validate | [Workload and feature widths](<notebooks/2. feature_creation/03_feature_creation.ipynb>), [decision features](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>), [0A](<notebooks/3. experiment_0/01_before_feature_creation.ipynb>), [0B](<notebooks/3. experiment_0/02_after_feature_creation.ipynb>) |
 | Evaluate | [Decision features](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>), [frozen embeddings](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>), [TAR](<notebooks/6. experiment_3/01_target_aware_embeddings.ipynb>), [native text](<notebooks/7. experiment_4/01_native_text_systems.ipynb>), [synthesis](<notebooks/8. synthesis/01_representation_comparison.ipynb>) |
 
-[Changelog](docs/CHANGELOG.md) · [Citation](CITATION.cff) · [License](LICENSE)
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [Experiments](docs/EXPERIMENTS.md) | Scientific design, grid, evaluation and qualification gates |
+| [Data sources](docs/DATA_SOURCES.md) | Dataset selection, text rules and question semantics |
+| [Literature review](docs/LITERATURE_REVIEW.md) | Evidence, model choices and interpretation |
+| [TAR](docs/TAR.md) | Upstream provenance and explicit project differences |
+| [VSC operations](docs/VSC.md) | Access, storage, runtimes, commands and recovery |
+| [Operational evidence](docs/AGENTS_MEMORY.md) | Dated results, receipts and unresolved validation |
+| [Changelog](docs/CHANGELOG.md) | Historical implementation changes |
+| [Agent instructions](AGENTS.md) | Authorization boundaries and maintenance rules |
+
+## Citation, licensing and template
+
+Use [CITATION.cff](CITATION.cff) to cite this software. Project code is [MIT licensed](LICENSE);
+datasets, weights and vendored code retain their own licences and attribution.
 
 The project follows the [research template](docs/TEMPLATE.md) with numbered phase folders,
 `output_JEVPFN`, project-specific aggregate report names, permanent paid-response stores,
-and separate local/VSC execution gates. Data and weights retain their source licences.
+and separate local/VSC execution gates.
+The project also retains its staging-root/publication interface and its explicit destructive
+output-reset helper. Unlike routine template cleanup, that helper can remove result files;
+use it only for an authorized reset with required backups. Automatic desktop job monitoring is disabled;
+current chat and platform instructions govern any requested monitoring.

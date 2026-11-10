@@ -15,20 +15,7 @@ from matplotlib.ticker import MaxNLocator, PercentFormatter
 from src.evaluation.decision_comparison import dataset_balanced
 from src.visualize import style
 
-LABELS = {
-    "jev": "Jev",
-    "liquid": "Liquid d1-3B",
-    "liquid_lfm3": "Liquid d1-2B",
-    "perplexity": "Perplexity",
-    "cloudflare": "Clef-flash",
-    "intern": "Intern-Decision-4B",
-    "strands": "Strands",
-    "h2o": "H2O-Lightning-4B",
-    "sii": "SII-Decision-27B",
-    "kev": "Kev-27B",
-    "decision3": "Decision 3.0 Turbo",
-    "nimble": "Nimble-9B",
-}
+LABELS = style.DECISION_SHORT
 TASKS = {
     "binary_classification": "Binary",
     "multiclass_classification": "Multiclass",
@@ -146,13 +133,13 @@ def coverage_figures(result, options):
             f"coverage_{mode}",
             (
                 f"Availability of complete cached feature artifacts for {MODES[mode].lower()}. "
-                "Pending means no selected artifact exists; it is not a measured model failure. "
+                "Pending indicates incomplete coverage for this comparison. "
                 "Only saved, checksum-verified artifacts enter subsequent comparisons."
             ),
         )
 
 
-def pair_figures(result, options):
+def pair_figures(result, options, *, headline_only=False):
     pairs = result.table("pairs")
     if pairs.empty:
         return
@@ -161,10 +148,17 @@ def pair_figures(result, options):
         pairs, ["task", "representation", "weighting", "model_a", "model_b"], metrics
     )
     for (task, mode), subset in overall.groupby(["task", "representation"], sort=False):
-        for metric in ["agreement", "total_variation", "js_divergence"] + (
+        if headline_only and mode != "joint":
+            continue
+        plotted_metrics = ["total_variation"] if headline_only else [
+            "agreement", "total_variation", "js_divergence"
+        ] + (
             ["scalar_mae", "pearson"] if task == "regression" else []
-        ):
+        )
+        for metric in plotted_metrics:
             data = subset[subset.weighting.eq("unique_inputs")]
+            if data.empty:
+                continue
             names = [p for p in options["providers"] if p in set(data.model_a) | set(data.model_b)]
             matrix = pd.DataFrame(np.nan, index=names, columns=names)
             for row in data.itertuples():
@@ -196,10 +190,14 @@ def pair_figures(result, options):
                 (
                     f"{label} between decision models on matched {MODES[mode].lower()} inputs for {TASKS[task].lower()} tasks. "
                     f"Each input counts once within its text group; groups are averaged within dataset, then datasets equally ({int(counts.min())}–{int(counts.max())} per pair). "
-                    "Missing cells are unavailable comparisons. Counts and row-weighted estimates accompany the figure in the report. "
-                    "Classification agreement uses 0.5 for binary probabilities and argmax for multiclass; regression agreement uses the configured sign categories."
+                    "The diagonal omits self-comparisons. Counts and row-weighted estimates are retained in the analysis tables. "
+                    + ("Classification agreement uses 0.5 for binary probabilities and argmax for multiclass; "
+                       "regression agreement uses the configured sign categories." if metric == "agreement" else
+                       "The distance describes differences between reported probabilities, independent of outcome labels.")
                 ),
             )
+        if headline_only:
+            continue
         # Show how much duplicates change the measured agreement, without substituting one estimate.
         row = subset[subset.weighting.eq("rows")].set_index(["model_a", "model_b"])
         unique = subset[subset.weighting.eq("unique_inputs")].set_index(["model_a", "model_b"])
@@ -268,7 +266,7 @@ def consensus_figures(result, options):
             fig,
             f"outliers_{task}_{mode}",
             (
-                "Distance to the arithmetic mean of the other models on the complete configured roster. "
+                "Distance to the arithmetic mean of the other models included in the comparison. "
                 "Classification uses total variation; regression uses absolute expected-direction difference. "
                 "Exact ties for furthest receive fractional credit. Unique inputs, text groups and datasets receive equal weight at their respective aggregation levels."
             ),

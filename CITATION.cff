@@ -1,7 +1,7 @@
 cff-version: 1.2.0
-message: "If you use this research software, please cite it using this metadata."
+message: "If you use JEVPFN, cite this software and the datasets and models used in your study."
 type: software
-title: "JEVPFN: Decision-model text features for tabular prediction"
+title: "JEVPFN: Comparing text representations for tabular prediction"
 authors:
   - family-names: Goethals
     given-names: Andreas
@@ -11,17 +11,18 @@ repository-code: https://github.com/andreasgoethals/JEVPFN
 url: https://github.com/andreasgoethals/JEVPFN
 license: MIT
 abstract: >-
-  Research software comparing frozen task-conditioned decision-model features,
-  frozen text embeddings, supervised target-aware E5 embeddings with training-fold
-  PCA, and native-text predictors on
-  18 selected MulTaBench text datasets. Decision-feature construction excludes
-  row labels and non-text row values. Cached per-column and joint representations
-  support paired comparisons within fixed predictors and cross-validation splits.
-  Exploration retains all 20 core datasets.
+  Research software comparing task-conditioned decision features, frozen text
+  embeddings, supervised target-aware E5 embeddings and native-text prediction
+  systems on 18 selected MulTaBench datasets. Decision requests use fixed task
+  definitions and row text without fitting to dataset labels. Decision and embedding
+  comparisons share six tabular predictors and five outer cross-validation folds;
+  supervised adaptation and fitted preprocessing remain within training partitions.
+  The software retains predictions, feature provenance, timings and validation evidence.
 keywords:
   - tabular prediction
   - decision models
-  - text features
+  - text representations
   - text embeddings
+  - target-aware representation learning
   - reproducible evaluation
   - MulTaBench

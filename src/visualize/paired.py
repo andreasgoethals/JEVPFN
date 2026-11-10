@@ -51,7 +51,7 @@ def _effect_grid(ax, values, wins, counts, limit, cmap):
     for (i, j), n in np.ndenumerate(counts):
         if n:
             dark = abs(values[i, j]) > 0.6 * limit
-            ax.text(j, i, f"{wins[i, j]:.0f}/{n:.0f}", ha="center", va="center", fontsize=5.8,
+            ax.text(j, i, f"{wins[i, j]:.0f}/{n:.0f}", ha="center", va="center", fontsize=7,
                     color=style.BACKGROUND_COLOR if dark else style.TEXT_COLOR)
     ax.tick_params(length=0)
     for spine in ax.spines.values():
@@ -109,13 +109,13 @@ def effect_matrix_figures(paired, phase="experiment_1"):
                     i, j = rows.index(key), models.index(record.model_id)
                     values[i, j], wins[i, j], counts[i, j] = record.effect, record.wins, record.n
             _effect_grid(ax, values, wins, counts, limit, cmap)
-            ax.set_xticks(range(len(models)), [short[m] for m in models], rotation=90, fontsize=6.5)
+            ax.set_xticks(range(len(models)), [short[m] for m in models], rotation=90, fontsize=7)
             if panel is not None:
                 ax.set_title(MODES[panel], fontsize=8, color=style.MODE_COLORS[MODE_KEYS[panel]])
             if phase != "experiment_1":
                 for boundary in range(len(recipes), len(rows), len(recipes)):
                     ax.axhline(boundary - 0.5, color=style.BACKGROUND_COLOR, linewidth=2)
-        axes[0, 0].set_yticks(range(len(rows)), row_labels, fontsize=6.5)
+        axes[0, 0].set_yticks(range(len(rows)), row_labels, fontsize=7)
         for tick, row in zip(axes[0, 0].get_yticklabels(), rows):
             key = row if phase == "experiment_1" else row[0]
             tick.set_color(style.DECISION_COLORS.get(key, style.EMBEDDING_COLORS.get(key, style.TEXT_COLOR)))

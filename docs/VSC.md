@@ -1,9 +1,17 @@
 # VSC operations
 
-The [README](../README.md) defines the benchmark. The [operational record](AGENTS_MEMORY.md)
-holds dated job status, receipts and recovery history. For the active campaign, the next
-stage begins with [feature verification and 0B](#46-experiment-0b) after extraction and
-publication finish. Keep the DATA checkout frozen while it has consumers.
+This runbook covers access, storage and stage-specific commands. [Experiments](EXPERIMENTS.md)
+defines the science; [Operational evidence](AGENTS_MEMORY.md) holds dated jobs, receipts
+and recovery history. Commands below are reference procedures, not instructions to
+restart an active campaign or permission to spend, submit or delete.
+
+The last recorded stage is **feature creation**. Preserve the active DATA checkout,
+queued consumers, publications and recovery state. After extraction finishes, follow
+[feature verification and 0B](#46-experiment-0b); a fresh reset is not required at that
+transition. Confirm live jobs and artifacts before acting on a dated status.
+
+[Access](#1-access) · [Storage](#2-storage-and-hardware) · [Runtimes](#3-runtimes-and-containers) ·
+[Pipeline](#4-pipeline) · [Maintenance](#5-working-sets-and-storage-maintenance) · [Transfer](#6-utilization-and-transfer)
 
 ## 1. Access
 
@@ -17,6 +25,9 @@ The owner approves KU Leuven Authenticator. Use native Windows OpenSSH with stri
 checking and the bounded LF stdin probe in [TEMPLATE](TEMPLATE.md). The gateway drops
 unredirected stderr, so start the script with `exec 2>&1` and require both output markers
 and a successful exit. Git Bash's `ssh` cannot use the Windows agent.
+On 6 November the authenticated login shell stalled. Native SSH with the explicit
+remote command `/bin/bash --noprofile --norc -s` and the same bounded LF script
+passed the marker and exit-status probe on the Leuven gateway.
 
 Inspection and workload authorization are separate. When the checkout is idle, fast-forward
 `main`, verify the commit and rerun affected checks before freezing the next stage.
@@ -55,8 +66,9 @@ Lustre-to-GPFS migration and its quiescent copy protocol are in the
 
 ## 3. Runtimes and containers
 
-All cluster dependencies are sealed, compact PROJECT images; build files use temporary
-scratch. Keep old images only while a recorded run or rollback needs them.
+Cluster dependencies are installed inside sealed PROJECT images; build files use temporary
+scratch. The local Windows venv is separate. Keep older images only for recorded reproduction
+or rollback requirements; [retention exceptions](#5-working-sets-and-storage-maintenance) are explicit.
 
 - **CPU controller.** `config/3. experiment_0/control_runtime.yaml` records exact package
   versions. `control_build.slurm` builds `control-v1`; `control_test.slurm` tests Slurm
@@ -104,8 +116,8 @@ $jevControlLock = Join-Path $env:TEMP 'jevpfn-control-requirements.txt'
 .\.venv\Scripts\python.exe -m src.cluster.preflight --runtime-parity
 ```
 
-The verifier reports package parity separately from interpreter parity. Windows
-currently uses CPython 3.12.10 and Windows wheels. The VSC CPU image uses Linux
+The verifier reports package parity separately from interpreter parity. The last verified Windows runtime
+uses CPython 3.12.10 and Windows wheels. The VSC CPU image uses Linux
 CPython 3.12.15. Notebook and hosted API extras are local. The sealed, model-specific
 Linux/CUDA images provide the benchmark runtimes. An active VSC campaign keeps
 its frozen checkout and sealed images through completion.
@@ -116,7 +128,9 @@ its frozen checkout and sealed images through completion.
 ### 4.1 Reset and upload (future authorized campaign only)
 
 For a separately authorized new campaign, reconcile existing jobs, stop JEVPFN writers,
-and verify the reviewed source on both machines. Preview with
+and verify the reviewed source on both machines. Back up irreplaceable results first:
+this explicit reset can delete saved predictions and validation evidence, unlike routine
+template cleanup. Preview with
 `python -m src.utils.output_cleanup --include-archives` on each machine. Add `--tier both`
 on VSC. Review the listed targets before running the destructive reset below.
 
@@ -206,7 +220,8 @@ Between reviewed stages, with no writers, run on both machines:
 python -m src.cluster.freeze --finish-stage --reviewed-by Andreas --writers-stopped
 ```
 
-then reconfigure and record a new freeze. Accepted evidence is never deleted at a transition.
+Then reconfigure and record a new freeze. Preserve accepted evidence at every transition.
+The reset procedure above is for a separately authorized clean campaign, not routine recovery.
 
 ### 4.4 Open-weight and encoder extraction
 
@@ -216,19 +231,25 @@ Run from the frozen checkout with the controller active.
 
 ```bash
 mkdir -p "output_JEVPFN/2. feature_creation/logs"
-python -m src.cluster.feature_campaign
-python -u -m src.cluster.feature_campaign --execute --watch
+"${JEVPFN_PYTHON:?}" -m src.cluster.feature_campaign
+"$JEVPFN_PYTHON" -u -m src.cluster.feature_campaign --execute --watch
 ```
 
-**Active campaign.** The reviewed `src.cluster.feature_admission` controller owns the
+**Expanded campaign.** The reviewed `src.cluster.feature_admission` controller owns the
 expanded 274-step graph. It schedules 198 decision dataset jobs and 54 encoder dataset
-jobs, plus staging and release. The output roster is 396 decision blocks and 54 embedding
-stores. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
+jobs, plus staging and release. The full output roster is 396 decision blocks (11 × 18 × 2) and 54 embedding
+stores (3 × 18). These are planned totals, not counts of completed work. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
 limit still apply. See the [recorded handover](AGENTS_MEMORY.md#parallel-admission-2-november).
 
 **Monitor and recover.** Reconcile the manifest, Slurm accounting, and publication receipts.
 A step marked `starting` without a job ID needs accounting review before retry. Named
-submission-limit refusals remain pending. Other policy errors or timeouts need review.
+submission-limit refusals remain pending. The feature dispatcher retries confirmed
+timeouts, node/boot failures, preemption and a release's unavailable queue check or
+publication-lock timeout up to twice. The release reuses verified publication progress
+on retry. An unavailable queue check stops the release before publication. A failed dependency remains
+in the campaign plan and is submitted after the replacement passes. An exhausted
+retry or data-integrity error requires review. Detached VSC login-node dispatch
+continues independently of the desktop connection.
 The 2 November snapshot measured 500 submitted and 16 running slots per user/account
 on Mindwell. Arrays use one submission slot per pending task. Recheck site limits as needed.
 
@@ -260,7 +281,7 @@ a busy durable store must finish publication before its next reader starts.
 Do not pull the local TAR/benchmark changes into active feature jobs. A recovery
 handover must distinguish operational fixes from the later scientific grid update.
 
-### 4.5 Jev (local, owner-run)
+### 4.5 Jev (local, explicitly budgeted)
 
 The local CLI loads the ignored `secrets/typesafe.local.json`. `TYPESAFE_API_KEY` takes
 precedence. Keep credentials local. The following paid validation commands are for
@@ -281,15 +302,15 @@ an authorized Jev validation stage.
   Provider-enforced 32k state/question and 64k request bounds; the 64k billing
   reservation is a spending bound, not a token count. Overflow stops without truncation.
 - `python -m src.jev.setup_pilot --configure` creates the private config (USD 0.042/M,
-  conservative EUR/USD, EUR 5 pilot budget) and never replaces an existing one; review
-  `config/2. feature_creation/jev.local.yaml` instead. The reviewed pilot runs one worker
-  at 1 RPS (setup default 0.2 RPS).
+  a conservative EUR/USD conversion and EUR 5 pilot budget) and never replaces an existing one; review
+  `config/2. feature_creation/jev.local.yaml` instead. The historical prefix pilot used one worker at 1 RPS (setup default 0.2 RPS); the
+  later existing-balance policy is described below.
 - Durable reservations, bounded 429 handling and timeout stops prevent repeat billing.
   `python -m src.jev.recovery DATASET_ID` inspects stopped requests without calls;
   `--review FILE --apply --writers-stopped` transitions preserve charges and history.
 - HTTP 402 or recognized structured credit codes stop the account's dispatch. Completed
-  responses stay reusable; the uncertain request remains reserved. Top up, review its
-  billing through `src.jev.recovery`, then resume the same command. TypeSafe does not
+  responses stay reusable; the uncertain request remains reserved. After owner-approved
+  funding and billing review through `src.jev.recovery`, resume the same command. TypeSafe does not
   document its exact exhausted-balance response or guarantee it was unbilled. Unknown
   API failures also stop; logs retain status codes without provider messages or secrets.
 
@@ -309,7 +330,9 @@ With `continue_on_dataset_budget_stop: true`, full mode spends each existing dat
 allocation and continues to the next; partial datasets remain cached responses only.
 The final status is `stopped_requires_budget`, never a full-feature success. Account,
 decoder and uncertain-billing failures still stop the whole run.
-The owner-authorized existing-balance run uses the ignored `jev_funded.local` config:
+The 5 November authorization covers only the existing EUR 5 allowance, with a cumulative
+USD 5.50 ceiling including historical charges. It does not fund full dataset coverage
+or authorize an automatic top-up. This run uses ignored `jev_funded.local`:
 
 ```powershell
 .\.venv\Scripts\python.exe -u -m src.jev.hosted --config feature_creation/jev_funded.local --execute --full
@@ -337,7 +360,8 @@ The merge validates identities and preserves other providers. Restage predictor 
 
 After extraction and publication finish, reconcile terminal jobs and verify the durable
 feature stores. Import the independent local copy using [the transfer procedure](#6-utilization-and-transfer).
-Include complete owner-run Jev features when qualifying the full roster.
+The full twelve-extractor roster also needs complete Jev features. A funded partial run
+or a portable notebook snapshot does not meet that gate.
 
 1. **Bind inputs.** Close the reviewed extraction stage using [the freeze procedure](#43-acceptance).
    Set each benchmark `feature_selectors` entry to the provider, model,
@@ -434,7 +458,9 @@ and an exclusive lease, refuses on unknown scheduler state and never cleans the 
 root. A released runtime must be restaged before GPU work; durable checkpoints and images
 need no rebuild.
 
-Retention exceptions, each retired only by a reviewed, scoped cleanup with no consumers:
+Retention recorded at migration acceptance (3–4 November); check current manifests and
+consumers before retirement. These are documented exceptions, not a claim that scratch
+is empty or that every retained file is still needed today:
 
 - Token recovery partitions (~39 GiB) stay on PROJECT through the first verified
   production run; they are excluded from GPU staging.
@@ -447,11 +473,25 @@ Retention exceptions, each retired only by a reviewed, scoped cleanup with no co
 
 ## 6. Utilization and transfer
 
+### Complete-model snapshots during extraction
+
+For notebook refreshes during extraction, copy only whole completed decision-model
+batches. A scoped bundle requires successful accounting and both published feature
+blocks for every selected dataset. The portable stores under `data/decision_features/`
+retain the original numeric tables, row/request links and digests verified against the
+actual source payloads. The comparison notebook reads them alongside local caches and
+includes only providers with both representations on all selected datasets. These
+stores support inspection and do not stand in for the full response ledgers in 0B.
+
+### Timing and utilization
+
 GPU telemetry samples the allocated GPUs every ten seconds (utilization, VRAM, power).
 Timings separate loading, inference, cache reuse, fit and prediction; inspect them before
 changing batch sizes or resources.
 
-After all writers stop and failed scratch jobs are published, export on VSC and import
+### Full verified transfer
+
+After all writers stop and recoverable scratch stores are published, export on VSC and import
 locally (substitute the printed bundle name):
 
 ```bash
@@ -472,4 +512,5 @@ Exports contain durable data, results and DATA logs/manifests, never credentials
 or environments; `export --omit-token-counts` omits only rebuildable token databases.
 Import verifies checksums and merges databases transactionally, stopping on conflicts.
 VSC freeze receipts land under `manifests/imported_revisions/`, never as the active local
-freeze. Keep the VSC copy as the second copy.
+freeze. Keep the durable VSC copy and the verified local copy. Portable notebook snapshots support
+analysis; they do not replace complete response/accounting ledgers or full 0B evidence.

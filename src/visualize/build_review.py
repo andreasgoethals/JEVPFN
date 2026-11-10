@@ -41,7 +41,7 @@ def extraction_figure(estimates, summary, price):
                      f"(range \\${totals[5]:,.2f}–\\${totals[3]:,.2f})", ha="right", va="bottom",
                      fontsize=7, transform=axes[1].transAxes)
         axes[1].set_xlim(0, cost[3].max() * 1.08)
-        axes[1].set_xlabel("Jev input cost per dataset (USD)\n(dot: 4 chars/token; line: 5–3)")
+        axes[1].set_xlabel("Approximate Jev input cost (USD)\n(dot: 4 chars/token; line: 5–3)")
     for ax in axes:
         layout.light_grid(ax)
         layout.task_rules(ax, order.task_type)
@@ -51,8 +51,8 @@ def extraction_figure(estimates, summary, price):
         "extraction_workload_and_cost",
         f"Left: unique requests per extractor for the {len(order)} selected datasets after exact "
         "reuse; joint requests equal to a single-field request are counted once, as per-column. "
-        "Right: Jev input cost of building both representations at the configured price, with "
-        "request bodies tokenized at 4 characters per token (range: 5 to 3). Costs exclude retries "
+        "Right: a character-based Jev cost scenario at the configured price for both representations. "
+        "The estimate uses 4 characters per token (range 5 to 3) on request bodies. Costs exclude retries "
         "and unknown billing overhead; open-weight extractors incur GPU time instead.",
     )
 
@@ -76,7 +76,7 @@ def regression_scale_figure(labels):
                 weight="bold", color="white" if abs(level) >= 3 else style.TEXT_COLOR)
         name, _, criterion = wording.partition(":")
         ax.text(0.07, row, name, va="center", fontsize=7, weight="bold")
-        ax.text(0.29, row, fill(criterion.strip(), 98), va="center", fontsize=6.8,
+        ax.text(0.29, row, fill(criterion.strip(), 98), va="center", fontsize=7,
                 linespacing=1.1)
     ax.axhline(3.5, xmin=0.07, color=style.GRID_COLOR, linewidth=0.6)
     ax.axhline(4.5, xmin=0.07, color=style.GRID_COLOR, linewidth=0.6)

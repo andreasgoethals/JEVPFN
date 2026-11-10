@@ -126,7 +126,7 @@ def overview_figures(table, characters_per_token=4.0):
         for j, (column, _, pattern, _) in enumerate(specs):
             value = row[column]
             text = "–" if column == "n_classes" and not value > 0 else pattern.format(value)
-            ax.text(j, i, text, ha="center", va="center", fontsize=6.5,
+            ax.text(j, i, text, ha="center", va="center", fontsize=7,
                     color=style.REMOVED_COLOR if removed[i] else style.TEXT_COLOR)
     labels = list(table.dataset)
     layout.dataset_axis(ax, labels, table.task_type,

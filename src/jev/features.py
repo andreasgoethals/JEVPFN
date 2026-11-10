@@ -12,6 +12,7 @@ import io
 import json
 import sqlite3
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -405,7 +406,7 @@ def load_block(folder: Path, artifact_id: str | None = None) -> FeatureBlock:
         values = pd.read_parquet(folder / "features.parquet")
         requests = pd.read_parquet(folder / "requests.parquet")
     else:
-        with sqlite3.connect(folder.resolve().as_uri() + "?mode=ro", uri=True) as db:
+        with closing(sqlite3.connect(folder.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             if (
                 artifact_id is None
                 and db.execute("SELECT COUNT(*) FROM feature_artifacts").fetchone()[0] != 1
@@ -457,7 +458,7 @@ def feature_inventory(path: Path) -> pd.DataFrame:
     ]
     if not path.is_file():
         return pd.DataFrame(columns=columns)
-    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         exists = db.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='feature_artifacts'"
         ).fetchone()

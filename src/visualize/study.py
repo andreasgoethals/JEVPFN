@@ -25,7 +25,7 @@ def _ordered_datasets(dataset_ids):
     return [d for d, _ in rows], [t for _, t in rows], names
 
 
-def coverage_figures(table, title):
+def coverage_figures(table, title, *, feature_inventory=False):
     if table.empty or not table.completed.gt(0).any():
         # A page of identical 0/N cells adds no information to the coverage table.
         return
@@ -41,21 +41,32 @@ def coverage_figures(table, title):
     fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.1 + 0.2 * len(datasets))))
     image = ax.imshow(fraction, vmin=0, vmax=1, cmap=style.OVERVIEW_CMAP, aspect="auto")
     for (i, j), label in labels.items():
-        ax.text(j, i, label, ha="center", va="center", fontsize=6.5,
+        ax.text(j, i, label, ha="center", va="center", fontsize=7,
                 color="white" if fraction[i, j] > 0.6 else style.TEXT_COLOR)
     layout.dataset_axis(ax, [names.get(d, d) for d in datasets], tasks, fontsize=7)
-    ax.set_xticks(range(len(models)), [style.PREDICTOR_LABELS.get(m, m) for m in models], fontsize=7)
+    names_by_model = style.DECISION_SHORT if feature_inventory else style.PREDICTOR_LABELS
+    ax.set_xticks(range(len(models)), [names_by_model.get(m, m) for m in models],
+                  fontsize=7, rotation=40 if len(models) > 6 else 0,
+                  ha="left" if len(models) > 6 else "center")
     ax.xaxis.tick_top()
     ax.tick_params(axis="x", length=0)
     for spine in ax.spines.values():
         spine.set_visible(False)
-    fig.colorbar(image, ax=ax, label="share of planned configurations complete", shrink=0.7)
-    yield fig, "coverage", (
-        f"{title}: completed over planned configurations per dataset and predictor. A configuration "
-        "counts as complete only with five defined outer folds of its headline metric; a stored "
-        "feature inventory uses saved representation manifests instead. Zero means no qualifying "
-        "saved evidence, not zero performance. Counts precede the width and resource review."
-    )
+    if feature_inventory:
+        label = "Share of representation types present"
+        detail = (
+            "Each cell counts saved manifest types out of the two planned for a dataset and "
+            "extractor (joint and separate text). This local inventory precedes 0B validation."
+        )
+    else:
+        label = "Share of configurations complete"
+        detail = (
+            "Cells count complete over planned configurations per dataset and predictor. "
+            "A configuration requires five defined outer folds of its headline metric. "
+            "Zero indicates absence of qualifying saved evidence."
+        )
+    fig.colorbar(image, ax=ax, label=label, shrink=0.7)
+    yield fig, "coverage", f"{title}. {detail}"
 
 
 def native_figures(summary):

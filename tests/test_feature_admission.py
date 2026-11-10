@@ -334,10 +334,13 @@ def test_retry_exhaustion_and_permanent_failures_are_terminal(state):
 
 
 @pytest.mark.parametrize("release", [None, "perplexity"])
-def test_retry_queue_inspection_failure_only_for_workspace_release(release):
+@pytest.mark.parametrize("exit_code", [
+    dispatch.QUEUE_CHECK_UNAVAILABLE, dispatch.PUBLICATION_LOCK_UNAVAILABLE,
+])
+def test_retry_transient_exit_only_for_workspace_release(release, exit_code):
     step = {"status": "failed", "job_id": "7", "name": "perplexity_release",
             "workspace_release": release, "scheduler_state": "FAILED",
-            "exit_code": f"{dispatch.QUEUE_CHECK_UNAVAILABLE}:0"}
+            "exit_code": f"{exit_code}:0"}
     dispatch.retry_interrupted(step)
     if release:
         assert step["status"] == "pending"

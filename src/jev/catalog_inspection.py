@@ -99,7 +99,7 @@ def dataset_example(dataset, cfg, bank, catalog):
         ],
         "groups": groups,
         "runtime_verified": False,
-        "notice": "Exact constructed bodies/arguments; live provider/GPU validation remains pending. Checkpoint/credential placeholders require real configuration. No credentials stored.",
+        "notice": "Exact constructed bodies/arguments; this preview does not run provider/GPU validation. Consult dated 0A receipts for runtime acceptance. Checkpoint/credential placeholders require real configuration. No credentials stored.",
     }
 
 

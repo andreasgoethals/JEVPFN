@@ -26,6 +26,10 @@ MARKER = "_JEVPFN_WORKSPACE.json"
 PUBLICATION_PROGRESS = "_JEVPFN_PUBLICATION_PROGRESS.json"
 
 
+class PublicationLockUnavailable(TimeoutError):
+    """A writer could not obtain the durable store's publication lock."""
+
+
 def roots(runtime):
     from src.cluster.containers import RUNTIMES
 
@@ -224,9 +228,11 @@ def _publish(durable, work, *, periodic=False, dataset_id=None, include_decision
                 with ExitStack() as stack:
                     try:
                         stack.enter_context(file_lock(lock, timeout=0 if periodic else 3600))
-                    except TimeoutError:
+                    except TimeoutError as exc:
                         if not periodic:
-                            raise
+                            raise PublicationLockUnavailable(
+                                f"Timed out waiting for the publication lock for {relative.as_posix()}"
+                            ) from exc
                         counts["busy_skipped"] += 1
                         continue
                     relative_key = relative.as_posix()

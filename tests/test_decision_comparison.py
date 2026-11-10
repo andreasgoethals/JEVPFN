@@ -1,6 +1,7 @@
 """Numerical and provenance checks; synthetic values never enter project feature stores."""
 
 import copy
+import sqlite3
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -220,9 +221,15 @@ def test_semantic_hashes_come_from_verified_raw_requests(tmp_path):
 
 
 def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, monkeypatch):
+    from src.evaluation import portable_features
+
     cfg = load_config("feature_comparison")
     monkeypatch.setattr(
         paths, "dataset_cache_path", lambda dataset: tmp_path / "protected" / f"{dataset}.sqlite3"
+    )
+    monkeypatch.setattr(
+        portable_features, "portable_path",
+        lambda dataset: tmp_path / "portable" / f"{dataset}.sqlite3",
     )
     result = compare_saved_features(cfg, progress=None)
     assert len(result.table("inventory")) == 18 * 12 * 2
@@ -280,6 +287,30 @@ def test_real_sqlite_contract_and_ambiguous_versions(isolated_output, monkeypatc
     cfg["comparison"]["artifacts"] = {"fixture": {"liquid": {"joint": artifact_ids["liquid"]}}}
     assert not compare_saved_features(cfg, progress=None).table("pairs").empty
 
+    # A completed remote feature remains comparable without downloading raw responses.
+    from src.evaluation.portable_features import portable_path
+    from src.jev.merge import ARTIFACT_SQL
+
+    portable = portable_path("fixture")
+    portable.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(portable) as exported, sqlite3.connect(path) as canonical:
+        exported.execute(ARTIFACT_SQL)
+        exported.execute("CREATE TABLE payload_hashes (request_key TEXT PRIMARY KEY, payload_sha256 BLOB)")
+        row = canonical.execute(
+            "SELECT * FROM feature_artifacts WHERE artifact_id=?", (artifact_ids["liquid"],)
+        ).fetchone()
+        exported.execute("INSERT INTO feature_artifacts VALUES (?,?,?,?)", row)
+        exported.execute(
+            "INSERT INTO payload_hashes VALUES (?,?)",
+            (request.cache_key, bytes.fromhex(digest({"state": {"text": {"text": "same"}}}))),
+        )
+        canonical.execute("DELETE FROM feature_artifacts WHERE artifact_id=?", (artifact_ids["liquid"],))
+    assert compare_saved_features(cfg, progress=None).table("pairs").agreement.eq(1).all()
+    with sqlite3.connect(portable) as exported:
+        exported.execute("DELETE FROM payload_hashes")
+    with pytest.raises(ValueError, match="missing verified request digests"):
+        compare_saved_features(cfg, progress=None)
+
 
 def test_missing_or_stale_context_screen_is_explicit(tmp_path, monkeypatch):
     import json
@@ -326,6 +357,11 @@ def test_every_plot_path_accepts_realistic_synthetic_results(task):
             plt.close(fig)
             count += 1
     assert count >= 15
+    (headline,) = plots.pair_figures(result, options(), headline_only=True)
+    fig, name, _ = headline
+    assert name == f"pairs_{task}_joint_total_variation"
+    assert fig.axes[0].images[0].get_clim() == (0, 1)
+    plt.close(fig)
 
 
 def test_twelve_models_paginate_all_66_duplicate_sensitivity_pairs():

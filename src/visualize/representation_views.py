@@ -46,15 +46,15 @@ def direct_comparison_figures(contrasts, *, family="frozen"):
             ax.imshow(np.ma.masked_invalid(values), cmap=cmap, vmin=-limit, vmax=limit, aspect="auto")
             for (i, j), share in np.ndenumerate(shares):
                 if np.isfinite(share):
-                    ax.text(j, i, f"{100 * share:.0f}%", ha="center", va="center", fontsize=5.8,
+                    ax.text(j, i, f"{100 * share:.0f}%", ha="center", va="center", fontsize=7,
                             color=style.BACKGROUND_COLOR if abs(values[i, j]) > 0.6 * limit
                             else style.TEXT_COLOR)
             ax.set_title(label, fontsize=8, color=style.MODE_COLORS[MODE_KEYS[mode]])
-            ax.set_xticks(range(len(models)), [short[m] for m in models], rotation=90, fontsize=6.5)
+            ax.set_xticks(range(len(models)), [short[m] for m in models], rotation=90, fontsize=7)
             ax.tick_params(length=0)
             for spine in ax.spines.values():
                 spine.set_visible(False)
-        axes[0].set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=6.5)
+        axes[0].set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=7)
         for tick, provider in zip(axes[0].get_yticklabels(), providers):
             tick.set_color(style.DECISION_COLORS[provider])
         mappable = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(-limit, limit))

@@ -178,10 +178,12 @@ DECISION_COLORS = {
     "decision3": "#B56845",
     "nimble": "#797D44",
 }
+# One label per decision model in every figure: family plus size where the name has none.
 DECISION_SHORT = {
-    "jev": "Jev", "liquid": "Liquid-3B", "liquid_lfm3": "Liquid-2B", "perplexity": "Perplexity",
-    "cloudflare": "Clef", "intern": "Intern", "strands": "Strands", "h2o": "H2O", "sii": "SII",
-    "kev": "Kev", "decision3": "D3-turbo", "nimble": "Nimble",
+    "jev": "Jev 1.14", "liquid": "Liquid d1-3B", "liquid_lfm3": "Liquid d1-2B",
+    "perplexity": "Perplexity 27B", "cloudflare": "Clef-flash", "intern": "Intern 4B",
+    "strands": "Strands 2B", "h2o": "H2O 4B", "sii": "SII 27B", "kev": "Kev 27B",
+    "decision3": "D3-turbo", "nimble": "Nimble 9B",
 }
 EVIDENCE_MARKS = {"observed": "#2E7D4F", "failed": "#B03A2E", "unknown": "#FFFFFF",
                   "not_applicable": "#E6E9EC", "review": "#D8A23A"}

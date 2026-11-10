@@ -68,7 +68,7 @@ def runtime_evidence_figure(table):
         ax.scatter(np.full(len(table), j), y, marker="s", s=58,
                    color=[style.EVIDENCE_MARKS[s] for s in table[column]],
                    edgecolors=style.GRID_COLOR, linewidths=0.6)
-    ax.set_xticks(range(len(gates)), [label for _, label in gates], fontsize=6)
+    ax.set_xticks(range(len(gates)), [label for _, label in gates], fontsize=7)
     ax.xaxis.tick_top()
     ax.set_xlim(-0.6, len(gates) - 0.4)
     for spine in ax.spines.values():
@@ -92,10 +92,10 @@ def runtime_evidence_figure(table):
         layout.light_grid(ax)
         for i, kind in enumerate(table.kind):
             if kind == "hosted":
-                ax.text(0.02, i, "hosted API", va="center", fontsize=6, color=style.REMOVED_COLOR,
+                ax.text(0.02, i, "hosted API", va="center", fontsize=7, color=style.REMOVED_COLOR,
                         transform=ax.get_yaxis_transform())
             elif kind == "encoder" and not np.isfinite(values.iloc[i]):
-                ax.text(0.02, i, "not recorded", va="center", fontsize=6,
+                ax.text(0.02, i, "not recorded", va="center", fontsize=7,
                         color=style.REMOVED_COLOR, transform=ax.get_yaxis_transform())
     for ax in axes:
         ax.axhline(boundary - 0.5, color=style.GRID_COLOR, linewidth=0.9)
@@ -105,7 +105,7 @@ def runtime_evidence_figure(table):
               Patch(facecolor=style.EVIDENCE_MARKS["unknown"], edgecolor=style.GRID_COLOR,
                     label="no local receipt"),
               Patch(facecolor=style.EVIDENCE_MARKS["not_applicable"], label="not applicable")]
-    fig.legend(handles=legend, loc="outside lower center", ncols=5, fontsize=6.5, frameon=False)
+    fig.legend(handles=legend, loc="outside lower center", ncols=3, fontsize=7, frameon=False)
     gpus = sorted({g for g in table.gpu_name.dropna()})
     return fig, "runtime_evidence", (
         "Experiment 0A gates for the twelve decision models and three frozen encoders, read from "
@@ -183,9 +183,11 @@ def pilot_agreement_figure(agreement):
     tasks = [t for t in layout.TASK_ORDER if t in agreement]
     providers = list(next(iter(agreement.values()))[0].index)
     short = [style.DECISION_SHORT.get(p, p) for p in providers]
-    fig, axes = plt.subplots(1, len(tasks), figsize=(style.WIDTH_FULL, 2.75), sharey=True)
+    fig, axes = plt.subplots(1, len(tasks), figsize=(style.WIDTH_FULL, 3.5), sharey=True)
     axes = np.atleast_1d(axes)
     cmap = plt.get_cmap(style.AGREEMENT_DIVERGING)
+    # Cell values stay legible (7 pt) only for small rosters; larger ones are tabulated.
+    annotate = len(providers) <= 8
     for ax, task in zip(axes, tasks):
         matrix, n = agreement[task]
         # Strict lower triangle, without its empty first row and last column.
@@ -193,29 +195,29 @@ def pilot_agreement_figure(agreement):
         mask = np.triu(np.ones_like(values, dtype=bool), k=1)
         image = ax.imshow(np.ma.masked_array(values, mask), cmap=cmap, vmin=-1, vmax=1)
         for (i, j), value in np.ndenumerate(values):
-            if i >= j and np.isfinite(value):
+            if annotate and i >= j and np.isfinite(value):
                 ax.text(j, i, f"{value:.2f}".replace("0.", ".").replace("-.", "−."),
-                        ha="center", va="center", fontsize=4.8,
+                        ha="center", va="center", fontsize=7,
                         color=style.BACKGROUND_COLOR if abs(value) > 0.6 else style.TEXT_COLOR)
-        ax.set_xticks(range(len(providers) - 1), short[:-1], rotation=90, fontsize=6)
-        ax.set_yticks(range(len(providers) - 1), short[1:], fontsize=6)
+        ax.set_xticks(range(len(providers) - 1), short[:-1], rotation=90, fontsize=7)
+        ax.set_yticks(range(len(providers) - 1), short[1:], fontsize=7)
         ax.tick_params(length=0)
         for spine in ax.spines.values():
             spine.set_visible(False)
         measure = "same top class" if task == "multiclass_classification" else "Spearman ρ"
-        ax.set_title(f"{layout.TASK_LABELS[task]}\n{measure} · {n} inputs", fontsize=7.5,
+        ax.set_title(f"{layout.TASK_LABELS[task]}\n{measure} · {n} inputs", fontsize=8,
                      color=style.TASK_COLORS[task])
         for tick, provider in zip(ax.get_xticklabels(), providers[:-1]):
             tick.set_color(style.DECISION_COLORS[provider])
     for tick, provider in zip(axes[0].get_yticklabels(), providers[1:]):
         tick.set_color(style.DECISION_COLORS[provider])
-    fig.colorbar(image, ax=list(axes), shrink=0.8, pad=0.015, label="agreement")
+    fig.colorbar(image, ax=list(axes), shrink=0.8, pad=0.015, label="Spearman ρ, or share with the same top class")
     yield fig, "decision_model_agreement", (
         "Agreement between every pair of decision models on the identical pilot inputs of the "
         "previous figure. Binary and regression: Spearman rank correlation of the main feature "
         "(1 = same ordering of texts). Multiclass: share of inputs on which both models give the "
         "highest probability to the same class (chance is roughly 1/K). Panel titles give the number "
-        f"of inputs; coefficients from as few as {min(n for _, n in agreement.values())} inputs are "
+        f"of inputs; exact values are in the accompanying table. Coefficients from as few as {min(n for _, n in agreement.values())} inputs are "
         "imprecise. Low agreement means the models would hand the predictor different information; "
         "it does not say which is correct."
     )
@@ -244,16 +246,16 @@ def robustness_matrix_figure(changes):
             values[i, j] = record.total_variation_from_base
             flipped[i, j] = not record.same_top_option
     cmap = LinearSegmentedColormap.from_list("tv", [style.BACKGROUND_COLOR, style.WINDOW_COLOR])
-    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 3.6))
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 3.9))
     ax.imshow(np.ma.masked_invalid(values), cmap=cmap, vmin=0, vmax=0.6, aspect="auto")
     for (i, j), value in np.ndenumerate(values):
         if np.isfinite(value):
             ax.text(j, i, f"{value:.2f}" + ("*" if flipped[i, j] else ""), ha="center",
-                    va="center", fontsize=6, weight="bold" if flipped[i, j] else "normal",
+                    va="center", fontsize=7, weight="bold" if flipped[i, j] else "normal",
                     color=style.BACKGROUND_COLOR if value > 0.4 else style.TEXT_COLOR)
     short = {"paraphrase": "Paraphrase", "irrelevant_context": "Unrelated\ncontext",
              "embedded_instruction": "Inserted\ninstruction", "option_order": "Reversed\noptions"}
-    ax.set_xticks(range(len(columns)), [short[v] for _, v in columns], fontsize=6.3)
+    ax.set_xticks(range(len(columns)), [short[v] for _, v in columns], fontsize=7)
     ax.set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=7)
     for tick, provider in zip(ax.get_yticklabels(), providers):
         tick.set_color(style.DECISION_COLORS[provider])
@@ -308,10 +310,10 @@ def prompt_sensitivity_figures(table):
                            color=style.TASK_COLORS[task])
             for pos, variant in enumerate(rows):
                 if variant not in set(part.variant):
-                    ax.text(0.03, pos, "n/a", fontsize=6.5, color=style.REMOVED_COLOR,
+                    ax.text(0.03, pos, "n/a", fontsize=7, color=style.REMOVED_COLOR,
                             va="center")
             ax.set(xlim=(-0.03, 1.03), xlabel="Total variation")
-            ax.set_title(f"{fill(names.get(dataset, dataset), 22)}", fontsize=7.5,
+            ax.set_title(f"{fill(names.get(dataset, dataset), 22)}", fontsize=8,
                          color=style.TASK_COLORS[task])
             layout.light_grid(ax)
         ax = axes[-1]
@@ -324,7 +326,7 @@ def prompt_sensitivity_figures(table):
                    color=style.TASK_COLORS["regression"])
         bound = max(0.1, float(regression.expected_direction_change.abs().max()) * 1.3)
         ax.set(xlim=(-bound, bound), xlabel="Δ expected direction")
-        ax.set_title("Regression direction", fontsize=7.5, color=style.TASK_COLORS["regression"])
+        ax.set_title("Regression direction", fontsize=8, color=style.TASK_COLORS["regression"])
         layout.light_grid(ax)
         axes[0].set_yticks(range(len(rows)), list(VARIANTS.values()), fontsize=7)
         axes[0].set_ylim(len(rows) - 0.5, -0.5)
@@ -361,11 +363,11 @@ def regression_information_figures(cases):
         ax.imshow(values, cmap=cmap, vmin=0, vmax=1, aspect="auto")
         for (i, j), value in np.ndenumerate(values):
             if value >= 0.01:
-                ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize=6.5,
+                ax.text(j, i, f"{value:.2f}", ha="center", va="center", fontsize=7,
                         color=style.BACKGROUND_COLOR if value >= 0.6 else style.TEXT_COLOR)
         for i, row in enumerate(part.itertuples()):
             ax.text(9.1, i, f"E = {row.mean:+.2f}   Var = {row.variance:.2f}", va="center",
-                    fontsize=6.5)
+                    fontsize=7)
         ax.set_xticks(range(9), [f"{r:+d}" if r else "0" for r in range(-4, 5)], fontsize=7)
         ax.set_yticks(range(len(part)),
                       ["Original" if v == "base" else VARIANTS[v] for v in variants], fontsize=7)

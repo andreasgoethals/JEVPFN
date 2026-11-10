@@ -1,12 +1,149 @@
 # Operational evidence
 
-This is the dated record of campaign evidence and recovery. The [README](../README.md)
-defines the design and the [VSC runbook](VSC.md) gives commands. Job completion requires
-terminal accounting and the expected artifacts.
+This is the dated record of campaign evidence and recovery, not a live status page.
+[Experiments](EXPERIMENTS.md) defines the design; the [VSC runbook](VSC.md) gives commands.
+Job completion requires terminal accounting and expected artifacts. Historical entries
+retain the source, settings and state observed then; later entries supersede their
+pending statuses without changing the original evidence.
 
 ## Latest verified status
 
-Local Jev on 5 November: 1,698,127 distinct prepared requests, 7,820 matching cached
+**Evidence through 9 November 2026. Recheck receipts and Slurm before acting.**
+
+| Area | Last verified position | Still required |
+|---|---|---|
+| 0A | Accepted for eleven open-weight extractors and three frozen encoders; local Jev 1.14 pilot passed | Preserve acceptance and source identities through recovery |
+| Open-weight features | Seven providers complete on all 18 datasets and verified locally, including Intern and SII | Intern release running, then Kev, Decision3, Nimble and Liquid LFM3 under the recovered dispatcher |
+| Frozen embeddings | All 54 encoder/dataset jobs completed and published | Full numerical verification/transfer and fold-local PCA for 0B |
+| Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
+| Benchmark | Four-experiment design and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
+| Documentation/notebooks | Seven-model snapshot, 12 notebooks passed, 35 figures | Refresh when more complete evidence is imported |
+
+### Local tree deletion by Google Drive sync on 9 November
+
+`C:\Users\U0152019\PhD Documents` is a two-way Google Drive for desktop *synced folder*
+(Drive computer "My Laptop", folder id `1uLZjdywk28gk8h4AmWoU1krAvT9rw4gv`). The local
+folder `Projects\5. JEVPFN` maps to the cloud folder **"0. Template - Copy"**
+(`1hjawhSwN-fZU4wUFrXzmfzcln6tTSHQc`, created 29 September). It was renamed locally, but
+the cloud kept the copy name. That cloud folder was moved to the Drive trash at about
+14:44 UTC. `drive_fs_248.txt` shows Drive's own `local_writer.cc:RemoveDirHandlingReadOnlyRecursive`
+deleting every local file from 14:44:57.112 to 14:45:15.981 UTC. The deletion ended by
+attempting the `5. JEVPFN` root, covered `JEVPFN` and `JEVPFN Paper`, and skipped
+directories and read-only files. The logs record no local delete upload beforehand, so
+the trash arrived from the cloud side: the web, another Drive client or an API client.
+Neither Claude Code sessions (no `trash_file` call) nor Codex (no 9 November session)
+trashed it, and isolated pytest reruns did not reproduce the deletion. Drive Activity on
+the trashed folder names the actor.
+
+Recovery:
+
+- Code came from GitHub `2e1e0a5` plus a replay of the uncommitted Codex and session edits.
+  All 29 pre-deletion copies recovered from the Drive trash match the reconstruction;
+  four differ only in CRLF and were restored byte-for-byte.
+- Decision inputs and features came from VSC exports, hash-verified (`11780780`).
+- The Jev cache came from the trashed Drive copies, merged to 144,653 responses.
+- Hosted receipts, extraction logs, event locks and `_control` rounds came from the trash.
+- Tokenizers were re-staged and match the original manifests' SHA-256 values.
+
+Notebook outputs are regenerated. The staging folder `JEVPFN_RECOVERY/` and the My Drive
+folder `JEVPFN_RECOVERY_from_trash` stay until the owner decides. Lesson: do not keep Git
+checkouts or data stores in a two-way synced folder. Exclude the project, or use backup-only.
+
+### Intern publication recovery on 9 November
+
+Perplexity release `11778676` passed. Intern staging `11778900` and all 18 Intern
+dataset jobs passed, as did all 18 SII dataset jobs and SII release `11779920`.
+Intern release `11779759` stopped on the Kickstarter publication lock during
+overlapping SII publication. The durable stores contained both feature representations
+for all 18 datasets for each model. Export `11780780` added both to the verified local
+snapshot, bringing it to 252 blocks across seven providers.
+
+Recovery QA `11781019` passed 183 tests and the native GPFS publication and readback
+checks. The exact patch `736a5efde78217150011d33e189f37a4e5229801349af2004a29c50b548460d5`
+was applied after confirming an idle checkout and archived freeze. Source
+`82e19c09dc7bd14c7a9706825987d709a80fbce6cd353b01a33f587175c881d1` rebinds campaign
+`48373214ab16d241344a2756575520e8858b4a498b8ccaec705c235b3babe542`.
+The recovered dispatcher retained 193 completed steps. Intern release retry `11781068`
+reused the first two stores and entered publication for Kickstarter. The remaining
+80 steps are eligible for admission as prerequisites and workspace limits allow.
+The historical failed attempt and the previous campaign receipt remain available.
+
+### Recovery and local analysis: 6 November
+
+6 November, unattended recovery. H2O release `11774770` completed at 12:31 CET.
+Intern stage `11774808` timed out at 14:32 CET while publishing US Accidents; all
+120 Slurm success-dependent jobs were cancelled at zero runtime. Recovery
+`11778590` passed SQLite quick_check on an independent rollback preview and matched
+the production rollback to it. All ten complete US Accidents artifacts matched the
+verified pre-timeout export. Receipt: `reviews/us_accidents_rollback_20261106.json`.
+
+Operational commit `1d9aaeb` passed 1,292 local tests (26 environment skips) and
+176 native GPFS tests in `11778670`. The first native QA attempt `11778663` lacked the
+isolated checkout's storage pointer. The real timeout test verified `11778665` TIMEOUT,
+replacement `11778666` COMPLETED using the published checkpoint, then dependent
+`11778668` COMPLETED. QA and rollback were bounded CPU jobs.
+
+An idle, exact-hash deployment used only the seven tested files from the published
+commit and preserved the existing extraction science and runtime seals. Cutover
+receipt: `reviews/unattended_cutover_d81d3aa13dab.json`. The new source is
+`ee179e15e0f9409e271dba54847d132351331ed724fbe14233a9463770540320`.
+The first dispatcher reattached 153 successful steps and submitted Perplexity's
+release `11778671`. The release failed before publication because the wICE queue
+query could not reach Slurm accounting. The verified idle cutover of `2e1e0a5`
+adds a distinct retry status for this check. The current source fingerprint is
+`6122143bad91868bd482f6d62acf446b2f01f2c480ba76730ef30a7d82785bc6`.
+The detached login-2 dispatcher PID 3866025, start ticks 149577238, resumed the
+same 274 steps. Replacement release `11778676` passed the queue guard and began
+publication with a 12-hour limit. Intern staging follows in the transfer slot.
+The VSC log is `logs/unattended_recovery_2e1e0a5.log`.
+The isolated QA DATA checkout and synthetic GPFS fixtures were retired after
+terminal accounting and preservation of the retry receipt.
+
+The notebook expansion adds label-free vote splits, matching-class correlations,
+probability concentration, text-field/duplicate sensitivity, hash-matched cases
+and a complete compressed joint-row diagnostic export. It uses the same five
+complete local extractors (180 blocks), without provider calls or target values.
+The final local suite passed 1,309 tests (26 environment/asset skips), and all 12
+notebooks executed successfully with 27 figures. Visually reviewed all 15 figures
+in the feature-creation folder at 140 dpi, including 13 comparison figures; checked
+665,406 source rows against 36 dataset/weighting summaries and all 54 exact case
+payload hashes. Receipt: `output_JEVPFN/manifests/decision_diagnostics_review_20261106.json`.
+These diagnostics neither use outcome labels nor certify downstream accuracy.
+
+The 6 November documentation pass aligned the README, experiment guide, citation and
+package metadata, operational instructions and research guides. Local validation:
+1,309 tests passed, 26 environment/asset skips; Ruff, 104 local links/anchors, grid
+arithmetic and metadata consistency passed. Dependency/tool configuration and the
+canonical template were unchanged. No VSC inspection, deployment or workload change
+was part of this documentation pass. Receipt:
+`output_JEVPFN/manifests/documentation_review_20261106.json`.
+
+### Earlier observation: 6 November, before timeout recovery
+
+Durable output and terminal accounting confirmed all 18 datasets for
+Liquid d1-3B, Strands, Clef-Flash, H2O and Perplexity, and all 54 frozen embedding
+jobs. The remaining 108 decision dataset jobs and 13 prerequisites were submitted
+on Mindwell as IDs 11774808–11774928, with dependency admission and the existing
+workspace limits. At that observation, H2O release 11774770 gated the next batch. Submission
+evidence is in the DATA review receipt `dependency_admission_verified_20261106.json`.
+The frozen VSC source at that observation was `f89688a`; the recovery above supersedes it.
+
+The five complete providers were exported and checksum-verified locally as 180
+feature blocks in 18 portable stores. The first export 11774931 hit a SQLite
+publication lock. Replacement 11775001 used shared extraction locks, verified
+payload identities in SQLite row order and retained restartable dataset parts.
+It completed 0:0 and produced a 1,736,158,920-byte archive. Local import verified
+all member hashes before installing the snapshot. Retired only 36 redundant
+transfer-stage files (2,029,685,591 bytes) after import; the archive and original
+response stores remain available. All 12 notebooks completed locally. Comparison
+covered 665,406 source rows with identical missing-text coverage across providers.
+Local pytest passed 1,285 tests with 26 environment/asset skips. The 0B notebook
+refresh is descriptive and does not execute the 0B acceptance campaign.
+
+
+### Local Jev preflight: 5 November
+
+ 1,698,127 distinct prepared requests, 7,820 matching cached
 responses and 1,690,307 remaining. Pilot-token/serialized-size ratios project 1.394
 billion further input tokens (about USD 58.56 at USD 0.042/M); this is an estimate,
 not an exact tokenizer count. Existing dataset charges are USD 0.271475568 with no
@@ -20,11 +157,13 @@ The private `feature_creation/jev_funded.local` configuration targets 20 RPS/eig
 workers with the existing allocations. Read its hosted/process receipts for actual
 execution, spending and terminal status; these offline checks do not prove live throughput.
 
-Recovery on 5 November: the owner explicitly requested deployment/resubmission.
+### Recovery handover: 5 November
+
+The owner explicitly requested deployment/resubmission.
 Stopped the verified login-4 controller (Python PID 1239677, wrapper 1239565) under
 the campaign lock and verified its controller lease was released. Withdrew only
 PENDING H2O IDs 11772705–11772722; Slurm reports cancellation with zero runtime.
-Clef publication 11772829 remains running and its checkout remains untouched.
+At that handover, Clef publication 11772829 was running and its checkout was untouched.
 Recovery revision `f89688a` passed 1,265 local tests (26 environment/asset skips),
 lint and Bash syntax. Native GPFS QA `11772948` passed 169 tests and isolated
 publication/union/warm-cache checks, COMPLETED 0:0 in 37 seconds. It also fixes
@@ -48,7 +187,9 @@ was running and had finished its first six dataset stores. Both QA jobs were ter
 0:0. Their logs were checksummed into the canonical DATA output before retiring the
 44,061,325-byte temporary DATA clone; `qa_checkout_retirement.json` records checks.
 
-On 5 November 2026 the DATA checkout remained clean and frozen at `3f84d7e`.
+### Earlier audit: 5 November, before recovery
+
+The DATA checkout remained clean and frozen at `3f84d7e`.
 A read-only audit inspected all 774 available text logs (918,359 lines), reconciled
 campaign IDs with Slurm, and checked durable embedding metadata. Liquid, Strands
 and Clef completed all eighteen datasets each; Clef's final job `11769377` completed
@@ -61,7 +202,7 @@ Nineteen failed steps have two causes: eighteen Perplexity jobs rejected their v
 112,000 MiB allocation because the guard only read `SLURM_MEM_PER_NODE`; Intern stage
 `11772686` read a durable cache while publication held its database lock. Local fixes
 accept per-CPU allocations and acquire the existing extraction lock before warm-cache
-reads. They are not deployed into the active checkout. Preserve failed logs/receipts
+reads. At this earlier audit they had not yet been deployed. Preserve failed logs/receipts
 and reconcile consumers before reviewed recovery; no active work was cancelled.
 
 Allocation usage was 556.1 GiB/2 TiB on GPFS PROJECT and 50.57 GiB/500 GiB on GPFS scratch,
@@ -98,21 +239,9 @@ entry points passed. The study map and 0B qualification panel were visually insp
 
 ## Authority
 
-- Since 28 October: commit and push reviewed JEVPFN changes.
-- 29 October: autonomous CPU-controller cutover, Slurm debugging, verified output reset,
-  fresh 0A, evidence review/acceptance and full open-weight feature creation. After
-  generation, download a verified snapshot and merge all feature/embedding stores locally,
-  preserving existing Jev responses and the durable VSC copy.
-- 30 October: pin new Jev calls to 1.14 and run a bounded first-100-source-rows pilot on
-  all eighteen datasets, preserving 1.13 ledgers and cumulative budget.
-- 3 November: the owner subsequently explicitly authorized the full verified migration
-  to `/gpfs1/project/prj_00013/JEVPFN`, superseding the earlier hold. Preserve source
-  on DATA, quiesce consumers, validate relocation/publication/resume, then retire
-  verified old JEVPFN copies without touching other projects or allocation roots.
-- 5 November: local Jev feature creation within the existing EUR 5 allowance, including
-  faster verified pacing and safe credit-stop handling. No larger budget or top-up.
-- Not authorized: additional Jev funding, 0B and benchmarks. Never touch another project's
-  jobs, files or runtimes.
+Current execution and budget boundaries are maintained in [AGENTS](../AGENTS.md#authorized-work).
+The dated migration, cleanup and recovery records below document completed actions;
+they do not authorize new submissions, spending or deletion.
 
 ## GPFS PROJECT migration and resume (3–4 November)
 
@@ -372,6 +501,9 @@ Direct read-only inspection, 17:20 UTC:
 
 ## Gates passed
 
+Historical acceptance evidence, primarily 29–30 October. Later relocation/recovery gates
+are recorded above; these passes do not qualify a changed benchmark runtime automatically.
+
 | Evidence | Result and scope |
 |---|---|
 | CPU image build 62468642 | Passed, 27m02s; sealed PROJECT controller. |
@@ -423,6 +555,9 @@ receipt `0A_local/20261030T081306Z_c9a72019.json`, review
 
 ## Jev accounting
 
+Historical validation charges below are not a live account balance. Current funded-run
+spend and reservations must be read from the hosted receipt and dataset ledgers.
+
 - 1.14.0 at USD 0.042/M input tokens, 64k/request, 32k state plus question, 32 MiB body
   (checked 30 October). Organization limits 80 RPS/100,000 input TPS do not remove the
   per-attempt reservations. There is no exact local Jev tokenizer.
@@ -439,6 +574,10 @@ receipt `0A_local/20261030T081306Z_c9a72019.json`, review
   Reviewed explicitly; neither semantic consistency nor calibration is guaranteed.
 
 ## Storage
+
+Historical reset, controller and retention evidence from 29–30 October. The later
+[GPFS migration](#gpfs-project-migration-and-resume-34-november) supersedes the old
+allocation paths and usage; none of these totals is a current quota check.
 
 - Controller identity `f04a2aef749aea1e56a397289aab237465a6f9dbc4cd6a8494d500bf305a2b7d`
   under `PROJECT/JEVPFN/containers/control-v1`. The old `DATA/conda_envs/JEVPFN` prefix is

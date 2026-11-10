@@ -1,153 +1,137 @@
 # Agent instructions — JEVPFN
 
-Read README.md, docs/LITERATURE_REVIEW.md and docs/AGENTS_MEMORY.md before changing this
-repository, and follow docs/TEMPLATE.md with the project deviations recorded in README.
+Read [README](README.md), [Experiments](docs/EXPERIMENTS.md), the relevant
+[Literature review](docs/LITERATURE_REVIEW.md) and dated [Operational evidence](docs/AGENTS_MEMORY.md)
+before changing this repository. Follow [TEMPLATE](docs/TEMPLATE.md); project deviations
+are recorded in the README. Preserve unrelated local changes.
 
-## Boundaries
+## Authorized work
 
-- Since 28 October 2026, the owner authorizes committing and pushing reviewed JEVPFN changes
-  without asking again. This supersedes the earlier no-publication preference; later
-  read-only or no-publication instructions still take precedence. Publish only relevant changes.
-  Never change branches/remotes/history without a separate explicit instruction.
-- Proposed plans and requested explanations belong in chat, not temporary documents.
-- `tfm-library/` is a pinned read-only submodule. Never edit, move, delete, lint or test it.
-  The only allowed library write is its gitignored PROJECT_SPECIFIC.md. Report library errors
-  to the owner. Cite code snapshots by symbol, not line number; record the pin used.
-- Raw datasets, prepared inputs, permanent response/features and checkpoints are protected.
-  Never recursively clean them or a system temporary root. Never force-add data/weights.
-- Credentials must never enter tracked code/configuration, notebooks, reports or tool output.
-  The owner explicitly authorized the Git-ignored local secrets/typesafe.local.json file.
-  Local Jev commands load it automatically; never copy it to VSC or include it in transfers.
-- Decision-model inputs are deterministic and label-free: no generative questions, non-text row values,
-  true row targets, class frequencies, target statistics or model feedback. Keep original
-  class vocabularies; source meanings live in dataset_semantics.yaml. Skip empty text and
-  retain missing features. Do not silently truncate, drop rows/classes or cap training rows.
-- The selected roster and method are in README/config. Microsoft is excluded. No new models
-  or changes to open design choices without instruction. Use open weights where available.
-- Open-weight and encoder extraction has reviewed 0A acceptance. Local hosted Jev may
-  consume only the owner's existing EUR 5 allocation authorized on 5 November; no
-  top-ups or larger campaign budget are approved. VSC 0B and benchmark execution
-  require their separate stage authorizations. Bounded GPU
-  contracts require explicit execution, staged pins, complete exact token evidence and
-  a VSC allocation. Cleanup grants no authority to submit jobs or make paid calls.
-- Preserve tokenization.py and decision_tokenization.py byte-for-byte while audits use their
-  fingerprints. Historical availability constants there do not select active providers.
-- Existing authorization for environment setup persists; verify the actual interpreter and
-  do not alter another project's/shared environment without authorization.
+- Since 28 October 2026, the owner permits committing and pushing reviewed JEVPFN changes.
+  Later read-only/no-publication instructions take precedence. Publish only relevant
+  changes; do not change branches, remotes or history without explicit instruction.
+- The authorized campaign includes CPU-container cutover, verified output reset, fresh
+  local/VSC 0A, review/acceptance and open-weight/encoder feature creation. The CPU and
+  GPFS migrations passed; old DATA runtime and Lustre PROJECT copies were retired.
+- Complete models may be downloaded as verified snapshots and merged locally, preserving
+  existing Jev responses and the durable VSC copy. Partial models do not count as complete.
+- Local Jev 1.14 may consume only the existing EUR 5 allowance authorized on 5 November,
+  under the cumulative USD 5.50 ceiling and existing dataset allocations. Preserve all
+  historical charges/reservations. No top-up or larger budget is approved. Test credit
+  exhaustion and shared rate backoff before changing dispatch behavior.
+- VSC 0B and benchmark execution require separate stage authorizations. Cleanup does not
+  authorize jobs or paid calls. Access alone does not authorize cancellation or migration.
+- Existing environment-setup authorization persists within JEVPFN. Verify the actual
+  interpreter; never change another project's jobs, files or shared environment.
+- Plans and requested explanations belong in chat, not temporary planning documents.
 
-## Authorized current run
+## Scientific constraints
 
-On 29 October the owner authorized the CPU control-container rebuild/cutover,
-Slurm debugging, verified final local/VSC output reset, fresh 0A, evidence review
-and accepted full open-weight feature creation. Carry this out autonomously within
-JEVPFN; preserve other projects. Full Jev extraction, 0B and benchmarks wait for the
-owner's next stage. The CPU migration passed; the old DATA environment is retired.
-On 30 October the owner authorized switching new Jev calls to pinned 1.14 and
-revalidating it before a local first-100-source-rows pilot for all eighteen datasets.
-This bounded pilot must preserve earlier 1.13 ledgers and the cumulative budget;
-it does not authorize full Jev extraction.
-On 5 November the owner authorized beginning local feature creation using the existing
-EUR 5 allowance only, and requested faster dispatch. Preserve the existing cumulative
-USD 5.50 ceiling and historical charges, verify the accepted 1.14 inputs, and test
-credit exhaustion and server-enforced rate backoff before dispatch. This funds partial
-coverage, not the estimated USD 59 full workload; no automatic top-up is authorized.
-On 2 November the owner requested maximum parallel admission of remaining feature and
-embedding work. Use feature_admission: all ready datasets per staged runtime, encoders
-partitioned by dataset, embedding staging at the next free storage slot. Preserve the
-two-workspace/byte safeguards and exact known job IDs. A reviewed, checksummed scheduling
-companion may replace the login controller outside the frozen source tree; record its
-artifact, policy and original/execution campaign identities. Never pull into active source
-or alter scientific inputs to change queue admission. The desktop monitor remains disabled.
+- The scope is Experiments 1–4: decisions, frozen embeddings, supervised TAR and native
+  text, with prerequisite 0A/0B and synthesis. Earlier ablations are retired. No new
+  models, grouped sensitivity, lexical baselines or selected-winner combinations without
+  instruction. The selected roster and exact pins are in `config/`; Microsoft is excluded.
+- Decision requests are deterministic and label-free: no generated questions, non-text
+  row values, true row targets, class frequencies, target statistics or model feedback.
+  Keep original class vocabularies and sourced meanings in `dataset_semantics.yaml`.
+  Empty text retains missing features. Never silently truncate decision inputs, drop
+  rows/classes/features or cap training rows.
+- Among precomputed representation arms, TAR fits the encoder to dataset labels only
+  inside each outer training partition.
+  Preserve its vendored source byte-for-byte and the exceptions documented in `docs/TAR.md`.
+  Do not deploy future benchmark changes into active extraction consumers.
+- Preserve `tokenization.py` and `decision_tokenization.py` byte-for-byte while audits
+  use their fingerprints. Historical availability constants do not select active providers.
+- Question, model and runtime contracts require actual evidence. Synthetic tests do not
+  establish checkpoint/GPU compatibility, linguistic perfection or full-stage acceptance.
 
-## Layout and operations
+## Protected files and libraries
 
-The active research scope is Experiments 1–4: decisions, frozen embeddings, supervised
-TAR and native-text systems, with prerequisite 0A/0B and synthesis. The owner explicitly
-added TAR on 4 November; earlier Experiments 4/5 ablations remain retired. No selected-winner
-combinations are approved. TAR alone fits labels inside each outer training partition;
-use the pinned, unmodified vendor files and documented exceptions in docs/TAR.md.
-Do not deploy these changes into the active VSC extraction checkout. Keep 0A input-robustness diagnostics and the main
-benchmark's statistical analysis in scope.
+- Raw datasets, prepared inputs, permanent responses/features and checkpoints are protected.
+  Never recursively clean them or a system temporary root; never force-add data/weights.
+- Credentials must not enter tracked files, notebooks, reports or tool output. The owner
+  authorized ignored `secrets/typesafe.local.json`; local Jev loads it automatically.
+  Never transfer it to VSC. `TYPESAFE_API_KEY` takes precedence.
+- `tfm-library/` and `dm-library/` are independent, pinned, read-only submodules. Read their
+  instructions, summaries and source maps; do not edit, move, refresh, lint or test them.
+  Their ignored `PROJECT_SPECIFIC.md` is the only permitted local-library exception.
+- `vsc-library/` is entirely read-only, with no `PROJECT_SPECIFIC` exception. Use its guides
+  and examples; keep project-specific choices in `docs/VSC.md`.
+- Record library pins when evidence depends on them. Cite implementation snapshots by
+  symbol. Shared corrections belong in the canonical libraries under `0. Literature`.
+- Frozen data-source snapshots in `src/data/upstream/` are inspected, not executed.
 
-VSC authentication is shared and manual. Reuse the owner's native Windows OpenSSH agent.
-Only when access needs renewal, ask them to run `step ssh login --context VSC` and approve
-KU Leuven Authenticator. Do not initiate login, install another agent, add project-specific
-credentials/configuration or schedule authentication reminders. Follow docs/TEMPLATE.md's bounded native
-`ssh.exe -F none -T` stdin-script probe, with host-key verification. Verify markers and exit
-status; an empty exit-0 response proves nothing. The current gateway drops unredirected
-remote stderr: the verified project workaround is `exec 2>&1` inside the LF script, retaining
-error text in stdout and the remote exit status. See docs/VSC.md for the dated evidence.
-Inspect this project's remote logs, files, quotas and jobs directly when relevant. Access
-does not authorize new workloads, cancellation, migration or cleanup. Preserve active/queued
-checkouts and recovery data; never update source consumed by a job.
-Use a temporary 30-minute progress monitor for authorized long-running work. Record its
-ID, owner, jobs, source and completion criteria in compact local output. Reuse an existing
-monitor, stay quiet without meaningful changes, pause after an expired certificate,
-and remove it after all tracked work is terminal and evidence is assessed. Monitoring
-requires the local host/app; it never grants new submission or cleanup authority.
+## VSC access and campaign continuity
 
-Reusable Python is in src/; upstream data-source snapshots stay under src/data/upstream/ and
-are never executed. Config/notebook/output phase folders use the same numbers. Do not create
-empty phase folders or copied question files. All notebooks run locally; permanent questions
-and responses/features each use one SQLite file per selected dataset under data/.
+Reuse the owner's native Windows OpenSSH agent. If the certificate needs renewal, ask
+once for `step ssh login --context VSC` and manual KU Leuven Authenticator approval.
+Do not initiate login, install another agent, configure separate project credentials,
+automate MFA or schedule authentication reminders.
 
-On VSC, the actual Git checkout and `.git` stay on DATA. PROJECT holds large inputs/weights,
-immutable containers containing installed dependencies, permanent caches, token counts,
-predictions and large results. DATA holds the checkout, compact manifests and operational
-logs. Both use JEVPFN/output_JEVPFN/<number>. phase/. Use the validated transfer export/import,
-never wholesale replacement of populated caches. See docs/VSC.md for commands/site details.
-The owner excludes all A100 allocations, including debug/MIG routes. GPU jobs default to
-Mindwell B200. CPU staging prepares isolated mutable native GPFS scratch stores. The allocated GPFS
-PROJECT root is durable authority after the reviewed migration; immutable weights,
-images, questions and token evidence are shared directly without full scratch copies. Use the ignored `.vsc-storage.local.json`, `JEVPFN_DURABLE_ROOT`,
-`JEVPFN_PROJECT_ROOT` or `VSC_PROJECT_ROOT` for the allocated
-shared root; legacy `JEVPFN_STAGING_ROOT` remains an explicit working-set override so B200
-jobs cannot accidentally read cross-mounted PROJECT. Never silently fall back to DATA.
-The CPU controller uses a versioned PROJECT image selected by control.active.json.
-An old DATA prefix may remain only until the recorded CPU and native B200 migration
-gates pass. Retirement requires the owner's authorization and an idle checkout; preserve
-the shared Miniconda installation and other projects. Scratch is temporary: retain failed
-or resumable work until verified publication and explicit scoped retirement; never wipe shared
-scratch. Check byte/file quotas and keep immutable assets needed by active jobs.
-Separate blackwell-cu130 containers, staged-input receipts,
-periodic/final durable cache publication and real GPU contracts are required. Never stream
-bulk model data from cross-mounted Lustre during B200 inference.
+Follow the bounded LF stdin-script method in TEMPLATE with `ssh.exe -F none -T`, strict
+host-key verification, output markers and checked exit status. Empty output with exit 0
+proves nothing. This project's verified gateway workaround starts the script with
+`exec 2>&1`; the dated shell workaround is in `docs/VSC.md`. Inspect scoped remote
+logs, files, quotas and Slurm state directly when relevant; run computational checks
+through Slurm within the authorized scope.
 
-PowerShell commands must remain compatible with Windows PowerShell 5.1: no &&, ternary or ??.
-Slurm files are Linux Bash and must use LF endings. New/editable text files are UTF-8.
+Keep the DATA checkout frozen while any queued/running job or publisher consumes it.
+Reconcile exact IDs, process identities, locks and recovery data before cutover. Deploy
+reviewed local fixes only after validation and consumer-safe handover. Failed attempts
+remain historical evidence; do not erase them to make a campaign look successful.
 
-## Notebooks and validation
+The owner requested parallel admission of remaining extraction/embedding work. Use
+`feature_admission`, all ready datasets per staged runtime, dataset-partitioned encoders,
+and the existing two-workspace/byte and bulk-transfer safeguards. A reviewed scheduling
+companion outside frozen source may replace the controller only with recorded hashes,
+policy and original/execution identities. Never alter scientific inputs for admission.
 
-- Put logic in source modules; notebooks contain no function/class definitions.
-- Each notebook ends with the complete printed report in section order.
-- src/visualize/style.py owns colors/sizes. Use FigureSaver, PDF output and inline display;
-  use final A4 widths and split dense views into readable panels. Captions describe the figure, ready for a paper.
-- Save figures under output_JEVPFN/figures/<phase>/<notebook>/, aggregate captions under
-  figures/Captions.md and the complete report under output_JEVPFN/All Results.md.
-- Verify actual files/runtime/evidence before claiming success. Synthetic tests establish
-  contracts, not CUDA/checkpoint/provider compatibility or full Experiment 0 acceptance.
-- Run `python -m pytest -q` before finishing. If a notebook or src/visualize/ changed, also run
-  `python -m src.utils.run_notebooks`. Check lint and relevant shell syntax.
-- Record substantive changes concisely in docs/CHANGELOG.md, newest first, DD-MM-YYYY.
-  Record each cluster run and reusable failures in docs/AGENTS_MEMORY.md. Submission is not
-  completion; retain the exact observed status. Keep docs uppercase, durable and concise.
+The desktop progress monitor is disabled. Do not create an automation to watch a job
+through completion. Use the current chat for requested checks; recurring reporting needs
+an explicit request and grants no new execution or cleanup authority.
 
-## Shared VSC Library
+## Storage and repository layout
 
-`vsc-library/` is a pinned, entirely read-only infrastructure submodule. Read its
-README, source snapshot, guides and Slurm examples; never edit, refresh, lint,
-format or test inside it. There is no PROJECT_SPECIFIC exception. Keep this
-project's VSC choices and operating instructions in `docs/VSC.md`, outside the
-submodule. Shared corrections belong in the standalone VSC Library checkout.
-Record the library pin when operational evidence depends on it.
+- Actual Git checkout and `.git`: DATA. Git operations remain there on VSC.
+- Persistent inputs, models, sealed dependency containers, response stores, token counts,
+  embeddings, predictions and large results: allocated GPFS PROJECT.
+- Isolated mutable working stores and temporary build/compiler caches: native scratch.
+  Share immutable GPFS PROJECT assets directly; avoid full working-set duplication.
+- DATA also holds compact manifests and operational logs under the matching numbered
+  `output_JEVPFN` phases. Use validated export/import, never replace populated caches wholesale.
 
+The durable allocation comes from ignored `.vsc-storage.local.json`,
+`JEVPFN_DURABLE_ROOT`, `JEVPFN_PROJECT_ROOT` or `VSC_PROJECT_ROOT`.
+`JEVPFN_STAGING_ROOT` is an explicit working-set override, not durable authority. Never
+silently fall back to DATA or stream bulk cross-mounted Lustre assets during B200 inference.
+The owner excludes A100, including debug/MIG. Use Mindwell B200 and the validated native
+CPU route. The controller image is selected by `control.active.json`; B200 model images
+use `blackwell-cu130` and require staged-input, CUDA and real model contracts.
 
-## Shared Decision Models Library
+Retirement requires consumer checks, verified publication/recovery and scoped authorization.
+Preserve resumable failures, referenced images and other projects. Check byte/file quotas;
+never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
-`dm-library/` is an independent pinned read-only submodule. Read
-its summaries, synthesis, papers and official source snapshots for decision-model
-claims; cite source paths and symbols and record the pin. Never edit, refresh,
-lint or test shared files there. The sole local exception is its ignored
-`PROJECT_SPECIFIC.md`, created from `PROJECT_SPECIFIC.template.md`.
-Maintain shared corrections in the canonical DM Library under `0. Literature`.
-Adding this reference changes no model roster, experimental protocol or execution gate.
+Reusable Python belongs in `src/`. Config, notebook and output phases share numbers.
+Do not create empty phase folders or duplicate question files. Permanent questions and
+response/features use per-dataset SQLite stores. PowerShell must work on Windows
+PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.
+
+## Notebooks, documentation and checks
+
+- All notebooks run locally. Put functions/classes in source modules, not notebook cells.
+  End each notebook with the complete printed report in section order.
+- `src/visualize/style.py` owns colors/sizes. Use `FigureSaver`, PDF and inline display;
+  inspect figures at final A4 widths and split dense views into readable panels.
+  Captions describe the figure without repeating the title.
+- Save figures to `output_JEVPFN/figures/<phase>/<notebook>/`, captions to
+  `figures/Captions.md`, and reports to `output_JEVPFN/All Results.md`.
+- Run `python -m pytest -q` before finishing. If notebooks or `src/visualize/` change,
+  also run `python -m src.utils.run_notebooks` and inspect every affected figure.
+  Check lint and relevant shell syntax. Separate local checks from real VSC acceptance.
+- Keep the README an orientation page; `docs/EXPERIMENTS.md` owns the scientific design,
+  VSC the operational procedure, and AGENTS_MEMORY dated evidence. Link rather than repeat.
+  Record substantive changes concisely in CHANGELOG, newest first, DD-MM-YYYY.
+- Record cluster outcomes and reusable failure lessons with exact IDs/source identities.
+  Submission is not completion. Keep docs uppercase, durable and concise; preserve historical
+  evidence even when the current implementation changes.

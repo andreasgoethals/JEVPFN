@@ -1,8 +1,9 @@
 # Literature review
 
-Research evidence reviewed 24–28 October 2026, with the benchmark description aligned
-to the 4 November design. The [README](../README.md) defines the protocol and
-[DATA_SOURCES](DATA_SOURCES.md) documents dataset semantics.
+Research evidence reviewed 24–28 October 2026, with the method description aligned to
+the current four-experiment design on 6 November. This is a scoped, dated review, not
+an exhaustive survey of the latest literature. [Experiments](EXPERIMENTS.md) defines the
+protocol; [Data sources](DATA_SOURCES.md) documents dataset and question semantics.
 
 Hosted extraction pins **Jev 1.14.0**. The earlier 1.13 evidence applies to that version.
 The 1.14 interface and sensitivity checks are documented in the [operational record](AGENTS_MEMORY.md).
@@ -50,7 +51,7 @@ Other particularly close sources are:
 
 The potential contribution is **measuring the utility, compression, robustness and cost of
 task-conditioned probabilistic text representations within fixed predictors**, against
-frozen embeddings and native-text reference systems. Separate-column and joint-column
+frozen embeddings, supervised TAR and native-text reference systems. Separate-column and joint-column
 representations, three task types and cache reuse make this a specific controlled study.
 It is not the invention of Jev-plus-TabPFN, the first decision-model benchmark, proof of a
 new decision architecture, or a demonstrated performance advance before results exist.
@@ -107,7 +108,7 @@ mutable tables. Open-weight availability does not mean zero compute cost or unre
 |---|---|
 | [Jev](https://docs.typesafe.ai/api) 1.14.0 | Hosted Noul, Choice and Score. Preserve usage, model version and raw responses. Account throughput and per-request limits are tracked separately. |
 | [Liquid d1-3B](https://huggingface.co/LiquidAI/d1-3B) | Custom decision runtime, not ordinary generated chat. LFM Open License is a conditional open-weight licence, not a blanket permissive open-source claim; qualifying research permissions and redistribution conditions must be respected. |
-| [Liquid d1-2B](https://huggingface.co/LiquidAI/d1-2B) | Separate LFM3 successor, text-only in this study; same questions and explicit mean readout. Its new runtime/window need independent acceptance; vendor benchmark improvements are not downstream evidence. |
+| [Liquid d1-2B](https://huggingface.co/LiquidAI/d1-2B) | Separate LFM3 successor, text-only in this study; same questions and explicit mean readout. Its distinct runtime/window require independent acceptance; vendor benchmark improvements are not downstream evidence. |
 | [Perplexity Decider v1.1-27B](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b) | Native decision head, noncausal full attention and saved calibration temperature. Generic causal-LM next-token inference is not equivalent. |
 | [Clef-flash](https://huggingface.co/Cloudflare/clef-flash) | `joint_schema_model.encode_record` and its joint head render/score the schema. The convenience encoder slices overlong state; JEVPFN rejects overflow and retains full-precision softmax. Hosted and open-weight context limits are not interchangeable. |
 | [Intern-Decision-4B](https://huggingface.co/internlm/Intern-Decision-4B) | Shifted answer-slot logits over legal candidates, then checkpoint-bound temperature. Keep the published calibration; do not refit it on benchmark labels. |
@@ -157,7 +158,7 @@ would not by itself improve an interpretable, reproducible comparison.
 and publisher code at `cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41` identify a distinct LFM3
 checkpoint with a 128,000-token configured text window and an LFM Open License v1.0.
 Vendor DecisionBench/ImajevBench improvements do not establish downstream tabular gains.
-We retain d1-3B and add d1-2B as `liquid_lfm3`, using identical canonical text/questions,
+The roster retains d1-3B and includes d1-2B as `liquid_lfm3`, using identical canonical text/questions,
 complete class distributions and the same nine directional levels. `api.py:answer` defaults
 to a median level, so `SelfHostedClient.evaluate` explicitly passes `score_readout="mean"`.
 `lfm3.py` registers the non-thinking answer lead; the CPU counter reads that exact registration
@@ -193,22 +194,18 @@ and R² for regression. The owner selected these headline metrics; all other sco
 recorded. We keep six fixed predictors and three native references, not every historical
 learner, image experiment or text-only arm from the paper. Experiment 3 adds its supervised TAR approach.
 
-Appendix A.1's target-aware representation (TAR) shares E5-small across columns and adapts its
-last three layers with LoRA (rank 16, alpha 32, dropout 0.1). Column-name/value examples use
-training-row targets; an internal holdout selects the checkpoint (10%, capped at 1,000; the source binary splitter adds two rows). Regression adaptation
-uses twenty equal-frequency target bins. This is valid supervised representation learning
-if bins, adaptation, selection and compression use only the relevant training partition.
-The copied training sources are hash-bound to commit `bc9e87130df9884ccd49d04055599c0eda9f3238`; see [TAR implementation and deviations](TAR.md).
+MulTaBench's target-aware representation (TAR) adapts E5-small with training-row labels,
+internal early stopping and LoRA on the last three layers. It is supervised learning;
+JEVPFN's decision features instead use documentary target semantics without fitting to
+these labels. The copied training sources are hash-bound to
+`bc9e87130df9884ccd49d04055599c0eda9f3238`. [TAR.md](TAR.md) records the exact source
+workflow, hyperparameters, training boundaries and project differences.
 
-JEVPFN's decision features use documentary target semantics without dataset-label fitting.
-Call this **task-conditioned feature extraction**, not supervised representation learning.
-Experiment 3 now uses one outer-fold TAR adapter shared across the six predictors and both
-PCA recipes. Like the upstream cached workflow, it has internal early stopping but no
-inner encoder refits. Fixed-0.5 binary secondary scores avoid tuning on in-sample supervised
-representations. Default-threshold scores are available in every arm; headline AUC is
-threshold-free. Upstream missing placeholders, column prefixes, 512-token truncation and
-coordinate standardization differ from Experiment 2. The comparison therefore measures
-complete representation pipelines, not the causal effect of fine-tuning alone.
+Experiment 3 retains one TAR adapter per outer fold and no inner encoder refits.
+Its fixed-0.5 binary scores avoid threshold tuning on in-sample supervised representations;
+headline AUC is threshold-free. Different missing-value, prefix, length and scaling
+policies mean the comparison with frozen embeddings is a complete-pipeline comparison,
+not an isolated causal estimate of fine-tuning.
 
 [STRABLE: Benchmarking Tabular Machine Learning with Strings](https://arxiv.org/abs/2605.12292)
 emphasizes that strings include names, codes, numbers, categories and prose. A compact
@@ -234,20 +231,15 @@ Nonoverlapping chunks, content-token-weighted aggregation and normalization cove
 text. This is a declared project policy, not equivalence to full-window contextualization
 or MulTaBench's original preprocessing. Qwen's chunk length is below its native window.
 
-Per-column PCA32 preserves separate column blocks; joint PCA64 compresses
-the concatenated text vectors. Non-text features bypass PCA. Joint PCA can capture
-cross-column covariance, and high-variance columns can dominate. The recipes have equal
-total width on two-text-column datasets. Elsewhere the comparison reflects both grouping
-and width. Explained variance measures retained variation, and predictive relevance is
-evaluated separately.
+The approved separate PCA32 and joint PCA64 recipes are defined in
+[Experiments](EXPERIMENTS.md#experiment-2-frozen-embeddings). Joint compression captures
+cross-column covariance but can be dominated by high-variance fields. Separate compression
+preserves a budget for each field. Grouping and total width vary together except on
+two-text-column datasets, and explained variance is not predictive relevance. See
+`src/data/text_embeddings.py` and `src/evaluation/embedding_control.py` for the
+encoder and training-only compression contracts.
 
-Frozen-embedding imputation and PCA fit on training rows only, including each inner threshold fold. TAR uses outer-training standardization/PCA and no inner threshold fit.
-Validation/test rows are transformed by that fitted map and receive exactly the same
-output columns. Frozen embeddings can be cached across folds; fitted PCA cannot.
-See `src/data/text_embeddings.py` and
-`src/evaluation/embedding_control.py`, `prepare_pca.py`, `pca_cache.py`.
-
-A useful fourth representation family is word/character **TF-IDF**, optionally followed by
+An omitted lexical representation family is word/character **TF-IDF**, optionally followed by
 TruncatedSVD. Length/count controls do not replace lexical representations. This remains a
 scope limitation: the owner declined these extra baselines on 27 October. TF-IDF is a
 weighted vocabulary-count representation; SVD compresses it, not a second pretrained encoder.
@@ -263,7 +255,7 @@ Raw categorical strings are not automatically semantic language encoding.
 |---|---|
 | TabPFN-3.5 local | Its selected interface uses our numeric/categorical features. TabPFN v9's optional `TextTransformer` uses skrub character TF-IDF/SVD; this is not the hosted Plus/Thinking semantic workflow, and is not exclusive to 3.5. |
 | TabICL v2 | Classification/regression checkpoints with numeric/categorical inputs; no native general-language encoder in the selected recipe. Many-class handling must retain every class. |
-| LimiX-2 | V2 numeric/categorical predictor. `RebalanceFeatureDistribution.fit_transform` already fits on training rows. JEVPFN also restricts filtering, category encoding and polynomial scaling to training rows. The adapter still requires real 0B validation. [Benchmark design](../README.md#benchmark-design) |
+| LimiX-2 | V2 numeric/categorical predictor. `RebalanceFeatureDistribution.fit_transform` already fits on training rows. JEVPFN also restricts filtering, category encoding and polynomial scaling to training rows. The adapter still requires real 0B validation. [Benchmark design](EXPERIMENTS.md#predictors-and-exact-grid) |
 | Kumo Tabular | NVIDIA SDM single-table model, not relational KumoRFM. The pinned recipe count-encodes some categories and selects at most 500 columns. JEVPFN rejects feature loss; 500 is a recipe bound, not a proven architectural maximum. |
 | CatBoost | Has separate native text tokenizers/dictionaries/calculators, but the selected main comparison uses numeric/categorical input plus the explicit representations. |
 | Linear/logistic regression | Requires fold-local imputation, categorical encoding and scaling; has no implicit language encoder. |
@@ -294,10 +286,9 @@ The three native-text references have different learning procedures:
   `finetunability/datasets.py:select_finetunability_datasets`, explicitly identify **TabArena**
   as the epoch-selection suite (fold 0, capped subsamples, Elo against baselines). The same
   README describes exclusion fingerprints from every MulTaBench `data.csv` before pretraining.
-  Thus the review's claim that the epoch-selection suite is unspecified is not supported by
-  these sources. This is publisher-documented procedure, not an independently reproduced
-  guarantee of no overlap through source aliases or the pretrained text encoder. We retain
-  v1.1 and do not treat this as evidence of leakage from JEVPFN's test folds.
+  This is publisher-documented procedure, not an independent guarantee against overlap
+  through source aliases or the pretrained text encoder. It does not establish leakage
+  from JEVPFN's test folds.
   The source/version check used TFM Library `e604ade99f7cf135f41c17a49e1f91da528e835d`;
   the earlier pins in section 1 identify the broader literature review.
 - **[ConTextTab / SAP RPT-1 OSS](https://github.com/SAP-samples/sap-rpt-1-oss)** embeds column
@@ -330,13 +321,11 @@ no answer leakage. The exhaustive question audit checks file hashes, schema, row
 fixed questions and empty-input behavior; it cannot prove perfect linguistic interpretation.
 See `src/jev/question_audit.py:audit_dataset`.
 
-The main comparison uses the same outer splits across representations, with stratification
-for classification and shuffled KFold for regression. In Experiments 1, 2 and 4, binary
-thresholds maximize F1 using three-fold out-of-fold predictions from the outer training
-partition, followed by a refit on all outer training rows. TAR (Experiment 3) retains
-upstream early stopping and fixed-0.5 binary scores, without inner encoder refits. PCA
-and preprocessing use the corresponding training partition only. Multiclass uses the full probability vector/argmax;
-regression retains point predictions and applicable continuous-target metrics.
+The [evaluation protocol](EXPERIMENTS.md#cross-validation-and-missing-inputs) fixes shared
+outer splits and training-only preprocessing. Experiments 1, 2 and 4 select binary F1
+thresholds using inner out-of-fold predictions; TAR uses a fixed threshold without inner
+encoder refits. This separation matters because selecting preprocessing, thresholds or
+representations from test results biases evaluation.
 [Threshold selection guidance](https://scikit-learn.org/stable/modules/classification_threshold.html),
 [Cawley and Talbot, 2010](https://jmlr.org/papers/v11/cawley10a.html)
 
@@ -433,9 +422,13 @@ decision before outcomes. Decision chunking also needs a defined aggregation rul
 lose cross-column interactions. Supported length is not proof of equally effective use of
 every position. [Lost in the Middle](https://aclanthology.org/2024.tacl-1.9/)
 
-The most informative figures consequently show text-column counts, nonempty cells, lengths
+The preparation figures show text-column counts, nonempty cells, lengths
 and tails, exact per-column/joint reuse, request and affected-row coverage, feature width,
-probability/expected-score disagreement and paired predictive gains. Accuracy alone hides
+probability/expected-score disagreement and paired predictive gains. The feature notebooks
+add row-level votes, matching-class correlations, full-vector distances, concentration,
+text grouping and hash-matched examples. All-row and exact-text-weighted summaries answer
+different questions; ties and missing text remain separate from consensus. None of these
+label-free diagnostics establishes correctness. Accuracy alone hides
 calibration and individual disagreement; provider-average distances need shared row coverage
 and aligned option identities. Missing inputs, failures and excluded datasets should remain
 distinct. Plot declared no-data states until real features/results exist.

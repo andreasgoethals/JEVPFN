@@ -65,12 +65,12 @@ def headline_summary(folds):
 
 def artifact_coverage():
     from src.data.selection import selected_entries
-    from src.jev.features import feature_inventory
+    from src.evaluation.portable_features import notebook_inventory
 
     main = load_yaml("experiment_1/main")
     rows = []
     for entry in selected_entries(load_catalog(), main):
-        inventory = feature_inventory(paths.dataset_cache_path(entry["id"]))
+        inventory = notebook_inventory(entry["id"])
         for provider in main["candidate_extractors"]:
             selected = inventory[inventory.provider.eq(provider)]
             rows.append({"dataset_id": entry["id"], "model_id": provider, "planned": 2,

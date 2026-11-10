@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -66,6 +67,34 @@ def test_failed_publication_never_removes_inputs(roots):
     with pytest.raises(ValueError):
         cap.release("intern", apply=True)
     assert (work / "containers/image.sif").exists()
+
+
+def test_release_can_resume_after_publication_lock_timeout(roots, monkeypatch):
+    from src.cluster import scheduling
+
+    durable, work = roots
+    copied_assets(durable, work)
+    source = work / "data/jev_cache/fixture.sqlite3"
+    cache(source, request("intern"))
+    lock = stage.file_lock
+    busy = True
+
+    @contextmanager
+    def publication_lock(path, **kwargs):
+        if busy and path.parent.name == ".publication-locks":
+            raise TimeoutError("Other publisher owns the lock")
+        with lock(path, **kwargs):
+            yield
+
+    monkeypatch.setattr(stage, "file_lock", publication_lock)
+    monkeypatch.setattr(scheduling, "require_cpu_staging", lambda: None)
+    monkeypatch.setattr("sys.argv", ["scratch_capacity", "--runtime", "intern", "--apply"])
+    assert cap.main() == cap.PUBLICATION_LOCK_UNAVAILABLE
+    assert source.is_file() and (work / "checkpoints/model.bin").is_file()
+    busy = False
+    assert cap.main() is None  # The module entry point exits successfully for None.
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern"), kind="verified_response") == response()
 
 
 @pytest.mark.parametrize("unknown", [False, True])

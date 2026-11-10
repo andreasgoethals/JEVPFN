@@ -1,8 +1,16 @@
 # Data sources and definitions
 
 This guide documents the pinned MulTaBench inputs, text definition and question semantics.
-The [README](../README.md) describes the evaluation, and the [VSC runbook](VSC.md) gives
-the verification commands.
+The [experiment guide](EXPERIMENTS.md) defines evaluation; the [VSC runbook](VSC.md)
+gives preparation and verification commands.
+
+## Dataset scope
+
+Exploration retains all 20 core text datasets. The 18 benchmark datasets exclude Zomato
+Restaurants for its extreme text burden and Spotify Genres for its 114-class output and
+extraction overhead. These choices were made before comparative predictive results.
+The selected collection has 665,406 rows and 80 official text columns across three binary,
+six multiclass and nine regression datasets; the all-20 totals below are historical scope.
 
 ## Primary sources and pins
 
@@ -51,89 +59,6 @@ and reproduced code give 1/3/6. This project consistently uses the pinned execut
 it does not mix the paper table's classifications with the released CSVs. The distinction must
 be stated when comparing to the paper, rather than silently adding or removing text features.
 
-## Statistics
-
-- Feature counts exclude the target. Missingness follows pandas CSV parsing. General unique
-  counts exclude nulls. Text reuse also excludes nonfinite and whitespace-only values.
-- The audit preserves CSV numeric dtypes and treats booleans as categorical. Numerical
-  summaries and regression quantiles use finite observations. Target summaries stay in
-  the audit artifacts. Requests use the original class vocabulary and documentary meanings.
-- Text lengths use characters and whitespace-delimited words. Approximate tokens default to
-  `ceil(characters / 4)`, with separate ceilings for per-column inputs and a row total for joint
-  text. Workload estimates include the compact request JSON, including metadata and escapes.
-  Exact provider token audits count the fully rendered requests separately.
-
-## Reproduction and outputs
-
-The catalog's `directory` selects the numbered folder under `data/raw/`. Its `slug` selects
-the Kaggle source. Each folder holds `data.csv`, `metadata.json` and `download.json`.
-Preparation checks the recorded source, version and hashes. Frozen references under
-`src/data/upstream/` are retained for inspection. CSVs retain their source licences.
-
-## Exact text reuse
-
-`src/data/text_reuse.py` matches the request builder's canonical typed JSON, without target
-values. It profiles every official text column and the full joint tuple of available named
-fields. `reuse.csv` records nonempty/missing counts, distinct inputs, repeated copies, rows in
-repeated groups, and the most common input frequencies. `text.csv` adds these to field lengths.
-`summary.csv` gives per-dataset totals and joint/per-column overlap. No raw text is stored in
-the reuse table. A missing field is omitted jointly, so a one-available-field joint request
-shares the per-column response. Missing inputs incur no call and are not counted as reusable
-nonempty text. Neither case folding nor fuzzy matching is applied.
-
-`repeated_nonempty_rows` means nonempty slots minus distinct inputs (avoidable calls).
-`rows_in_repeated_groups` includes the first occurrence too. For a value appearing five times,
-these are four and five respectively. Exact input equality predicts cache reuse only with
-unchanged task metadata, question and settings. Cache reuse means returning the first stored
-response; it does not require a claim that repeated API executions are bit-identical.
-
-`overview.csv` summarizes availability, lengths, distinct values and extraction workload.
-Distinct cells are counted within each named column and then summed. Empty-cell rates use
-all cells, per-column reuse rates use nonempty cells, and joint reuse rates use rows with
-available text. Both-mode reuse includes identical requests shared across modes.
-
-## Long-text audit
-
-`long_text_datasets.csv` compares p95/p99/max individual-cell and joint-row lengths;
-`long_text_columns.csv` covers all official text fields. Nonempty cells/rows alone enter these
-quantiles. Characters are Python string lengths; tokens remain ceil(characters/4), without
-provider tokenization. Boxplots use p01/p99 whiskers, with observed maxima shown separately.
-The context-limit line is a text-only screen; full request escaping/metadata can increase it.
-The longest original cell per column is saved under the ignored audit cache `longest_text/`,
-with dataset/column/`csv:N` identity in audit JSON. Notebook examples show beginning/middle/end
-excerpts, clipped only for display. No extraction truncation policy is implied.
-
-## Extraction and experiment selection
-
-Exploration retains all 20 core text datasets. The 18 benchmark datasets exclude Zomato
-Restaurants for its extreme text burden and Spotify Genres for its 114-class output and
-extraction overhead. These choices were made before comparative predictive results.
-
-## Dataset issues relevant to the experiment
-
-The pinned collection contains 821,071 rows and 90 official text columns: three binary,
-seven multiclass and ten regression tasks. All official row/text/non-text counts matched the
-loaded data. The generated notebook report contains the per-dataset column names and counts.
-
-Official text includes short names, identifiers, URLs and numeric/date-like strings. Rotten
-Tomatoes has 13 text fields and SciMagojr has 10; some are measurements, not prose. Review
-prediction-time availability and target proxies rather than relabelling features silently.
-Spotify has 114 genre classes; Data Scientist Salary has six interval-labelled classes;
-Wine Review predicts 30 varieties; Mercari predicts log_price. Binary orientations are
-Fraud=1, toxicity=True and Kickstarter=Successful; Product Sentiment has descriptive class
-names. Units and meanings of coded classes are verified in the source-backed metadata below.
-
-Zomato contributes about three quarters of raw text tokens and has extreme review lengths.
-The approximate screen flags some inputs against the Jev context limit. Decision extraction
-rejects overflow. Frozen encoders cover long inputs in chunks. Review scores can be target
-proxies and warrant prediction-time availability review.
-
-The 30-09-2026 audit finds substantial reuse of joint inputs too: Vancouver Salaries avoids
-59.36% of nonempty joint slots, Zomato 31.94%, Video Games Sales 28.20% and Data Scientist
-Salary 23.78%. Across both modes, 3,985,167 nonempty slots become 2,032,351 distinct requests;
-107,235 distinct joint inputs overlap per-column inputs. These are historical all-20-dataset
-counts, not the selected 18-dataset extraction workload. Recompute them if the design changes.
-
 ## Source-backed question metadata
 
 `config/1. question_preparation/dataset_semantics.yaml` is the single maintained dictionary for the 18 selected datasets:
@@ -169,18 +94,18 @@ baby-product currency and company-field extraction conventions, CLEAR `British W
 legacy movie `RatingValue` scale/provenance, salary interval endpoints, and US Accidents'
 intermediate traffic-severity boundaries. Unknown units/definitions are not guessed.
 
-Metadata verified 13 October 2026. Only documentary meanings enter `documented-task-v3`; source URLs remain in question-bank
-provenance and are excluded from the model payload. Version 3 adds quotation marks around
-binary class descriptions and uses "a lower or higher value for" to support singular and
-plural regression target names. Target meanings, options, class order and the nine-level
-rubric are unchanged. Earlier versions remain readable for historical
-reproduction. Audit frequencies, target distributions,
-current row labels and prediction results remain excluded. API class IDs retain original class
-order and types; the human description is added alongside each raw class. The selected text
-fields keep their raw names; per-column requests include only their applicable field definitions.
-Selected-dataset budgets read the frozen prepared question version, including definitions of
-nonempty fields. Removed datasets retain an audit-only template for workload comparison.
-Measured hosted billing is recorded in [AGENTS_MEMORY](AGENTS_MEMORY.md).
+Metadata was verified on 13 October 2026. `documented-task-v3` fixes the grammar of
+regression target wording and quotes binary descriptions without changing meanings,
+class order or the nine-level rubric. Older versions remain readable for reproduction.
+Only documentary meanings enter model payloads: source URLs stay in provenance; row
+labels, frequencies, target summaries and prediction results remain excluded.
+
+Class IDs retain original order and types, with human descriptions alongside them.
+Text fields retain raw names and only applicable field definitions. Budgets read the
+frozen question version; excluded datasets retain audit-only workload templates.
+Measured hosted billing belongs in [Operational evidence](AGENTS_MEMORY.md#jev-accounting).
+
+## Evaluation-related data limitations
 
 Non-text ISO date columns are recognized on each training partition and converted to UTC
 epoch seconds for the numeric predictors. Test dates use that same conversion rather than
@@ -205,3 +130,80 @@ again. Entirely empty inputs form their own group, never a repeated semantic tex
 For example, the pinned Women's Clothing data has 666 entirely empty joint inputs but
 only five nonempty rows in repeated joint groups. Unseen-joint and all-columns-unseen
 results answer different questions and both retain the outer-training threshold.
+
+### Dataset-specific interpretation
+
+The full 20-dataset pinned collection contains 821,071 rows and 90 official text columns: three binary,
+seven multiclass and ten regression tasks. All official row/text/non-text counts matched the
+loaded data. The generated notebook report contains the per-dataset column names and counts.
+
+Official text includes short names, identifiers, URLs and numeric/date-like strings. Rotten
+Tomatoes has 13 text fields and SciMagojr has 10; some are measurements, not prose. Review
+prediction-time availability and target proxies rather than relabelling features silently.
+Spotify has 114 genre classes; Data Scientist Salary has six interval-labelled classes;
+Wine Review predicts 30 varieties; Mercari predicts log_price. Binary orientations are
+Fraud=1, toxicity=True and Kickstarter=Successful; Product Sentiment has descriptive class
+names. Units and meanings of coded classes are verified in the source-backed metadata below.
+
+Zomato contributes about three quarters of raw text tokens and has extreme review lengths.
+The approximate screen flags some inputs against the Jev context limit. Decision extraction
+rejects overflow. Frozen encoders cover long inputs in chunks. Review scores can be target
+proxies and warrant prediction-time availability review.
+
+The historical 30 September 2026 audit found substantial reuse of joint inputs too: Vancouver Salaries avoids
+59.36% of nonempty joint slots, Zomato 31.94%, Video Games Sales 28.20% and Data Scientist
+Salary 23.78%. Across both modes, 3,985,167 nonempty slots become 2,032,351 distinct requests;
+107,235 distinct joint inputs overlap per-column inputs. These are historical all-20-dataset
+counts, not the selected 18-dataset extraction workload. Recompute them if the design changes.
+
+
+## Audit statistics
+
+- Feature counts exclude the target. Missingness follows pandas CSV parsing. General unique
+  counts exclude nulls. Text reuse also excludes nonfinite and whitespace-only values.
+- The audit preserves CSV numeric dtypes and treats booleans as categorical. Numerical
+  summaries and regression quantiles use finite observations. Target summaries stay in
+  the audit artifacts. Requests use the original class vocabulary and documentary meanings.
+- Text lengths use characters and whitespace-delimited words. Approximate tokens default to
+  `ceil(characters / 4)`, with separate ceilings for per-column inputs and a row total for joint
+  text. Workload estimates include the compact request JSON, including metadata and escapes.
+  Exact provider token audits count the fully rendered requests separately.
+
+## Source files and reproduction
+
+The catalog's `directory` selects the numbered folder under `data/raw/`. Its `slug` selects
+the Kaggle source. Each folder holds `data.csv`, `metadata.json` and `download.json`.
+Preparation checks the recorded source, version and hashes. Frozen references under
+`src/data/upstream/` are retained for inspection. CSVs retain their source licences.
+
+## Exact text reuse
+
+`src/data/text_reuse.py` matches the request builder's canonical typed JSON, preserving
+field names and values without case folding, fuzzy matching or targets. It profiles
+per-column and joint inputs. Missing fields are omitted jointly: a joint row with one
+available field can reuse its per-column response. Entirely missing inputs incur no
+call and are excluded from nonempty reuse counts.
+
+| Output | Contents and denominator |
+|---|---|
+| `reuse.csv` | Nonempty/missing counts, distinct inputs, repeated copies and common frequencies; no raw text |
+| `text.csv` | Per-field reuse and lengths |
+| `summary.csv` | Dataset totals and joint/per-column overlap |
+| `overview.csv` | Availability, lengths and workload; empty-cell rates use all cells, reuse rates use nonempty inputs |
+
+`repeated_nonempty_rows` counts nonempty slots minus distinct inputs (avoidable calls).
+`rows_in_repeated_groups` includes the first occurrence: five identical values count as
+four and five respectively. Equality implies cache reuse only with unchanged task,
+question and model/settings identities. Reuse returns the first stored response; it
+makes no claim that repeated uncached API calls are bit-identical.
+
+## Long-text audit
+
+`long_text_datasets.csv` compares p95/p99/max individual-cell and joint-row lengths;
+`long_text_columns.csv` covers all official text fields. Nonempty cells/rows alone enter these
+quantiles. Characters are Python string lengths; tokens remain ceil(characters/4), without
+provider tokenization. Boxplots use p01/p99 whiskers, with observed maxima shown separately.
+The context-limit line is a text-only screen; full request escaping/metadata can increase it.
+The longest original cell per column is saved under the ignored audit cache `longest_text/`,
+with dataset/column/`csv:N` identity in audit JSON. Notebook examples show beginning/middle/end
+excerpts, clipped only for display. No extraction truncation policy is implied.

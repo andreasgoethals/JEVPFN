@@ -38,7 +38,7 @@ def predictor_width_figure(plan, summary):
                    color=style.MODE_COLORS[mode], zorder=5, linewidths=0)
     ax.axvline(limit, color=style.WINDOW_COLOR, linestyle=(0, (3, 2)), linewidth=0.8)
     ax.text(limit * 1.05, 0.02, "Kumo recipe limit · 500", rotation=90, ha="left", va="bottom",
-            fontsize=6, color=style.WINDOW_COLOR, transform=ax.get_xaxis_transform())
+            fontsize=7, color=style.WINDOW_COLOR, transform=ax.get_xaxis_transform())
     ax.set_xscale("log")
     ax.set_xticks([1, 3, 10, 30, 100, 300, 1000], ["1", "3", "10", "30", "100", "300", "1,000"])
     ax.set_xlim(0.8, 1100)
@@ -85,7 +85,7 @@ def _arrow(ax, start, end):
 
 def input_design_figure():
     """What one request contains, what it returns, and how blocks enter each predictor arm."""
-    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 4.3))
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 4.6))
     ax.set_axis_off()
     ink, faint = style.TOTAL_COLOR, style.FAINT_COLOR
     per, joint = style.MODE_COLORS["per_column"], style.MODE_COLORS["joint"]
@@ -104,7 +104,7 @@ def input_design_figure():
         ax.text(0.10, y, body, fontsize=7, va="top", transform=ax.transAxes, linespacing=1.15)
         y -= 0.07 if "\n" not in body else 0.105
     ax.text(0.02, 0.528, "Never sent: non-text values, row targets, class frequencies",
-            fontsize=6.5, color=style.DIRECTION_COLORS["higher"], transform=ax.transAxes)
+            fontsize=7, color=style.DIRECTION_COLORS["higher"], transform=ax.transAxes)
     _arrow(ax, (0.41, 0.72), (0.455, 0.72))
     _box(ax, 0.46, 0.62, 0.15, 0.20, ink, fill=faint)
     ax.text(0.535, 0.72, "Frozen decision\nmodel\n(12 extractors,\nno generation)",
@@ -125,7 +125,7 @@ def input_design_figure():
         ax.text(0.68, y, task, fontsize=7, va="top", color=style.TASK_COLORS[key],
                 weight="bold", transform=ax.transAxes)
         ax.text(0.785, y, width, fontsize=7, va="top", weight="bold", transform=ax.transAxes)
-        ax.text(0.81, y, body, fontsize=6.8, va="top", transform=ax.transAxes)
+        ax.text(0.81, y, body, fontsize=7, va="top", transform=ax.transAxes)
         y -= 0.075 if "\n" not in body else 0.11
     ax.text(0, 0.46, "b  Predictor input for a row with T = 2 text columns (f features per request)",
             weight="bold", fontsize=8, va="top", transform=ax.transAxes)
@@ -138,32 +138,39 @@ def input_design_figure():
         ("+ both", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
                     ("A · f", 0.09, per), ("B · f", 0.09, per), ("joint · f", 0.09, joint)]),
         ("+ frozen embedding", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
-                                ("training-only PCA of E5/Qwen vectors", 0.27,
+                                ("PCA of frozen E5/Qwen vectors", 0.27,
                                  style.FAMILY_COLORS["experiment_2"])]),
+        ("+ TAR embedding", [("non-text", 0.34, style.MISSING_COLOR), ("T flags", 0.06, faint),
+                             ("PCA of label-tuned E5 vectors", 0.27,
+                              style.FAMILY_COLORS["experiment_3"])]),
     ]
+    experiments = {"+ frozen embedding": "Experiment 2", "+ TAR embedding": "Experiment 3"}
     for i, (name, blocks) in enumerate(arms):
-        top = 0.385 - i * 0.075
-        ax.text(0.16, top - 0.027, name, ha="right", va="center", fontsize=7,
+        top = 0.39 - i * 0.066
+        ax.text(0.16, top - 0.025, name, ha="right", va="center", fontsize=7,
                 transform=ax.transAxes)
         x = 0.175
         for label, width, color in blocks:
             light = color in (faint, style.MISSING_COLOR)
-            ax.add_patch(plt.Rectangle((x, top - 0.054), width - 0.004, 0.054, color=color,
+            ax.add_patch(plt.Rectangle((x, top - 0.05), width - 0.004, 0.05, color=color,
                                        transform=ax.transAxes, linewidth=0))
-            ax.text(x + width / 2, top - 0.027, label, ha="center", va="center", fontsize=6.3,
+            ax.text(x + width / 2, top - 0.025, label, ha="center", va="center", fontsize=7,
                     color=style.TEXT_COLOR if light else style.BACKGROUND_COLOR,
                     transform=ax.transAxes)
             x += width
-        ax.text(0.99, top - 0.027, ("Experiment 2" if "embedding" in name else "Experiment 1"),
-                ha="right", va="center", fontsize=6.3, color=ink, transform=ax.transAxes)
+        ax.text(0.99, top - 0.025, experiments.get(name, "Experiment 1"),
+                ha="right", va="center", fontsize=7, color=ink, transform=ax.transAxes)
     return (
         fig,
         "request_and_feature_design",
         "(a) Contents of one provider-neutral decision request and the numeric features it "
         "returns. Every extractor receives the same task context, question, options and named "
         "text; adapters differ only in native prompt framing and readout. (b) Column blocks "
-        "entering the six fixed predictors for a row with two text columns. Flags mark missing "
-        "text and are shared by every arm shown. The value f is 1 for binary and regression and K for "
+        "entering the six fixed predictors for a row with two text columns. Embedding arms add "
+        "training-only PCA (32 components per text column, or 64 jointly) of frozen E5-small/large "
+        "or Qwen3 vectors, or of E5-small vectors fine-tuned on each outer-training fold's labels "
+        "(TAR). Native text systems (Experiment 4) replace both the representation and the "
+        "predictor and are not shown. Flags mark missing text and are shared by every arm shown. The value f is 1 for binary and regression and K for "
         "multiclass. Identical requests are answered once and reused across rows. With a single "
         "text column the joint block equals the per-column block and is included once.",
     )

@@ -1,6 +1,7 @@
 extends: feature_creation
 name: saved_decision_feature_comparison
 comparison:
+  complete_providers_only: true
   providers:
   - jev
   - liquid

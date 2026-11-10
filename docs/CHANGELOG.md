@@ -1,5 +1,52 @@
 # Changelog
 
+Implementation history, newest first. Entries describe the code and evidence at their
+date; old model rosters, grids, paths and pending statuses are not current instructions.
+Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for commands and
+[Operational evidence](AGENTS_MEMORY.md) for dated campaign outcomes.
+
+## 09-11-2026
+
+- Restore the local checkout after Google Drive for desktop mirrored a cloud trash of the
+  synced project folder (see [Operational evidence](AGENTS_MEMORY.md)). Code, data,
+  features, Jev cache, receipts, tokenizers and paper sources were recovered and verified.
+- Rebuild the decision-model comparison notebook around the notes' questions (agreement,
+  probability differences, confidence, systematic deviation) with five figures instead of
+  21: pairwise same-answer/rank similarity per task, model profiles (distance from peers
+  and entropy), per-dataset agreement with the peer majority (new label-free measure),
+  all-model consensus with single-field versus joint text, and the most disputed input
+  per task. One model label set across all figures; text below 7 pt raised to the floor;
+  the input-design figure adds the TAR arm. Pilot agreement drops illegible 12-model values.
+- Classify a busy durable publication lock separately from other release failures.
+  The dispatcher can retry that release twice using the saved publication progress.
+  Recover the stopped Intern release and retain the completed dataset jobs.
+
+## 06-11-2026
+
+- Consolidate the current scientific design in `EXPERIMENTS.md`; shorten and reorder the
+  README around scope, status, design, setup and navigation. Align citation/package metadata,
+  dataset/TAR/literature guides and the VSC runbook. Separate dated evidence from current
+  instructions and retire the obsolete automatic-monitor mandate. Preserve source pins,
+  historical receipts, runtime dependencies and the shared template unchanged.
+
+- Align input-design previews with accepted 0A evidence and the shared missing-text flags; previews remain offline and do not certify full extraction coverage.
+
+- Give GPFS staging 12 hours, retain verified per-dataset publication and warm-cache
+  progress, and avoid rewriting durable stores when a validated union adds no records.
+  The feature dispatcher retries known transient Slurm failures twice and admits
+  dependants only after a successful attempt. Release also retries unavailable
+  queue checks while preserving its protection for queued consumers.
+
+- Expand the saved decision-feature analysis with full-row vote splits, matching-class
+  correlations, probability differences, confidence, peer distance and duplicate-text
+  sensitivity. Retain exact hash-matched example questions and a compressed searchable
+  joint-row table. Keep tied answers and missing text distinct from consensus; these
+  label-free diagnostics do not establish correctness or predictive utility.
+
+- Add a checksum-verified local notebook snapshot for complete VSC decision-feature
+  batches. Retain the original feature tables and matched-input digests without
+  replacing response ledgers. Keep incomplete providers out of model comparisons.
+
 ## 05-11-2026
 
 - Handle Jev payment/credit failures explicitly, preserve unresolved billing, stop queued
@@ -88,6 +135,9 @@
   terminal IDs, preserves history and reuses successful jobs and cached responses.
 - Add isolated Linux recovery checks for saved feature blocks and unchanged numerical
   source; preserve accepted 0A evidence and identify historical failed logs separately.
+
+<details>
+<summary>September–October 2026 implementation history</summary>
 
 ## 30-10-2026
 
@@ -724,5 +774,7 @@
 - Initialized the inner JEVPFN repository, Python 3.12, pinned data/source loading, deterministic templates, thin notebooks and read-only TFM Library integration.
 - Preserved the template's source/style/Git conventions and fixed parallel audit races.
 
+</details>
+
 Detailed historical edits and validation snapshots remain in Git history. Current run evidence
-belongs in AGENTS_MEMORY; code/configuration and README define the present implementation.
+belongs in AGENTS_MEMORY; code/configuration and EXPERIMENTS define the present implementation.

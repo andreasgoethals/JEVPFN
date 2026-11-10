@@ -5,20 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jevpfn"
 version = "0.1.0"
-description = "Controlled comparisons of decision-model, embedding and native-text representations for tabular prediction"
+description = "Comparing decision features, frozen and target-aware embeddings, and native-text systems for tabular prediction"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Andreas Goethals", email = "andreas.goethals@kuleuven.be" }]
 
-# ---------------------------------------------------------------------------
-# WHY 3.11-3.12 and not open-ended.
-#
-# Preserve the template's support boundary. The verified local and VSC CPU
-# environments both use Python 3.12; record interpreter/package identities in
-# each runtime rather than assuming equal package names prove equal numerics.
-# Widen the support boundary only after
-# checking the notebook and model dependency stack on both platforms.
-# ---------------------------------------------------------------------------
+# Verified CPU runtimes use Python 3.12; widen support only after cross-platform checks.
+# Record interpreter and package identities separately (Windows/Linux builds differ).
 requires-python = ">=3.11,<3.13"
 
 dependencies = [
@@ -62,7 +55,7 @@ embeddings = ["transformers==5.17.0", "torch==2.12.1", "scikit-learn==1.9.1"]
 tar = ["transformers==5.17.0", "torch==2.12.1", "peft==0.21.0", "accelerate==1.15.0", "python-dotenv==1.2.1"]
 token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  # CPU rendering, including publisher chat templates; no weights.
 # Selected benchmark engines; actual VSC compatibility is tested in Experiment 0B.
-# Validate each selected extra on VSC in experiment 0. Each native-text engine uses a separate pinned runtime.
+# Each native-text engine uses a separate pinned runtime.
 baselines = ["scikit-learn==1.9.1", "catboost==1.2.10"]
 tabicl = ["tabicl==2.2.0", "torch==2.12.1"]
 ag-mm = ["autogluon.multimodal==1.6.1"]  # Separate runtime: Transformers <5.15; never combine with token-audit/embeddings.
@@ -83,17 +76,10 @@ decision-open = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1",
 
 [project.urls]
 Repository = "https://github.com/andreasgoethals/JEVPFN"
+Documentation = "https://github.com/andreasgoethals/JEVPFN#documentation"
 Template = "https://github.com/andreasgoethals/0.-Template"
 
-# ---------------------------------------------------------------------------
-# Packaging: src/ is a flat package root (src/data, src/utils, src/visualize),
-# NOT a src/{{PACKAGE_NAME}}/ layout, because every script and notebook imports
-# `from src.utils.paths import ...`. Changing the layout breaks every import in
-# the repository, so it is fixed by the template.
-#
-# The excludes matter: without them, `pip install -e .` walks the read-only
-# literature submodule and the data directory looking for packages.
-# ---------------------------------------------------------------------------
+# src/ is the importable package. Exclude libraries, data and reference snapshots.
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]

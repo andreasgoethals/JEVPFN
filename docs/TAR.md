@@ -2,7 +2,9 @@
 
 TAR adapts E5-small-v2 using the dataset's training targets, then feeds its vectors to
 the same six predictors used in Experiments 1 and 2. It is supervised representation
-learning; the frozen decision features remain task-conditioned and label-free.
+learning; frozen decision features remain task-conditioned without dataset-label fitting.
+See [Experiments](EXPERIMENTS.md) for the shared grid and evaluation rules. This guide
+records the upstream implementation and the differences necessary to reproduce it.
 
 ## Source and workflow
 
@@ -29,8 +31,8 @@ four data-loader workers are preserved. The training head is discarded. Inferenc
 uses masked mean pooling and L2-normalized 384-dimensional vectors.
 
 Each fold's adapter and vectors are prepared once and reused by all six predictors
-and both PCA recipes. There are **18 × 5 = 90 encoder fits** and
-**18 × 6 × 2 = 216 predictor configurations**, each with five outer fits (1,080).
+and both PCA recipes: **90 encoder fits and 216 predictor configurations**. The
+[grid table](EXPERIMENTS.md#predictors-and-exact-grid) separates training and predictor costs.
 Upstream does not train encoders inside an inner threshold-CV loop. TAR therefore uses
 fixed-0.5 binary decision metrics; it produces no inner-OOF threshold predictions.
 Compare default-threshold metrics across families; AUC does not depend on the threshold.
@@ -63,10 +65,8 @@ the established scratch/publication workflow. Temporary Trainer checkpoints use 
 job's owned native scratch cache. Standard result export includes completed durable
 TAR assets; interrupted bundles stay on PROJECT for diagnosis and are not exported.
 
-TAR preparation is part of the 0B stage: train one adapter for each of 18 datasets ×
-5 outer folds, then validate it. Each adapter sees only that fold's outer-training rows
-and is reused by all six predictors and both PCA recipes. These 90 fits are retained
-for the benchmark; 0B does not require training them again for every predictor.
+TAR preparation belongs to 0B. The 90 fitted adapters and their validated vectors are
+retained for the benchmark; they are not retrained for each predictor.
 
 0B must validate all 90 real bundles, disjoint internal training/validation membership,
 complete finite unit-length vectors, adapter save/reload agreement on **every text column**, both PCA recipes,
@@ -113,5 +113,5 @@ sbatch --dependency="afterok:$jevpfn_tar_job" scripts/slurm/prepare_tar_pca.slur
 Repeat for the other selected IDs in `config/0. exploration/datasets.yaml`. Queue completion alone is insufficient: the 0B preflight reads
 the artifact checksums and PCA stores. Generate predictor-profile arrays through
 `src.cluster.benchmark_jobs --phase experiment_3 --model MODEL --profile-fold --write`.
-Review and accept them before enabling the final benchmark. No TAR jobs were launched
-by the local implementation task.
+Review and accept them before enabling the benchmark. The dated [operational record](AGENTS_MEMORY.md#local-tar-addition-4-november)
+distinguishes local implementation checks from actual B200 validation.

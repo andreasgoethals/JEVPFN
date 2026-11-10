@@ -20,6 +20,7 @@ from src.utils.serialization import write_json
 
 GIB = 1024**3
 QUEUE_CHECK_UNAVAILABLE = 75
+PUBLICATION_LOCK_UNAVAILABLE = 76
 
 
 class QueueCheckUnavailable(RuntimeError):
@@ -388,6 +389,7 @@ def retire_published_mutable(work):
 def main():
     from src.cluster.containers import RUNTIMES
     from src.cluster.scheduling import require_cpu_staging
+    from src.cluster.scratch_stage import PublicationLockUnavailable
 
     parser = argparse.ArgumentParser(description=__doc__)
     selection = parser.add_mutually_exclusive_group(required=True)
@@ -404,6 +406,9 @@ def main():
         except QueueCheckUnavailable as exc:
             print(exc, flush=True)
             return QUEUE_CHECK_UNAVAILABLE
+        except PublicationLockUnavailable as exc:
+            print(exc, flush=True)
+            return PUBLICATION_LOCK_UNAVAILABLE
 
 
 if __name__ == "__main__":

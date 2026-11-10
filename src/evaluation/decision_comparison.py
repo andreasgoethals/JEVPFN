@@ -18,7 +18,8 @@ import pandas as pd
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
-from src.jev.features import FeatureBlock, feature_inventory, load_block
+from src.evaluation.portable_features import notebook_inventory, verified_payload_hashes
+from src.jev.features import FeatureBlock, load_block
 from src.utils import paths
 from src.utils.serialization import canonical_json, digest, write_json
 
@@ -37,11 +38,15 @@ class GroupFeatures:
 @dataclass
 class Comparison:
     records: dict[str, list[dict]] = field(default_factory=dict)
+    frames: dict[str, list[pd.DataFrame]] = field(default_factory=dict)
 
     def add(self, table: str, record: dict):
         self.records.setdefault(table, []).append(record)
 
     def table(self, name: str) -> pd.DataFrame:
+        frames = self.frames.get(name, [])
+        if frames:
+            return pd.concat(frames, ignore_index=True)
         return pd.DataFrame(self.records.get(name, []))
 
 
@@ -288,6 +293,14 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                         "constant": bool(np.ptp(values) == 0),
                     },
                 )
+    # Multiclass correlations must compare matching options, not arbitrary class IDs
+    # or just the largest probability. Rank once per model/option/weighting.
+    from src.evaluation.decision_diagnostics import correlation_vectors, matching_correlations
+    correlation_cache = {
+        weight: correlation_vectors(ps[:, idx], reference.task)
+        for weight, idx, _, _ in _weighting_indices(present[0], hashes, cfg["weightings"])
+        if len(idx)
+    }
     for i, j in combinations(range(len(aligned)), 2):
         mask = present[i] & present[j]
         for weighting, idx, n, u in _weighting_indices(mask, hashes, cfg["weightings"]):
@@ -296,6 +309,11 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
             p, q = ps[i, idx], ps[j, idx]
             delta = np.abs(scalars[i, idx] - scalars[j, idx])
             same = choices[i, idx] == choices[j, idx]
+            options_seen = np.unique(choices[[i, j]][:, idx])
+            expected_agreement = sum(
+                np.mean(choices[i, idx] == option) * np.mean(choices[j, idx] == option)
+                for option in options_seen
+            )
             record = {
                 **base,
                 "model_a": names[i],
@@ -307,6 +325,9 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 "agree_count": int(same.sum()),
                 "disagree_count": int((~same).sum()),
                 "agreement": float(same.mean()),
+                "marginal_expected_agreement": float(expected_agreement),
+                "cohen_kappa": float((same.mean() - expected_agreement) / (1 - expected_agreement))
+                if expected_agreement < 1 else np.nan,
                 "probability_mae": float(np.abs(p - q).mean()),
                 "total_variation": float((np.abs(p - q).sum(axis=1) / 2).mean()),
                 "js_divergence": float(js_divergence(p, q).mean()),
@@ -314,6 +335,7 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 "scalar_difference_p95": float(np.quantile(delta, 0.95)),
                 "pearson": _correlation(scalars[i, idx], scalars[j, idx]),
                 "spearman": _correlation(scalars[i, idx], scalars[j, idx], rank=True),
+                **matching_correlations(correlation_cache[weighting], i, j),
             }
             if reference.task == "regression":
                 record.update(
@@ -341,6 +363,8 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
     if len(names) < 2 or (cfg["require_complete_roster_for_consensus"] and not roster_complete):
         return
     common = present.all(axis=0)
+    from src.evaluation.decision_diagnostics import add_diagnostics
+    add_diagnostics(result, base, names, reference, ps, common, hashes, choices, cfg)
     for weighting, idx, n, u in _weighting_indices(common, hashes, cfg["weightings"]):
         if not len(idx):
             continue
@@ -431,10 +455,20 @@ def compare_saved_features(cfg: dict, *, progress=print) -> Comparison:
         raise ValueError("Invalid comparison configuration")
     result = Comparison()
     entries = selected_entries(load_catalog(cfg["catalog"]), cfg)
+    inventories = {e["id"]: notebook_inventory(e["id"]) for e in entries}
+    ready_providers = set(options["providers"])
+    if options.get("complete_providers_only"):
+        ready_providers = {
+            provider for provider in ready_providers
+            if all(set(inv.loc[inv.provider.eq(provider), "representation"])
+                   >= set(options["representations"]) for inv in inventories.values())
+        }
+    comparison_options = {**options, "providers": [
+        provider for provider in options["providers"] if provider in ready_providers
+    ]}
     for number, entry in enumerate(entries, 1):
         dataset_id = entry["id"]
-        path = paths.dataset_cache_path(dataset_id)
-        inventory = feature_inventory(path)
+        inventory = inventories[dataset_id]
         if progress:
             progress(
                 f"[{number}/{len(entries)}] {dataset_id}: {len(inventory)} saved feature artifacts",
@@ -467,16 +501,25 @@ def compare_saved_features(cfg: dict, *, progress=print) -> Comparison:
                     "dataset": entry.get("name", dataset_id),
                     "provider": provider,
                     "representation": representation,
-                    "status": "available" if len(matches) else "not_created",
+                    "status": ("available" if provider in ready_providers else "provider_incomplete")
+                    if len(matches) else "not_created",
                 }
                 if len(matches):
-                    artifact_id = matches.iloc[0].artifact_id
+                    selected = matches.iloc[0]
+                    row.update(selected.drop(labels=["feature_store", "portable"]).to_dict())
+                    if provider not in ready_providers:
+                        result.add("inventory", row)
+                        continue
+                    artifact_id = selected.artifact_id
+                    path = Path(selected.feature_store)
                     block = load_block(path, artifact_id=artifact_id)
                     if block.manifest["identity"]["dataset_id"] != dataset_id:
                         raise ValueError("Feature file belongs to a different dataset")
-                    row.update(matches.iloc[0].to_dict())
                     blocks.append(block)
-                    hash_maps.append(payload_hashes(path, block))
+                    hash_maps.append(
+                        verified_payload_hashes(path, block.requests.request_key.dropna().unique())
+                        if selected.portable else payload_hashes(path, block)
+                    )
                 result.add("inventory", row)
             if not blocks:
                 continue
@@ -504,7 +547,7 @@ def compare_saved_features(cfg: dict, *, progress=print) -> Comparison:
                         "group": group,
                         "text_column": title,
                     },
-                    options,
+                    comparison_options,
                     result,
                 )
     return result
@@ -533,12 +576,17 @@ def save_comparison(result: Comparison, cfg: dict, notebook: str):
         "distributions",
         "examples",
         "scatter",
+        "row_summary",
+        "vote_patterns",
+        "cases",
+        "confidence_density",
     ):
         result.table(name).to_csv(folder / f"{name}.csv", index=False)
+    result.table("row_diagnostics").to_parquet(folder / "joint_rows.parquet", index=False)
     write_json(
         folder / "manifest.json",
         {
-            "schema": "jevpfn.decision_feature_comparison.v1",
+            "schema": "jevpfn.decision_feature_comparison.v2",
             "configuration": cfg["comparison"],
             "config_sha256": digest(cfg),
             "source_artifacts": result.table("inventory").fillna("").to_dict("records"),
@@ -546,6 +594,10 @@ def save_comparison(result: Comparison, cfg: dict, notebook: str):
             "all_rows_used_for_metrics": True,
             "scatter_only_sampled": True,
             "distance_is_not_accuracy": True,
+            "classification_ties": "Exact tied maximum: separate ambiguous category; no strict consensus",
+            "correlation": "Matching class probabilities, macro over defined options; binary positive probability; regression expected direction",
+            "case_selection": "Label-free extreme unique inputs; illustrative, not representative",
+            "row_export": "All joint-text rows including missing rows; Parquet is compressed and searchable",
         },
     )
     return folder

@@ -93,7 +93,7 @@ def long_text_figures(datasets, columns, *, all_columns=False):
                        zorder=0)
             # Inside the empty lower-right region, along the line, so labels never collide.
             ax.text(value * 1.08, 0.02, f"{label} · {value:,}", transform=ax.get_xaxis_transform(),
-                    ha="left", va="bottom", rotation=90, fontsize=6, color=style.WINDOW_COLOR)
+                    ha="left", va="bottom", rotation=90, fontsize=7, color=style.WINDOW_COLOR)
         layout.light_grid(ax)
         ax.set_xlabel("Nonempty cell length (approximate tokens, log scale)")
         ax.legend(loc="upper right", bbox_to_anchor=(1, 0.93), fontsize=7)
