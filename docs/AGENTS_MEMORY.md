@@ -13,7 +13,7 @@ pending statuses without changing the original evidence.
 | Area | Last verified position | Still required |
 |---|---|---|
 | 0A | Accepted for eleven open-weight extractors and three frozen encoders; local Jev 1.14 pilot passed | Preserve acceptance and source identities through recovery |
-| Open-weight features | Seven providers complete on all 18 datasets and verified locally, including Intern and SII | Intern release running, then Kev, Decision3, Nimble and Liquid LFM3 under the recovered dispatcher |
+| Open-weight features | Seven providers complete on all 18 datasets and verified locally, including Intern and SII | 10 Nov: Kev 16/18 and Decision3 14/18, with four native-space failures to review; Nimble and Liquid LFM3 not started |
 | Frozen embeddings | All 54 encoder/dataset jobs completed and published | Full numerical verification/transfer and fold-local PCA for 0B |
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
 | Benchmark | Four-experiment design and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
@@ -48,6 +48,34 @@ Recovery:
 Notebook outputs are regenerated. The staging folder `JEVPFN_RECOVERY/` and the My Drive
 folder `JEVPFN_RECOVERY_from_trash` stay until the owner decides. Lesson: do not keep Git
 checkouts or data stores in a two-way synced folder. Exclude the project, or use backup-only.
+
+10 November check: the local `5. JEVPFN` folder and the cloud folder were created at the
+same second (29 September, 12:18:25 UTC). This matches a Windows Explorer copy of
+`0. Template` whose later local rename never reached the cloud. No cloud `5. JEVPFN`
+exists. Drive still binds the local folder to the trashed cloud item: the new
+`JEVPFN_RECOVERY` upload sits inside it, and the restored `JEVPFN`/`JEVPFN Paper`
+have no cloud counterpart. The restored tree was intact (0 missing tracked files).
+GitHub `7e79f05` holds the restored code, which passed 1,313 tests with 26 skips.
+
+### VSC observation on 10 November
+
+At 10:35 CET, dispatcher PIDs 3837469/3838367 (login-3, started 9 November 10:51) were
+running source `82e19c09…`. The DATA checkout is `f89688a` plus the reviewed uncommitted
+patches. The campaign had 226 of 274 steps completed, with 3 submitted, 41 pending and
+4 failed. Complete decision models: Liquid, Strands, Perplexity, Cloudflare, Intern, H2O
+and SII. All 54 encoder jobs are complete. Kev release `11784791` was running, and
+Decision3 Kickstarter `11781945` and Mercari `11781957` were running.
+
+Four jobs failed after inference with `Insufficient native space for a validated
+publication union` (`scratch_stage._merge_native_decision`):
+
+- Kev Kickstarter `11781804`;
+- Kev SCImago `11781817`;
+- Decision3 US Accidents `11781951`;
+- Decision3 Wine Review `11781952`.
+
+These failures need review before retry. Nimble and Liquid LFM3 have not started. No new
+complete decision model has appeared since export `11780780`.
 
 ### Intern publication recovery on 9 November
 
