@@ -347,3 +347,38 @@ def test_retry_transient_exit_only_for_workspace_release(release, exit_code):
         assert step["scheduler_retries"][0]["job_id"] == "7"
     else:
         assert step["status"] == "failed"
+
+
+def test_full_scratch_budget_makes_staging_wait_not_fail():
+    step = {"status": "failed", "job_id": "9", "name": "kev_scratch", "workspace_stage": "kev",
+            "scheduler_state": "FAILED", "exit_code": f"{dispatch.SCRATCH_CAPACITY_UNAVAILABLE}:0"}
+    dispatch.retry_interrupted(step)
+    assert step["status"] == "pending" and step["capacity_retries"][0]["job_id"] == "9"
+    assert "scheduler_retries" not in step  # Transient-failure retries stay available.
+    step.update(status="failed", job_id="10", scheduler_state="FAILED",
+                exit_code=f"{dispatch.SCRATCH_CAPACITY_UNAVAILABLE}:0",
+                capacity_retries=[{"job_id": str(i)} for i in range(dispatch.MAX_CAPACITY_RETRIES)])
+    before = copy.deepcopy(step)
+    dispatch.retry_interrupted(step)
+    assert step == before  # Bounded: a permanently full budget needs review.
+
+
+def test_capacity_exit_code_never_retries_non_staging_steps():
+    step = {"status": "failed", "job_id": "9", "name": "kev_BIN_TEXT_X", "pool": "kev",
+            "scheduler_state": "FAILED", "exit_code": f"{dispatch.SCRATCH_CAPACITY_UNAVAILABLE}:0"}
+    before = copy.deepcopy(step)
+    dispatch.retry_interrupted(step)
+    assert step == before
+
+
+def test_staging_reports_a_full_budget_with_its_own_exit_status(monkeypatch):
+    from src.cluster import scratch_capacity, scratch_stage
+
+    def full(runtime):
+        raise scratch_capacity.ScratchCapacityUnavailable("JEVPFN GPFS byte budget exceeded")
+
+    monkeypatch.setattr(scratch_stage, "stage", full)
+    monkeypatch.setattr("sys.argv", ["scratch_stage", "stage", "--runtime", "kev"])
+    with pytest.raises(SystemExit) as stopped:
+        scratch_stage.main()
+    assert stopped.value.code == scratch_capacity.SCRATCH_CAPACITY_UNAVAILABLE

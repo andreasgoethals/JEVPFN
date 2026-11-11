@@ -9,9 +9,9 @@ import json
 import os
 from pathlib import Path
 
-from src.evaluation.checkpoint_paths import checkpoint_path
+from src.evaluation.checkpoint_paths import checkpoint_path, verified_sha256
 from src.utils import paths
-from src.utils.serialization import digest, file_sha256
+from src.utils.serialization import digest
 
 MARKER = "_JEVPFN_PREDICTOR.json"
 
@@ -41,7 +41,7 @@ def verified_settings(settings, task):
     body = asset_manifest(settings)
     for pin in body["assets"]:
         asset = checkpoint_path(pin["path"])
-        if not asset.is_file() or file_sha256(asset) != pin["sha256"]:
+        if not asset.is_file() or verified_sha256(asset) != pin["sha256"]:
             raise ValueError("Staged TabSTAR asset is missing or its checksum differs")
     expected = paths.checkpoints_dir("huggingface", "hub").resolve()
     if os.environ.get("HF_HUB_CACHE") and Path(os.environ["HF_HUB_CACHE"]).resolve() != expected:

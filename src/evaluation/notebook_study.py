@@ -83,6 +83,14 @@ def burden_table(folds, phases):
         return pd.DataFrame()
     wanted = ["seconds.fit", "seconds.predict", "columns.representation"]
     table = folds[folds.phase.isin(phases) & folds.metric.isin(wanted)]
+    # Timings from folds that shared a device with other fits are not burden measures;
+    # a configuration then lacks five exclusive folds and is left out below.
+    shared = folds[folds.metric.eq("resources.device_workers") & folds.value.gt(1)]
+    if not shared.empty and not table.empty:
+        keys = IDENTITY + ["outer_fold"]
+        flagged = table.merge(shared[keys].drop_duplicates(), on=keys, how="left", indicator=True)
+        table = table[~(flagged["_merge"].eq("both").to_numpy()
+                        & table.metric.str.startswith("seconds.").to_numpy())]
     if table.empty:
         return pd.DataFrame()
     means = table.groupby(IDENTITY + ["metric"], dropna=False).value.agg(mean="mean", n="count").reset_index()

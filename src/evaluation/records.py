@@ -63,11 +63,22 @@ class ResourceMonitor:
             "peak_gpu_reserved_bytes": self.torch.cuda.max_memory_reserved(self.device)
             if self.torch
             else None,
+            # Bundled benchmark tasks may run several fits concurrently on one device.
+            # Wall-clock timings from shared devices are not comparable burden measures.
+            "device_workers": device_workers(),
         }
 
     def __exit__(self, *exc):
         self.stop.set()
         self.thread.join()
+
+
+def device_workers():
+    """Concurrent benchmark worker processes sharing this allocation's device (1 = exclusive)."""
+    value = os.environ.get("JEVPFN_WORKERS_PER_DEVICE", "1")
+    if not value.isdigit() or int(value) < 1:
+        raise ValueError("JEVPFN_WORKERS_PER_DEVICE must be a positive integer")
+    return int(value)
 
 
 def fold_marker(recipe, phase):

@@ -117,6 +117,28 @@ Cutover preparation (owner-authorized, 10 November):
   login-3, bounded to 30 h. Once both jobs are terminal and no JEVPFN job is queued, it
   runs the launcher: cutover, source review, then `feature_admission --recover-from 48373214…`.
   Log: `logs/publication_fallback_recovery_838d3e1fbb18.log`.
+- Before it fired, the waiter's patch was replaced by `fa21fa4d4d61…`, which also skips
+  unchanged republication. QA `11785143` (186 passed) and `11785144` (50 passed, real GPFS
+  fallback, scratch left clean) passed on it.
+
+### Cutover outcome and Kev staging (observed 11 November, 14:36 CET)
+
+- **Cutover.** The waiter fired after Mercari `11781957` completed (14:51, 10 November) and
+  Kev release `11784836` completed (17:35, published all 18 Kev stores).
+  - Recovered campaign `387b9b2a…` now runs source `2ed9574c…`, with live `scratch_stage.py`
+    hash `51cc24ca…`.
+  - Decision3 retries `11785955` and `11785956` completed. Nimble staging `11786046`
+    completed and 18 Nimble jobs were queued or running.
+  - 231 of 274 steps are complete.
+- **Kev restaging failed.** Recovery reset Kev staging/release because two Kev dataset steps
+  were incomplete. Restage `11785957` failed with `JEVPFN GPFS byte budget exceeded` while
+  Decision3's working set was still resident. The empty-workspace release `11786041`
+  completed.
+  - Kev Kickstarter and SCImago are blocked on that failed stage. Their responses are
+    durable through `11784836`; a re-run would reuse them.
+  - Plan: retry at the post-extraction recovery.
+  - Local fix: staging now exits 77 for a full scratch budget, and the dispatcher retries
+    that up to 12 times.
 
 ### Intern publication recovery on 9 November
 

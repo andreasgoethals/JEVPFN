@@ -18,9 +18,13 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 
-from src.evaluation.checkpoint_paths import checkpoint_path, model_checkpoint_argument
+from src.evaluation.checkpoint_paths import (
+    checkpoint_path,
+    model_checkpoint_argument,
+    verified_sha256,
+)
 from src.utils import paths
-from src.utils.serialization import canonical_json, digest, file_sha256, scalar
+from src.utils.serialization import canonical_json, digest, scalar
 
 MAIN_MODELS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear")
 TEXT_MODELS = ("tabstar", "contexttab", "ag_mm")
@@ -112,7 +116,7 @@ def _checkpoint(settings, task):
     if not pin.get("path") or not pin.get("sha256"):
         raise ValueError(f"A staged checkpoint path and SHA256 are required for {task}")
     path = checkpoint_path(pin["path"])
-    if not path.is_file() or file_sha256(path) != pin["sha256"]:
+    if not path.is_file() or verified_sha256(path) != pin["sha256"]:
         raise ValueError("Checkpoint missing or SHA256 differs from the reviewed pin")
     return str(path)
 
@@ -144,7 +148,7 @@ def _verify_assets(settings):
         if not pin.get("path") or not pin.get("sha256"):
             raise ValueError("Incomplete native-text asset pin")
         path = checkpoint_path(pin["path"])
-        if not path.is_file() or file_sha256(path) != pin["sha256"]:
+        if not path.is_file() or verified_sha256(path) != pin["sha256"]:
             raise ValueError("Native-text asset is missing or differs from its reviewed hash")
 
 
@@ -241,7 +245,7 @@ def _backend(model_id, task, settings, encoder, n_train):
         if not isinstance(pin, dict) or not pin.get("path") or not pin.get("sha256"):
             raise ValueError("Select and hash the publisher's V2 no-retrieval inference config")
         config_path = checkpoint_path(pin["path"])
-        if not config_path.is_file() or file_sha256(config_path) != pin["sha256"]:
+        if not config_path.is_file() or verified_sha256(config_path) != pin["sha256"]:
             raise ValueError("LimiX inference config differs from its reviewed SHA256")
         params.setdefault("preprocess_num_jobs", settings["threads"])
         return TrainOnlyLimiX(

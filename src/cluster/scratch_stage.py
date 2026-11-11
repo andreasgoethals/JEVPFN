@@ -853,7 +853,17 @@ def main():
     else:
         if command:
             parser.error("Unknown arguments: " + " ".join(command))
-        print(json.dumps((stage if args.action == "stage" else publish)(args.runtime), indent=2))
+        from src.cluster.scratch_capacity import (
+            SCRATCH_CAPACITY_UNAVAILABLE,
+            ScratchCapacityUnavailable,
+        )
+
+        try:
+            print(json.dumps((stage if args.action == "stage" else publish)(args.runtime), indent=2))
+        except ScratchCapacityUnavailable as exc:
+            # A distinct status lets the dispatcher wait and retry instead of failing.
+            print(exc, flush=True)
+            raise SystemExit(SCRATCH_CAPACITY_UNAVAILABLE) from None
 
 
 if __name__ == "__main__":

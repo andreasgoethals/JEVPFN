@@ -21,6 +21,11 @@ from src.utils.serialization import write_json
 GIB = 1024**3
 QUEUE_CHECK_UNAVAILABLE = 75
 PUBLICATION_LOCK_UNAVAILABLE = 76
+SCRATCH_CAPACITY_UNAVAILABLE = 77
+
+
+class ScratchCapacityUnavailable(OSError):
+    """Staging must wait for another working set to be released; nothing was copied."""
 
 
 class QueueCheckUnavailable(RuntimeError):
@@ -115,7 +120,7 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
 
     resident = [p for p in existing if p != work and resident_workspace(p)]
     if len(resident) >= settings["max_resident_workspaces"]:
-        raise OSError("GPFS working-set slots are full; publish/release idle JEVPFN copies first")
+        raise ScratchCapacityUnavailable("GPFS working-set slots are full; publish/release idle JEVPFN copies first")
     sources = [(source, work / relative) for relative, source in candidates.items()]
     container_relative = source_container.relative_to(source_container.parents[2])
     # Container paths always live under JEVPFN/containers/<profile>/<runtime>.
@@ -139,15 +144,15 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
     project_bytes = tree_bytes(root)
     personal_bytes = tree_bytes(root.parent)
     if project_bytes + extra > settings["scratch_working_set_gib"] * GIB:
-        raise OSError(
+        raise ScratchCapacityUnavailable(
             "JEVPFN GPFS byte budget exceeded; publish/release idle copies before staging"
         )
     if personal_bytes + extra > settings["scratch_allocation_gib"] * GIB:
-        raise OSError(
+        raise ScratchCapacityUnavailable(
             "Personal GPFS scratch budget/headroom exhausted; check myquota and other projects"
         )
     if shutil.disk_usage(work).free < extra:
-        raise OSError("GPFS filesystem has insufficient free capacity for staging")
+        raise ScratchCapacityUnavailable("GPFS filesystem has insufficient free capacity for staging")
 
 
 def _scheduler_read(command):

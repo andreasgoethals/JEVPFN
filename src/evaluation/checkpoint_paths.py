@@ -9,6 +9,20 @@ import os
 from pathlib import Path
 
 from src.utils import paths
+from src.utils.serialization import file_sha256
+
+# Immutable reviewed assets are hashed once per process, not once per fit. Any change
+# to the file's identity (path, size, mtime, inode) forces a fresh full hash.
+_VERIFIED = {}
+
+
+def verified_sha256(path):
+    path = Path(path).resolve()
+    info = path.stat()
+    key = (str(path), info.st_size, info.st_mtime_ns, info.st_ino)
+    if key not in _VERIFIED:
+        _VERIFIED[key] = file_sha256(path)
+    return _VERIFIED[key]
 
 
 def checkpoint_path(value):

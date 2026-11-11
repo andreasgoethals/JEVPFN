@@ -10,6 +10,7 @@ import argparse
 import copy
 import json
 import os
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from src.data.loaders import load_catalog, load_dataset
@@ -120,6 +121,34 @@ def benchmark_plan(main=None, text=None):
     return rows
 
 
+# Bundled tasks run many arms of one dataset in one process. Pure, deterministic
+# inputs are loaded once and every arm receives its own deep copy, so no arm can
+# observe another arm's mutations. Estimators are still constructed fresh per fit.
+# The cache exists only inside task_cache(); a lone run_arm call loads everything fresh.
+_TASK_CACHE = None
+
+
+def _cached(key, load):
+    if _TASK_CACHE is None:
+        return load()
+    if key not in _TASK_CACHE:
+        _TASK_CACHE[key] = load()
+    return copy.deepcopy(_TASK_CACHE[key])
+
+
+@contextmanager
+def task_cache():
+    """Share pure inputs between the arms of one bundled task, then discard them."""
+    global _TASK_CACHE
+    if _TASK_CACHE is not None:
+        raise RuntimeError("Bundled task caches do not nest")
+    _TASK_CACHE = {}
+    try:
+        yield
+    finally:
+        _TASK_CACHE = None
+
+
 def run_arm(arm, *, allow_model_runs=False, profile=False):
     config_names = {
         "experiment_1": "main",
@@ -139,8 +168,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     if not profile:
         from src.evaluation.qualification import benchmark_evidence
 
-        qualified = benchmark_evidence(cfg.get("experiment_0_acceptance"), arm)
-    if arm not in benchmark_plan():
+        qualified = _cached(("evidence", digest(cfg.get("experiment_0_acceptance")), digest(arm)),
+                            lambda: benchmark_evidence(cfg.get("experiment_0_acceptance"), arm))
+    if arm not in _cached(("plan",), benchmark_plan):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     catalog = load_yaml("experiment_1/models")
     settings = copy.deepcopy(catalog["models"][arm["model"]]["runtime"])
@@ -169,7 +199,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         ]
     )
     entry = next(e for e in load_catalog()["datasets"] if e["id"] == arm["dataset_id"])
-    dataset = load_dataset(entry, allow_download=False)
+    dataset = _cached(("dataset", entry["id"]), lambda: load_dataset(entry, allow_download=False))
     from src.evaluation.widths import width_status
 
     status = width_status(dataset.metadata, arm)
@@ -189,7 +219,11 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             if decision_set == "non_text_plus_joint"
             else ("per_column",)
         )
-        blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector, modes)
+        blocks = _cached(
+            ("decision", entry["id"], digest(selector), modes),
+            lambda selector=selector, modes=modes: load_feature_selection(
+                paths.dataset_cache_path(entry["id"]), selector, modes),
+        )
         checksums.update({b.manifest["artifact_id"]: digest(b.manifest["sha256"]) for b in blocks})
         additions.append(
             (
@@ -215,7 +249,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         embedding_cfg = encoder_config(arm["encoder"])
         embedding_cfg["pca_components_per_column"] = arm["pca_components"]
         embedding_cfg["pca_scope"] = arm["pca_scope"]
-        embeddings = load(dataset, embedding_cfg)
+        embeddings = _cached(("embeddings", entry["id"], digest(embedding_cfg)),
+                             lambda: load(dataset, embedding_cfg))
         embedding_artifacts = embeddings.attrs["feature_artifact_ids"]
         if arm["model"] not in embedding_cfg["models"]:
             raise ValueError("Predictor is not enabled for the embedding feature configurations")
@@ -223,11 +258,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     from src.evaluation.qualification import execution_runtime, verify_inputs
 
     features.attrs["decision_artifact_checksums"] = checksums
-    settings["execution_runtime"] = execution_runtime()
+    settings["execution_runtime"] = _cached(("runtime",), execution_runtime)
     specification = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
     if tar_arm:
         from src.evaluation.tar import read_bundle
-        bundles = [read_bundle(dataset, specification, i) for i in range(5)]
+        bundles = [_cached(("tar", entry["id"], digest(specification["split_id"]), i),
+                           lambda i=i: read_bundle(dataset, specification, i)) for i in range(5)]
         features.attrs["feature_artifact_ids"] = [b["artifact_id"] for b in bundles]
     if not profile:
         verify_inputs(

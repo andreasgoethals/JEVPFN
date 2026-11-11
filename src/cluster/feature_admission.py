@@ -28,7 +28,11 @@ from src.cluster.feature_campaign import capacity_rejection, plan
 from src.cluster.freeze import check_if_present, runtime_pins
 from src.cluster.job_graph import SubmissionDeferred, advance, pool
 from src.cluster.maintenance import require_idle_vsc
-from src.cluster.scratch_capacity import PUBLICATION_LOCK_UNAVAILABLE, QUEUE_CHECK_UNAVAILABLE
+from src.cluster.scratch_capacity import (
+    PUBLICATION_LOCK_UNAVAILABLE,
+    QUEUE_CHECK_UNAVAILABLE,
+    SCRATCH_CAPACITY_UNAVAILABLE,
+)
 from src.jev.catalog import SELF_HOSTED
 from src.utils import paths
 from src.utils.acceptance import reviewed_acceptance
@@ -38,6 +42,7 @@ from src.utils.serialization import digest, file_sha256, write_json
 
 RETRYABLE_STATES = frozenset({"TIMEOUT", "NODE_FAIL", "BOOT_FAIL", "PREEMPTED"})
 MAX_SCHEDULER_RETRIES = 2
+MAX_CAPACITY_RETRIES = 12  # A full scratch budget clears when another runtime releases.
 
 
 def retry_interrupted(step):
@@ -47,10 +52,16 @@ def retry_interrupted(step):
         and step["scheduler_state"] == "FAILED"
         and step["exit_code"] in {f"{QUEUE_CHECK_UNAVAILABLE}:0", f"{PUBLICATION_LOCK_UNAVAILABLE}:0"}
     )
-    if step["scheduler_state"] not in RETRYABLE_STATES and not transient_release_failure:
+    capacity_wait = (
+        step.get("workspace_stage")
+        and step["scheduler_state"] == "FAILED"
+        and step["exit_code"] == f"{SCRATCH_CAPACITY_UNAVAILABLE}:0"
+    )
+    if (step["scheduler_state"] not in RETRYABLE_STATES and not transient_release_failure
+            and not capacity_wait):
         return
-    attempts = step.setdefault("scheduler_retries", [])
-    if len(attempts) >= MAX_SCHEDULER_RETRIES:
+    attempts = step.setdefault("capacity_retries" if capacity_wait else "scheduler_retries", [])
+    if len(attempts) >= (MAX_CAPACITY_RETRIES if capacity_wait else MAX_SCHEDULER_RETRIES):
         return
     attempt = {"retried_utc": datetime.now(UTC).isoformat()}
     for key in (
@@ -62,7 +73,7 @@ def retry_interrupted(step):
     attempts.append(attempt)
     step["status"] = "pending"
     print(f"Retry queued for {step['name']} after {attempt['scheduler_state']} "
-          f"({attempt['job_id']}, retry {len(attempts)}/{MAX_SCHEDULER_RETRIES})", flush=True)
+          f"({attempt['job_id']}, retry {len(attempts)})", flush=True)
 
 
 def admission_settings(base, steps):

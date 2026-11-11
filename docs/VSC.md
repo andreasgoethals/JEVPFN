@@ -430,9 +430,29 @@ to print its submission command.
 python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --concurrency 8 --write
 ```
 
-Each task owns one dataset × model × representation and resumes its five folds from
-checksummed records. GPU models default to B200; CPU models follow the native route of the allocated
-durable root (Mindwell for this GPFS deployment).
+**Bundled tasks.** Each array task owns one dataset × predictor × phase and runs all its
+supported arms; each arm still resumes its five folds from checksummed records.
+- **Shared inputs.** The dataset, decision blocks, embeddings, TAR bundles and runtime
+  identity are loaded once per process. Each arm gets a deep copy and fresh estimators.
+- **Hashing.** Checkpoint and asset hashes are verified once per process while the file is
+  unchanged.
+- **Workers.** A task may run several workers. Each keeps the reviewed eight threads, so
+  settings identities and resume are unchanged.
+  - **CPU predictors** (CatBoost, linear/logistic regression) pack workers on disjoint
+    pinned cores of `batch_graniterapids`.
+  - **GPU predictors** share a B200 only when 0B profiles measured their peak VRAM. The
+    limit comes from 85% of 192 GiB, the 24-core and 194,400 MiB per-GPU ceilings, and
+    eight threads per worker, so at most three workers.
+  - **Profiles** always run with one exclusive worker.
+- **Sizing.** `--time`, `--mem` and the worker count come from the 0B profiles. Tasks with
+  an identical request share one array, so the planner can print several submission
+  commands. Smaller datasets run first. `--workers N` overrides the sizing.
+- **Timings.** Each fold records `resources.device_workers`. Shared-device folds are left
+  out of the fit-time burden tables, because concurrent fits inflate wall-clock time; plan
+  enough exclusive runs where burden figures matter.
+
+GPU models default to B200; CPU models follow the native route of the allocated durable root
+(Mindwell for this GPFS deployment).
 
 ## 5. Working sets and storage maintenance
 

@@ -5,6 +5,19 @@ date; old model rosters, grids, paths and pending statuses are not current instr
 Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for commands and
 [Operational evidence](AGENTS_MEMORY.md) for dated campaign outcomes.
 
+## 11-11-2026
+
+- Bundle benchmark arrays per dataset × predictor × phase, keeping every arm's evaluation
+  unchanged. Pure inputs load once per task (deep-copied per arm), and checkpoint hashes
+  are verified once per process.
+- Run several eight-thread workers per task: pinned CPU cores for CatBoost and
+  linear/logistic regression, and a shared B200 only when 0B profiles measured the VRAM
+  (at most three workers).
+- Size time, memory and workers from 0B profiles, and order small datasets first.
+- Record `resources.device_workers`; shared-device timings are excluded from burden tables.
+- Give a full scratch budget its own staging status (exit 77). The dispatcher now retries it
+  up to 12 times instead of failing the runtime.
+
 ## 10-11-2026
 
 - Publish oversized decision-store unions on Mindwell GPFS scratch when the shared B200
