@@ -187,9 +187,10 @@ def require_runtime_idle(runtime):
                 continue
             detail = _scheduler_read(["scontrol", "--clusters=" + cluster, "show", "job", job, "-o"])
             tokens = shlex.split(detail)
-            # These exact project entrypoints never consume a GPFS working set.
-            # Unrelated CPU preparation can continue while a finished runtime releases.
-            cpu_only = {
+            # These exact project entrypoints never consume an extraction workspace.
+            # TAR uses fold-specific PROJECT bundles and its own temporary job cache;
+            # CPU contracts use PROJECT directly. Both can overlap workspace release.
+            independent = {
                 "experiment_0_tokens.slurm",
                 "experiment_0_cpu.slurm",
                 "experiment_0_stage.slurm",
@@ -197,11 +198,14 @@ def require_runtime_idle(runtime):
                 "experiment_0_embedding_stage.slurm",
                 "stage_tabstar.slurm",
                 "experiment_0_storage.slurm",
+                "experiment_0_predictor_cpu.slurm",
+                "prepare_tar.slurm",
+                "prepare_tar_pca.slurm",
             }
             command = next(
                 (t.removeprefix("Command=") for t in tokens if t.startswith("Command=")), ""
             )
-            if Path(command).name in cpu_only and "/JEVPFN/scripts/slurm/" in command:
+            if Path(command).name in independent and "/JEVPFN/scripts/slurm/" in command:
                 continue
             owners = {r for r in RUNTIMES if r in tokens or f"/jevpfn-work/{r}/" in detail}
             # Unknown JEVPFN consumers fail closed, including manually queued scripts

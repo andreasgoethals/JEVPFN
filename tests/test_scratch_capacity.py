@@ -324,7 +324,9 @@ def test_graph_bounds_residency_through_queue_wait_and_releases_after_failure():
     assert next(s for s in steps if s["name"] == "c_pilot")["status"] == "completed"
 
 
-def test_known_lustre_cpu_job_does_not_block_runtime_release(monkeypatch):
+@pytest.mark.parametrize("entrypoint", ["experiment_0_cpu.slurm", "experiment_0_predictor_cpu.slurm",
+                                      "prepare_tar.slurm", "prepare_tar_pca.slurm"])
+def test_independent_job_does_not_block_runtime_release(monkeypatch, entrypoint):
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     monkeypatch.setattr(
         cap.subprocess,
@@ -332,7 +334,7 @@ def test_known_lustre_cpu_job_does_not_block_runtime_release(monkeypatch):
         lambda argv, **kw: (
             "321|jevpfn-exp0-cpu|/data/JEVPFN\n"
             if argv[0] == "squeue"
-            else "Command=/data/JEVPFN/scripts/slurm/experiment_0_cpu.slurm SubmitLine=sbatch script"
+            else f"Command=/data/JEVPFN/scripts/slurm/{entrypoint} SubmitLine=sbatch script"
         ),
     )
     cap.require_runtime_idle("intern")

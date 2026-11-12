@@ -7,6 +7,8 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
 
 ## 12-11-2026
 
+- Allow independent CPU predictor contracts and TAR jobs to overlap extraction-workspace
+  release; unknown or actual workspace consumers still prevent retirement.
 - Remove the inherited controller-image bin directory from the host container-builder
   PATH. Support reproducible new CPU-baseline images from the existing pinned extras.
 

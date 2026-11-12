@@ -58,6 +58,10 @@ pending statuses without changing the original evidence.
 - TAR image build `11793068` failed before installation because Tykky rejected the
   controller image in PATH. The build now removes only that inherited directory,
   keeping helper calls bound to the absolute verified controller interpreter.
+- Native GPFS recovery QA `11793080` passed: publication, repeated publication and
+  provider-only warm-cache integrity. CatBoost image build `11793082` completed in
+  9m14s. Independent CPU predictor contracts and TAR preparation have separate stores
+  and must not block release of an extractor workspace.
 
 ### Frozen PCA pilot and rollout on 12 November
 
