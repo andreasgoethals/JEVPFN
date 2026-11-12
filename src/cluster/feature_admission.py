@@ -145,13 +145,33 @@ def dispatch_order(steps):
     return sorted(steps, key=priority)  # Same step objects; receipt order/plan stays unchanged.
 
 
-def submit_step(step, *, save, policy_sha256):
+def staging_datasets(step, steps):
+    """Bind recovery staging to unfinished consumers without changing the science grid."""
+    runtime = step.get("workspace_stage")
+    if runtime not in SELF_HOSTED:
+        return None
+    consumers = [s for s in steps if step["name"] in s.get("depends_on", [])
+                 and s.get("status") != "completed"]
+    if any(s.get("pool") != runtime for s in consumers):
+        return None  # Cloudflare can also host unfinished frozen-encoder jobs.
+    datasets = sorted({s["command"][-1] for s in consumers})
+    if not datasets:
+        raise ValueError("No unfinished consumers justify staging this runtime")
+    return datasets
+
+
+def submit_step(step, *, save, policy_sha256, datasets=None):
     """Persist intent first. Only a definite refusal may return to pending."""
     step.update(status="starting", submission_policy_sha256=policy_sha256,
                 submission_started_utc=datetime.now(UTC).isoformat())
+    command = list(step["command"])
+    if datasets is not None:
+        command += [arg for dataset in datasets for arg in ("--dataset", dataset)]
+        step["staging_datasets"] = datasets
+    step["submission_command"] = command
     save()
     try:
-        result = subprocess.run(step["command"], cwd=paths.REPO_ROOT, capture_output=True,
+        result = subprocess.run(command, cwd=paths.REPO_ROOT, capture_output=True,
                                 text=True, timeout=60, check=True)
     except (subprocess.SubprocessError, OSError) as exc:
         diagnostic = {
@@ -207,6 +227,42 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
     forbidden = {name for name in changed if name.startswith(protected) or name in core
                  or (name.startswith("config/3. experiment_0/")
                      and name != "config/3. experiment_0/debug.yaml")}
+    # The original extraction checkout predates hosted-only credit handling and
+    # read-only notebook repairs. Accept only these named, exactly reviewed paths;
+    # request generation, self-hosted inference and feature construction stay protected.
+    exceptions = review.get("non_extraction_changes", {})
+    eligible = {"src/jev/extraction.py", "src/jev/hosted.py", "src/jev/catalog_inspection.py",
+                "src/jev/features.py", "config/2. feature_creation/feature_creation.yaml",
+                "config/2. feature_creation/feature_comparison.yaml"}
+    if exceptions.keys() - eligible or any(not reason for reason in exceptions.values()):
+        raise ValueError("Unrecognized non-extraction source exception")
+    for name in forbidden & exceptions.keys():
+        if name == "src/jev/features.py" or name.endswith("/feature_creation.yaml"):
+            import hashlib
+
+            import yaml
+
+            original = subprocess.check_output(["git", "show", old["git_head"] + ":" + name],
+                                               cwd=paths.REPO_ROOT, timeout=30).replace(b"\r\n", b"\n")
+            if hashlib.sha256(original).hexdigest() != old["files"][name]:
+                raise ValueError("Historical extraction source cannot be reconstructed exactly")
+            updated = (paths.REPO_ROOT / name).read_text(encoding="utf-8")
+            if name.endswith(".yaml"):
+                before, after = yaml.safe_load(original), yaml.safe_load(updated)
+                live = after["live_extraction"]
+                if (live.pop("token_rate_policy", None) != "reserved_upper_bound"
+                        or live.pop("continue_on_dataset_budget_stop", None) is not False
+                        or before != after):
+                    raise ValueError("Feature configuration changed beyond inert hosted defaults")
+            else:
+                normalized = updated.replace("from contextlib import closing\n", "").replace(
+                    'with closing(sqlite3.connect(folder.resolve().as_uri() + "?mode=ro", uri=True)) as db:',
+                    'with sqlite3.connect(folder.resolve().as_uri() + "?mode=ro", uri=True) as db:').replace(
+                    'with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:',
+                    'with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:')
+                if normalized.encode() != original:
+                    raise ValueError("Feature construction changed beyond read-handle cleanup")
+    forbidden -= exceptions.keys()
     if forbidden:
         raise ValueError("Source review cannot authorize changed extraction science: "
                          + ", ".join(sorted(forbidden)))
@@ -240,8 +296,9 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
         "scripts/slurm/experiment_0_decision_pilot.slurm", "tests/test_shell_environment.py",
     }
     reviewed_delta = None
-    if old_freeze["runtime_pins"] != runtime_pins():
-        raise ValueError("Recovery cannot authorize changed science/configuration/runtime pins")
+    pins = runtime_pins()
+    if old_freeze["runtime_pins"] != pins:
+        validate_runtime_additions(old_freeze["runtime_pins"], pins, source_review, reviewed_by)
     if source_review:
         reviewed_delta = validate_source_review(old_freeze, current, changed, source_review, reviewed_by)
     elif changed - allowed:
@@ -313,6 +370,22 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
                      "created_utc": datetime.now(UTC).isoformat()},
     })
     return identity
+
+
+def validate_runtime_additions(previous, current, review_path, reviewed_by):
+    """Allow explicitly reviewed new predictor/TAR seals, never change existing assets."""
+    from src.cluster.containers import PREDICTORS
+
+    if not review_path or any(current.get(key) != value for key, value in previous.items()):
+        raise ValueError("Recovery cannot change or remove an existing runtime pin")
+    additions = {key: value for key, value in current.items() if key not in previous}
+    allowed = {f"containers/blackwell-cu130/{'tabstar-v1p1' if name == 'tabstar' else name}/_JEVPFN_CONTAINER.json"
+               for name in (*PREDICTORS, "e5_tar")}
+    allowed |= {f"checkpoints/predictors/{name}/_JEVPFN_PREDICTOR.json" for name in PREDICTORS}
+    review = json.loads(Path(review_path).read_text(encoding="utf-8"))
+    if (not additions or additions.keys() - allowed or review.get("reviewed_by") != reviewed_by
+            or review.get("runtime_additions") != additions):
+        raise ValueError("New predictor/TAR assets require an exact named runtime-addition review")
 
 
 def run(*, execute=False, expected_campaign=None, expected_source=None, reviewed_by=None):
@@ -390,7 +463,8 @@ def run(*, execute=False, expected_campaign=None, expected_source=None, reviewed
     try:
         result = advance(dispatch_order(report["steps"]), settings=settings,
                          state=scheduler_state, save=save, retry=retry_interrupted,
-                         submit=lambda step: submit_step(step, save=save, policy_sha256=policy_sha256))
+                         submit=lambda step: submit_step(step, save=save, policy_sha256=policy_sha256,
+                                                        datasets=staging_datasets(step, report["steps"])))
     except BaseException as exc:
         report.update(status="stopped_requires_review", dispatcher_error={
             "error_type": type(exc).__name__, "message": str(exc)[-4096:]})

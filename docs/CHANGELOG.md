@@ -5,9 +5,28 @@ date; old model rosters, grids, paths and pending statuses are not current instr
 Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for commands and
 [Operational evidence](AGENTS_MEMORY.md) for dated campaign outcomes.
 
+## 12-11-2026
+
+- Remove the inherited controller-image bin directory from the host container-builder
+  PATH. Support reproducible new CPU-baseline images from the existing pinned extras.
+
+- Scope recovery staging to unfinished datasets, retaining the original scientific grid
+  and exact submitted-command receipts. Reject inference outside that workspace scope.
+- Permit an idle, explicitly reviewed addition of new predictor/TAR runtime seals while
+  preserving every existing extraction pin. Enable owner-authorized TAR preparation.
+
+- Add full-size binary inner-OOF fits to the 0B resource profiles. Size benchmark jobs
+  from reviewed profiles of the same predictor, phase and cluster. Account for uneven
+  worker loads and keep overrides within measured GPU and CPU limits.
+- Reuse the current provider or encoder across benchmark arms and release its buffers
+  before moving on. Mindwell predictors read verified representations and prepared PCA
+  directly from GPFS PROJECT, reducing staging time and scratch use.
+- Retry SQLite publication readback on native GPFS scratch if node-local disk fills after the union starts. The retry verifies the same committed database under the original lock.
+- Allow a verified portable feature bundle to add providers to the local notebook stores, preserving existing blocks and refusing conflicting versions or request digests.
+
 ## 11-11-2026
 
-- Bundle benchmark arrays per dataset × predictor × phase, keeping every arm's evaluation
+- Bundle benchmark arrays per dataset Ã— predictor Ã— phase, keeping every arm's evaluation
   unchanged. Pure inputs load once per task (deep-copied per arm), and checkpoint hashes
   are verified once per process.
 - Run several eight-thread workers per task: pinned CPU cores for CatBoost and
@@ -157,18 +176,18 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
   source; preserve accepted 0A evidence and identify historical failed logs separately.
 
 <details>
-<summary>September–October 2026 implementation history</summary>
+<summary>Septemberâ€“October 2026 implementation history</summary>
 
 ## 30-10-2026
 
 - Rewrite the documentation for the current stage. README now leads with status, the
-  RQ1–RQ3 design and the new figure index; VSC follows execution order (access, storage,
+  RQ1â€“RQ3 design and the new figure index; VSC follows execution order (access, storage,
   runtimes, pipeline, maintenance, transfer); AGENTS_MEMORY is newest-first and records the
   submitted open-weight campaign, including two Jigsaw publication-lock failures and the
   stopped controller observed at 17:20 UTC. Evidence, hashes and commands are preserved;
   DATA_SOURCES and LITERATURE_REVIEW drop stale pilot and 1.13 wording.
 
-- Rework notebook figures around the RQ1–RQ3 story in the paper notes. 0A now shows
+- Rework notebook figures around the RQ1â€“RQ3 story in the paper notes. 0A now shows
   runtime gates beside measured B200 memory/load/contract time (signed acceptances read),
   output profiles and pairwise agreement of all twelve decision models on 280 identical
   pinned-version pilot inputs, and a cross-model robustness matrix. Synthesis opens
@@ -466,7 +485,7 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
 - Restored durable evaluation SQLite stores when staging predictor working sets,
   with transactional union and CV resume/publication tests across experiment phases.
 - Added SII single-token/unique-ID/cue validation before weight loading. The publisher
-  already filters labels beyond A–Z; no prompt/tokenizer identity was changed. Added
+  already filters labels beyond Aâ€“Z; no prompt/tokenizer identity was changed. Added
   statistical-resolution, method and Holm-rank diagnostics without approving a plan.
 - Earlier local validation before the parallel-testing update: 993 tests passed, 20 optional-runtime/platform skips;
   Ruff, dependencies and diff checks passed. No remote mutation, paid inference,

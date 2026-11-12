@@ -331,6 +331,37 @@ def test_mindwell_publication_uses_native_scratch_when_node_disk_cannot_hold_uni
     assert source.path.is_file() and not list(fallback.iterdir()) and not list(local.iterdir())
 
 
+def test_publication_readback_retries_on_scratch_after_node_disk_fills(roots, monkeypatch, tmp_path):
+    durable, work = roots
+    marker(durable, work)
+    source = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    local = tmp_path / "node-local"
+    local.mkdir()
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    monkeypatch.setenv("SLURM_JOB_ID", "4242")
+    monkeypatch.setenv("VSC_SCRATCH_NODE", str(local))
+    real_snapshot = stage.snapshot
+    readbacks = []
+
+    def snapshot(source_path, destination):
+        if destination.name == "published_readback.sqlite3":
+            readbacks.append(destination)
+            if destination.is_relative_to(local):
+                error = sqlite3.OperationalError("database or disk is full")
+                error.sqlite_errorcode = sqlite3.SQLITE_FULL
+                raise error
+        return real_snapshot(source_path, destination)
+
+    monkeypatch.setattr(stage, "snapshot", snapshot)
+    assert stage.publish("intern")["decision_stores"] == 1
+    fallback = work.parents[2] / "jevpfn-transfers" / "publication-temporary"
+    first, second = readbacks
+    assert first.is_relative_to(local) and second.is_relative_to(fallback / "4242")
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern"), kind="verified_response") == response()
+    assert source.path.is_file() and not list(fallback.iterdir()) and not list(local.iterdir())
+
+
 def test_copy_snapshots_committed_wal_without_copying_open_journal(tmp_path):
     source = tmp_path / "source.sqlite3"
     with sqlite3.connect(source) as db:
@@ -609,6 +640,27 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
     assert len(list((work / "output_JEVPFN").glob("*/results/evaluation/*.sqlite3"))) == 1
 
 
+def test_native_gpfs_predictor_stage_omits_durable_representation_inputs(roots, monkeypatch):
+    durable, _ = roots
+    monkeypatch.setattr(paths, "native_gpfs_project", lambda root: True)
+    monkeypatch.setenv("JEVPFN_SHARED_IMMUTABLES", "1")
+    monkeypatch.setattr(paths, "REPO_ROOT", Path(stage.__file__).resolve().parents[2])
+    (durable / "data/decision_inputs").mkdir(parents=True)
+    inputs = [
+        "data/jev_cache/dataset.sqlite3",
+        "data/text_embeddings/dataset.sqlite3",
+        "output_JEVPFN/5. experiment_2/results/pca/e5_small_v2/dataset.sqlite3",
+    ]
+    for relative in inputs:
+        source = durable / relative
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b"unused by staging")
+    result = stage.stage("linear")
+    work = Path(result["working_root"])
+    assert not set(inputs) & json.loads((work / stage.MARKER).read_text())["files"].keys()
+    assert all(not (work / name).exists() for name in inputs)
+
+
 def test_interrupted_publication_resumes_verified_dataset_and_preserves_new_rows(roots, monkeypatch):
     durable, work = roots
     marker(durable, work)
@@ -654,3 +706,44 @@ def test_unchanged_union_avoids_rewriting_durable_database(roots):
     before = stage._closed_db_identity(target)
     assert stage._publish(durable, work, resume=True)["decision_stores"] == 1
     assert stage._closed_db_identity(target) == before
+
+def test_scoped_stage_filters_completed_stores_before_capacity_check(roots, monkeypatch):
+    from src.cluster import containers, scratch_capacity
+    from src.jev import checkpoints
+    durable, work = roots
+    for dataset in ('fixture', 'finished'):
+        source = durable / 'data/decision_inputs' / (dataset + '.sqlite3')
+        source.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(source) as db:
+            db.execute('CREATE TABLE inputs (id)')
+        cache(durable / 'data/jev_cache' / (dataset + '.sqlite3'), request('intern'))
+    before = file_sha256(durable / 'data/jev_cache/finished.sqlite3')
+    image = durable / 'containers/blackwell-cu130/intern'
+    image.mkdir(parents=True)
+    (image / '_JEVPFN_CONTAINER.json').write_text('{}')
+    monkeypatch.setattr(containers, 'relocate', lambda *a: None)
+    monkeypatch.setattr(checkpoints, 'verify_checkpoint', lambda *a: None)
+    observed = []
+    monkeypatch.setattr(scratch_capacity, 'check_capacity', lambda work, candidates, *a, **k:
+                        observed.extend(p.as_posix() for p in candidates))
+    result = stage.stage('intern', datasets=['fixture'])
+    assert result['datasets'] == ['fixture']
+    assert 'data/jev_cache/fixture.sqlite3' in observed
+    assert 'data/jev_cache/finished.sqlite3' not in observed
+    assert not (work / 'data/jev_cache/finished.sqlite3').exists()
+    assert file_sha256(durable / 'data/jev_cache/finished.sqlite3') == before
+    assert cache(work / 'data/jev_cache/fixture.sqlite3').get(request('intern'), kind='verified_response') == response()
+    with pytest.raises(ValueError, match='distinct prepared'):
+        stage.stage('intern', datasets=['unknown'])
+
+
+def test_scoped_workspace_rejects_unstaged_dataset_before_child(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    body = json.loads((work / stage.MARKER).read_text())
+    body['datasets'] = ['fixture']
+    (work / stage.MARKER).write_text(json.dumps(body))
+    monkeypatch.setenv('JEVPFN_STAGING_ROOT', str(work.parent))
+    monkeypatch.setenv('JEVPFN_PUBLISH_DATASET', 'finished')
+    with pytest.raises(ValueError, match='outside the staged'):
+        stage.run('intern', ['never-start-this'])

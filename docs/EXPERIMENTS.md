@@ -175,7 +175,7 @@ No winner-selected follow-up is part of the confirmatory grid.
 | 0A | Local CPU/question and hosted-interface/pilot checks; VSC storage/locking, exact token coverage, real B200 decision and frozen-encoder contracts and dataset pilots; reviewed acceptance |
 | Feature creation | Accepted open-weight and frozen-encoder extraction; budgeted local Jev; resumable response/vector stores, verified publication and independent copies |
 | 0B preparation | Complete selected feature stores; fold-specific frozen PCA; 90 real TAR adapters and both TAR PCA recipes; sealed predictor runtimes |
-| 0B qualification | Integrity/identity and leakage screens; nine predictor contracts; difficult input/class/missingness/resume cases; full-size profiles covering phase/recipe extremes; published prediction readback and reviewed acceptance |
+| 0B qualification | Integrity/identity and leakage screens, nine predictor contracts, difficult input/class/missingness/resume cases, full-size profiles covering dataset shape and binary inner-OOF fitting, published prediction readback and reviewed acceptance |
 | Experiments 1–4 | Enabled, frozen, acceptance-bound arrays; five-fold records; paired descriptive analysis and approved inferential contrasts |
 
 TAR preparation is part of getting 0B ready, not an assumption that its training was

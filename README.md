@@ -8,15 +8,13 @@ without fitting to dataset labels; TAR is a separate supervised comparison.
 
 ## Project status
 
-**Last recorded evidence: 6 November 2026.** Experiment 0A was accepted for eleven
-open-weight extractors and three frozen encoders.
-The local Jev 1.14 pilot also passed on the first 100 rows of each dataset. Feature
-creation uses a frozen VSC checkout. The 6 November audit found all frozen embeddings
-and five open-weight providers complete. Database recovery passed; the detached VSC
-dispatcher resumes the remaining six providers after verified workspace publication.
-This is a dated observation, not a live job status. Next: verify complete published
-features, prepare fold-specific PCA and TAR, and qualify the benchmark in 0B.
-TAR is implemented locally; its new runtime and training jobs still need real 0B validation.
+**Last recorded evidence: 12 November 2026.** Experiment 0A was accepted for eleven
+open-weight extractors and three frozen encoders. The local Jev 1.14 first-100-row pilot
+also passed. Eight open-weight providers and all 54 frozen encoder/dataset pairs are
+complete; all 54 frozen-PCA preparation jobs passed. Kev has two unfinished datasets,
+Nimble one, and Liquid LFM3 eighteen. Scoped staging recovery and independent 0B/TAR
+preparation are authorized. These are dated observations, not live job status.
+Full benchmark execution still requires complete feature checks and reviewed 0B evidence.
 Local Jev extraction is authorized within the existing EUR 5 allowance; full coverage
 will need additional funding. [Run evidence](docs/AGENTS_MEMORY.md) ·
 [VSC workflow](docs/VSC.md#46-experiment-0b)

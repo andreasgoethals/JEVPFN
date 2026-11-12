@@ -1,4 +1,4 @@
-# Agent instructions — JEVPFN
+# Agent instructions â€” JEVPFN
 
 Read [README](README.md), [Experiments](docs/EXPERIMENTS.md), the relevant
 [Literature review](docs/LITERATURE_REVIEW.md) and dated [Operational evidence](docs/AGENTS_MEMORY.md)
@@ -19,7 +19,9 @@ are recorded in the README. Preserve unrelated local changes.
   under the cumulative USD 5.50 ceiling and existing dataset allocations. Preserve all
   historical charges/reservations. No top-up or larger budget is approved. Test credit
   exhaustion and shared rate backoff before changing dispatch behavior.
-- VSC 0B and benchmark execution require separate stage authorizations. Cleanup does not
+- On 12 November, the owner authorized independent 0B predictor contracts and TAR
+  preparation at a safe handover, alongside recovery of remaining extraction. Full
+  benchmark execution still requires separate authorization and reviewed 0B. Cleanup does not
   authorize jobs or paid calls. Access alone does not authorize cancellation or migration.
 - Existing environment-setup authorization persists within JEVPFN. Verify the actual
   interpreter; never change another project's jobs, files or shared environment.
@@ -27,7 +29,7 @@ are recorded in the README. Preserve unrelated local changes.
 
 ## Scientific constraints
 
-- The scope is Experiments 1–4: decisions, frozen embeddings, supervised TAR and native
+- The scope is Experiments 1â€“4: decisions, frozen embeddings, supervised TAR and native
   text, with prerequisite 0A/0B and synthesis. Earlier ablations are retired. No new
   models, grouped sensitivity, lexical baselines or selected-winner combinations without
   instruction. The selected roster and exact pins are in `config/`; Microsoft is excluded.

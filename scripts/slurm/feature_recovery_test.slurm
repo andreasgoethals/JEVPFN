@@ -40,12 +40,21 @@ unchanged = [
     'src/jev/self_hosted.py', 'src/jev/extended_runtimes.py', 'src/jev/catalog.py',
     'src/jev/checkpoints.py', 'src/jev/tokenization.py', 'src/jev/decision_tokenization.py',
     'src/jev/registry.py', 'src/jev/provider.py', 'src/jev/requests.py', 'src/jev/inputs.py',
-    'src/jev/question_bank.py', 'src/jev/features.py', 'src/jev/merge.py',
+    'src/jev/question_bank.py', 'src/jev/merge.py',
     'src/data/text_embeddings.py',
 ]
 for name in unchanged:
     old = subprocess.check_output(['git', 'show', '3f84d7e:' + name])
     assert old.replace(b'\r\n', b'\n') == Path(name).read_bytes().replace(b'\r\n', b'\n'), name
+# The only feature-module change closes read-only SQLite handles explicitly.
+import ast
+before = ast.parse(subprocess.check_output(['git', 'show', '3f84d7e:src/jev/features.py']))
+after = ast.parse(Path('src/jev/features.py').read_text())
+def construction(tree):
+    return [ast.dump(node, include_attributes=False) for node in tree.body
+            if not isinstance(node, (ast.Import, ast.ImportFrom))
+            and getattr(node, 'name', None) not in {'load_block', 'feature_inventory'}]
+assert construction(before) == construction(after), 'Feature construction changed'
 
 project = paths.results_dir('recovery_qa', phase='feature_creation')
 project.mkdir(parents=True, exist_ok=True)

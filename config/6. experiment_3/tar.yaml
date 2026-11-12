@@ -2,7 +2,7 @@ extends: experiment_2/embeddings
 phase: experiment_3
 name: supervised_target_aware_embeddings
 enabled: false
-prepare_enabled: false
+prepare_enabled: true  # Owner-authorized 0B preparation; full benchmark remains gated.
 encoders: [e5_small_v2_tar]
 candidate_combinations: [non_text_plus_tar]
 upstream_commit: bc9e87130df9884ccd49d04055599c0eda9f3238

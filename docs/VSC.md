@@ -10,8 +10,8 @@ queued consumers, publications and recovery state. After extraction finishes, fo
 [feature verification and 0B](#46-experiment-0b); a fresh reset is not required at that
 transition. Confirm live jobs and artifacts before acting on a dated status.
 
-[Access](#1-access) · [Storage](#2-storage-and-hardware) · [Runtimes](#3-runtimes-and-containers) ·
-[Pipeline](#4-pipeline) · [Maintenance](#5-working-sets-and-storage-maintenance) · [Transfer](#6-utilization-and-transfer)
+[Access](#1-access) Â· [Storage](#2-storage-and-hardware) Â· [Runtimes](#3-runtimes-and-containers) Â·
+[Pipeline](#4-pipeline) Â· [Maintenance](#5-working-sets-and-storage-maintenance) Â· [Transfer](#6-utilization-and-transfer)
 
 ## 1. Access
 
@@ -237,8 +237,8 @@ mkdir -p "output_JEVPFN/2. feature_creation/logs"
 
 **Expanded campaign.** The reviewed `src.cluster.feature_admission` controller owns the
 expanded 274-step graph. It schedules 198 decision dataset jobs and 54 encoder dataset
-jobs, plus staging and release. The full output roster is 396 decision blocks (11 × 18 × 2) and 54 embedding
-stores (3 × 18). These are planned totals, not counts of completed work. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
+jobs, plus staging and release. The full output roster is 396 decision blocks (11 Ã— 18 Ã— 2) and 54 embedding
+stores (3 Ã— 18). These are planned totals, not counts of completed work. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
 limit still apply. See the [recorded handover](AGENTS_MEMORY.md#parallel-admission-2-november).
 
 **Monitor and recover.** Reconcile the manifest, Slurm accounting, and publication receipts.
@@ -358,6 +358,10 @@ The merge validates identities and preserves other providers. Restage predictor 
 
 ### 4.6 Experiment 0B
 
+Independent synthetic predictor contracts and TAR preparation may start at an authorized
+idle source handover while remaining extraction continues. They do not require completed
+decision features. Full 0B preflight, profiles and acceptance retain all completeness gates.
+
 After extraction and publication finish, reconcile terminal jobs and verify the durable
 feature stores. Import the independent local copy using [the transfer procedure](#6-utilization-and-transfer).
 The full twelve-extractor roster also needs complete Jev features. A funded partial run
@@ -367,10 +371,12 @@ or a portable notebook snapshot does not meet that gate.
    Set each benchmark `feature_selectors` entry to the provider, model,
    version, question bank, question variant and `settings_sha256`. An optional
    `feature_artifacts` list in `debug.yaml` must match the selected artifact IDs exactly.
-2. **Stage runtimes and prepare PCA.** Stage the reviewed predictor images and checkpoints.
+2. **Stage runtimes and prepare PCA.** Frozen PCA can start as soon as the corresponding
+   embedding stores are complete. It can run on `batch_graniterapids` in parallel with
+   decision extraction. Stage the reviewed predictor images and checkpoints separately.
    Set the 0B fixture and profile switches (`predictor_execution_enabled` and
    `full_fold_profile_enabled`), then record the 0B freeze. Submit one CPU preparation per
-   dataset and encoder (18 × 3). Each job writes joint PCA64 and separate PCA32 for the
+   dataset and encoder (18 Ã— 3). Each job writes joint PCA64 and separate PCA32 for the
    exact outer and binary inner training partitions.
 
    ```bash
@@ -378,7 +384,7 @@ or a portable notebook snapshot does not meet that gate.
    sbatch scripts/slurm/prepare_pca.slurm REG_TEXT_ROTTEN_TOMATOES e5_small_v2
    ```
 
-   **Prepare TAR before this preflight too.** Follow [the TAR setup](TAR.md#vsc-preparation-after-current-extraction-finishes): build its separate sealed image, prepare five adapters and both PCA recipes for each dataset. TAR uses native GPFS PROJECT directly for immutable bundles; Trainer temporary checkpoints use per-job scratch.
+   **Prepare TAR before this preflight too.** Follow [the TAR setup](TAR.md#vsc-preparation-at-a-safe-source-handover): build its separate sealed image, prepare five adapters and both PCA recipes for each dataset. TAR uses native GPFS PROJECT directly for immutable bundles; Trainer temporary checkpoints use per-job scratch.
 
 3. **Run preflight and predictor contracts.** After PCA and TAR are published, submit the CPU
    preflight and a contract job for each of the nine predictors. For each GPU runtime,
@@ -407,9 +413,10 @@ or a portable notebook snapshot does not meet that gate.
    ```
 
    The generated profile plan covers the tall and wide extremes of every phase, including
-   both frozen and TAR PCA recipes. Use its current count rather than an old fixed total.
+   both frozen and TAR PCA recipes. It also includes a full-size binary profile for each
+   predictor and recipe that fits an inner-OOF threshold. Use the current generated count.
    Each fits the first outer fold at full size, retains binary inner-OOF predictions
-   except for TAR’s fixed-threshold workflow, and
+   except for TARâ€™s fixed-threshold workflow, and
    verifies predictor width, row IDs and targets. Review resource use and publication.
 5. **Accept the stage.** Add the current preflight, nine contract reports and all required
    profiles to the checksummed evidence list. Verify the owner's reviewed record with
@@ -430,10 +437,12 @@ to print its submission command.
 python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --concurrency 8 --write
 ```
 
-**Bundled tasks.** Each array task owns one dataset × predictor × phase and runs all its
+**Bundled tasks.** Each array task owns one dataset Ã— predictor Ã— phase and runs all its
 supported arms; each arm still resumes its five folds from checksummed records.
-- **Shared inputs.** The dataset, decision blocks, embeddings, TAR bundles and runtime
-  identity are loaded once per process. Each arm gets a deep copy and fresh estimators.
+- **Shared inputs.** Mindwell predictors read reviewed decision features, frozen vectors
+  and PCA parameters directly from GPFS PROJECT. Native scratch holds mutable evaluation
+  stores. Each worker reuses the current provider or encoder's data across arms and
+  releases it when it moves to the next. Each arm gets fresh estimators and isolated inputs.
 - **Hashing.** Checkpoint and asset hashes are verified once per process while the file is
   unchanged.
 - **Workers.** A task may run several workers. Each keeps the reviewed eight threads, so
@@ -444,9 +453,11 @@ supported arms; each arm still resumes its five folds from checksummed records.
     limit comes from 85% of 192 GiB, the 24-core and 194,400 MiB per-GPU ceilings, and
     eight threads per worker, so at most three workers.
   - **Profiles** always run with one exclusive worker.
-- **Sizing.** `--time`, `--mem` and the worker count come from the 0B profiles. Tasks with
-  an identical request share one array, so the planner can print several submission
-  commands. Smaller datasets run first. `--workers N` overrides the sizing.
+- **Sizing.** The planner uses reviewed full-fold 0B profiles for the same phase, predictor
+  and cluster. It sizes walltime for the busiest worker and requests Mindwell's default
+  memory per CPU (4,000 MiB on `batch_graniterapids`, 8,000 MiB on `gpu_b200`). Tasks with
+  matching requests share an array. Short tasks come first. `--workers N` can lower the
+  measured sharing limit.
 - **Timings.** Each fold records `resources.device_workers`. Shared-device folds are left
   out of the fit-time burden tables, because concurrent fits inflate wall-clock time; plan
   enough exclusive runs where burden figures matter.
@@ -457,7 +468,10 @@ GPU models default to B200; CPU models follow the native route of the allocated 
 ## 5. Working sets and storage maintenance
 
 A stage holds a working-set slot from submission until its consumers are terminal and its
-release succeeds. In the GPFS shared-asset deployment, immutable inputs/images are read
+release succeeds. Recovery submissions append the exact unfinished dataset IDs to the staging
+command and record them in the receipt. Completed decision stores stay on PROJECT and
+are excluded before the capacity estimate; a scoped workspace rejects other datasets.
+This reduces warm-cache copies without dropping cached responses from unfinished work. In the GPFS shared-asset deployment, immutable inputs/images are read
 directly from PROJECT; release publishes committed mutable stores, then retires only
 verified redundant working copies. PROJECT retains response history, features, embeddings,
 PCA and predictions; DATA retains compact operational evidence. A publication conflict,
@@ -479,7 +493,7 @@ root. A released runtime must be restaged before GPU work; durable checkpoints a
 need no rebuild.
 
 **Publication unions.** Publishing a decision store builds and validates the merged copy
-before backing it up to PROJECT. That needs 2 × (durable store + incoming) + 0.5 GiB of
+before backing it up to PROJECT. That needs 2 Ã— (durable store + incoming) + 0.5 GiB of
 temporary space, about 140 GiB for a 62 GiB store. On Mindwell B200 nodes, `/tmp` is a
 590 GiB node-local volume shared by every job on the node (`TmpDisk=0`, nothing reserved).
 When it cannot hold the union, publication uses this job's own directory on Mindwell GPFS
@@ -488,7 +502,7 @@ bounded by the personal scratch allocation minus headroom. A normal exit removes
 directory. Directories left by killed jobs are removed only after `sacct` reports those jobs
 terminal; unknown or unverifiable jobs are kept. wICE never uses this fallback.
 
-Retention recorded at migration acceptance (3–4 November); check current manifests and
+Retention recorded at migration acceptance (3â€“4 November); check current manifests and
 consumers before retirement. These are documented exceptions, not a claim that scratch
 is empty or that every retained file is still needed today:
 

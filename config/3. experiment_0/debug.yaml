@@ -22,7 +22,7 @@ stages:
     embedding_contract_command: python -m src.cluster.embedding_contracts --encoder ENCODER --execute
     acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
   after_extraction:
-    requires: [complete_selected_provider_features, complete_all_three_encoder_features, complete_90_outer_fold_TAR_bundles_and_PCA]
+    requires: [complete_selected_provider_features, complete_all_three_encoder_features, complete_frozen_PCA, complete_90_outer_fold_TAR_bundles_and_PCA]
     acceptance_ids: [feature_campaign_coverage, consistent_transfer_and_backup, predictor_task_compatibility, predictive_pipeline_boundaries, full_fold_resource_profile, real_run_output_and_resume]
 checks:
   - python_and_dependency_versions
@@ -84,7 +84,7 @@ acceptance_checks:
     evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds (fixed 0.5 for TAR), fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.
   - id: full_fold_resource_profile
     site: vsc_compute_node
-    evidence: Representative full outer-training folds fit memory/time limits without hidden row caps, checkpoint downloads or HPO; TabSTAR required adaptation is recorded separately; fit/predict timings synchronize CUDA.
+    evidence: Representative full outer-training folds, including real binary inner-OOF fitting where required, fit memory/time limits without hidden row caps, checkpoint downloads or HPO; TabSTAR required adaptation is recorded separately; fit/predict timings synchronize CUDA.
   - id: real_run_output_and_resume
     site: vsc_compute_node
     evidence: Real interrupted/restarted prediction jobs preserve immutable outputs; large tables stay on PROJECT and compact logs/indexes stay on DATA; failed arms remain explicit.

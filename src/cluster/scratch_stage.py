@@ -6,6 +6,7 @@ interrupted jobs leave their working set intact for explicit recovery.
 """
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -457,8 +458,26 @@ def _merge_native_decision(incoming, destination, work):
         # perform random-read integrity checks on native temporary disk. Running
         # quick_check directly on PROJECT caused millions of GPFS page reads.
         verified = Path(temporary) / "published_readback.sqlite3"
-        snapshot(destination, verified)
-        if _backup_page_identity(native) != _backup_page_identity(verified):
+        try:
+            snapshot(destination, verified)
+            verified_identity = _backup_page_identity(verified)
+        except (OSError, sqlite3.OperationalError) as exc:
+            # Free space was checked before the union. A co-tenant may have
+            # filled node-local disk while it ran. Retry only the readback.
+            if not (getattr(exc, "errno", None) == errno.ENOSPC
+                    or getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL):
+                raise
+            if temporary_root == _fallback_job_root(work):
+                raise
+            fallback = _native_scratch_fallback(work, native.stat().st_size + 512 * 2**20)
+            if fallback is None:
+                raise
+            print(json.dumps({"event": "publication_readback_fallback", "path": destination.name,
+                              "temporary_storage": str(fallback)}), flush=True)
+            with tempfile.TemporaryDirectory(prefix=".readback-", dir=fallback) as retry:
+                verified = snapshot(destination, Path(retry) / verified.name)
+                verified_identity = _backup_page_identity(verified)
+        if _backup_page_identity(native) != verified_identity:
             raise ValueError("Published SQLite readback differs from the validated union")
         return _closed_db_identity(destination)
 
@@ -537,7 +556,7 @@ def publish(runtime):
     return report
 
 
-def stage(runtime):
+def stage(runtime, *, datasets=None):
     from src.cluster import containers
     from src.cluster.runtime_profiles import BLACKWELL, selected
     from src.cluster.scheduling import require_cpu_staging
@@ -548,6 +567,16 @@ def stage(runtime):
 
     durable, work = roots(runtime)
     require_cpu_staging()
+    if datasets is not None:
+        if runtime not in containers.SELF_HOSTED or not datasets:
+            raise ValueError("Dataset-scoped staging requires a decision runtime and nonempty scope")
+        datasets = [paths.output_component(value) for value in datasets]
+        if len(set(datasets)) != len(datasets) or any(
+            not (durable / "data/decision_inputs" / (value + ".sqlite3")).is_file()
+            for value in datasets
+        ):
+            raise ValueError("Staging datasets must be distinct prepared dataset IDs")
+        datasets = sorted(datasets)
     shared_assets = str(durable).startswith("/gpfs") or os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1"
     with capacity_lease(work), workspace_lease(work):
         previous = {}
@@ -565,10 +594,12 @@ def stage(runtime):
             "status": "staging",
             "files": previous.get("files", {}),
             "warm_cache_progress": warm,
+            "datasets": datasets,
         }
         write_json(work / MARKER, staging_marker)
         inputs = ["data/raw", "data/decision_inputs", "data/jev_cache"]
-        if runtime == "cloudflare" or runtime not in containers.SELF_HOSTED:
+        shared_predictor_inputs = runtime not in containers.SELF_HOSTED and paths.native_gpfs_project(durable)
+        if (runtime == "cloudflare" and datasets is None) or runtime not in containers.SELF_HOSTED:
             inputs += ["data/text_embeddings"]
         if runtime in containers.SELF_HOSTED:
             inputs += [
@@ -638,6 +669,14 @@ def stage(runtime):
                 for source in _dataset_stores(folder):
                     candidates[source.relative_to(durable)] = source
         for folder in inputs:
+            if runtime in containers.SELF_HOSTED and folder.endswith("/results/pca"):
+                continue  # Decision extraction never consumes predictor PCA parameters.
+            if shared_predictor_inputs and folder in {
+                "data/jev_cache", "data/text_embeddings",
+                f"output_JEVPFN/{paths.phase_folder('experiment_2')}/results/pca",
+                f"output_JEVPFN/{paths.phase_folder('experiment_1')}/results/pca",
+            }:
+                continue  # Predictors open accepted, immutable features and PCA directly on PROJECT.
             if shared_assets and (folder.startswith("checkpoints/") or folder in {"data/raw", "data/decision_inputs"}
                                   or "token_audit" in folder):
                 continue
@@ -654,6 +693,9 @@ def stage(runtime):
             )
             for source in sources:
                 relative = source.relative_to(durable)
+                if (datasets is not None and folder == "data/jev_cache"
+                        and source.stem not in datasets):
+                    continue  # Completed datasets remain durable; exclude before capacity estimation.
                 if "token_audit" in relative.parts and "shards" in relative.parts:
                     continue  # CPU restart partitions are not GPU inputs.
                 if (
@@ -773,6 +815,7 @@ def stage(runtime):
             "quota_verified": False,
             "scratch_is_backup": False,
             "shared_immutable_root": str(durable) if shared_assets else None,
+            "datasets": datasets,
         }
         write_json(work / MARKER, report)
         write_json(
@@ -805,10 +848,12 @@ def run(runtime, command):
             raise ValueError("Wrong scratch workspace identity")
         from src.cluster.control_runtime import child_command, child_environment
 
+        dataset_id = os.environ.get("JEVPFN_PUBLISH_DATASET")
+        if marker.get("datasets") is not None and dataset_id not in marker["datasets"]:
+            raise ValueError("Requested dataset is outside the staged recovery scope")
         process = subprocess.Popen(child_command(command), env=child_environment())
         stopped = threading.Event()
         publication_errors = []
-        dataset_id = os.environ.get("JEVPFN_PUBLISH_DATASET")
 
         def checkpoint():
             # Only committed SQLite pages are copied. This also protects long
@@ -842,7 +887,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("stage", "publish", "run", "path"))
     parser.add_argument("--runtime", required=True)
+    parser.add_argument("--dataset", action="append", help="Stage only these unfinished decision datasets")
     args, command = parser.parse_known_args()
+    if args.dataset and args.action != "stage":
+        parser.error("--dataset applies only to stage")
     if args.action == "path":
         print(roots(args.runtime)[1].parent)
     elif args.action == "run":
@@ -859,7 +907,8 @@ def main():
         )
 
         try:
-            print(json.dumps((stage if args.action == "stage" else publish)(args.runtime), indent=2))
+            report = stage(args.runtime, datasets=args.dataset) if args.action == "stage" else publish(args.runtime)
+            print(json.dumps(report, indent=2))
         except ScratchCapacityUnavailable as exc:
             # A distinct status lets the dispatcher wait and retry instead of failing.
             print(exc, flush=True)

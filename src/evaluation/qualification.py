@@ -59,10 +59,11 @@ def execution_runtime():
 
 
 def profile_plan(arms=None):
-    """Profile the tall and wide extremes for each predictor, phase and PCA recipe."""
+    """Profile shape extremes and the real inner-OOF workload for each applicable recipe."""
     from src.evaluation.campaign import benchmark_plan
 
     rows = {e["id"]: e["paper_summary"]["rows"] for e in load_catalog()["datasets"]}
+    semantics = load_yaml("dataset_semantics")["datasets"]
     encoders = load_yaml("feature_creation/embedding_models")["models"]
     groups = {}
     for arm in benchmark_plan() if arms is None else arms:
@@ -82,10 +83,21 @@ def profile_plan(arms=None):
         def encoder_width(arm):
             return encoders[arm["encoder"].removesuffix("_tar")]["dimensions"] if arm.get("encoder") else 0
 
-        for arm in (
-            max(group, key=lambda a: (height(a), width(a), encoder_width(a))),
+        def tall(arm):
+            return height(arm), width(arm), encoder_width(arm)
+
+        extremes = [
+            max(group, key=tall),
             max(group, key=lambda a: (width(a), height(a), encoder_width(a))),
-        ):
+        ]
+        binary = [
+            arm for arm in group
+            if arm["phase"] != "experiment_3"
+            and semantics[arm["dataset_id"]]["task_type"] == "binary_classification"
+        ]
+        if binary:
+            extremes.append(max(binary, key=tall))
+        for arm in extremes:
             selected[digest(arm)] = arm
     return list(selected.values())
 

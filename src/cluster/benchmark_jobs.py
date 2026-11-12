@@ -66,8 +66,13 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
     excluded = [a for a in candidates if a["width_status"] == "unsupported_width"]
     if not arms:
         raise ValueError("No supported arms for this phase/model")
-    if profile_summary is None and not profile_fold:
-        profile_summary = sizing.summarize(sizing.profile_records(model)) if paths.on_vsc() else None
+    if profile_summary is None and not profile_fold and paths.on_vsc():
+        from src.evaluation.qualification import PHASE_CONFIGS
+
+        acceptance = load_yaml(PHASE_CONFIGS[phase]).get("experiment_0_acceptance")
+        profile_summary = sizing.summarize(sizing.profile_records(
+            model, phase=phase, cluster=route["cluster"], acceptance=acceptance,
+        ))
     sizes = _dataset_rows()
     groups = {}
     for index, arm in enumerate(arms):
@@ -75,8 +80,10 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
     tasks = []
     for dataset_id, indices in groups.items():
         rows, width = sizes.get(dataset_id, (0, 0))
-        count = sizing.workers(profile_summary, gpu=gpu, threads=threads, arms=len(indices),
-                               requested=1 if profile_fold else workers)
+        count = sizing.workers(
+            profile_summary, gpu=gpu, threads=threads, arms=len(indices),
+            requested=1 if profile_fold or (gpu and route["cluster"] != "mindwell") else workers,
+        )
         tasks.append({
             "dataset_id": dataset_id,
             "arms": indices,
@@ -134,6 +141,10 @@ def write_plan(body):
         target = paths.manifests_dir(output_phase) / "arrays" / f"{digest(manifest)}.json"
         write_json(target, manifest)
         request = tier[0]["resources"]
+        cpus = request["cpus"]
+        if route["cluster"] == "mindwell" and request["mem_mib"]:
+            mib_per_cpu = sizing.MINDWELL_GPU_MIB_PER_CORE if body["gpu"] else sizing.MINDWELL_CPU_MIB_PER_CORE
+            cpus = max(cpus, (request["mem_mib"] + mib_per_cpu - 1) // mib_per_cpu)
         command = [
             "sbatch",
             "--parsable",
@@ -142,12 +153,12 @@ def write_plan(body):
             f"--partition={partition}",
             f"--account={load_yaml('experiment_0/scheduling')['account']}",
             f"--array=0-{len(tier) - 1}%{body['concurrency']}",
-            f"--cpus-per-task={request['cpus']}",
+            f"--cpus-per-task={cpus}",
             f"--time={request['time_hours']}:00:00",
             f"--output={logs}/jevpfn-benchmark_%A_%a.log",
             f"--error={logs}/jevpfn-benchmark_%A_%a.log",
         ]
-        if request["mem_mib"]:
+        if request["mem_mib"] and route["cluster"] != "mindwell":
             command.append(f"--mem={request['mem_mib']}M")
         if body["gpu"]:
             command.append("--gpus-per-node=1")
@@ -164,7 +175,7 @@ def write_plan(body):
             "array_tasks": len(tier),
             "arms": sum(len(t["arms"]) for t in tier),
             "workers_per_task": sorted({t["workers"] for t in tier}),
-            "resources": request,
+            "resources": {**request, "cpus": cpus},
             "submission_command": shlex.join(command),
         })
     return {"submissions": submissions, "excluded_arms": body["excluded_arms"], "submitted": False}
@@ -202,8 +213,9 @@ def _pin_cores(threads, worker):
         return
     allowed = sorted(os.sched_getaffinity(0))
     cores = allowed[worker * threads:(worker + 1) * threads]
-    if len(cores) == threads:
-        os.sched_setaffinity(0, cores)
+    if len(cores) != threads:
+        raise RuntimeError("Benchmark worker has too few allocated CPU cores")
+    os.sched_setaffinity(0, cores)
 
 
 def run_arms(body, task, worker=0):
@@ -233,7 +245,10 @@ def execute(path, expected, index, worker=None):
             raise SystemExit(1)
         return
     workers = task["workers"]
+    if hasattr(os, "sched_getaffinity") and len(os.sched_getaffinity(0)) < threads * workers:
+        raise RuntimeError("Benchmark task has too few allocated CPU cores for its worker plan")
     if workers == 1:
+        _pin_cores(threads, 0)
         os.environ.update(worker_environment({}, threads=threads, workers=1, worker=0, gpu=body["gpu"]))
         if run_arms(body, task):
             raise SystemExit(1)
@@ -259,7 +274,7 @@ def main():
     parser.add_argument("--profile", default=None)
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--workers", type=int, default=None,
-                        help="Override sized workers per task (GPU default: measured, else 1)")
+                        help="Cap workers per task below the resource-based limit")
     parser.add_argument("--profile-fold", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--run-manifest")

@@ -374,7 +374,7 @@ def test_capacity_exit_code_never_retries_non_staging_steps():
 def test_staging_reports_a_full_budget_with_its_own_exit_status(monkeypatch):
     from src.cluster import scratch_capacity, scratch_stage
 
-    def full(runtime):
+    def full(runtime, **kwargs):
         raise scratch_capacity.ScratchCapacityUnavailable("JEVPFN GPFS byte budget exceeded")
 
     monkeypatch.setattr(scratch_stage, "stage", full)
@@ -382,3 +382,50 @@ def test_staging_reports_a_full_budget_with_its_own_exit_status(monkeypatch):
     with pytest.raises(SystemExit) as stopped:
         scratch_stage.main()
     assert stopped.value.code == scratch_capacity.SCRATCH_CAPACITY_UNAVAILABLE
+
+def test_stage_submission_scopes_only_unfinished_decision_consumers(monkeypatch):
+    steps = grid()
+    step = next(s for s in steps if s['name'] == 'liquid_scratch')
+    for s in steps:
+        if s.get('pool') == 'liquid' and s['command'][-1] not in {'16', '17'}:
+            s['status'] = 'completed'
+    scope = dispatch.staging_datasets(step, steps)
+    assert scope == ['16', '17']
+    original = list(step['command'])
+    calls = []
+    monkeypatch.setattr(dispatch.subprocess, 'run', lambda cmd, **kw:
+                        calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, '123;wice', ''))
+    dispatch.submit_step(step, save=lambda: None, policy_sha256='reviewed', datasets=scope)
+    assert step['command'] == original
+    assert calls == [original + ['--dataset', '16', '--dataset', '17']]
+    assert step['submission_command'] == calls[0]
+    cloudflare = next(s for s in steps if s['name'] == 'cloudflare_scratch')
+    assert dispatch.staging_datasets(cloudflare, steps) is None
+
+
+def test_reviewed_predictor_runtime_additions_preserve_every_existing_seal(tmp_path):
+    old = {'containers/control.active.json': 'fixed'}
+    added = {'containers/blackwell-cu130/e5_tar/_JEVPFN_CONTAINER.json': 'new-tar-seal'}
+    review = tmp_path / 'review.json'
+    write_json(review, {'reviewed_by': 'owner-authorized', 'runtime_additions': added})
+    dispatch.validate_runtime_additions(old, old | added, review, 'owner-authorized')
+    with pytest.raises(ValueError, match='existing runtime pin'):
+        dispatch.validate_runtime_additions(old, {'containers/control.active.json': 'changed'} | added,
+                                            review, 'owner-authorized')
+    with pytest.raises(ValueError, match='exact named'):
+        dispatch.validate_runtime_additions(old, old | {'containers/blackwell-cu130/kev/_JEVPFN_CONTAINER.json': 'new'},
+                                            review, 'owner-authorized')
+    with pytest.raises(ValueError, match='exact named'):
+        dispatch.validate_runtime_additions(old, old | added, review, 'other')
+
+def test_source_review_cannot_label_inference_as_non_extraction(tmp_path):
+    name = 'src/jev/self_hosted.py'
+    old = {'files': {name: 'a'}, 'source_sha256': 'old'}
+    new = {'files': {name: 'b'}, 'source_sha256': 'new'}
+    p = tmp_path / 'review.json'
+    write_json(p, {'schema': 'jevpfn.extraction-source-review.v1', 'reviewed_by': 'reviewer',
+                   'previous_source': 'old', 'next_source': 'new', 'rationale': 'reviewed',
+                   'changes': {name: {'before': 'a', 'after': 'b'}},
+                   'non_extraction_changes': {name: 'cannot waive inference'}})
+    with pytest.raises(ValueError, match='Unrecognized'):
+        dispatch.validate_source_review(old, new, {name}, p, 'reviewer')

@@ -52,7 +52,27 @@ def verified_payload_hashes(path, keys):
     return hashes
 
 
-def import_bundle(bundle, expected_sha256):
+def _include_previous_blocks(candidate, previous):
+    """Merge into a staged store so a failed import leaves the installed copy intact."""
+    with closing(sqlite3.connect(candidate.resolve().as_uri(), uri=True)) as db, db:
+        db.execute("ATTACH DATABASE ? AS previous", (previous.resolve().as_uri() + "?mode=ro",))
+        for table, key, values in (
+            ("feature_artifacts", "artifact_id", ("manifest_json", "features_parquet", "requests_parquet")),
+            ("payload_hashes", "request_key", ("payload_sha256",)),
+        ):
+            mismatch = " OR ".join(f"old.{column} IS NOT new.{column}" for column in values)
+            if db.execute(
+                f"SELECT 1 FROM previous.{table} old JOIN main.{table} new USING ({key}) "
+                f"WHERE {mismatch} LIMIT 1"
+            ).fetchone():
+                raise ValueError(f"Conflicting portable records in {table}")
+            db.execute(
+                f"INSERT INTO main.{table} SELECT old.* FROM previous.{table} old "
+                f"WHERE NOT EXISTS (SELECT 1 FROM main.{table} new WHERE new.{key}=old.{key})"
+            )
+
+
+def import_bundle(bundle, expected_sha256, *, add_providers=False):
     """Verify a complete snapshot before publishing its per-dataset notebook stores."""
     if paths.on_vsc():
         raise RuntimeError("Portable decision feature import is for the local notebooks")
@@ -103,10 +123,17 @@ def import_bundle(bundle, expected_sha256):
                 != {(p, rep) for p in providers for rep in ("joint", "per_column")}
             ):
                 raise ValueError("Portable dataset does not contain the entire provider roster")
-            if destination.exists() and not set(feature_inventory(destination).artifact_id) <= set(
-                inventory.artifact_id
-            ):
-                raise ValueError("Incoming snapshot would drop previously downloaded artifacts")
+            if destination.exists():
+                previous = feature_inventory(destination)
+                if add_providers:
+                    identities = pd.concat([previous, inventory], ignore_index=True).drop_duplicates("artifact_id")
+                    if identities.duplicated(["provider", "representation"]).any():
+                        raise ValueError("Incoming snapshot would mix versions of an installed provider")
+                    _include_previous_blocks(candidate, destination)
+                    if set(feature_inventory(candidate).artifact_id) != set(identities.artifact_id):
+                        raise ValueError("Portable feature union is incomplete")
+                elif not set(previous.artifact_id) <= set(inventory.artifact_id):
+                    raise ValueError("Incoming snapshot would drop previously downloaded artifacts")
             checked.append((candidate, destination))
         for candidate, destination in checked:
             candidate.replace(destination)

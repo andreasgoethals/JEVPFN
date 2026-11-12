@@ -10,7 +10,7 @@ import argparse
 import copy
 import json
 import os
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 
 from src.data.loaders import load_catalog, load_dataset
@@ -128,12 +128,32 @@ def benchmark_plan(main=None, text=None):
 _TASK_CACHE = None
 
 
-def _cached(key, load):
+def _cached(key, load, *, copy_result=True):
     if _TASK_CACHE is None:
         return load()
     if key not in _TASK_CACHE:
         _TASK_CACHE[key] = load()
-    return copy.deepcopy(_TASK_CACHE[key])
+    result = _TASK_CACHE[key]
+    return copy.deepcopy(result) if copy_result else result
+
+
+def _retain_representation(provider, encoder):
+    if _TASK_CACHE is None:
+        return
+    for key in list(_TASK_CACHE):
+        if (key[0] == "decision" and key[1] != provider) or (
+            key[0] == "embeddings" and key[1] != encoder
+        ):
+            del _TASK_CACHE[key]
+
+
+def _representation_storage():
+    from src.cluster.scratch_stage import staging_environment
+
+    root = paths.durable_project_override()
+    if os.environ.get("SLURM_CLUSTER_NAME") == "mindwell" and paths.native_gpfs_project(root):
+        return staging_environment(root / paths.PROJECT_NAME)
+    return nullcontext()
 
 
 @contextmanager
@@ -168,10 +188,15 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     if not profile:
         from src.evaluation.qualification import benchmark_evidence
 
-        qualified = _cached(("evidence", digest(cfg.get("experiment_0_acceptance")), digest(arm)),
-                            lambda: benchmark_evidence(cfg.get("experiment_0_acceptance"), arm))
-    if arm not in _cached(("plan",), benchmark_plan):
+        acceptance = cfg.get("experiment_0_acceptance")
+        qualified = _cached(
+            ("evidence", acceptance, arm.get("model")),
+            lambda: benchmark_evidence(acceptance, arm),
+            copy_result=False,
+        )
+    if arm not in _cached(("plan",), benchmark_plan, copy_result=False):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
+    _retain_representation(arm.get("provider"), arm.get("encoder"))
     catalog = load_yaml("experiment_1/models")
     settings = copy.deepcopy(catalog["models"][arm["model"]]["runtime"])
     settings["threads"] = min(
@@ -219,11 +244,17 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             if decision_set == "non_text_plus_joint"
             else ("per_column",)
         )
-        blocks = _cached(
-            ("decision", entry["id"], digest(selector), modes),
-            lambda selector=selector, modes=modes: load_feature_selection(
-                paths.dataset_cache_path(entry["id"]), selector, modes),
-        )
+        with _representation_storage():
+            blocks = [
+                block
+                for mode in modes
+                for block in _cached(
+                    ("decision", provider, entry["id"], digest(selector), mode),
+                    lambda mode=mode, selector=selector: load_feature_selection(
+                        paths.dataset_cache_path(entry["id"]), selector, (mode,),
+                    ),
+                )
+            ]
         checksums.update({b.manifest["artifact_id"]: digest(b.manifest["sha256"]) for b in blocks})
         additions.append(
             (
@@ -247,10 +278,13 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         from src.data.text_embeddings import encoder_config, load
 
         embedding_cfg = encoder_config(arm["encoder"])
+        with _representation_storage():
+            embeddings = _cached(
+                ("embeddings", arm["encoder"], entry["id"], digest(embedding_cfg)),
+                lambda: load(dataset, embedding_cfg),
+            )
         embedding_cfg["pca_components_per_column"] = arm["pca_components"]
         embedding_cfg["pca_scope"] = arm["pca_scope"]
-        embeddings = _cached(("embeddings", entry["id"], digest(embedding_cfg)),
-                             lambda: load(dataset, embedding_cfg))
         embedding_artifacts = embeddings.attrs["feature_artifact_ids"]
         if arm["model"] not in embedding_cfg["models"]:
             raise ValueError("Predictor is not enabled for the embedding feature configurations")
@@ -283,19 +317,20 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     }
     if embedding_cfg:
         from src.evaluation.embedding_control import EmbeddingControl
+        from src.evaluation.pca_cache import cache_path
 
         base_factory = factory
+        with _representation_storage():
+            prepared_cache = cache_path(entry["id"], arm["encoder"])
 
         def factory():
-            from src.evaluation.pca_cache import cache_path
-
             return EmbeddingControl(
                 base_factory(),
                 features.attrs["embedding_groups"],
                 components=embedding_cfg["pca_components_per_column"],
                 seed=cfg["random_seed"],
                 scope=embedding_cfg["pca_scope"],
-                prepared_cache=cache_path(entry["id"], arm["encoder"]),
+                prepared_cache=prepared_cache,
                 embedding_artifacts=embedding_artifacts,
             )
 

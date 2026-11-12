@@ -699,3 +699,15 @@ def test_b200_bootstrap_propagates_failure_before_exporting_a_bad_root(tmp_path,
     )
     assert result.returncode == {"activation": 37, "workspace_path": 42}[failure], result.stderr
     assert "MUST_NOT_CONTINUE" not in result.stdout
+
+def test_container_build_removes_only_the_inherited_controller_bin():
+    result = subprocess.run([bash_executable(), '-c', '''set -eu
+export JEVPFN_BUILD_PYTHON=/gpfs/project/JEVPFN/containers/control-v1/bin/python
+export PATH=/usr/bin:/gpfs/project/JEVPFN/containers/control-v1/bin:/bin:/site/tools
+source scripts/container_build_path.sh
+[[ "$PATH" == /usr/bin:/bin:/site/tools ]]
+[[ "$JEVPFN_BUILD_PYTHON" == /gpfs/project/JEVPFN/containers/control-v1/bin/python ]]
+'''], cwd=ROOT, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    source = (ROOT / 'scripts/build_decision_container.sh').read_text()
+    assert 'source scripts/container_build_path.sh' in source

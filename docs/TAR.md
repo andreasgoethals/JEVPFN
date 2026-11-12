@@ -83,13 +83,15 @@ these local checks do not train weights. A fresh comparison on 5 November verifi
 12 vendored files against the official pinned source byte-for-byte.
 These tests do not substitute for B200 training and predictor acceptance.
 
-## VSC preparation after current extraction finishes
+## VSC preparation at a safe source handover
 
-Do not update the currently active VSC checkout. After publication and consumer checks,
-close the extraction freeze and deploy the reviewed source. Build the TAR runtime
-before recording a new freeze: image construction is refused in a frozen checkout.
-Then enable `prepare_enabled` in `config/6. experiment_3/tar.yaml` and the authorized
-0B switches, and freeze the 0B stage before training.
+Independent predictor checks and TAR preparation may overlap remaining extraction after
+a reviewed idle handover. Stop the dispatcher, reconcile active jobs and publishers,
+archive the old freeze, and deploy the tested source. Build the TAR runtime before
+recording the new freeze: image construction is refused in a frozen checkout. Preserve
+every existing extractor/checkpoint seal; explicitly review any new predictor/TAR seal
+in the recovery receipt. TAR preparation and bounded predictor contracts are enabled;
+full-fold qualification and benchmark execution retain their separate gates.
 The TAR benchmark `enabled` switch remains false until 0B is accepted.
 Use the current [VSC freeze and review procedure](VSC.md#46-experiment-0b).
 

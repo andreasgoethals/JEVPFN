@@ -121,6 +121,21 @@ def write_approval(tmp_path, bodies):
     return accepted
 
 
+def test_real_profile_plan_covers_inner_oof_for_each_applicable_recipe():
+    from src.evaluation.campaign import benchmark_plan
+
+    def group(arm):
+        return arm["phase"], arm["model"], arm.get("pca_scope")
+
+    def needs_inner_oof(arm):
+        return arm["dataset_id"].startswith("BIN_") and arm["phase"] != "experiment_3"
+
+    arms = benchmark_plan()
+    expected = {group(a) for a in arms if needs_inner_oof(a) and a["width_status"] != "unsupported_width"}
+    actual = {group(a) for a in q.profile_plan(arms) if needs_inner_oof(a)}
+    assert actual == expected
+
+
 def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     isolated_output, monkeypatch
 ):

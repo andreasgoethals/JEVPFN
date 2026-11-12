@@ -85,6 +85,11 @@ def durable_project_override() -> Path | None:
     return configured_root()
 
 
+def native_gpfs_project(root: Path | None) -> bool:
+    """Whether the durable allocation can serve native Mindwell readers."""
+    return root is not None and root.as_posix().startswith("/gpfs") and "/project/" in root.as_posix()
+
+
 def _use_staging() -> bool:
     """Should big files go to project storage rather than into the repo?"""
     return on_vsc() or staging_override() is not None

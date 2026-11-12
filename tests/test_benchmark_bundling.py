@@ -49,6 +49,7 @@ def test_linear_covers_logistic_regression_on_cpu():
 
 def test_unmeasured_gpu_work_is_never_shared():
     assert benchmark_sizing.workers(None, gpu=True, threads=8, arms=37) == 1
+    assert benchmark_sizing.workers(None, gpu=True, threads=8, arms=37, requested=3) == 1
 
 
 def test_measured_gpu_sharing_respects_vram_cores_and_host_memory():
@@ -60,6 +61,7 @@ def test_measured_gpu_sharing_respects_vram_cores_and_host_memory():
     assert benchmark_sizing.workers(heavy, gpu=True, threads=8, arms=37) == 1
     big = {**summary, "peak_gpu_reserved_bytes": 100 * 1024**3}
     assert benchmark_sizing.workers(big, gpu=True, threads=8, arms=37) == 1
+    assert benchmark_sizing.workers(big, gpu=True, threads=8, arms=37, requested=3) == 1
 
 
 def test_resources_bucket_time_and_scale_memory_with_workers():
@@ -80,6 +82,50 @@ def test_profiles_from_shared_devices_never_set_time_rates():
     summary = benchmark_sizing.summarize([shared])
     assert summary["seconds_per_training_row"] is None
     assert benchmark_sizing.estimated_arm_seconds(summary, 1000) is None
+
+
+def test_array_walltime_accounts_for_the_longest_worker():
+    summary = {"seconds_per_training_row": 0.35, "peak_rss_bytes": 0}
+    resources = benchmark_sizing.resources(
+        summary, gpu=False, threads=8, workers_per_task=2, arm_rows=[1600] * 3,
+    )
+    assert resources["time_hours"] == 6
+
+
+def test_sizing_reads_only_the_current_reviewed_profile_on_its_cluster(tmp_path, monkeypatch):
+    import json
+
+    from src.evaluation import acceptance, store
+    from src.utils.serialization import file_sha256, write_json
+
+    monkeypatch.setattr(acceptance, "evaluation_identity", lambda: "current")
+    meta = dict(model_id="catboost", dataset_id="d", prediction_role="outer_test", split_id="s",
+                outer_fold=0, n_train=8000, representation_feature_count=4)
+    body = dict(metadata=meta, predictions={"sha256": "prediction"},
+                timing={"measured_wall_seconds": 100}, resources={"peak_rss_bytes": 12345})
+    evidence = []
+    for i, (phase, cluster, identity) in enumerate([
+        ("experiment_1", "mindwell", "current"),
+        ("experiment_2", "mindwell", "current"),
+        ("experiment_1", "wice", "current"),
+        ("experiment_1", "mindwell", "previous"),
+    ]):
+        file = tmp_path / f"report{i}.json"
+        write_json(file, dict(status="full_fold_profile_passed", evaluation_identity=identity,
+                              cluster=cluster, job_id="1", split_id="s", training_rows=8000,
+                              predictor_columns=4, arm={"phase": phase, "model": "catboost", "dataset_id": "d"},
+                              roles=[{"role": "outer_test", "record_id": str(i), "prediction_sha256": "prediction"}]))
+        evidence.append({"path": file.name, "sha256": file_sha256(file)})
+    review = tmp_path / "review.json"
+    write_json(review, dict(accepted=True, stage="after_extraction", reviewed_by="owner",
+                            evaluation_identity="current", evidence=evidence))
+    calls = []
+    monkeypatch.setattr(store.RecordRef, "read_text", lambda self: calls.append(self.key) or json.dumps(body))
+    profiles = benchmark_sizing.profile_records(
+        "catboost", phase="experiment_1", cluster="mindwell", acceptance=review,
+    )
+    assert calls == ["0"]
+    assert benchmark_sizing.summarize(profiles)["seconds_per_training_row"] == 100 / 8000
 
 
 def test_workers_keep_the_reviewed_thread_count_and_record_sharing():
@@ -133,6 +179,11 @@ def test_multi_worker_task_launches_one_process_per_worker(monkeypatch):
             return 0
 
     monkeypatch.setattr(benchmark_jobs.subprocess, "Popen", Process)
+    monkeypatch.setattr(benchmark_jobs.os, "sched_getaffinity", lambda _: set(range(8)), raising=False)
+    with pytest.raises(RuntimeError, match="too few allocated CPU cores"):
+        benchmark_jobs.execute("manifest.json", "sha", 0)
+    assert not launched
+    monkeypatch.setattr(benchmark_jobs.os, "sched_getaffinity", lambda _: set(range(16)))
     benchmark_jobs.execute("manifest.json", "sha", 0)
     assert [c[c.index("--worker") + 1] for c, _ in launched] == ["0", "1"]
     assert all(env["JEVPFN_WORKERS_PER_DEVICE"] == "2" for _, env in launched)
@@ -151,6 +202,36 @@ def test_task_cache_hands_each_arm_an_independent_copy():
     campaign._cached(("x",), lambda: calls.append(1))
     campaign._cached(("x",), lambda: calls.append(1))
     assert calls == [1, 1, 1]
+
+
+def test_task_cache_releases_old_representations_but_preserves_current_modes():
+    from src.evaluation import campaign
+
+    with campaign.task_cache():
+        for key in [("dataset", "d"), ("decision", "intern", "per_column"),
+                    ("decision", "intern", "joint"), ("embeddings", "e5_small_v2")]:
+            campaign._cached(key, lambda: "original")
+        campaign._retain_representation("intern", None)
+        assert set(campaign._TASK_CACHE) == {("dataset", "d"),
+                                            ("decision", "intern", "per_column"),
+                                            ("decision", "intern", "joint")}
+        campaign._retain_representation("liquid", None)
+        assert set(campaign._TASK_CACHE) == {("dataset", "d")}
+
+
+def test_mindwell_benchmark_reads_representations_from_project_then_restores_scratch(monkeypatch):
+    from pathlib import Path
+
+    from src.evaluation import campaign
+
+    project = Path("/gpfs1/project/prj_00013")
+    scratch = Path("/gpfs1/scratch/jevpfn-work/tabpfn_3_5")
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(scratch))
+    monkeypatch.setattr(campaign.paths, "durable_project_override", lambda: project)
+    with campaign._representation_storage():
+        assert campaign.paths.staging_root() == project
+    assert campaign.paths.staging_root() == scratch
 
 
 def test_verified_hash_is_reused_only_while_the_file_is_unchanged(tmp_path, monkeypatch):

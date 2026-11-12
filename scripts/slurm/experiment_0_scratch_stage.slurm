@@ -18,4 +18,6 @@ export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh
-"${JEVPFN_PYTHON:?}" -m src.cluster.scratch_stage stage --runtime "${1:?Pass runtime}"
+jevpfn_stage_runtime="${1:?Pass runtime}"
+shift
+"${JEVPFN_PYTHON:?}" -m src.cluster.scratch_stage stage --runtime "$jevpfn_stage_runtime" "$@"
