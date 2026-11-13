@@ -8,7 +8,7 @@ pending statuses without changing the original evidence.
 
 ## Latest verified status
 
-**Evidence through 12 November 2026. Recheck receipts and Slurm before acting.**
+**Evidence through 13 November 2026. Recheck receipts and Slurm before acting.**
 
 | Area | Last verified position | Still required |
 |---|---|---|
@@ -18,6 +18,27 @@ pending statuses without changing the original evidence.
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
 | Benchmark | Four-experiment design and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
 | Documentation/notebooks | Eight-model snapshot, 12 notebooks passed, 19 figures | Refresh when more complete evidence is imported |
+
+### Independent validation and scoped recovery on 13 November
+
+- At source `ab0bd964…` (Git `3bbedcb`), native recovery QA `11794596` passed
+  200 tests and GPFS publication/readback checks; all 36 previous runtime pins were
+  preserved, with only the new sealed CatBoost and TAR images added. The full local
+  suite passed 1,356 tests with 26 environment-specific skips before this deployment.
+- The recovered dispatcher submitted Kev staging `11794602` with exactly Kickstarter
+  Funding and ScimagoJR Impact. It retains the two-workspace and byte-budget safeguards.
+- That scoped attempt still failed the size estimate. Native sizing audit `11794675`
+  measured about 7.96 GB of Kev payload across the two shared source stores, which total
+  about 107 GB. The old eightfold character/page allowance, followed by separate copy
+  reserves, exceeded the 200-GiB budget. The corrected UTF-8 estimate retains fourfold
+  row/page slack, two extra largest-store copies and 20 GiB headroom; it does not raise
+  the workspace or personal quota. Local tests compare estimates with real filtered
+  SQLite files and verify multibyte text costs more than equal-length ASCII text.
+- Linear contracts `11794610` passed all 32 fixture cases. CatBoost `11794611` and TAR
+  pilot `11794612_0` failed before fitting: the telemetry process attempted to run an
+  original model wrapper from inside the control image. The explicit host-step route
+  repairs this launch; the default extraction route is unchanged. Admission was paused
+  while staging continued, so the repair could wait for a safe idle handover.
 
 ### Feature recovery handover on 12 November
 

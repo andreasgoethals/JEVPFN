@@ -84,8 +84,10 @@ or rollback requirements; [retention exceptions](#5-working-sets-and-storage-mai
   needs driver branch >= 580). Startup checks CUDA 13.0, native `sm_100`, BF16 and the B200
   device. These checks do not establish model correctness; never substitute newer packages
   to bypass a failed pin.
-- **Model-image probes** inside a CPU-controller job use an overlapping host Slurm step;
-  rebuildable compiler caches use a per-job scratch leaf removed on exit.
+- **Model-image probes** inside a CPU-controller job use an overlapping host Slurm step.
+  Direct PROJECT CatBoost contracts and TAR use the same route via telemetry's
+  `--host-step`; relocated extraction wrappers keep their existing launch mode.
+  Rebuildable compiler caches use a per-job scratch leaf removed on exit.
 - **Predictor runtimes.** Review the checkpoint and runtime pins in
   [models.yaml](<../config/4. experiment_1/models.yaml>). Before freezing 0B,
   `python -m src.cluster.predictor_assets --execute` stages the pinned TabSTAR snapshots on

@@ -320,9 +320,11 @@ def test_all_monitored_jobs_separate_host_monitor_from_workload_interpreter():
             line for line in script.read_text().splitlines() if "-m src.cluster.monitor" in line
         ]
         for call in calls:
-            assert call.lstrip().startswith(
-                'jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- '
-            )
+            prefix = 'jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor '
+            assert call.lstrip().startswith(prefix)
+            expected_flags = ("--host-step -- " if script.name in {
+                "experiment_0_predictor_cpu.slurm", "prepare_tar.slurm"} else "-- ")
+            assert call.lstrip()[len(prefix):].startswith(expected_flags)
             assert '-- "${JEVPFN_PYTHON:?}" -m ' in call
             monitored.append(script.name)
     assert len(set(monitored)) >= 9

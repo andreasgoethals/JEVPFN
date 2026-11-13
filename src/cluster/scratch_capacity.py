@@ -69,26 +69,32 @@ def disposable_paths(work):
 
 
 def provider_cache_bound(source, provider):
-    """Conservative bytes for a provider-only warm cache, not every prior model."""
+    """Reserve for the selected provider's UTF-8 records, indexes and page slack.
+
+    Count encoded bytes, not SQLite TEXT character lengths. Four times payload
+    plus a page per row is deliberately generous for a freshly filtered store;
+    check_capacity separately reserves two more copies of the largest store.
+    """
     with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         size = 16 * 2**20
         for table, predicate, columns in (
             ("responses", "json_extract(settings_json,'$.provider')=?",
-             "length(payload_json)+length(settings_json)+length(response_json)"),
+             ("payload_json", "settings_json", "response_json")),
             ("origins", "request_key IN (SELECT request_key FROM responses WHERE "
-             "json_extract(settings_json,'$.provider')=?)", "length(provenance_json)"),
+             "json_extract(settings_json,'$.provider')=?)", ("provenance_json",)),
             ("failures", "json_extract(settings_json,'$.provider')=?",
-             "length(payload_json)+length(settings_json)+length(error_type)"),
+             ("payload_json", "settings_json", "error_type")),
             ("feature_artifacts", "json_extract(manifest_json,'$.identity.provider')=?",
-             "length(manifest_json)+length(features_parquet)+length(requests_parquet)"),
+             ("manifest_json", "features_parquet", "requests_parquet")),
         ):
             if table in tables:
+                payload_sql = "+".join(f"COALESCE(length(CAST({column} AS BLOB)),0)" for column in columns)
                 count, payload = db.execute(
-                    f"SELECT COUNT(*),COALESCE(SUM({columns}),0) FROM {table} WHERE {predicate}",
+                    f"SELECT COUNT(*),COALESCE(SUM({payload_sql}),0) FROM {table} WHERE {predicate}",
                     (provider,),
                 ).fetchone()
-                size += 8 * (payload + 4096 * count)
+                size += 4 * (payload + 4096 * count)
     return min(source.stat().st_size, size)
 
 
@@ -143,6 +149,10 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
     extra = growth + 2 * largest + settings["scratch_headroom_gib"] * GIB
     project_bytes = tree_bytes(root)
     personal_bytes = tree_bytes(root.parent)
+    print(json.dumps({"event": "scratch_capacity_estimate", "workspace_bytes": project_bytes,
+                      "personal_bytes": personal_bytes, "growth_bytes": growth,
+                      "largest_store_bytes": largest, "extra_bytes": extra,
+                      "working_budget_gib": settings["scratch_working_set_gib"]}), flush=True)
     if project_bytes + extra > settings["scratch_working_set_gib"] * GIB:
         raise ScratchCapacityUnavailable(
             "JEVPFN GPFS byte budget exceeded; publish/release idle copies before staging"

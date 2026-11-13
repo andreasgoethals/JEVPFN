@@ -5,6 +5,15 @@ date; old model rosters, grids, paths and pending statuses are not current instr
 Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for commands and
 [Operational evidence](AGENTS_MEMORY.md) for dated campaign outcomes.
 
+## 13-11-2026
+
+- Size provider-only warm caches from UTF-8 payload bytes with fourfold row/page
+  allowance, plus the existing separate merge-copy reserves and quota headroom.
+  Log the capacity calculation; keep the 200-GiB workspace budget unchanged.
+- Launch original PROJECT model wrappers from telemetry through an overlapping host
+  step in the existing allocation. This fixes the direct CatBoost/TAR launch without
+  changing the established extraction monitoring route or rebuilding sealed images.
+
 ## 12-11-2026
 
 - Allow independent CPU predictor contracts and TAR jobs to overlap extraction-workspace

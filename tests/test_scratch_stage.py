@@ -234,6 +234,24 @@ def test_provider_warm_cache_keeps_only_matching_responses_origins_and_features(
     assert target.stat().st_size <= provider_cache_bound(source.path, "intern")
 
 
+def test_provider_size_reserves_utf8_bytes_and_covers_filtered_sqlite(roots):
+    from src.cluster.scratch_capacity import provider_cache_bound
+
+    durable, work = roots
+    bounds = []
+    for number, char in enumerate(("x", "😀")):
+        source = cache(durable / f"source_{number}.sqlite3", request("intern", text=char * 160_000))
+        # A different provider must not determine this provider's scratch reserve.
+        source.put(request("jev", text="unrelated" * 3_000_000), response(), kind="verified_response")
+        destination = work / f"filtered_{number}.sqlite3"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        stage._provider_cache(source.path, destination, "intern")
+        estimate = provider_cache_bound(source.path, "intern")
+        assert destination.stat().st_size <= estimate < source.path.stat().st_size
+        bounds.append(estimate)
+    assert bounds[1] > bounds[0]  # Equal character counts have different UTF-8 storage costs.
+
+
 def test_provider_warm_cache_waits_for_publisher_before_reading_identity(roots, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event

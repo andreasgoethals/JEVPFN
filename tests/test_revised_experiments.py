@@ -234,6 +234,35 @@ def test_telemetry_preserves_child_failure_and_uses_separate_small_outputs(monke
         assert "gpu_uuid" in stream.read()
 
 
+def test_telemetry_host_step_preserves_wrapper_and_child_failure(monkeypatch, tmp_path):
+    import json
+    import sys
+
+    from src.cluster import monitor
+
+    monkeypatch.setenv("SLURM_JOB_ID", "1234")
+    monkeypatch.setattr(monitor.paths, "on_vsc", lambda: True)
+    monkeypatch.setattr(monitor.paths, "logs_dir", lambda phase: tmp_path / "logs")
+    monkeypatch.setattr(monitor.paths, "manifests_dir", lambda phase: tmp_path / "manifests")
+    monkeypatch.setattr(monitor, "gpu_sample", lambda: [])
+    original = ["/project/model/bin/python", "-m", "target.module"]
+    observed = []
+
+    def host_step(command):
+        observed.append(command)
+        return [sys.executable, "-c", "raise SystemExit(7)"]
+
+    monkeypatch.setattr(monitor, "host_step_command", host_step)
+    assert monitor.run(original, interval=1, host_step=True) == 7
+    assert observed == [original]
+    receipt = json.loads(next((tmp_path / "manifests").rglob("*.json")).read_text())
+    assert receipt["command"] == original and receipt["host_step"] is True
+    assert receipt["exit_code"] == 7
+    observed.clear()
+    assert monitor.run([sys.executable, "-c", "pass"], interval=1) == 0
+    assert not observed  # Existing extraction launch mode remains unchanged.
+
+
 def test_array_plan_reports_width_exclusions(monkeypatch):
     from src.cluster import benchmark_jobs
 

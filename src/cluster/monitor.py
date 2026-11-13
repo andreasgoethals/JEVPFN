@@ -14,7 +14,7 @@ import threading
 import time
 from contextlib import suppress
 
-from src.cluster.control_runtime import child_command, child_environment
+from src.cluster.control_runtime import child_command, child_environment, host_step_command
 from src.utils import paths
 from src.utils.serialization import write_json
 
@@ -58,7 +58,7 @@ def gpu_sample():
     return list(csv.reader(io.StringIO(result.stdout), skipinitialspace=True))
 
 
-def run(command, *, interval=10):
+def run(command, *, interval=10, host_step=False):
     if not command or interval < 1:
         raise ValueError("A command and positive sampling interval are required")
     job = os.environ.get("SLURM_JOB_ID")
@@ -127,7 +127,12 @@ def run(command, *, interval=10):
     signal.signal(signal.SIGTERM, terminate)
     try:
         print(f"GPU telemetry -> {target}", flush=True)
-        child = subprocess.Popen(child_command(command), env=child_environment())
+        effective_command = child_command(command)
+        if host_step:
+            # Direct PROJECT images retain their publisher wrappers. Launch them
+            # through the current allocation's host rather than nesting in control.
+            effective_command = host_step_command(effective_command)
+        child = subprocess.Popen(effective_command, env=child_environment())
         code = child.wait()
         return code if code >= 0 else 128 - code
     finally:
@@ -142,6 +147,7 @@ def run(command, *, interval=10):
                 "partition": os.environ.get("SLURM_JOB_PARTITION"),
                 "cpus": os.environ.get("SLURM_CPUS_PER_TASK"),
                 "command": command,
+                "host_step": host_step,
                 "samples_file": str(target),
                 "exit_code": code,
                 "wall_seconds": time.monotonic() - started,
@@ -167,6 +173,8 @@ def run(command, *, interval=10):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--interval", type=float)
+    parser.add_argument("--host-step", action="store_true",
+                        help="Start an original model wrapper outside the control image in this allocation")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -175,7 +183,7 @@ def main():
     interval = args.interval
     if interval is None:
         interval = load_yaml("experiment_0/scheduling")["monitor_interval_seconds"]
-    raise SystemExit(run(command, interval=interval))
+    raise SystemExit(run(command, interval=interval, host_step=args.host_step))
 
 
 if __name__ == "__main__":

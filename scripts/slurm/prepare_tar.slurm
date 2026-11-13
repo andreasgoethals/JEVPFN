@@ -22,4 +22,4 @@ export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:?Select the allocated GPFS PRO
 source scripts/slurm/_activate_env.sh
 export TMPDIR="$XDG_CACHE_HOME/trainer"
 mkdir -p "$TMPDIR"
-jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor -- "${JEVPFN_PYTHON:?}" -m src.evaluation.tar --dataset "${1:?Dataset ID}" --fold "${SLURM_ARRAY_TASK_ID:?}" --execute
+jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor --host-step -- "${JEVPFN_PYTHON:?}" -m src.evaluation.tar --dataset "${1:?Dataset ID}" --fold "${SLURM_ARRAY_TASK_ID:?}" --execute
