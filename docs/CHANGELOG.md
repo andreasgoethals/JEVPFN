@@ -7,6 +7,15 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
 
 ## 13-11-2026
 
+- Add pinned Fastino GLiDE-27B to the selected roster, with native recurrent inference,
+  complete probabilities, exact no-truncation counting, a separate Blackwell container
+  and independent 0A gates. Preserve historical tokenizer fingerprints and the active
+  VSC campaign. Update the planned grid and provider labels; real GLiDE GPU acceptance
+  remains pending.
+- Keep existing pilot comparison panels when a new extractor lacks evidence, while
+  reporting included/missing providers and checking exact model revisions. Fix clipped
+  consensus legends and runtime labels; refresh notebooks without changing the approved
+  scientific design or active VSC jobs.
 - Size provider-only warm caches from UTF-8 payload bytes with fourfold row/page
   allowance, plus the existing separate merge-copy reserves and quota headroom.
   Log the capacity calculation; keep the 200-GiB workspace budget unchanged.

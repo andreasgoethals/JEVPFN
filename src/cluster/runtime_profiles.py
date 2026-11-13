@@ -23,7 +23,7 @@ def check_wheels(provider, profile=None):
     suffix = "cu130" if profile == BLACKWELL else "cu126"
     versions = (
         {"torch": "2.14.0", "torchvision": "0.29.0"}
-        if provider == "perplexity"
+        if provider in {"perplexity", "glide"}
         else {"torch": "2.12.1", "torchvision": "0.27.1"}
     )
     for package, version in versions.items():

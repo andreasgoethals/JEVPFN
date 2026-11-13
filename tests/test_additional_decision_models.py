@@ -26,6 +26,7 @@ def test_owner_selected_roster_and_delivery():
         "kev",
         "decision3",
         "nimble",
+        "glide",
     }
     assert set(SELF_HOSTED) == {k for k, v in candidates.items() if v["delivery"] == "self_hosted"}
     assert all(not v["enabled"] for v in candidates.values())

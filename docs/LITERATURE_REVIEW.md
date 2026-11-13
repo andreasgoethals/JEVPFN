@@ -86,7 +86,7 @@ Reported results are the authors' measurements, not results reproduced by JEVPFN
 
 The papers generally support the usefulness of compact typed interfaces, while giving
 mixed evidence for calibration, framing invariance, causal understanding and robustness.
-They do not establish that the twelve selected extractors produce interchangeable beliefs.
+They do not establish that the thirteen selected extractors produce interchangeable beliefs.
 The comparison must preserve their differences rather than normalize them away.
 
 Public tools already apply these interfaces to individual text columns. The
@@ -95,9 +95,9 @@ procurement demonstration shows that documentary class descriptions change mappi
 organization names. This is a developer demonstration, not an independent benchmark;
 it also illustrates that a short name may lack the information needed for the true label.
 
-## 4. Why these twelve extractors and how their interfaces differ
+## 4. Why these thirteen extractors and how their interfaces differ
 
-The selected roster combines one funded hosted reference and eleven open-weight releases
+The selected roster combines one funded hosted reference and twelve open-weight releases
 that can express the complete answer spaces in the retained tasks. The largest target
 vocabulary has thirty classes; regression uses nine options. Revisions, licences, configured
 context bounds and base-model dependencies belong in
@@ -118,6 +118,7 @@ mutable tables. Open-weight availability does not mean zero compute cost or unre
 | [Kev-27B](https://huggingface.co/jaredpalmer/kev-27b) | `kev.model.encode`, `DecisionModel.forward` and `PointerHead.forward` implement branch-aware readout with checkpoint temperature. Native state/branch bounds differ from the project-wide complete-request check. |
 | [Decision3 d3-turbo](https://huggingface.co/vllm-sr/d3-turbo) | `d3_format.render`/`encode_split` and native probability readout use prefix-bidirectional attention. An ordinary vLLM chat server is not a substitute. |
 | [Bespoke-Nimble-9B](https://huggingface.co/bespokelabs/Bespoke-Nimble-9B) | `serving_schema.prepare_prompts`, candidate logits and extended candidate-code schema. Pin the adapter and Qwen base separately; binary enum fields retain both class descriptions and the extended schema must retain all thirty Wine classes together. |
+| [Fastino GLiDE-27B](https://huggingface.co/fastino/GLiDE-27B) | Pinned native 255-option readout and recurrent-depth inference; no generated answer. The native 40,000-token bound includes an eight-token reserve. Research use is permitted by the conditional Fastino Community License. Real B200 acceptance is pending. |
 
 Implementation comparison points are `src/jev/registry.py:ExtendedCounter`,
 `src/jev/open_runtimes.py`, `src/jev/extended_runtimes.py:ExtendedRuntime` and
@@ -145,14 +146,25 @@ values and rejects larger inconsistencies. Provider “confidence” fields are 
 uncertainty scale. Derived entropy, maximum probability and directional variance have a
 common definition but still inherit different calibration and temperature policies.
 
-Other public releases are not automatically suitable replacements. Microsoft, OpenAI
-Decisions and hosted GLiDE are excluded by the owner's access/cost/scope choices, not
+Other public releases are not automatically suitable replacements. Microsoft and OpenAI
+Decisions are excluded by the owner's access/cost/scope choices, not
 evidence that they are worse. Jeff's checked serving release supports only sixteen options;
 StartLux/Torchcast grouping beyond twenty-six would change the thirty-class task's
-computation and probability meaning. Fastino's checked schema and full ordered-distribution
-mapping were not established for this common protocol. Reasoning, multi-round grouping or
+computation and probability meaning. Reasoning, multi-round grouping or
 domain-specific extractors belong to separate methodological choices. Adding every release
 would not by itself improve an interpretable, reproducible comparison.
+
+**13 November addition: Fastino GLiDE-27B.** The October library description of GLiDE
+as hosted-only is superseded by its public weights and native inference source at
+`4d32743ae96b74f0116f050d37742bbd43c04e7d`. The current release reuses middle backbone
+blocks through its configured recurrent-depth path; it must not be described as a single
+unmodified backbone traversal. It still returns a distribution without autoregressive
+answer generation. The project preserves this runtime, its answer ordering and full
+probabilities, using the same semantic requests as the other extractors. Its conditional
+licence permits research/benchmarking; open-weight does not mean unrestricted open source.
+The current model card and native source supersede the pinned library on this release,
+without changing library pins. Offline adapter tests do not establish GPU compatibility
+or predictive improvement. [Pinned source and licence](https://huggingface.co/fastino/GLiDE-27B/tree/4d32743ae96b74f0116f050d37742bbd43c04e7d)
 
 **28 October addition: Liquid d1-2B.** The [official model card](https://huggingface.co/LiquidAI/d1-2B)
 and publisher code at `cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41` identify a distinct LFM3

@@ -12,6 +12,7 @@ providers:
 - kev
 - decision3
 - nimble
+- glide
 extractor_catalog: extractors
 feature_config: feature_creation
 question_design: question_design

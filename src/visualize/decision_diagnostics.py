@@ -229,7 +229,7 @@ def consensus_figure(result):
     left.xaxis.set_major_formatter(PercentFormatter(1, decimals=0))
     left.set_xlabel("Share of distinct joint-text inputs")
     left.set_title("a  Largest agreeing group", loc="left")
-    left.legend(handles=handles, ncols=len(handles), loc="lower left", bbox_to_anchor=(0, 1.06), frameon=False,
+    left.legend(handles=handles, ncols=min(5, len(handles)), loc="lower left", bbox_to_anchor=(0, 1.06), frameon=False,
                 handlelength=1, handletextpad=.3, columnspacing=.7, fontsize=7)
     layout.dataset_axis(left, order, tasks)
     fields = summary[summary.weighting.eq("unique_inputs")]
@@ -250,7 +250,7 @@ def consensus_figure(result):
     right.tick_params(axis="y", length=0)
     right.legend(handles=[Line2D([], [], linestyle="none", marker="o", markersize=4, color=style.MODE_COLORS["per_column"], label="One field (per-column)"),
                           Line2D([], [], linestyle="none", marker="D", markersize=5, color=style.MODE_COLORS["joint"], label="All fields (joint)")],
-                 ncols=2, loc="lower left", bbox_to_anchor=(0, 1.06), frameon=False, handletextpad=.2, columnspacing=.8, fontsize=7)
+                 ncols=1, loc="lower left", bbox_to_anchor=(0, 1.06), frameon=False, handletextpad=.2, columnspacing=.8, fontsize=7)
     yield fig, "all_model_consensus", (
         f"(a) For every distinct nonmissing joint-text input, the number of the {models} models that give the most common answer "
         "(binary: positive-class probability ≥ 0.5; multiclass: most probable class; regression: sign of the expected evidence score); "

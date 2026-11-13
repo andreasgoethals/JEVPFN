@@ -13,7 +13,7 @@ from src.evaluation.widths import pca_width_table
 def test_primary_grid_and_widths():
     plan = benchmark_plan()
     assert Counter(a["phase"] for a in plan) == {
-        "experiment_1": 3996,
+        "experiment_1": 4320,
         "experiment_2": 648,
         "experiment_3": 216,
         "experiment_4": 54,

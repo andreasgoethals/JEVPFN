@@ -4,6 +4,7 @@ jevpfn_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]//\\//}")" && pwd)"
 set -euo pipefail
 JEVPFN_SETUP_PROVIDER="${1:?Usage: bash scripts/setup_decision_env.sh cloudflare|intern|liquid|strands|perplexity|h2o|sii|kev|decision3|nimble}"
 case "$JEVPFN_SETUP_PROVIDER" in
+    glide) echo 'GLiDE requires its isolated Blackwell container. Use python -m src.cluster.setup_extractors --provider glide --execute --watch.' >&2; exit 2 ;;
     liquid_lfm3) echo 'd1-2B requires its isolated Blackwell container. Use python -m src.cluster.setup_extractors --provider liquid_lfm3 --execute --watch.' >&2; exit 2 ;;
     cloudflare) JEVPFN_SETUP_EXTRA=clef ;;
     intern) JEVPFN_SETUP_EXTRA=intern ;;

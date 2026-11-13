@@ -30,6 +30,21 @@ def preview(request, provider):
     questions = {QUESTION_ID: question}
     from src.jev.catalog import ADDED
 
+    if provider == "glide":
+        return {
+            "transport": "self_hosted_publisher_decision_readout",
+            "initialization": "Runtime(staged_checkpoint, audited_counter)",
+            "call": "runtime.predict(arguments)",
+            "arguments": {"state": state, "questions": questions},
+            "pin_requirement": "GLiDE checkpoint, native prompt/readout/recurrence sources and isolated container",
+            "runtime_requirements": [
+                "Text only; complete prompt at most 39992 tokens plus eight reserved positions.",
+                "Native 255-way readout with pinned recurrent depth; no autoregressive generation.",
+                "Keep native probabilities/confidence; map score to its weighted mean and preserve the native response.",
+            ],
+            "reference": "https://huggingface.co/fastino/GLiDE-27B",
+            "live_verified": False,
+        }
     if provider in ADDED:
         from src.utils.config import load_yaml
 

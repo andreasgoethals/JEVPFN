@@ -28,7 +28,7 @@ PROVIDERS = SELF_HOSTED
 def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     if site == "vsc" and dataset_pilot:
         raise ValueError(
-            "--dataset-pilot selects the local Jev pilot; VSC always tests its eleven open-weight providers"
+            "--dataset-pilot selects the local Jev pilot; VSC tests its selected open-weight providers"
         )
     if site == "local":
         items = [
@@ -115,7 +115,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 dependencies = [provider + "_scratch", "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"]
                 if name.endswith("_pilot"):
                     dependencies.append(provider + "_contracts")
-                if provider in {"perplexity", "sii", "kev", "decision3"}:
+                if provider in {"perplexity", "sii", "kev", "decision3", "glide"}:
                     flags.extend(["--cpus-per-task=14"])
         result.append(
             {

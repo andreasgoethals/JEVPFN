@@ -21,11 +21,11 @@ ENCODER_LABELS = {"e5_small_v2": "E5-small-v2", "e5_large_v2": "E5-large-v2",
 
 
 def study_grid_figure(grid):
-    """Four research questions at A4 print width, with measured plan counts."""
+    """Four comparisons at A4 print width, with measured plan counts."""
     counts = grid.set_index("experiment")
     fig, axes = plt.subplots(2, 2, figsize=(style.WIDTH_FULL, 5.0))
     rows = [
-        ("experiment_1", "Decision features", "Twelve extractors; per-column, joint or both.\nOne shared non-text reference; six predictors."),
+        ("experiment_1", "Decision features", "Selected extractors; per-column, joint or both.\nOne shared non-text reference; six predictors."),
         ("experiment_2", "Frozen embeddings", "Three pretrained encoders; six predictors.\nPer-column PCA32 and joint PCA64."),
         ("experiment_3", "Supervised TAR", "E5-small-v2 LoRA using training labels.\nSame six predictors and two PCA recipes."),
         ("experiment_4", "Native text systems", "TabSTAR v1.1, ConTextTab and AG-MM.\nText and structured inputs, end-to-end."),
@@ -56,19 +56,19 @@ def runtime_evidence_figure(table):
     """Acceptance gates (left) beside the measured B200 footprint of each runtime (right)."""
     from matplotlib.patches import Patch
 
-    gates = [("bounded_runtime", "Contract"), ("known_answer", "Known\nanswers"),
-             ("robustness", "Robust-\nness"), ("token_audit", "Token\naudit"),
+    gates = [("bounded_runtime", "Contract"), ("known_answer", "Known answers"),
+             ("robustness", "Robustness"), ("token_audit", "Token audit"),
              ("accepted", "Accepted")]
     names = [LABELS.get(m, ENCODER_LABELS.get(m, m)) for m in table.model_id]
     y = np.arange(len(table))
-    fig, axes = plt.subplots(1, 4, figsize=(style.WIDTH_FULL, 3.9), sharey=True,
+    fig, axes = plt.subplots(1, 4, figsize=(style.WIDTH_FULL, style.MAX_HEIGHT), sharey=True,
                              gridspec_kw={"width_ratios": [1.6, 1, 1, 1]})
     ax = axes[0]
     for j, (column, _) in enumerate(gates):
         ax.scatter(np.full(len(table), j), y, marker="s", s=58,
                    color=[style.EVIDENCE_MARKS[s] for s in table[column]],
                    edgecolors=style.GRID_COLOR, linewidths=0.6)
-    ax.set_xticks(range(len(gates)), [label for _, label in gates], fontsize=7)
+    ax.set_xticks(range(len(gates)), [label for _, label in gates], fontsize=7, rotation=90)
     ax.xaxis.tick_top()
     ax.set_xlim(-0.6, len(gates) - 0.4)
     for spine in ax.spines.values():
@@ -108,7 +108,7 @@ def runtime_evidence_figure(table):
     fig.legend(handles=legend, loc="outside lower center", ncols=3, fontsize=7, frameon=False)
     gpus = sorted({g for g in table.gpu_name.dropna()})
     return fig, "runtime_evidence", (
-        "Experiment 0A gates for the twelve decision models and three frozen encoders, read from "
+        "Experiment 0A gates for the selected decision models and three frozen encoders, read from "
         "the receipts available locally. Runtime contracts load the pinned checkpoint and answer "
         "synthetic and real requests; known-answer probes require the expected answer on synthetic "
         "inputs whose answer is unambiguous; robustness probes rerun real inputs under harmless "
@@ -168,7 +168,7 @@ def pilot_output_figures(shared):
         tick.set_color(style.DECISION_COLORS[provider])
     yield fig, "decision_output_profiles", (
         "Main decision feature returned by each model for the same label-blind 0A pilot inputs "
-        "(identical payloads answered by all twelve models at their pinned versions; per-column "
+        "(identical semantic requests across selected models at their pinned versions; per-column "
         "and joint requests from all 18 datasets). Boxes span p25–p75 with the median; lines span "
         "p5–p95; points are individual inputs. A narrow profile means a model returns similar "
         "values whatever the text; differences in location reflect each model's own framing and "

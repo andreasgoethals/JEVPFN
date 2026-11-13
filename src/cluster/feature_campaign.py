@@ -3,14 +3,18 @@
 Each GPU allocation handles one dataset, with two concurrent allocations per
 resident decision runtime. The existing two-workspace lease/quota/publication
 protocol bounds storage. Jev and all predictive benchmarks are excluded.
+Explicit --provider selections use their own receipt and exclude encoder jobs;
+they never extend or overwrite the historical full-campaign receipt.
 """
 
 import argparse
+import copy
 import json
 import os
 import re
 import subprocess
 import time
+from contextlib import nullcontext
 
 from src.cluster.experiment_zero import scheduler_state
 from src.cluster.freeze import check_if_present, runtime_pins
@@ -40,13 +44,32 @@ def capacity_rejection(stdout, stderr):
     )
 
 
-def plan():
+def selected_providers(providers=None):
+    """Canonicalize an explicit scope without changing the default historical order."""
+    if providers is None:
+        return tuple(SELF_HOSTED)
+    if isinstance(providers, str):
+        raise ValueError("Provider scope must be a nonempty sequence of selected providers")
+    requested = tuple(providers)
+    if not requested or any(p not in SELF_HOSTED for p in requested):
+        raise ValueError("Provider scope must contain selected open-weight providers")
+    return tuple(p for p in SELF_HOSTED if p in requested)
+
+
+def campaign_receipt(providers=None):
+    selected = selected_providers(providers)
+    suffix = "" if providers is None else "_" + "-".join(selected)
+    return paths.manifests_dir("feature_creation") / f"open_weight_campaign{suffix}.json"
+
+
+def plan(providers=None):
+    selected = selected_providers(providers)
     profile = gpu_profile()
     root = profile["durable_root"]
     export = project_export(root)
     ids = [e["id"] for e in selected_entries(load_catalog(), load_yaml("feature_creation"))]
     steps = []
-    for provider in SELF_HOSTED:
+    for provider in selected:
         native = gpu_profile(runtime=provider)["staging_root"]
         steps.append(
             dict(
@@ -65,7 +88,7 @@ def plan():
             )
         )
         for dataset in ids:
-            large = provider in {"perplexity", "sii", "kev", "decision3"}
+            large = provider in {"perplexity", "sii", "kev", "decision3", "glide"}
             steps.append(
                 dict(
                     name=provider + "_" + dataset,
@@ -88,7 +111,7 @@ def plan():
                     ],
                 )
             )
-        if provider == "cloudflare":
+        if provider == "cloudflare" and providers is None:
             for encoder in load_yaml("feature_creation/embedding_models")["models"]:
                 steps.append(
                     dict(
@@ -111,13 +134,17 @@ def plan():
     return add_releases(steps, command_style=True)
 
 
-def run(*, execute=False, recover=False, reviewed_by=None):
-    steps = plan()
+def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
+    selected = selected_providers(providers)
+    steps = plan() if providers is None else plan(selected)
+    receipt = campaign_receipt(providers)
     if not execute:
         return dict(
             status="preview",
-            decision_datasets=18 * len(SELF_HOSTED),
-            encoders=3,
+            providers=list(selected),
+            receipt=str(receipt),
+            decision_datasets=sum(s.get("pool") in selected for s in steps),
+            encoders=sum(s["name"].startswith("embeddings_") for s in steps),
             max_resident_workspaces=2,
             decision_gpu_jobs_per_runtime=2,
             steps=steps,
@@ -130,18 +157,18 @@ def run(*, execute=False, recover=False, reviewed_by=None):
     cfg = load_yaml("experiment_0/self_hosted")
     if cfg["full_feature_creation_enabled"] is not True:
         raise ValueError("Full extraction is disabled")
-    for provider in SELF_HOSTED:
+    for provider in selected:
         reviewed_acceptance(
-            cfg["accepted_before_extraction_manifests"].get(provider), stage="before_extraction"
+            cfg["accepted_before_extraction_manifests"].get(provider), stage="before_extraction",
+            **({"expected": {"provider": provider}} if providers is not None else {}),
         )
-    for encoder in load_yaml("feature_creation/embedding_models")["models"]:
+    for encoder in (load_yaml("feature_creation/embedding_models")["models"] if providers is None else ()):
         from src.data.text_embeddings import encoder_config
 
         if encoder_config(encoder)["enabled"] is not True:
             raise ValueError("Enable the reviewed encoder configuration first")
     settings = load_yaml("experiment_0/scheduling")
-    settings["test_pool_limits"] = {**settings["test_pool_limits"], **dict.fromkeys(SELF_HOSTED, 2)}
-    receipt = paths.manifests_dir("feature_creation") / "open_weight_campaign.json"
+    settings["test_pool_limits"] = {**settings["test_pool_limits"], **dict.fromkeys(selected, 2)}
     identity = digest(
         dict(frozen=frozen, runtime_pins=runtime_pins(), steps=steps, settings=settings)
     )
@@ -176,12 +203,30 @@ def run(*, execute=False, recover=False, reviewed_by=None):
             stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
             previous = receipt.parent / "recovery_history" / f"campaign_{stamp}_{report['identity'][:12]}.json"
             write_json(previous, report)
+            templates = copy.deepcopy(steps)
             for step in steps:
                 old = next(s for s in old_steps if s["name"] == step["name"])
                 if old.get("status") == "completed":
                     step.update(old)
                 elif old.get("job_id") or old.get("submission_diagnostics"):
                     step["previous_attempt"] = old
+            if providers is not None:
+                # A terminal release can publish partial work and retire its scratch
+                # workspace. Retrying a failed consumer must stage a new working set.
+                for stage in steps:
+                    runtime = stage.get("workspace_stage")
+                    if not runtime:
+                        continue
+                    release = next(s for s in steps if s.get("workspace_release") == runtime)
+                    consumers = [s for s in steps if stage["name"] in s.get("depends_on", [])]
+                    if release.get("status") == "completed" and any(
+                        s.get("status") != "completed" for s in consumers
+                    ):
+                        for step in (stage, release):
+                            previous_attempt = copy.deepcopy(step)
+                            template = next(s for s in templates if s["name"] == step["name"])
+                            step.clear()
+                            step.update(template, previous_attempt=previous_attempt)
             report = dict(identity=identity, steps=steps, recovery={
                 "reviewed_by": reviewed_by.strip(), "previous_receipt": str(previous),
                 "created_utc": datetime.now(UTC).isoformat(),
@@ -198,6 +243,8 @@ def run(*, execute=False, recover=False, reviewed_by=None):
             raise ValueError("Recovery requires an existing campaign receipt")
         require_idle_vsc()
         report = dict(identity=identity, steps=steps)
+    if providers is not None:
+        report["provider_scope"] = list(selected)
     for phase in ("experiment_0", "feature_creation"):
         paths.logs_dir(phase).mkdir(parents=True, exist_ok=True)
 
@@ -259,22 +306,32 @@ def main():
     parser.add_argument("--recover", action="store_true",
                         help="Review terminal attempts and reuse successes across an operational repair")
     parser.add_argument("--reviewed-by")
+    parser.add_argument("--provider", action="append", choices=SELF_HOSTED,
+                        help="Run only named providers in a separate campaign receipt; excludes encoders")
     args = parser.parse_args()
     if args.watch and not args.execute:
         parser.error("--watch requires --execute")
     if args.recover and (not args.execute or not args.reviewed_by):
         parser.error("--recover requires --execute and --reviewed-by")
     if not args.execute:
-        print(json.dumps(run()))
+        print(json.dumps(run(providers=args.provider)))
         return 0
-    while True:
-        with file_lock(paths.manifests_dir("feature_creation") / ".campaign.lock", timeout=1):
-            report = run(execute=args.execute, recover=args.recover, reviewed_by=args.reviewed_by)
-        args.recover = False
-        print(json.dumps(report), flush=True)
-        if not args.watch or report["status"] != "running":
-            return int(report["status"] == "completed_with_failures")
-        time.sleep(60)
+    # The expanded original controller holds this lock for its whole lifetime.
+    # A new scoped campaign cannot race its next admission during an idle queue gap.
+    controller_lock = (
+        file_lock(paths.manifests_dir("feature_creation") / ".parallel-controller.lock", timeout=1)
+        if args.provider is not None else nullcontext()
+    )
+    with controller_lock:
+        while True:
+            with file_lock(paths.manifests_dir("feature_creation") / ".campaign.lock", timeout=1):
+                report = run(execute=args.execute, recover=args.recover,
+                             reviewed_by=args.reviewed_by, providers=args.provider)
+            args.recover = False
+            print(json.dumps(report), flush=True)
+            if not args.watch or report["status"] != "running":
+                return int(report["status"] == "completed_with_failures")
+            time.sleep(60)
 
 
 if __name__ == "__main__":

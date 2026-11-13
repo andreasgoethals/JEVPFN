@@ -13,6 +13,7 @@ pending statuses without changing the original evidence.
 | Area | Last verified position | Still required |
 |---|---|---|
 | 0A | Accepted for eleven open-weight extractors and three frozen encoders; local Jev 1.14 pilot passed | Preserve acceptance and source identities through recovery |
+| GLiDE addition | Pinned 27B integration and provider-only validation/extraction paths implemented locally | Separate image, exact token audit, B200 contracts, dataset pilot and reviewed acceptance; absent from the active frozen campaign |
 | Open-weight features | Eight providers complete on all 18 datasets and verified locally, including Decision3 | Kev 16/18, Nimble 17/18 and Liquid LFM3 0/18 successful dataset steps in the live campaign |
 | Frozen embeddings | All 54 encoder/dataset jobs completed and published; all 54 frozen-PCA jobs completed 0:0. | Verify all training-fold cache keys in full 0B |
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
@@ -21,6 +22,29 @@ pending statuses without changing the original evidence.
 
 ### Independent validation and scoped recovery on 13 November
 
+- GLiDE integration validation: 1,392 local tests passed, 26 environment-specific
+  checks skipped; Ruff and affected Bash syntax passed. All 12 notebooks executed
+  successfully, leaving 19 figures. Affected figures were inspected and clipped
+  legends corrected. The partial pilot panel retains 304 identical inputs across
+  twelve available pinned providers, with GLiDE explicitly missing. These checks
+  do not establish GLiDE's real B200 runtime or extraction acceptance.
+- At 18:01 CET, both Kev jobs `11794772` and `11794773` were running and producing
+  new responses; Kickstarter had begun periodic publication. Nimble `11794789`
+  remained queued for Resources. The dispatcher still reported 249 completed,
+  3 submitted and 22 pending, without active failures. Checked log tails showed
+  no new error; the DATA checkout remained at `6b4f2e51…`.
+- At 17:30–17:34 CET, direct SSH verified Kev Kickstarter `11794772` running on B200;
+  Kev Scimago `11794773` and Nimble US Accidents `11794789` remained queued. Dispatcher:
+  249 completed, 3 submitted, 22 pending, no active failure. Source remains frozen at
+  Git `6b4f2e51…`; the new local GLiDE roster must not be pulled into these consumers.
+- TAR pilot `11794746_0` passed 0:0 in 18m30s. Baby Products/fold 0 used 4,068 training
+  and 1,017 test rows; fitting took 980.49s. Its saved adapter reproduced all four
+  column embeddings under batch/reversed-single replay, maximum difference 4.61e-7.
+  Artifact `dadbe1652979856989642385ecc6a88051a36821fbfce0a22e79e98574f070a3` is complete.
+  This qualifies that pilot, not all 90 TAR bundles or full 0B.
+- `/apps/leuven/bin/myquota` reported allocation totals: GPFS PROJECT 835.1 GiB/2 TiB,
+  11,099/300,000 files; personal GPFS scratch 22.35 GiB/500 GiB. These are shared-tier
+  totals, not JEVPFN-only sizes. No cleanup or remote change was made during the check.
 - At source `ab0bd964…` (Git `3bbedcb`), native recovery QA `11794596` passed
   200 tests and GPFS publication/readback checks; all 36 previous runtime pins were
   preserved, with only the new sealed CatBoost and TAR images added. The full local

@@ -15,6 +15,9 @@ complete; all 54 frozen-PCA preparation jobs passed. Kev has two unfinished data
 Nimble one, and Liquid LFM3 eighteen. Scoped staging recovery and independent 0B/TAR
 preparation are authorized. These are dated observations, not live job status.
 Full benchmark execution still requires complete feature checks and reviewed 0B evidence.
+Fastino GLiDE-27B was added to the local planned roster on 13 November. It requires its
+own token audit, sealed runtime, B200 contracts and dataset pilot; the active VSC campaign
+remains on its recorded eleven-open-model scope until a safe handover.
 Local Jev extraction is authorized within the existing EUR 5 allowance; full coverage
 will need additional funding. [Run evidence](docs/AGENTS_MEMORY.md) ·
 [VSC workflow](docs/VSC.md#46-experiment-0b)
@@ -23,13 +26,13 @@ will need additional funding. [Run evidence](docs/AGENTS_MEMORY.md) ·
 
 | Experiment | Comparison | Configurations |
 |---|---|---:|
-| 1 | A shared structured baseline versus decision features from twelve extractors, using text jointly, per column, or both | 3,996 |
+| 1 | A shared structured baseline versus decision features from thirteen extractors, using text jointly, per column, or both | 4,320 |
 | 2 | Three frozen encoders with joint PCA64 or separate PCA32 per text column, compared with the same structured baseline | 648 |
 | 3 | E5-small-v2 TAR (LoRA), with the same two PCA recipes and six predictors | 216 |
 | 4 | Three native-text systems on the original features | 54 |
 
-One configuration is a dataset × predictor × representation. The grid contains **4,914
-configurations**, with **24,570 outer fits** and **11,745 binary inner fits**. The structured
+One configuration is a dataset × predictor × representation. The grid contains **5,238
+configurations**, with **26,190 outer fits** and **12,555 binary inner fits**. The structured
 baseline includes non-text features and the same text-availability flags as the decision
 and embedding arms. The experiments use fixed settings and prespecified recipes.
 

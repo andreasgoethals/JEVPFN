@@ -15,6 +15,7 @@ comparison:
   - kev
   - decision3
   - nimble
+  - glide
   representations:
   - per_column
   - joint

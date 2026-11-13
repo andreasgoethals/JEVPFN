@@ -227,6 +227,43 @@ def test_empty_response_cache_remains_reportable(tmp_path):
     assert summary.empty
     assert table.attrs["invalid_responses"] == 0
     assert list(pilot_output_figures(table)) == []
+    shared = evidence.shared_pilot_outputs(table)
+    assert shared.empty and shared.attrs["included_providers"] == []
+    assert shared.attrs["missing_providers"] == shared.attrs["configured_providers"]
+    assert shared.attrs["complete_provider_coverage"] is False
+
+
+def test_descriptive_shared_inputs_keep_available_pins_and_expose_missing_models(monkeypatch):
+    candidates = {
+        "first": {"model": "first-model", "revision": "current"},
+        "second": {"model": "second-model", "version": "v2"},
+        "glide": {"model": "fastino/GLiDE-27B", "revision": "new"},
+    }
+    monkeypatch.setattr(evidence, "load_yaml", lambda _: {"candidates": candidates})
+    table = pd.DataFrame([
+        {"provider": provider, "model": model, "version": version, "input": item,
+         "task_type": "binary_classification", "value": value}
+        for provider, model, version, item, value in [
+            ("first", "first-model", "current", "shared", 0.2),
+            ("second", "second-model", "v2", "shared", 0.8),
+            ("first", "first-model", "current", "only-first", 0.9),
+            # An old revision with the same model name cannot fill a missing input.
+            ("second", "second-model", "v1", "only-first", 0.9),
+            ("glide", "fastino/GLiDE-27B", "old", "shared", 0.6),
+            ("unselected", "other", "current", "shared", 0.4),
+        ]
+    ])
+    shared = evidence.shared_pilot_outputs(table)
+    assert shared.input.tolist() == ["shared", "shared"]
+    assert shared.value.tolist() == [0.2, 0.8]
+    assert shared.attrs["providers"] == shared.attrs["included_providers"] == ["first", "second"]
+    assert shared.attrs["missing_providers"] == ["glide"]
+    assert shared.attrs["shared_inputs"] == 1
+    assert shared.attrs["complete_provider_coverage"] is False
+    assert shared.attrs["scope"] == "descriptive_historical_cache_not_acceptance"
+    # No rows are manufactured for a new provider, and available nonmatching
+    # payloads cannot become a pairwise comparison merely to fill the figure.
+    assert len(evidence.pilot_agreement(shared)["binary_classification"][0]) == 2
 
 
 def test_effect_matrix_rejects_counting_a_dataset_twice():

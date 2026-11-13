@@ -147,6 +147,25 @@ candidates:
     calibration_temperature: 1.0
     input_price_per_million_usd: null
     reference: https://huggingface.co/bespokelabs/Bespoke-Nimble-9B
+  glide:
+    enabled: false
+    model: fastino/GLiDE-27B
+    revision: 4d32743ae96b74f0116f050d37742bbd43c04e7d
+    delivery: self_hosted
+    context_tokens: 39992  # Exact prompt tokens; the native runtime reserves eight further positions.
+    publisher_context_tokens: 40000
+    reserved_context_positions: 8
+    max_options: 255
+    batch_token_budget: 16384
+    input_modalities: [text]
+    license: Fastino-Community-License
+    license_note: research_and_benchmarking_excluded_from_production_commercial_restrictions
+    input_price_per_million_usd: null
+    attention: noncausal_full_attention_native_linear_recurrence
+    recurrent_depth: publisher_midloop_two_passes_blocks_24_35_and_36_47
+    probability_policy: native_temperature_1.0_no_rescaling
+    score_readout: mean_from_native_probabilities_preserve_native_modal_score
+    reference: https://huggingface.co/fastino/GLiDE-27B
 readiness_required:
 - explicit_owner_roster_selection
 - verified_account_access_or_checkpoint_license

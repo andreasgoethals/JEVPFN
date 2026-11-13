@@ -199,10 +199,27 @@ interfaces, a bounded wording/repetition/instruction diagnostic (15 calls) and, 
 acceptance is incomplete. Diagnostic rounds use a ledger per frozen source; interrupted
 rounds reuse saved responses. VSC 0A reruns CPU/question/data checks, two-node storage
 contracts and exact token counts (ten CPU partitions, recovery check and coverage-checked
-merge per provider), stages working sets and runs all eleven decision contracts/pilots and
+merge per provider), stages working sets and runs the selected open-weight decision contracts/pilots and
 three encoder contracts on B200. The watcher resumes recorded job IDs, blocks only the
 descendants of a failure and never accepts a partial campaign. Receipts go to
 `3. experiment_0/{manifests,logs}/0A_vsc` or `0A_local`.
+
+The GLiDE addition is not part of the frozen eleven-model extraction campaign. After
+its consumers and dispatcher have cleared and the reviewed revision has been deployed,
+preview `python -m src.cluster.setup_extractors --provider glide`. Explicit
+`--execute --watch` stages its pinned assets, builds its separate Blackwell image,
+runs the exact token audit, storage checks, B200 contracts and dataset pilot. Its
+39,992-token prompt limit preserves the publisher's eight-position reserve. Keep the
+GLiDE acceptance pointer unset until those reports are reviewed; do not reuse another
+provider's receipt or reset the existing campaign to add it.
+
+After GLiDE's review, acceptance pointer and new extraction freeze are recorded, preview
+`python -m src.cluster.feature_campaign --provider glide`. Its separate
+`open_weight_campaign_glide.json` contains only GLiDE's 18 dataset jobs and its staging/
+release steps; embeddings and the historical campaign are preserved. Add
+`--execute --watch` only at the idle handover. Resume with the same command and receipt.
+The provider-only controller holds the existing campaign/admission locks, so it cannot
+start during a temporary queue gap in the old dispatcher.
 
 ### 4.3 Acceptance
 
@@ -366,7 +383,7 @@ decision features. Full 0B preflight, profiles and acceptance retain all complet
 
 After extraction and publication finish, reconcile terminal jobs and verify the durable
 feature stores. Import the independent local copy using [the transfer procedure](#6-utilization-and-transfer).
-The full twelve-extractor roster also needs complete Jev features. A funded partial run
+The full thirteen-extractor roster also needs complete Jev features. A funded partial run
 or a portable notebook snapshot does not meet that gate.
 
 1. **Bind inputs.** Close the reviewed extraction stage using [the freeze procedure](#43-acceptance).

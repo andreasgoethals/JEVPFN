@@ -250,6 +250,7 @@ def pilot_decision_outputs(cache_folder=None):
                     "task_type": task["task_type"],
                     "provider": settings.get("provider", "jev"),
                     "model": settings.get("model"),
+                    "version": settings.get("version"),
                     "settings_sha256": digest(json.loads(settings_json)),
                     "input": digest(payload),
                     "text_fields": len(payload["state"]["text"]),
@@ -267,7 +268,7 @@ def pilot_decision_outputs(cache_folder=None):
                     row["no_evidence_probability"] = features["p_4"]
                 rows.append(row)
     table = pd.DataFrame(rows, columns=[
-        "dataset_id", "dataset", "task_type", "provider", "model", "settings_sha256", "input",
+        "dataset_id", "dataset", "task_type", "provider", "model", "version", "settings_sha256", "input",
         "text_fields", "value", "top_class", "top_probability", "class_probabilities",
         "no_evidence_probability",
     ])
@@ -276,20 +277,34 @@ def pilot_decision_outputs(cache_folder=None):
 
 
 def shared_pilot_outputs(pilot):
-    """Inputs answered by every configured extractor at its currently pinned model.
+    """Descriptive cache intersection among available, currently pinned extractors.
 
     Historical model versions (for example Jev 1.13) are excluded, and each provider
     contributes one settings identity per input. Returns the long table restricted to
-    those inputs; agreement and spread are then computed on identical payloads only.
+    inputs answered by every included provider. Missing configured providers are
+    reported explicitly; they do not erase existing panels or count as validated.
+    This partial historical view never establishes current-code acceptance.
     """
     candidates = load_yaml("extractors")["candidates"]
-    current = pilot[pilot.apply(
-        lambda r: r.provider in candidates and r.model == candidates[r.provider]["model"], axis=1)]
+    matches = pd.Series([
+        row.provider in candidates
+        and row.model == candidates[row.provider]["model"]
+        and getattr(row, "version", None) == candidates[row.provider].get("revision", candidates[row.provider].get("version"))
+        for row in pilot.itertuples()
+    ], index=pilot.index, dtype=bool)
+    current = pilot.loc[matches]
     current = current.drop_duplicates(["provider", "input"])
+    included = [p for p in candidates if p in set(current.provider)]
+    missing = [p for p in candidates if p not in included]
     counts = current.groupby("input").provider.nunique()
-    shared = counts[counts.eq(len(candidates))].index
+    shared = counts[counts.eq(len(included))].index
     result = current[current.input.isin(shared)].copy()
     result.attrs["providers"] = [p for p in candidates if p in set(result.provider)]
+    result.attrs.update(
+        configured_providers=list(candidates), included_providers=included,
+        missing_providers=missing, complete_provider_coverage=not missing,
+        shared_inputs=len(shared), scope="descriptive_historical_cache_not_acceptance",
+    )
     return result
 
 

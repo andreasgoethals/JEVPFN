@@ -112,7 +112,16 @@ class SelfHostedClient:
             paths.REPO_ROOT / "src/jev/self_hosted.py"
         )
         started = time.perf_counter()
-        if provider in ADDED:
+        if provider == "glide":
+            from src.jev.glide import MIDLOOP, Runtime
+
+            self.model = Runtime(folder, self.counter)
+            self.settings["request_configuration"].update(
+                additional_runtime_sha256=file_sha256(paths.REPO_ROOT / "src/jev/glide.py"),
+                native_midloop=MIDLOOP,
+                score_readout="mean_from_native_probabilities_preserving_modal_response",
+            )
+        elif provider in ADDED:
             from src.jev.extended_runtimes import ExtendedRuntime
 
             self.model = ExtendedRuntime(provider, folder, self.counter)
@@ -196,7 +205,7 @@ class SelfHostedClient:
                 raw = self.model.evaluate(
                     self.request_class(state=payload["state"], questions={QUESTION_ID: question})
                 ).model_dump(mode="json")
-            elif self.provider in {"cloudflare", "intern"}:
+            elif self.provider in {"cloudflare", "intern", "glide"}:
                 raw = self.model.predict(
                     {"state": payload["state"], "questions": {QUESTION_ID: question}}
                 )
@@ -225,7 +234,7 @@ class SelfHostedClient:
         return response
 
     def evaluate_many(self, requests):
-        if len(requests) <= 1 or self.provider not in {"cloudflare", "perplexity"}:
+        if len(requests) <= 1 or self.provider not in {"cloudflare", "perplexity", "glide"}:
             return [self.evaluate(r) for r in requests]
         if len(requests) > self.settings["request_configuration"]["batch_size"]:
             raise ValueError("Batch exceeds pinned runtime configuration")
@@ -241,7 +250,7 @@ class SelfHostedClient:
             counts.append(count)
             questions.append(semantic_question(payload["question"]))
         with self.torch.inference_mode():
-            if self.provider == "cloudflare":
+            if self.provider in {"cloudflare", "glide"}:
                 raw = self.model.predict_many(
                     [
                         {"state": p["state"], "questions": {QUESTION_ID: q}}
@@ -288,7 +297,7 @@ def batch_size_for(provider):
     size = cfg.get("provider_batch_sizes", {}).get(provider, cfg["batch_size"])
     if type(size) is not int or not 1 <= size <= 8:
         raise ValueError("Bounded inference batch size must be between 1 and 8")
-    if size > 1 and provider not in {"cloudflare", "perplexity"}:
+    if size > 1 and provider not in {"cloudflare", "perplexity", "glide"}:
         raise ValueError("This provider has no verified multi-input batch adapter")
     return size
 

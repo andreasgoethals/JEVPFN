@@ -216,7 +216,10 @@ def test_migration_rebind_preserves_36_completed_jobs_and_all_encoder_partitions
     result = storage_migration.rebind(previous, "authorized fixture")
     saved = json.loads((tmp_path / "open_weight_campaign.json").read_text())
     assert result["reused_providers"] == sorted(SELF_HOSTED[:2])
-    assert len(saved["steps"]) == 274
+    # Migration preserves the complete selected grid, including any newer provider;
+    # it must never silently add or remove jobs while moving their storage roots.
+    assert len(saved["steps"]) == len(expanded)
+    assert {s["name"] for s in saved["steps"]} == {s["name"] for s in expanded}
     assert {s["job_id"] for s in saved["steps"] if s.get("job_id")} == completed
     assert len(completed) == 36
     assert len([s for s in saved["steps"] if s["name"].startswith("embeddings_")]) == 54

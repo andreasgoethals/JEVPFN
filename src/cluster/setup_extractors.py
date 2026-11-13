@@ -27,7 +27,7 @@ from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import digest, write_json
 
-LARGE = {"perplexity", "sii", "kev", "decision3"}
+LARGE = {"perplexity", "sii", "kev", "decision3", "glide"}
 
 
 def plan(providers, *, reuse=()):
@@ -84,7 +84,7 @@ def plan(providers, *, reuse=()):
             )
             ready = provider + "_build"
         token_dependencies = [provider + "_stage"]
-        if provider == "liquid_lfm3":
+        if provider in {"liquid_lfm3", "glide"}:
             token_dependencies = list(dict.fromkeys([*token_dependencies, ready]))
         steps.extend(token_plan(provider, root, dependencies=token_dependencies))
         steps.append(
@@ -307,7 +307,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", action="append", choices=SELF_HOSTED)
     parser.add_argument(
-        "--all", action="store_true", help="Set up/test all eleven open-weight extractors"
+        "--all", action="store_true", help="Set up/test all selected open-weight extractors"
     )
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(

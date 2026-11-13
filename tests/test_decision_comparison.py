@@ -232,7 +232,7 @@ def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, 
         lambda dataset: tmp_path / "portable" / f"{dataset}.sqlite3",
     )
     result = compare_saved_features(cfg, progress=None)
-    assert len(result.table("inventory")) == 18 * 12 * 2
+    assert len(result.table("inventory")) == 18 * 13 * 2
     assert result.table("inventory").status.eq("not_created").all()
     assert result.table("pairs").empty
     assert not (tmp_path / "protected").exists()
@@ -364,7 +364,7 @@ def test_every_plot_path_accepts_realistic_synthetic_results(task):
     plt.close(fig)
 
 
-def test_twelve_models_paginate_all_66_duplicate_sensitivity_pairs():
+def test_thirteen_models_paginate_all_78_duplicate_sensitivity_pairs():
     from itertools import combinations
 
     result = Comparison()
@@ -385,8 +385,8 @@ def test_twelve_models_paginate_all_66_duplicate_sensitivity_pairs():
             shown.extend(labels)
             pages += 1
         plt.close(fig)
-    assert pages == 6
-    assert len(set(shown)) == 66
+    assert pages == 7
+    assert len(set(shown)) == 78
 
 
 def test_thirty_class_example_keeps_all_probabilities_legible_across_pages():

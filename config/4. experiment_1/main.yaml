@@ -47,6 +47,7 @@ candidate_extractors:
 - kev
 - decision3
 - nimble
+- glide
 non_text_columns: all_original_numerical_and_categorical_features
 feature_selectors:
   jev: null
@@ -61,3 +62,4 @@ feature_selectors:
   kev: null
   decision3: null
   nimble: null
+  glide: null

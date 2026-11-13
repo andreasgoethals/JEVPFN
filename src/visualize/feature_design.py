@@ -10,7 +10,7 @@ from src.visualize import layout, style
 def predictor_width_figure(plan, summary):
     """Predictor input columns of every Experiment 1/2 arm, per dataset, on one log axis.
 
-    Widths are identical across the twelve extractors and across the three encoders, so one
+    Widths are identical across the selected extractors and across the three encoders, so one
     representative of each is drawn. The figure shows planned columns, not fitted rank.
     """
     order = layout.ordered(summary[["dataset_id", "dataset", "task_type"]])
@@ -62,7 +62,7 @@ def predictor_width_figure(plan, summary):
         "predictor_input_widths",
         "Planned number of predictor input columns for each Experiment 1 and Experiment 2 arm. "
         "Every structured arm includes one missing-text flag per text column. "
-        "Decision widths are the same for all twelve extractors (1 feature per request for "
+        "Decision widths are the same for all selected extractors (1 feature per request for "
         "binary and regression, K for multiclass) and embedding widths the same for all three "
         "encoders. Separate PCA adds 32 coordinates per text column; joint PCA adds 64 total. Arms "
         "wider than 500 columns are excluded for Kumo rather than silently reduced.",
@@ -107,7 +107,7 @@ def input_design_figure():
             fontsize=7, color=style.DIRECTION_COLORS["higher"], transform=ax.transAxes)
     _arrow(ax, (0.41, 0.72), (0.455, 0.72))
     _box(ax, 0.46, 0.62, 0.15, 0.20, ink, fill=faint)
-    ax.text(0.535, 0.72, "Frozen decision\nmodel\n(12 extractors,\nno generation)",
+    ax.text(0.535, 0.72, "Frozen decision\nmodel\n(non-generative\nprobabilities)",
             ha="center", va="center", fontsize=7, transform=ax.transAxes)
     _arrow(ax, (0.615, 0.72), (0.66, 0.72))
     _box(ax, 0.665, 0.505, 0.33, 0.43, ink)

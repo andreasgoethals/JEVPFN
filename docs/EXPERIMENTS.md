@@ -18,7 +18,7 @@ The [data guide](DATA_SOURCES.md) documents the pinned inputs and selection.
 ## Experiment 1: decision features
 
 For each dataset, six predictors receive a shared structured baseline or one of three
-feature sets from each of twelve decision models:
+feature sets from each of thirteen decision models:
 
 | Feature set | Added decision features |
 |---|---|
@@ -27,10 +27,14 @@ feature sets from each of twelve decision models:
 | Joint | One question/response for all available named text fields in the row |
 | Both | The per-column and joint feature blocks together |
 
-The baseline runs once per dataset/predictor, not once per decision model. The twelve
+The baseline runs once per dataset/predictor, not once per decision model. The thirteen
 extractors are Jev 1.14, Liquid d1-3B, Liquid d1-2B (LFM3), Perplexity Decider, Clef-Flash,
-Intern-Decision, Strands, H2O Lightning, SII-Decision, Kev, Decision3 and Bespoke-Nimble.
+Intern-Decision, Strands, H2O Lightning, SII-Decision, Kev, Decision3, Bespoke-Nimble and Fastino GLiDE-27B.
 Exact versions, licences and dependencies are in [extractors.yaml](<../config/2. feature_creation/extractors.yaml>).
+
+GLiDE is the 13 November addition. Its planned grid entries do not constitute runtime
+acceptance or completed features. Existing frozen campaign receipts retain their original
+roster; GLiDE needs separate 0A evidence before extraction and complete features before 0B.
 
 All models receive the same **semantic request**: fixed task/question definitions,
 ordered class descriptions and available named row text. Native serialization and
@@ -101,11 +105,11 @@ One configuration is a dataset × predictor × representation. Each has five out
 
 | Experiment | Configurations | Outer fits | Binary inner fits |
 |---|---:|---:|---:|
-| 1 | 18 × 6 × (1 + 12 × 3) = **3,996** | 19,980 | 9,990 |
+| 1 | 18 × 6 × (1 + 13 × 3) = **4,320** | 21,600 | 10,800 |
 | 2 | 18 × 6 × 3 × 2 = **648** | 3,240 | 1,620 |
 | 3 | 18 × 6 × 1 × 2 = **216** | 1,080 | 0 |
 | 4 | 18 × 3 = **54** | 270 | 135 |
-| **Total** | **4,914** | **24,570** | **11,745** |
+| **Total** | **5,238** | **26,190** | **12,555** |
 
 Experiments 2 and 3 reuse Experiment 1's structured baseline. Inner-fit counts are three
 binary datasets × configurations per dataset × five outer folds × three inner folds.

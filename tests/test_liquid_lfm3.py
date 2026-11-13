@@ -15,7 +15,7 @@ from src.utils.config import load_yaml
 
 def test_new_model_is_distinct_and_disabled_with_pinned_publisher_assets():
     candidates = load_yaml("extractors")["candidates"]
-    assert len(catalog.SELF_HOSTED) == 11
+    assert len(catalog.SELF_HOSTED) == 12
     assert set(candidates) == {"jev", *catalog.SELF_HOSTED}
     cfg = candidates["liquid_lfm3"]
     assert cfg["model"] == "LiquidAI/d1-2B" and not cfg["enabled"]
