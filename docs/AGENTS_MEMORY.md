@@ -14,7 +14,7 @@ pending statuses without changing the original evidence.
 |---|---|---|
 | 0A | Accepted for eleven open-weight extractors and three frozen encoders; local Jev 1.14 pilot passed | Preserve acceptance and source identities through recovery |
 | GLiDE addition | Pinned 27B integration and provider-only validation/extraction paths implemented locally | Separate image, exact token audit, B200 contracts, dataset pilot and reviewed acceptance; absent from the active frozen campaign |
-| Open-weight features | Ten original providers complete on all 18 datasets and publication/release on VSC; eight verified locally | Liquid LFM3 staging retry 11806945; eighteen dataset steps follow through the controller |
+| Open-weight features | Ten original providers complete on all 18 datasets and publication/release on VSC; eight verified locally | Liquid LFM3 staging 11806945 passed; all eighteen dataset jobs 11807002–11807019 submitted and queued at 10:47 CET |
 | Frozen embeddings | All 54 encoder/dataset jobs completed and published; all 54 frozen-PCA jobs completed 0:0. | Verify all training-fold cache keys in full 0B |
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
 | Benchmark | RQ1/RQ2/RQ3 layout; four core RQ2 comparisons and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
@@ -30,12 +30,15 @@ pending statuses without changing the original evidence.
   store; an exclusive-writer regression test passed. This fix is not deployed into active
   consumers. With publishers finished, the exact old source was retried instead.
 - The original campaign manifest was archived in `manifests/recovery_history/` before
-  resetting only Liquid LFM3's twenty steps. Stage `11806945` is running. The first
+  resetting only Liquid LFM3's twenty steps. Stage `11806945` completed 0:0 in 31m01s.
+  At 10:47 CET the controller had submitted all eighteen dataset jobs `11807002`–`11807019`;
+  Slurm confirmed they were queued for Priority. The campaign had 255 completed, eighteen
+  submitted and only its release still pending, with zero failed/blocked steps. The first
   restarted controller submitted it but then lost its inherited container mount; its
   failure log is retained. The corrected controller was launched through the installed
   host wrapper, PID `819705`, started 10:12:26 CET, and verified alive with fresh polls.
-  Log: `lfm3_host_wrapper_retry_20261116.log`. It will admit the eighteen dependent
-  dataset jobs after staging succeeds; pending steps are not yet Slurm submissions.
+  Log: `lfm3_host_wrapper_retry_20261116.log`. This confirms automatic admission after
+  recovery; queued jobs are not completed inference.
 - DATA remains frozen at `6b4f2e51ef8b8bf28e5db2bac8b73d43adffc239`, source
   `d54245b106d7b5a18a9c85a2d7b13cac2042d5ef681464510fa4ac2cd3c08ee0`.
   Do not pull the local research-layout changes into this running campaign.

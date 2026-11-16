@@ -33,8 +33,9 @@ AutoGluon-Multimodal are descriptive native-text system references.
 
 **16 November 2026, live VSC inspection:** ten original open-weight providers have completed
 all eighteen dataset jobs and publication/release; all 54 frozen encoder and 54 PCA jobs
-previously passed. Liquid d1-2B staging hit a publication lock and its eighteen jobs were
-blocked. A reviewed same-source retry is underway. GLiDE is locally integrated but still
+previously passed. Liquid d1-2B staging recovered from a publication-lock failure; its
+eighteen remaining dataset jobs were all submitted and queued on Mindwell at 10:47 CET.
+GLiDE is locally integrated but still
 needs separate real 0A acceptance and extraction. Jev full coverage remains budget-limited.
 One real TAR pilot and the linear/CatBoost contracts passed; full 0B and the benchmark
 have not passed or run. See [dated evidence](docs/AGENTS_MEMORY.md) for exact IDs and updates.
