@@ -257,6 +257,8 @@ def test_recovery_restages_a_retired_runtime_without_repeating_successful_infere
 
 
 @pytest.mark.parametrize("name", ["src/jev/self_hosted.py", "src/data/text_embeddings.py",
+                                  "config/general/2. feature_creation/embedding_models.yaml",
+                                  "config/general/3. experiment_0/self_hosted.yaml",
                                   "config/2. feature_creation/embedding_models.yaml",
                                   "config/3. experiment_0/self_hosted.yaml",
                                   "src/cluster/feature_campaign.py"])

@@ -20,6 +20,7 @@ def evaluation_identity():
         ("experiment_2", "embeddings"),
         ("experiment_3", "tar"),
         ("experiment_4", "native_text"),
+        ("rq3", "readout"),
     ):
         phases[phase] = load_yaml(phase + "/" + name)
     feature_fields = (
@@ -27,6 +28,8 @@ def evaluation_identity():
         "candidate_models",
         "candidate_extractors",
         "candidate_combinations",
+        "modes",
+        "views",
         "feature_selectors",
         "dataset_selection",
     )

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jevpfn"
 version = "0.1.0"
-description = "Comparing decision features, frozen and target-aware embeddings, and native-text systems for tabular prediction"
+description = "Decision-model behaviour, text representations for tabular prediction, and controlled adaptation"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Andreas Goethals", email = "andreas.goethals@kuleuven.be" }]

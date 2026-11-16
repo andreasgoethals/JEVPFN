@@ -31,7 +31,7 @@ six multiclass and nine regression datasets; the all-20 totals below are histori
   [published wheel](https://pypi.org/project/tabstar/1.1.15/); no TabSTAR installation or weights
   were needed.
 
-`config/0. exploration/datasets.yaml` records primary-source URLs/hashes, data versions/hashes and
+`config/general/0. exploration/datasets.yaml` records primary-source URLs/hashes, data versions/hashes and
 the column list obtained from these rules. The public official Kaggle archives are downloaded
 through the versioned dataset-download endpoint, using only Python's standard library. Only
 `data.csv` and `metadata.json` are extracted; no arbitrary archive paths or downloaded code run.
@@ -61,7 +61,7 @@ be stated when comparing to the paper, rather than silently adding or removing t
 
 ## Source-backed question metadata
 
-`config/1. question_preparation/dataset_semantics.yaml` is the single maintained dictionary for the 18 selected datasets:
+`config/general/1. question_preparation/dataset_semantics.yaml` is the single maintained dictionary for the 18 selected datasets:
 raw target, task, observation unit, readable task meaning, every official text column, typed raw
 class values/descriptions, source URLs and unresolved facts. Pinned MulTaBench annotations use
 commit `3bb95079a6146ed35d45187e98bcad5b063273a1`; their inspected source hashes are recorded.

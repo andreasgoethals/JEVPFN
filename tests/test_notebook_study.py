@@ -96,7 +96,7 @@ def test_no_empty_coverage_figures_before_results_exist():
 
 
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
-    for folder in [f"{i+3}. experiment_{i}" for i in range(5)] + ["8. synthesis"]:
+    for folder in ("general", "rq1", "rq2", "rq3"):
         notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
         assert notebooks
         for filename in notebooks:

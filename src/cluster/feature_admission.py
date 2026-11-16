@@ -216,6 +216,8 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
     protected = (
         "src/jev/", "src/data/", "config/0. exploration/",
         "config/1. question_preparation/", "config/2. feature_creation/",
+        "config/general/0. exploration/", "config/general/1. question_preparation/",
+        "config/general/2. feature_creation/",
     )
     core = {
         "src/cluster/freeze.py", "src/cluster/feature_campaign.py",
@@ -225,14 +227,16 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
         "scripts/activate_conda.sh", "scripts/slurm/embedding_creation.slurm",
     }
     forbidden = {name for name in changed if name.startswith(protected) or name in core
-                 or (name.startswith("config/3. experiment_0/")
-                     and name != "config/3. experiment_0/debug.yaml")}
+                 or (name.startswith(("config/3. experiment_0/", "config/general/3. experiment_0/"))
+                     and name not in {"config/3. experiment_0/debug.yaml", "config/general/3. experiment_0/debug.yaml"})}
     # The original extraction checkout predates hosted-only credit handling and
     # read-only notebook repairs. Accept only these named, exactly reviewed paths;
     # request generation, self-hosted inference and feature construction stay protected.
     exceptions = review.get("non_extraction_changes", {})
     eligible = {"src/jev/extraction.py", "src/jev/hosted.py", "src/jev/catalog_inspection.py",
-                "src/jev/features.py", "config/2. feature_creation/feature_creation.yaml",
+                "src/jev/features.py", "config/general/2. feature_creation/feature_creation.yaml",
+                "config/general/2. feature_creation/feature_comparison.yaml",
+                "config/2. feature_creation/feature_creation.yaml",
                 "config/2. feature_creation/feature_comparison.yaml"}
     if exceptions.keys() - eligible or any(not reason for reason in exceptions.values()):
         raise ValueError("Unrecognized non-extraction source exception")

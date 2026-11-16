@@ -175,6 +175,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "experiment_2": "embeddings",
         "experiment_3": "tar",
         "experiment_4": "native_text",
+        "rq3": "readout",
     }
     cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
     enabled = (
@@ -194,7 +195,10 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             lambda: benchmark_evidence(acceptance, arm),
             copy_result=False,
         )
-    if arm not in _cached(("plan",), benchmark_plan, copy_result=False):
+    from src.evaluation.research_questions import regression_readout_plan
+
+    plan_loader = regression_readout_plan if arm["phase"] == "rq3" else benchmark_plan
+    if arm not in _cached(("plan", arm["phase"]), plan_loader, copy_result=False):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     _retain_representation(arm.get("provider"), arm.get("encoder"))
     catalog = load_yaml("experiment_1/models")
@@ -312,7 +316,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "providers": providers,
         "selector": selector,
         "control": None,
-        "view": "main",
+        "view": arm.get("view", "main"),
         "embedding": embedding_cfg,
     }
     if embedding_cfg:
@@ -395,7 +399,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
-    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4"))
+    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4", "rq3"))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
     parser.add_argument("--pca-scope", choices=("per_column", "joint"))
@@ -412,7 +416,9 @@ def main():
         help="Experiment 0B: full first outer fold, no row cap",
     )
     args = parser.parse_args()
-    plan = benchmark_plan()
+    from src.evaluation.research_questions import regression_readout_plan
+
+    plan = regression_readout_plan() if args.phase == "rq3" else benchmark_plan()
     selected = [
         a
         for a in plan

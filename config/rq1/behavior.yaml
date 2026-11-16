@@ -1,0 +1,23 @@
+research_question: How do decision models represent real text, and which systematic
+  behaviours and limitations do their outputs show?
+status: approved_design_pending_controlled_probe_implementation
+saved_output_analysis: true
+controlled_queries_enabled: false
+seed: 42
+unique_inputs_per_dataset: 100
+variants:
+- option_order
+- field_order
+- question_paraphrase
+pairing:
+- dataset
+- source_row
+- text_group
+- question_identity
+- model_revision
+aggregation: within_dataset_then_equal_dataset_weight
+requires:
+- reviewed_semantic_equivalence
+- complete_baseline_outputs
+- paired_option_alignment
+- explicit_jev_budget

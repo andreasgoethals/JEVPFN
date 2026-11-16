@@ -1,0 +1,17 @@
+extends: experiment_1/main
+phase: rq3
+name: regression_probability_readout
+enabled: false
+candidate_models:
+- linear
+- catboost
+modes:
+- per_column
+views:
+- main
+- probabilities
+reuse_main_from: experiment_1
+requires:
+- accepted_experiment_0
+- complete_feature_artifacts
+- readout_full_width_profiles

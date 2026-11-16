@@ -1,7 +1,7 @@
 # Literature review
 
-Research evidence reviewed 24–28 October 2026, with the method description aligned to
-the current four-experiment design on 6 November. This is a scoped, dated review, not
+Research evidence reviewed 24–28 October 2026 and refreshed from primary sources on
+16 November for the three-RQ design, new model selections and ICML positioning. This is a scoped, dated review, not
 an exhaustive survey of the latest literature. [Experiments](EXPERIMENTS.md) defines the
 protocol; [Data sources](DATA_SOURCES.md) documents dataset and question semantics.
 
@@ -101,7 +101,7 @@ The selected roster combines one funded hosted reference and twelve open-weight 
 that can express the complete answer spaces in the retained tasks. The largest target
 vocabulary has thirty classes; regression uses nine options. Revisions, licences, configured
 context bounds and base-model dependencies belong in
-[extractor configuration](../config/2.%20feature_creation/extractors.yaml), not duplicated
+[extractor configuration](../config/general/2.%20feature_creation/extractors.yaml), not duplicated
 mutable tables. Open-weight availability does not mean zero compute cost or unrestricted licensing.
 
 | Selected extractor | Source behavior that must survive the adapter |
@@ -451,3 +451,73 @@ mappings; reuse across folds is an amortization advantage, not repeated free inf
 A GPU or provider latency from a paper is not a throughput guarantee for this workload.
 Cached artifacts provide reproducible reuse even when repeated uncached inference is not
 deterministic. Operational timing and hardware evidence belong with the actual run.
+
+## 8. November refresh: coverage and contribution
+
+For this November refresh, the already-present pins were DM
+`43d4938e50fab660d942d4b79cbaca61544c27cf`, TFM
+`c08b03530c4f0f9019cd1cd59e749c97dabcbfac` and VSC
+`710d1c3e0cd5f153a7d5eafcf83f6d51703c1bf6`; none was changed in this review.
+The table above records the historical October review, not these newer pins.
+The DM snapshot predates the
+verified GLiDE open release and the following additions; it is not an exhaustive current
+leaderboard. On 16 November the owner approved **Mammoth-1 and Drex Max**, taking the
+planned roster to fifteen. Thirteen have local inference integrations; the new two are
+pinned in `config/general/2. feature_creation/approved_additions.yaml` and cannot run yet.
+
+[Artificial Analysis Decision Index v2](https://artificialanalysis.ai/articles/decision-index-v2)
+places hosted Drex Max v1.1, GLiDE v1.2 and Mammoth near the top on its revised metric.
+That evaluator combines accuracy with confidence and includes private tests. Its ranking
+is evidence for selecting strong families, not a ranking of our exact pinned checkpoints
+or their downstream usefulness. Versions and benchmark editions must accompany scores.
+
+[Baseten Mammoth-1](https://huggingface.co/baselabs/mammoth-1) supplies a 27B open checkpoint
+under MIT and a native OneJev serving patch. Its model card's first-place claims include
+a vendor-run replica; those are not independent replications. The card documents a
+16,384-token trained limit and block-bidirectional full-attention layers. Generic causal
+LM inference would change the model and is not an acceptable shortcut.
+
+[Nace Drex Max](https://huggingface.co/nace-ai/drex-max-v1) supplies a 27B checkpoint with
+a 255-option readout under Open RAIL-M. The open artifact is named v1, whereas the
+leading hosted endpoint is Max v1.1; do not transfer the hosted ranking to the pinned
+open release. Its default serving limit is 16,384 although the architectural window is
+larger. Any changed limit must pass an exact input and real-runtime review.
+
+These additions address two clear coverage gaps. We do not add every leaderboard variant,
+quantization or hosted-only API. The roster already spans the major relevant families,
+small and large backbones, pointer and fixed-code readouts, and different calibration
+choices. This is a justified sample, not a claim that it includes every top model forever.
+
+### ICML: what the paper needs to establish
+
+The [2026 author instructions](https://icml.cc/Conferences/2026/AuthorInstructions) allow
+**eight main-body pages at submission, nine for an accepted final version**, with unlimited
+references/appendices. Crucial evidence belongs in the main paper; reviewers need not read
+appendices. The [reviewer instructions](https://icml.cc/Conferences/2026/ReviewerInstructions)
+evaluate soundness, significance, originality and presentation. They do not prescribe a
+new neural architecture or a fixed number of ablations. These are 2026 examples, not an
+assertion that the next submission uses unchanged rules.
+
+Four useful ICML 2026 patterns, interpreted rather than copied mechanically:
+
+| Paper | Relevant pattern | Consequence for JEVPFN |
+|---|---|---|
+| [One Bias After Another](https://proceedings.mlr.press/v306/fein26a.html) | Controlled reward-model biases followed by an intervention and checks on retained quality | RQ1 should identify a specific reproducible behaviour; RQ3 should test a correction without assuming it preserves utility |
+| [A Critical Look at Targeted Instruction Selection](https://proceedings.mlr.press/v306/nayak26a.html) | Separates representation, algorithm and budget contributions, with explicit theory | Keep predictor, representation and label access distinct; its theorem does not imply that our study needs an unrelated theorem |
+| [CaliDist](https://proceedings.mlr.press/v306/jawad26a.html) | Connects perturbation stability to calibration, tested across models/tasks | Stability-based confidence is prior art; our value must connect behaviour to representation utility, not rename this idea |
+| [VT-Bench](https://proceedings.mlr.press/v306/jia26a.html) | A multimodal benchmark with systematic model comparisons | An empirical contribution can be substantial, but dataset/model counts alone are insufficient |
+
+A particularly close new preprint is [Can the Confidence and Decisions of System 1 Models
+Be Trusted?](https://arxiv.org/abs/2611.12521), submitted 9 November. It already studies
+calibration under perturbations, cross-question interference and attribution faithfulness.
+RQ1 must cite this overlap. The defensible combined question is how these probabilistic
+representations retain or discard useful information on real linked-outcome text, and
+whether fuller readouts or fold-local adaptation change held-out predictive utility.
+
+The proposed main-paper story is: characterize the representation (RQ1), measure its
+value and limits (RQ2), then test two targeted improvements (RQ3). Head-only versus LoRA
+and temperature scaling distinguish extra representation learning from simple calibration.
+Negative results remain informative. One trained decision model supports a case study,
+not a universal adaptation claim. Shuffled CV, public pretraining exposure, selected-task
+coverage and the TAR input-policy differences remain limitations, not problems erased
+by an extra experiment. Freeze hypotheses before inspecting comparative outcomes.

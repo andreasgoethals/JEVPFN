@@ -21,6 +21,7 @@ PHASE_CONFIGS = {
     "experiment_2": "experiment_2/embeddings",
     "experiment_3": "experiment_3/tar",
     "experiment_4": "experiment_4/native_text",
+    "rq3": "rq3/readout",
 }
 
 
@@ -61,12 +62,13 @@ def execution_runtime():
 def profile_plan(arms=None):
     """Profile shape extremes and the real inner-OOF workload for each applicable recipe."""
     from src.evaluation.campaign import benchmark_plan
+    from src.evaluation.research_questions import regression_readout_plan
 
     rows = {e["id"]: e["paper_summary"]["rows"] for e in load_catalog()["datasets"]}
     semantics = load_yaml("dataset_semantics")["datasets"]
     encoders = load_yaml("feature_creation/embedding_models")["models"]
     groups = {}
-    for arm in benchmark_plan() if arms is None else arms:
+    for arm in benchmark_plan() + regression_readout_plan() if arms is None else arms:
         if arm["width_status"] != "unsupported_width":
             key = (arm["phase"], arm["model"], arm.get("pca_scope"), arm.get("pca_components"))
             groups.setdefault(key, []).append(arm)

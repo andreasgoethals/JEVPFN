@@ -1,0 +1,35 @@
+research_question: Can preserving output information or targeted adaptation improve
+  decision models?
+status: approved_design_training_runner_not_implemented
+enabled: false
+provider: strands
+representation: joint
+tasks:
+- binary_classification
+- multiclass_classification
+variants:
+- original
+- temperature_scaling
+- head_only
+- lora_and_head
+outer_folds: 5
+seed: 42
+evaluation: direct_decision_probabilities
+downstream_stacking: false
+calibration_partition: outer_training_only
+early_stopping_partition: outer_training_only
+pilot_datasets:
+- BIN_TEXT_JIGSAW_TOXICITY
+- MUL_TEXT_PRODUCT_SENTIMENT
+pilot_folds:
+- 0
+row_cap: null
+truncate_inputs: false
+requires:
+- sealed_training_runtime
+- released_checkpoint_initialization
+- head_freeze_and_gradient_checks
+- held_out_label_invariance
+- adapter_replay
+- resume_identity
+- b200_pilot_acceptance

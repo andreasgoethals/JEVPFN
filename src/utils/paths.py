@@ -147,7 +147,23 @@ PHASES = (
     "experiment_3",
     "experiment_4",
     "synthesis",
+    "rq1",
+    "rq3",
 )
+
+# Presentation layout changes must not rename historical output/resume identities.
+CONFIG_GROUPS = {phase: ("general" if phase in {
+    "exploration", "question_preparation", "feature_creation", "experiment_0"
+} else "rq2") for phase in PHASES if phase not in {"rq1", "rq3"}}
+NOTEBOOK_PHASES = {
+    "01_data_exploration": "exploration", "02_jev_input_design": "exploration",
+    "01_prepare_questions": "question_preparation", "03_feature_creation": "feature_creation",
+    "04_decision_feature_comparison": "feature_creation",
+    "01_before_feature_creation": "experiment_0", "02_after_feature_creation": "experiment_0",
+    "01_paired_representation_effects": "experiment_1", "01_frozen_embeddings": "experiment_2",
+    "01_target_aware_embeddings": "experiment_3", "01_native_text_systems": "experiment_4",
+    "01_representation_comparison": "synthesis",
+}
 
 
 def phase_name(phase: str | None = None) -> str:
@@ -164,8 +180,10 @@ def phase_name(phase: str | None = None) -> str:
 
 
 def phase_folder(phase: str) -> str:
-    """Stable logical phase names; numbered folders shared by config/notebooks/output."""
+    """Stable output identities; research folders are resolved separately."""
     name = phase_name(phase)
+    if name in {"rq1", "rq3"}:
+        return name
     if name == "synthesis":
         return "8. synthesis"
     index = (
@@ -181,6 +199,12 @@ def notebook_phase(notebook: str) -> str:
     if any(not p or p in {".", ".."} or "\\" in p or ":" in p for p in parts) or len(parts) > 2:
         raise ValueError("Notebook must be a name or phase/name, without path traversal.")
     if len(parts) == 2:
+        if parts[0] in {"general", "rq1", "rq2", "rq3"}:
+            if parts[-1] in NOTEBOOK_PHASES:
+                return NOTEBOOK_PHASES[parts[-1]]
+            if parts[0] in {"rq1", "rq3"}:
+                return parts[0]
+            raise ValueError("Unknown notebook in research layout")
         return phase_name(parts[0])
     if notebook == "03_feature_creation":
         return "feature_creation"
@@ -438,6 +462,14 @@ def config_path(name: str) -> Path:
         prefix, rest = stem.split("/", 1)
         stem = f"{phase_folder(prefix)}/{rest}"
     root = (REPO_ROOT / "config").resolve()
+    prefix = stem.split("/", 1)[0]
+    for phase, group in CONFIG_GROUPS.items():
+        if prefix == phase_folder(phase):
+            relocated = f"{group}/{stem}"
+            # Old paths remain readable for immutable archived checkouts/test fixtures.
+            if (root / f"{relocated}.yaml").exists() or not (root / f"{stem}.yaml").exists():
+                stem = relocated
+            break
     path = (root / f"{stem}.yaml").resolve()
     if not path.is_relative_to(root):
         raise ValueError("Configuration must remain under config/.")

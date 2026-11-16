@@ -103,8 +103,9 @@ def input_design_figure():
         ax.text(0.02, y, head, weight="bold", fontsize=7, va="top", transform=ax.transAxes)
         ax.text(0.10, y, body, fontsize=7, va="top", transform=ax.transAxes, linespacing=1.15)
         y -= 0.07 if "\n" not in body else 0.105
-    ax.text(0.02, 0.528, "Never sent: non-text values, row targets, class frequencies",
-            fontsize=7, color=style.DIRECTION_COLORS["higher"], transform=ax.transAxes)
+    ax.text(0.02, 0.555, "Never sent: non-text values, row targets,\nclass frequencies",
+            fontsize=7, va="top", linespacing=1.15,
+            color=style.DIRECTION_COLORS["higher"], transform=ax.transAxes)
     _arrow(ax, (0.41, 0.72), (0.455, 0.72))
     _box(ax, 0.46, 0.62, 0.15, 0.20, ink, fill=faint)
     ax.text(0.535, 0.72, "Frozen decision\nmodel\n(non-generative\nprobabilities)",

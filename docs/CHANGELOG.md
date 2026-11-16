@@ -1,5 +1,22 @@
 # Changelog
 
+## 16-11-2026
+
+- Organized config/notebooks around general preparation and three research questions,
+  preserving historical configuration/output identities. Added explicit behavior and
+  Strands adaptation plans, a readout notebook and executable full-probability regression
+  arms with distinct identities and largest-width 0B profiles.
+- Pinned approved Mammoth-1 and Drex Max additions separately from the executable roster;
+  native adapters and real 0A remain required. Updated scientific scope and literature,
+  including the distinction between open Drex v1 and hosted v1.1 evidence.
+- Fixed scratch capacity inspection racing SQLite publication; recovered Liquid LFM3
+  staging under the unchanged remote source and verified the host-wrapper controller.
+- Reran all thirteen notebooks; inspected twenty figures, aligned readout colors and
+  corrected a diagram label that crossed its box.
+- Extended tests for option alignment, training-only cohorts, adaptation partition
+  isolation, regression information retention and the new repository layout.
+
+
 Implementation history, newest first. Entries describe the code and evidence at their
 date; old model rosters, grids, paths and pending statuses are not current instructions.
 Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for commands and

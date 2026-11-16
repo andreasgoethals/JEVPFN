@@ -1,0 +1,40 @@
+approved_on: '2026-11-16'
+execution_enabled: false
+models:
+  mammoth:
+    model: baselabs/mammoth-1
+    revision: 61cec44c281c693992e3d6ebeb44dd3402dfa186
+    parameters_billions: 27
+    license: MIT
+    source_repository: https://github.com/OmniJev/OneJev
+    source_revision: 81ce62f1597c91e46767d4d02d6ac2e18534fe94
+    publisher_patch: serve.patch
+    request_token_limit: 16384
+    status: approved_pending_native_adapter_and_0A
+    required:
+    - pinned_OneJev_plus_publisher_patch
+    - exact_shared_prefix_token_count
+    - native_block_bidirectional_and_slot_readout
+    - full_probability_and_score_mapping
+    - sealed_B200_runtime
+    - token_audit
+    - semantic_batch_and_dataset_pilots
+  drex_max:
+    model: nace-ai/drex-max-v1
+    revision: 005d4eb46cd2f2f56ae0e82c6444fba8363c9c17
+    parameters_billions: 27
+    license: Nace.AI Open RAIL-M
+    source_repository: https://github.com/nace-ai/drex-decision-models
+    source_revision: b932571901f531b2378b356fcab7d176048c2bcb
+    request_token_limit: 16384
+    architectural_context_max: 262144
+    status: approved_pending_native_adapter_and_0A
+    version_note: Open v1 checkpoint; do not attribute hosted Max v1.1 leaderboard
+      results to this exact artifact.
+    required:
+    - native_drex_max_readout
+    - exact_rendered_token_count
+    - full_probability_and_score_mapping
+    - sealed_B200_runtime
+    - token_audit
+    - semantic_batch_and_dataset_pilots

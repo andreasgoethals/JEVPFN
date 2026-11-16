@@ -252,6 +252,38 @@ def test_provider_size_reserves_utf8_bytes_and_covers_filtered_sqlite(roots):
     assert bounds[1] > bounds[0]  # Equal character counts have different UTF-8 storage costs.
 
 
+def test_provider_capacity_waits_for_publisher_before_opening_database(roots, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from src.cluster import scratch_capacity
+    from src.utils.locking import file_lock
+
+    durable, _ = roots
+    source = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    entered, reading = Event(), Event()
+    original = scratch_capacity._provider_cache_bound_locked
+
+    def checked(*args):
+        reading.set()
+        return original(*args)
+
+    def estimate():
+        entered.set()
+        return scratch_capacity.provider_cache_bound(source.path, "intern")
+
+    monkeypatch.setattr(scratch_capacity, "_provider_cache_bound_locked", checked)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with file_lock(source.path.with_suffix(".extraction.lock")), closing(sqlite3.connect(source.path)) as db:
+            db.execute("BEGIN EXCLUSIVE")
+            future = pool.submit(estimate)
+            assert entered.wait(5)
+            assert not reading.wait(.2)
+            db.rollback()
+        assert future.result(timeout=10) > 0
+    assert reading.is_set()
+
+
 def test_provider_warm_cache_waits_for_publisher_before_reading_identity(roots, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event

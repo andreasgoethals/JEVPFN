@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use JEVPFN, cite this software and the datasets and models used in your study."
 type: software
-title: "JEVPFN: Comparing text representations for tabular prediction"
+title: "JEVPFN: Decision-model behaviour and text representations for prediction"
 authors:
   - family-names: Goethals
     given-names: Andreas
@@ -11,7 +11,8 @@ repository-code: https://github.com/andreasgoethals/JEVPFN
 url: https://github.com/andreasgoethals/JEVPFN
 license: MIT
 abstract: >-
-  Research software comparing task-conditioned decision features, frozen text
+  Research software studying decision-model behaviour, predictive usefulness and
+  information-preserving readouts and adaptation, comparing decision features, frozen text
   embeddings, supervised target-aware E5 embeddings and native-text prediction
   systems on 18 selected MulTaBench datasets. Decision requests use fixed task
   definitions and row text without fitting to dataset labels. Decision and embedding

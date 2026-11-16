@@ -29,10 +29,12 @@ are recorded in the README. Preserve unrelated local changes.
 
 ## Scientific constraints
 
-- The scope is Experiments 1â€“4: decisions, frozen embeddings, supervised TAR and native
-  text, with prerequisite 0A/0B and synthesis. Earlier ablations are retired. No new
-  models, grouped sensitivity, lexical baselines or selected-winner combinations without
-  instruction. The selected roster and exact pins are in `config/`; Microsoft is excluded.
+- The approved scope is RQ1 decision behavior, RQ2 predictive utility (historical
+  Experiments 1–4) and RQ3 readout/adaptation, with general preparation and 0A/0B.
+  Mammoth-1 and Drex Max are approved additions, disabled pending native adapter and
+  0A validation. Strands 2B adaptation is approved in design; its training runner
+  still needs implementation and a bounded pilot. Do not add grouped sensitivity,
+  lexical baselines or selected-winner combinations. Microsoft remains excluded.
 - Decision requests are deterministic and label-free: no generated questions, non-text
   row values, true row targets, class frequencies, target statistics or model feedback.
   Keep original class vocabularies and sourced meanings in `dataset_semantics.yaml`.
@@ -114,7 +116,7 @@ Retirement requires consumer checks, verified publication/recovery and scoped au
 Preserve resumable failures, referenced images and other projects. Check byte/file quotas;
 never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
-Reusable Python belongs in `src/`. Config, notebook and output phases share numbers.
+Reusable Python belongs in `src/`. Config/notebooks use general/rq1/rq2/rq3; historical numbered output IDs remain stable.
 Do not create empty phase folders or duplicate question files. Permanent questions and
 response/features use per-dataset SQLite stores. PowerShell must work on Windows
 PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.

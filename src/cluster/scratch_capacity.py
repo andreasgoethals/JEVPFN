@@ -69,6 +69,12 @@ def disposable_paths(work):
 
 
 def provider_cache_bound(source, provider):
+    """Read capacity under the same lease used by durable publication/copying."""
+    with file_lock(source.with_suffix(".extraction.lock"), timeout=3600):
+        return _provider_cache_bound_locked(source, provider)
+
+
+def _provider_cache_bound_locked(source, provider):
     """Reserve for the selected provider's UTF-8 records, indexes and page slack.
 
     Count encoded bytes, not SQLite TEXT character lengths. Four times payload

@@ -112,7 +112,7 @@ jevpfn_tar_job=${jevpfn_tar_job%%;*}
 sbatch --dependency="afterok:$jevpfn_tar_job" scripts/slurm/prepare_tar_pca.slurm BIN_TEXT_JIGSAW_TOXICITY
 ```
 
-Repeat for the other selected IDs in `config/0. exploration/datasets.yaml`. Queue completion alone is insufficient: the 0B preflight reads
+Repeat for the other selected IDs in `config/general/0. exploration/datasets.yaml`. Queue completion alone is insufficient: the 0B preflight reads
 the artifact checksums and PCA stores. Generate predictor-profile arrays through
 `src.cluster.benchmark_jobs --phase experiment_3 --model MODEL --profile-fold --write`.
 Review and accept them before enabling the benchmark. The dated [operational record](AGENTS_MEMORY.md#local-tar-addition-4-november)

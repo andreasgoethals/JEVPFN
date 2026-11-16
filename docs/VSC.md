@@ -13,6 +13,21 @@ transition. Confirm live jobs and artifacts before acting on a dated status.
 [Access](#1-access) Â· [Storage](#2-storage-and-hardware) Â· [Runtimes](#3-runtimes-and-containers) Â·
 [Pipeline](#4-pipeline) Â· [Maintenance](#5-working-sets-and-storage-maintenance) Â· [Transfer](#6-utilization-and-transfer)
 
+## Research stages and active-source boundary
+
+Config/notebooks now follow `general/`, `rq1/`, `rq2/`, `rq3/`; existing logical
+configuration names and numbered output phases are preserved. Do not rename remote
+results or pull this reorganization while the extraction campaign consumes its frozen
+checkout. At the next idle handover, validate the new resolver and rerun affected 0B
+contracts before using the new readout grid.
+
+RQ1 saved-output analysis runs locally. Its controlled variants need a dedicated runner
+and accepted 0A contracts. RQ2 retains the four benchmark pipelines. RQ3's full-regression
+probability arms use the existing benchmark runner (`--phase rq3`) and are disabled until
+0B; Strands head/LoRA training remains an implementation/pilot gate. Mammoth-1 and Drex
+Max are pinned approved additions, not yet installed or qualified extractors. See the
+[design](EXPERIMENTS.md) for exact scope; do not submit these planned stages as production.
+
 ## 1. Access
 
 The owner renews the shared Windows-agent certificate manually, only when access fails:
@@ -54,7 +69,7 @@ Authentication and monitoring boundaries are in [AGENTS](../AGENTS.md).
   native scratch. They publish compatible SQLite unions every 600 seconds and on exit
   under per-destination locks. Periodic publication can defer a busy store. Final publication
   waits. Dataset jobs publish their own store, and resumed work reuses committed records.
-- The [scheduling configuration](<../config/3. experiment_0/scheduling.yaml>) allows two
+- The [scheduling configuration](<../config/general/3. experiment_0/scheduling.yaml>) allows two
   resident workspaces, a 200 GiB working budget and 20 GiB headroom in a 500 GiB scratch
   allocation. Check both bytes and files with `myquota`. Retain an independent feature
   copy because unused scratch files can be purged and failed jobs can lose unpublished work.
@@ -70,7 +85,7 @@ Cluster dependencies are installed inside sealed PROJECT images; build files use
 scratch. The local Windows venv is separate. Keep older images only for recorded reproduction
 or rollback requirements; [retention exceptions](#5-working-sets-and-storage-maintenance) are explicit.
 
-- **CPU controller.** `config/3. experiment_0/control_runtime.yaml` records exact package
+- **CPU controller.** `config/general/3. experiment_0/control_runtime.yaml` records exact package
   versions. `control_build.slurm` builds `control-v1`; `control_test.slurm` tests Slurm
   accounting, nested model launches, two-node locking/snapshots, data checks and the CPU
   suite. `python -m src.cluster.control_runtime activate --test-job-id JOBID` activates it
@@ -89,7 +104,7 @@ or rollback requirements; [retention exceptions](#5-working-sets-and-storage-mai
   `--host-step`; relocated extraction wrappers keep their existing launch mode.
   Rebuildable compiler caches use a per-job scratch leaf removed on exit.
 - **Predictor runtimes.** Review the checkpoint and runtime pins in
-  [models.yaml](<../config/4. experiment_1/models.yaml>). Before freezing 0B,
+  [models.yaml](<../config/rq2/4. experiment_1/models.yaml>). Before freezing 0B,
   `python -m src.cluster.predictor_assets --execute` stages the pinned TabSTAR snapshots on
   CPU. TabSTAR v1.1 uses `tabstar-v1p1`. AG-MM uses a separate image.
 - Question ZIPs install with `input_install.slurm`, which refuses other JEVPFN consumers.
@@ -105,7 +120,7 @@ source scripts/activate_conda.sh
 ```
 
 The Windows notebook venv and sealed Linux CPU image share exact versions for the
-packages listed in `config/3. experiment_0/control_runtime.yaml`. The `control`
+packages listed in `config/general/3. experiment_0/control_runtime.yaml`. The `control`
 extra in `pyproject.toml` pins the scientific subset. To reproduce the full shared
 package set in an existing local Python 3.12 venv, generate a temporary requirements
 file from the lock and install it into that venv.
@@ -322,7 +337,7 @@ an authorized Jev validation stage.
   reservation is a spending bound, not a token count. Overflow stops without truncation.
 - `python -m src.jev.setup_pilot --configure` creates the private config (USD 0.042/M,
   a conservative EUR/USD conversion and EUR 5 pilot budget) and never replaces an existing one; review
-  `config/2. feature_creation/jev.local.yaml` instead. The historical prefix pilot used one worker at 1 RPS (setup default 0.2 RPS); the
+  `config/general/2. feature_creation/jev.local.yaml` instead. The historical prefix pilot used one worker at 1 RPS (setup default 0.2 RPS); the
   later existing-balance policy is described below.
 - Durable reservations, bounded 429 handling and timeout stops prevent repeat billing.
   `python -m src.jev.recovery DATASET_ID` inspects stopped requests without calls;

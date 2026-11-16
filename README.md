@@ -1,57 +1,52 @@
 # JEVPFN
 
-JEVPFN compares **task-conditioned decision features, frozen embeddings, supervised
-target-aware embeddings and native-text systems** on 18 selected MulTaBench datasets.
-The study asks how these representations help fixed tabular predictors on shared
-cross-validation splits. Decision features use fixed task definitions and row text
-without fitting to dataset labels; TAR is a separate supervised comparison.
+JEVPFN studies **how decision models represent real text, when their representations help
+prediction, and whether preserving information or adapting a model improves them**.
+Eighteen text-rich tabular datasets provide linked outcomes and a shared test bed.
+The contribution connects model behaviour to predictive utility; it does not assume that
+confident or agreeing models are correct.
 
-## Project status
+## Study at a glance
 
-**Last recorded evidence: 12 November 2026.** Experiment 0A was accepted for eleven
-open-weight extractors and three frozen encoders. The local Jev 1.14 first-100-row pilot
-also passed. Eight open-weight providers and all 54 frozen encoder/dataset pairs are
-complete; all 54 frozen-PCA preparation jobs passed. Kev has two unfinished datasets,
-Nimble one, and Liquid LFM3 eighteen. Scoped staging recovery and independent 0B/TAR
-preparation are authorized. These are dated observations, not live job status.
-Full benchmark execution still requires complete feature checks and reviewed 0B evidence.
-Fastino GLiDE-27B was added to the local planned roster on 13 November. It requires its
-own token audit, sealed runtime, B200 contracts and dataset pilot; the active VSC campaign
-remains on its recorded eleven-open-model scope until a safe handover.
-Local Jev extraction is authorized within the existing EUR 5 allowance; full coverage
-will need additional funding. [Run evidence](docs/AGENTS_MEMORY.md) ·
-[VSC workflow](docs/VSC.md#46-experiment-0b)
+| Research question | Experiments | Compute |
+|---|---|---|
+| RQ1: behaviour | Distributions/agreement, joint versus separate context, controlled equivalent-input variations | Mostly existing outputs locally; new controlled variants on VSC |
+| RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems; fixed analyses of when text helps | Four existing benchmark grids on VSC; paired analysis locally |
+| RQ3: improvement | Full regression distributions versus their mean; Strands 2B calibration/head-only/LoRA case study | Saved-feature predictor fits and new fold-local training on VSC |
 
-## Benchmark design
+The core RQ2 grid remains 5,238 configurations / 26,190 outer fits. Its historical
+Experiments 1–4 identifiers are preserved. RQ3-A adds 234 configurations / 1,170 outer fits,
+reusing existing mean comparators. RQ3-B starts with four training pilots before any
+90-run expansion. Once the two approved additions are integrated, RQ2 becomes 5,886
+configurations / 29,430 outer fits, and RQ3-A becomes 270 configurations / 1,350 outer fits.
+These larger counts are planned, not enabled. See [Experiments](docs/EXPERIMENTS.md) for arithmetic, controls,
+training boundaries and which additions are still pending implementation.
 
-| Experiment | Comparison | Configurations |
-|---|---|---:|
-| 1 | A shared structured baseline versus decision features from thirteen extractors, using text jointly, per column, or both | 4,320 |
-| 2 | Three frozen encoders with joint PCA64 or separate PCA32 per text column, compared with the same structured baseline | 648 |
-| 3 | E5-small-v2 TAR (LoRA), with the same two PCA recipes and six predictors | 216 |
-| 4 | Three native-text systems on the original features | 54 |
+Six structured predictors compare features from thirteen configured extractors. The
+approved roster adds Mammoth-1 and Drex Max (fifteen total); both are pinned but still
+need native adapters and real 0A. The comparisons use three frozen encoders
+(E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B) and supervised E5-small TAR. Both embedding
+tracks retain joint PCA64 and separate PCA32 per text field. TabSTAR v1.1, ConTextTab and
+AutoGluon-Multimodal are descriptive native-text system references.
 
-One configuration is a dataset × predictor × representation. The grid contains **5,238
-configurations**, with **26,190 outer fits** and **12,555 binary inner fits**. The structured
-baseline includes non-text features and the same text-availability flags as the decision
-and embedding arms. The experiments use fixed settings and prespecified recipes.
+## Current evidence
 
-- **Six structured predictors** — CatBoost, TabPFN-3.5, TabICL v2, LimiX-2, NVIDIA Kumo
-  Tabular, and logistic/linear regression. LimiX-2 preprocessing is restricted to training rows.
-- **Three frozen encoders** — E5-small-v2, E5-large-v2, and Qwen3-Embedding-0.6B.
-  Joint PCA yields 64 embedding features total. Separate PCA yields 32 per text column.
-- **Three native-text references** — TabSTAR v1.1, ConTextTab, and AutoGluon-Multimodal.
-  Experiment 4 compares complete systems descriptively.
+**16 November 2026, live VSC inspection:** ten original open-weight providers have completed
+all eighteen dataset jobs and publication/release; all 54 frozen encoder and 54 PCA jobs
+previously passed. Liquid d1-2B staging hit a publication lock and its eighteen jobs were
+blocked. A reviewed same-source retry is underway. GLiDE is locally integrated but still
+needs separate real 0A acceptance and extraction. Jev full coverage remains budget-limited.
+One real TAR pilot and the linear/CatBoost contracts passed; full 0B and the benchmark
+have not passed or run. See [dated evidence](docs/AGENTS_MEMORY.md) for exact IDs and updates.
 
-[Predictor settings](<config/4. experiment_1/models.yaml>) ·
-[Embedding grid](<config/5. experiment_2/embeddings.yaml>) ·
-[Model interfaces and prior work](docs/LITERATURE_REVIEW.md)
+## Repository navigation
 
-The full [experiment guide](docs/EXPERIMENTS.md) explains the grid arithmetic, feature
-schemas, missing inputs, training boundaries, metrics and acceptance gates. It is the
-single reference for the current scientific design. [TAR](docs/TAR.md) records exact
-upstream provenance and declared differences; the [literature review](docs/LITERATURE_REVIEW.md)
-explains the model choices and limits of the contribution.
+`config/` and `notebooks/` each have `general/`, `rq1/`, `rq2/`, `rq3/`.
+General contains data/question inspection, feature preparation and 0A/0B qualification.
+RQ folders follow the scientific story. Existing logical configuration names and numbered
+output paths remain valid. Source fingerprints change; completed scientific artifacts and
+recovery references remain intact, and new evaluation code requires fresh 0B evidence.
+[Model choices and evidence](docs/LITERATURE_REVIEW.md) · [Full design](docs/EXPERIMENTS.md)
 
 ## Local setup
 
@@ -83,7 +78,7 @@ Windows/Linux interpreter difference, see [CPU environment parity](docs/VSC.md#c
 ## Workflow and outputs
 
 Prepare inputs, qualify them and the runtimes in **0A**, create features, then run **0B**
-on the complete stores and predictor runtimes. Experiments 1–4 require reviewed 0B evidence.
+on the complete stores and predictor runtimes. RQ2 and RQ3-A require reviewed 0B evidence; controlled probes and Strands adaptation require their additional pilot gates.
 The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 [operational record](docs/AGENTS_MEMORY.md) preserves dated receipts and recovery history.
 
@@ -114,9 +109,10 @@ Parquet. Only fully downloaded extractors enter comparisons; agreement is not ac
 
 | Stage | Notebooks |
 |---|---|
-| Explore and prepare | [Data](<notebooks/0. exploration/01_data_exploration.ipynb>), [input design](<notebooks/0. exploration/02_jev_input_design.ipynb>), [questions](<notebooks/1. question_preparation/01_prepare_questions.ipynb>) |
-| Extract and validate | [Workload and feature widths](<notebooks/2. feature_creation/03_feature_creation.ipynb>), [decision features](<notebooks/2. feature_creation/04_decision_feature_comparison.ipynb>), [0A](<notebooks/3. experiment_0/01_before_feature_creation.ipynb>), [0B](<notebooks/3. experiment_0/02_after_feature_creation.ipynb>) |
-| Evaluate | [Decision features](<notebooks/4. experiment_1/01_paired_representation_effects.ipynb>), [frozen embeddings](<notebooks/5. experiment_2/01_frozen_embeddings.ipynb>), [TAR](<notebooks/6. experiment_3/01_target_aware_embeddings.ipynb>), [native text](<notebooks/7. experiment_4/01_native_text_systems.ipynb>), [synthesis](<notebooks/8. synthesis/01_representation_comparison.ipynb>) |
+| Explore and prepare | [Data](<notebooks/general/01_data_exploration.ipynb>), [input design](<notebooks/general/02_jev_input_design.ipynb>), [questions](<notebooks/general/01_prepare_questions.ipynb>) |
+| General validation and RQ1 behaviour | [Workload and feature widths](<notebooks/general/03_feature_creation.ipynb>), [decision features](<notebooks/rq1/04_decision_feature_comparison.ipynb>), [0A](<notebooks/general/01_before_feature_creation.ipynb>), [0B](<notebooks/general/02_after_feature_creation.ipynb>) |
+| RQ2 benchmark | [Decision features](<notebooks/rq2/01_paired_representation_effects.ipynb>), [frozen embeddings](<notebooks/rq2/01_frozen_embeddings.ipynb>), [TAR](<notebooks/rq2/01_target_aware_embeddings.ipynb>), [native text](<notebooks/rq2/01_native_text_systems.ipynb>), [synthesis](<notebooks/rq2/01_representation_comparison.ipynb>) |
+| RQ3 improvement | [Readout widths and adaptation design](<notebooks/rq3/01_improvement_studies.ipynb>) |
 
 ## Documentation
 
@@ -136,7 +132,7 @@ Parquet. Only fully downloaded extractors enter comparisons; agreement is not ac
 Use [CITATION.cff](CITATION.cff) to cite this software. Project code is [MIT licensed](LICENSE);
 datasets, weights and vendored code retain their own licences and attribution.
 
-The project follows the [research template](docs/TEMPLATE.md) with numbered phase folders,
+The project follows the [research template](docs/TEMPLATE.md) with an approved RQ-based config/notebook layout and historical numbered output folders,
 `output_JEVPFN`, project-specific aggregate report names, permanent paid-response stores,
 and separate local/VSC execution gates.
 The project also retains its staging-root/publication interface and its explicit destructive

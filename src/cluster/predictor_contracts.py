@@ -63,7 +63,8 @@ def required_fixture_cases(model):
             ("multiclass_classification", 30),
             ("regression", 0),
         )
-        for case in cases
+        for case in (cases + (("decision_per_column_probabilities",)
+                              if task == "regression" and model not in TEXT_MODELS else ()))
     }
 
 
@@ -150,6 +151,17 @@ def feature_cases(dataset, model):
     result = base.join(blocks["per_column"]).join(blocks["joint"])
     result.attrs.update(feature_artifact_ids=[])
     yield "decision_both", result, None
+    if task == "regression":
+        # RQ3 retains the complete ordered nine-level distribution per text field.
+        columns = {}
+        for group, missing in enumerate(text_missing.T):
+            values = rng.dirichlet(np.ones(9), size=len(base))
+            values[missing] = np.nan
+            columns.update({f"synthetic_probabilities__{group}__p_{i}": values[:, i]
+                            for i in range(9)})
+        result = base.join(pd.DataFrame(columns, index=base.index))
+        result.attrs.update(feature_artifact_ids=[])
+        yield "decision_per_column_probabilities", result, None
 
 
 def case_factory(base_factory, features, components):

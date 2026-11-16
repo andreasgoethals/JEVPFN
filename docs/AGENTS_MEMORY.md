@@ -8,17 +8,53 @@ pending statuses without changing the original evidence.
 
 ## Latest verified status
 
-**Evidence through 13 November 2026. Recheck receipts and Slurm before acting.**
+**Evidence through 16 November 2026. Recheck receipts and Slurm before acting.**
 
 | Area | Last verified position | Still required |
 |---|---|---|
 | 0A | Accepted for eleven open-weight extractors and three frozen encoders; local Jev 1.14 pilot passed | Preserve acceptance and source identities through recovery |
 | GLiDE addition | Pinned 27B integration and provider-only validation/extraction paths implemented locally | Separate image, exact token audit, B200 contracts, dataset pilot and reviewed acceptance; absent from the active frozen campaign |
-| Open-weight features | Eight providers complete on all 18 datasets and verified locally, including Decision3 | Kev 16/18, Nimble 17/18 and Liquid LFM3 0/18 successful dataset steps in the live campaign |
+| Open-weight features | Ten original providers complete on all 18 datasets and publication/release on VSC; eight verified locally | Liquid LFM3 staging retry 11806945; eighteen dataset steps follow through the controller |
 | Frozen embeddings | All 54 encoder/dataset jobs completed and published; all 54 frozen-PCA jobs completed 0:0. | Verify all training-fold cache keys in full 0B |
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
-| Benchmark | Four-experiment design and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
-| Documentation/notebooks | Eight-model snapshot, 12 notebooks passed, 19 figures | Refresh when more complete evidence is imported |
+| Benchmark | RQ1/RQ2/RQ3 layout; four core RQ2 comparisons and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
+| New roster | Mammoth-1 and Drex Max approved and pinned; planned total fifteen | Native adapters, sealed runtimes and real 0A; do not attribute hosted Drex v1.1 scores to open v1 |
+
+### Recovery and research organization on 16 November
+
+- Live SSH verified Kev Kickstarter `11794772` and Scimago `11794773` completed 0:0
+  in 7h08m37s and 2h56m20s; Nimble US Accidents `11794789` completed 0:0 in 2h59m29s.
+  Ten original providers now have eighteen successful dataset steps and completed releases.
+- Liquid LFM3 staging `11797520` failed with SQLite `database is locked` during the
+  capacity estimate. Local sizing now acquires the publication lease before opening the
+  store; an exclusive-writer regression test passed. This fix is not deployed into active
+  consumers. With publishers finished, the exact old source was retried instead.
+- The original campaign manifest was archived in `manifests/recovery_history/` before
+  resetting only Liquid LFM3's twenty steps. Stage `11806945` is running. The first
+  restarted controller submitted it but then lost its inherited container mount; its
+  failure log is retained. The corrected controller was launched through the installed
+  host wrapper, PID `819705`, started 10:12:26 CET, and verified alive with fresh polls.
+  Log: `lfm3_host_wrapper_retry_20261116.log`. It will admit the eighteen dependent
+  dataset jobs after staging succeeds; pending steps are not yet Slurm submissions.
+- DATA remains frozen at `6b4f2e51ef8b8bf28e5db2bac8b73d43adffc239`, source
+  `d54245b106d7b5a18a9c85a2d7b13cac2042d5ef681464510fa4ac2cd3c08ee0`.
+  Do not pull the local research-layout changes into this running campaign.
+- Bounded tails of 234 current-attempt feature logs contained no error-pattern matches.
+  This does not replace numerical verification of every response. Historical failed
+  attempts were retained, not erased. No scientific outputs or recovery stores were deleted.
+- Allocation totals: GPFS PROJECT 845.4 GiB/2 TiB, 12,337/300,000 files; personal GPFS
+  scratch 7.687 GiB/500 GiB. These totals include other projects where applicable.
+- The stable local suite passed **1,404 tests**, with 26 environment-specific checks
+  skipped; Ruff passed. All thirteen notebooks executed successfully, producing twenty
+  figures; every figure was visually inspected, and two layout/style refinements were
+  rerun. These checks do not establish new-model GPU acceptance.
+- Automatic approval review blocked removal of local temporary figure previews
+  `output_JEVPFN/_rq_visual_review/` (and the requested RQ3 `_review.png` if present),
+  reporting only "blocked by policy". They remain ignored and are not scientific results.
+- The owner approved RQ1 behavior, RQ2 usefulness and RQ3 improvement, plus Strands 2B
+  adaptation. Config/notebooks were reorganized while logical/output IDs stayed stable.
+  RQ3 full-probability readout is wired into execution/profile identities. Controlled
+  query dispatch and Strands training remain explicit implementation gates, not results.
 
 ### Independent validation and scoped recovery on 13 November
 

@@ -33,7 +33,7 @@ def test_actual_predictor_fixtures_exercise_both_pca_widths_and_combined_feature
 
     for dataset in predictor_contracts.fixtures():
         cases = list(predictor_contracts.feature_cases(dataset, MAIN_MODELS[0]))
-        assert len(cases) == 8
+        assert len(cases) == (9 if dataset.metadata.task_type == "regression" else 8)
         assert {
             (dataset.metadata.task_type, len(dataset.metadata.classes), name)
             for name, _, _ in cases

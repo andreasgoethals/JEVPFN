@@ -59,7 +59,7 @@ def test_execution_catalog_and_metric_version_match_implementation():
         == METRICS_VERSION
     )
     for folder in (paths.REPO_ROOT / "config").iterdir():
-        assert folder.is_dir() and folder.name == paths.phase_folder(paths.phase_name(folder.name))
+        assert folder.is_dir() and folder.name in {"general", "rq1", "rq2", "rq3"}
     assert all(p.stem == p.stem.upper() for p in (paths.REPO_ROOT / "docs").glob("*.md"))
 
 

@@ -19,6 +19,7 @@ def configuration(monkeypatch):
         "experiment_2/embeddings",
         "experiment_3/tar",
         "experiment_4/native_text",
+        "rq3/readout",
         "feature_creation/embedding_models",
         "datasets",
         "dataset_semantics",
