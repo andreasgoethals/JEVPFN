@@ -267,3 +267,8 @@ def test_project_root_aliases_and_explicit_native_working_set(tmp_path, monkeypa
     # B200 native working-set override must not be redirected to cross-mounted PROJECT.
     monkeypatch.setenv("JEVPFN_STAGING_ROOT", str(tmp_path / "gpfs-working"))
     assert paths.checkpoints_dir() == tmp_path / "gpfs-working" / "JEVPFN" / "checkpoints"
+
+
+def test_direct_research_results_do_not_repeat_the_research_folder():
+    for group in ("rq1", "rq2", "rq3"):
+        assert paths.result_relative(group) == Path(group) / "results"

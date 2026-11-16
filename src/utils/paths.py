@@ -206,6 +206,8 @@ def research_group(phase: str) -> str:
 def result_relative(phase: str) -> Path:
     """RQ result paths; operational 0A/token stores retain their frozen identities."""
     phase = phase_name(phase)
+    if phase in {"rq1", "rq2", "rq3"}:
+        return Path(phase) / "results"
     if research_group(phase) == "general":
         return Path(phase_folder(phase)) / "results"
     return Path(research_group(phase)) / phase_folder(phase) / "results"
