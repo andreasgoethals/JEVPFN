@@ -687,7 +687,7 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
     stage.publish("linear")
     with stage.staging_environment(durable):
         assert len(list(recipes(phase))) == 3
-    assert len(list((work / "output_JEVPFN").glob("*/results/evaluation/*.sqlite3"))) == 1
+    assert len(list((work / "output_JEVPFN").glob("**/results/evaluation/*.sqlite3"))) == 1
 
 
 def test_native_gpfs_predictor_stage_omits_durable_representation_inputs(roots, monkeypatch):

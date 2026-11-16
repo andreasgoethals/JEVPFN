@@ -15,7 +15,7 @@ from src.utils import paths
 from src.utils.serialization import digest, write_json
 
 
-def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4")):
+def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4", "regression_readout")):
     rows = []
     for phase in phases:
         legacy = [

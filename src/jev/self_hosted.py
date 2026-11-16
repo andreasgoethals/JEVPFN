@@ -112,7 +112,14 @@ class SelfHostedClient:
             paths.REPO_ROOT / "src/jev/self_hosted.py"
         )
         started = time.perf_counter()
-        if provider == "glide":
+        if provider in {"mammoth", "drex_max"}:
+            from src.jev.frontier_decisions import Runtime
+
+            self.model = Runtime(provider, folder, self.counter)
+            self.settings["request_configuration"]["additional_runtime_sha256"] = file_sha256(
+                paths.REPO_ROOT / "src/jev/frontier_decisions.py"
+            )
+        elif provider == "glide":
             from src.jev.glide import MIDLOOP, Runtime
 
             self.model = Runtime(folder, self.counter)
@@ -205,7 +212,7 @@ class SelfHostedClient:
                 raw = self.model.evaluate(
                     self.request_class(state=payload["state"], questions={QUESTION_ID: question})
                 ).model_dump(mode="json")
-            elif self.provider in {"cloudflare", "intern", "glide"}:
+            elif self.provider in {"cloudflare", "intern", "glide", "mammoth", "drex_max"}:
                 raw = self.model.predict(
                     {"state": payload["state"], "questions": {QUESTION_ID: question}}
                 )

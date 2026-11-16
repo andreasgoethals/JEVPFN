@@ -650,7 +650,7 @@ def stage(runtime, *, datasets=None):
             inputs += ["checkpoints/text_embeddings"]
         # Include prepared CPU artifacts (tokens and fold-specific PCA), never arbitrary outputs.
         inputs += [
-            f"output_JEVPFN/{paths.phase_folder(p)}/results/{name}"
+            f"output_JEVPFN/{paths.result_relative(p).as_posix()}/{name}"
             for p, name in (
                 *([("experiment_0", "token_audit")] if runtime in containers.SELF_HOSTED else []),
                 ("experiment_2", "pca"),
@@ -663,7 +663,8 @@ def stage(runtime, *, datasets=None):
             # A fresh native workspace must see durable attempts before fitting;
             # otherwise it would refit them and conflict when publishing back.
             for folder in sorted(
-                (durable / "output_JEVPFN").glob("*. experiment_*/results/evaluation")
+                list((durable / "output_JEVPFN/rq2").glob("*/results/evaluation"))
+                + list((durable / "output_JEVPFN").glob("3. experiment_0/results/evaluation"))
             ):
                 paths.phase_name(folder.parents[1].name)  # Require canonical experiment numbering.
                 for source in _dataset_stores(folder):
@@ -673,8 +674,8 @@ def stage(runtime, *, datasets=None):
                 continue  # Decision extraction never consumes predictor PCA parameters.
             if shared_predictor_inputs and folder in {
                 "data/jev_cache", "data/text_embeddings",
-                f"output_JEVPFN/{paths.phase_folder('experiment_2')}/results/pca",
-                f"output_JEVPFN/{paths.phase_folder('experiment_1')}/results/pca",
+                f"output_JEVPFN/{paths.result_relative('experiment_2').as_posix()}/pca",
+                f"output_JEVPFN/{paths.result_relative('experiment_1').as_posix()}/pca",
             }:
                 continue  # Predictors open accepted, immutable features and PCA directly on PROJECT.
             if shared_assets and (folder.startswith("checkpoints/") or folder in {"data/raw", "data/decision_inputs"}

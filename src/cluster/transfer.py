@@ -109,8 +109,8 @@ def export_bundle(*, include_token_counts=True) -> Path:
                         continue  # Rebuildable CPU restart files; merged counts are exported.
                     if not include_token_counts and "token_audit" in relative.parts:
                         continue  # Keep compact token receipts, omit reproducible count databases.
-                    # Only numbered research phases; generated local notebook reports stay local.
-                    if not relative.parts or relative.parts[0] not in {
+                    # Operational phases and RQ scientific results; notebook intermediates stay local.
+                    if not relative.parts or (relative.parts[0] not in {
                         paths.phase_folder(p)
                         for p in (
                             "question_preparation",
@@ -121,7 +121,10 @@ def export_bundle(*, include_token_counts=True) -> Path:
                             "experiment_3",
                             "experiment_4",
                         )
-                    }:
+                    } and not any(relative.is_relative_to(paths.result_relative(p)) for p in (
+                        "experiment_1", "experiment_2", "experiment_3", "experiment_4",
+                        "regression_readout", "synthesis", "rq1", "rq3"
+                    ))):
                         continue
                     if (
                         source.name.startswith(".")

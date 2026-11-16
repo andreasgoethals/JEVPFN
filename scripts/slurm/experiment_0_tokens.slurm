@@ -23,9 +23,9 @@ if [[ "${2:-}" == liquid_lfm3 ]]; then
     export JEVPFN_CONDA_ENV=liquid_lfm3
     export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
     source scripts/activate_runtime.sh
-elif [[ "${2:-}" == glide ]]; then
+elif [[ "${2:-}" == glide || "${2:-}" == mammoth || "${2:-}" == drex_max ]]; then
     # GLiDE requires tokenizers 0.23.2, separate from all historical counter identities.
-    export JEVPFN_CONDA_ENV=glide
+    export JEVPFN_CONDA_ENV="$2"
     export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
     source scripts/activate_runtime.sh
 fi

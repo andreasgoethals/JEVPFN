@@ -86,7 +86,7 @@ Reported results are the authors' measurements, not results reproduced by JEVPFN
 
 The papers generally support the usefulness of compact typed interfaces, while giving
 mixed evidence for calibration, framing invariance, causal understanding and robustness.
-They do not establish that the thirteen selected extractors produce interchangeable beliefs.
+They do not establish that the fifteen selected extractors produce interchangeable beliefs.
 The comparison must preserve their differences rather than normalize them away.
 
 Public tools already apply these interfaces to individual text columns. The
@@ -95,7 +95,7 @@ procurement demonstration shows that documentary class descriptions change mappi
 organization names. This is a developer demonstration, not an independent benchmark;
 it also illustrates that a short name may lack the information needed for the true label.
 
-## 4. Why these thirteen extractors and how their interfaces differ
+## 4. Why these fifteen extractors and how their interfaces differ
 
 The selected roster combines one funded hosted reference and twelve open-weight releases
 that can express the complete answer spaces in the retained tasks. The largest target
@@ -462,7 +462,7 @@ The table above records the historical October review, not these newer pins.
 The DM snapshot predates the
 verified GLiDE open release and the following additions; it is not an exhaustive current
 leaderboard. On 16 November the owner approved **Mammoth-1 and Drex Max**, taking the
-planned roster to fifteen. Thirteen have local inference integrations; the new two are
+roster to fifteen. All have local inference integrations; Mammoth and Drex remain
 pinned in `config/general/2. feature_creation/approved_additions.yaml` and cannot run yet.
 
 [Artificial Analysis Decision Index v2](https://artificialanalysis.ai/articles/decision-index-v2)
@@ -515,7 +515,7 @@ representations retain or discard useful information on real linked-outcome text
 whether fuller readouts or fold-local adaptation change held-out predictive utility.
 
 The proposed main-paper story is: characterize the representation (RQ1), measure its
-value and limits (RQ2), then test two targeted improvements (RQ3). Head-only versus LoRA
+value and limits (RQ2), then test supervised Strands adaptation (RQ3). Head-only versus LoRA
 and temperature scaling distinguish extra representation learning from simple calibration.
 Negative results remain informative. One trained decision model supports a case study,
 not a universal adaptation claim. Shuffled CV, public pretraining exposure, selected-task

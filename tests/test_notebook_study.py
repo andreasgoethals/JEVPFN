@@ -51,7 +51,7 @@ def test_r2_differences_are_not_rescaled_or_dropped_for_negative_references():
 def test_coverage_requires_five_defined_folds_and_rejects_duplicate_campaign():
     frame = fixture_folds()
     table = study.planned_coverage(frame, "experiment_1")
-    assert table.planned.eq(40).all() and table.completed.sum() == 3
+    assert table.planned.eq(1 + 3 * len(load_yaml("experiment_1/main")["candidate_extractors"])).all() and table.completed.sum() == 3
     broken = frame.drop(frame[frame.model_id.eq("catboost") & frame.outer_fold.eq(4)].index)
     assert study.planned_coverage(broken, "experiment_1").completed.sum() == 0
     bad = frame[frame.model_id.eq("catboost")].copy()
@@ -96,7 +96,7 @@ def test_no_empty_coverage_figures_before_results_exist():
 
 
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
-    for folder in ("general", "rq1", "rq2", "rq3"):
+    for folder in ("general", ""):
         notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
         assert notebooks
         for filename in notebooks:

@@ -148,13 +148,15 @@ PHASES = (
     "experiment_4",
     "synthesis",
     "rq1",
+    "rq2",
     "rq3",
+    "regression_readout",
 )
 
-# Presentation layout changes must not rename historical output/resume identities.
+# Keep scientific phase identities; move physical results only at an idle handover.
 CONFIG_GROUPS = {phase: ("general" if phase in {
     "exploration", "question_preparation", "feature_creation", "experiment_0"
-} else "rq2") for phase in PHASES if phase not in {"rq1", "rq3"}}
+} else "rq2") for phase in PHASES if phase not in {"rq1", "rq2", "rq3", "regression_readout"}}
 NOTEBOOK_PHASES = {
     "01_data_exploration": "exploration", "02_jev_input_design": "exploration",
     "01_prepare_questions": "question_preparation", "03_feature_creation": "feature_creation",
@@ -182,7 +184,7 @@ def phase_name(phase: str | None = None) -> str:
 def phase_folder(phase: str) -> str:
     """Stable output identities; research folders are resolved separately."""
     name = phase_name(phase)
-    if name in {"rq1", "rq3"}:
+    if name in {"rq1", "rq2", "rq3", "regression_readout"}:
         return name
     if name == "synthesis":
         return "8. synthesis"
@@ -194,7 +196,24 @@ def phase_folder(phase: str) -> str:
     return f"{index}. {name}"
 
 
+def research_group(phase: str) -> str:
+    phase = phase_name(phase)
+    if phase in {"rq1", "rq2", "rq3"}:
+        return phase
+    return "rq2" if phase.startswith("experiment_") and phase != "experiment_0" or phase in {"synthesis", "regression_readout"} else "general"
+
+
+def result_relative(phase: str) -> Path:
+    """RQ result paths; operational 0A/token stores retain their frozen identities."""
+    phase = phase_name(phase)
+    if research_group(phase) == "general":
+        return Path(phase_folder(phase)) / "results"
+    return Path(research_group(phase)) / phase_folder(phase) / "results"
+
+
 def notebook_phase(notebook: str) -> str:
+    if notebook in {"rq1_behavior", "rq2_prediction", "rq3_adaptation"}:
+        return notebook.split("_")[0]
     parts = notebook.split("/")
     if any(not p or p in {".", ".."} or "\\" in p or ":" in p for p in parts) or len(parts) > 2:
         raise ValueError("Notebook must be a name or phase/name, without path traversal.")
@@ -240,7 +259,7 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected in {"exploration", "feature_creation"}:
         return notebook_cache_dir(selected, "results", *parts)
-    return large_outputs_dir().joinpath(phase_folder(selected), "results", *parts)
+    return large_outputs_dir().joinpath(result_relative(selected), *parts)
 
 
 def tar_results_dir(*parts: str) -> Path:
@@ -249,7 +268,7 @@ def tar_results_dir(*parts: str) -> Path:
         root = durable_project_override()
         if root is None or not root.as_posix().startswith("/gpfs") or "/project/" not in root.as_posix():
             raise ValueError("TAR requires an allocated native GPFS PROJECT root")
-        return _under(root, OUTPUT_DIR_NAME, phase_folder("experiment_3"), "results", *parts)
+        return _under(root, OUTPUT_DIR_NAME, str(result_relative("experiment_3")), *parts)
     return results_dir(*parts, phase="experiment_3")
 
 
@@ -282,9 +301,9 @@ def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
     root = notebook_outputs_dir() / "figures"
     if notebook is not None:
         inferred_phase = notebook_phase(notebook)  # Also validate a plain notebook name.
-        root = root / phase_folder(phase or inferred_phase)
+        root = root / research_group(phase or inferred_phase)
     elif phase is not None:
-        root = root / phase_folder(phase)
+        root = root / research_group(phase)
     return root / notebook_stem(notebook) if notebook else root
 
 
@@ -295,9 +314,9 @@ def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", 
     root = notebook_outputs_dir()
     folder = root / kind / "notebooks"
     if notebook is not None:
-        folder = folder / phase_folder(phase or notebook_phase(notebook)) / notebook_stem(notebook)
+        folder = folder / research_group(phase or notebook_phase(notebook)) / notebook_stem(notebook)
     elif phase is not None:
-        folder /= phase_folder(phase)
+        folder /= research_group(phase)
     for entry in (folder, *folder.parents):
         if entry.is_symlink() or getattr(entry, "is_junction", lambda: False)():
             raise ValueError(f"Linked notebook output is not allowed: {entry}")
@@ -456,6 +475,8 @@ def config_path(name: str) -> Path:
         "extractors": "feature_creation",
         "feature_comparison": "feature_creation",
     }
+    if stem == "regression_readout/readout":
+        stem = "rq2/readout"
     if stem in prerequisites:
         stem = f"{phase_folder(prerequisites[stem])}/{stem}"
     elif "/" in stem and stem.split("/")[0] in PHASES or re.match(r"experiment_[0-9]+/", stem):

@@ -18,7 +18,33 @@ pending statuses without changing the original evidence.
 | Frozen embeddings | All 54 encoder/dataset jobs completed and published; all 54 frozen-PCA jobs completed 0:0. | Verify all training-fold cache keys in full 0B |
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
 | Benchmark | RQ1/RQ2/RQ3 layout; four core RQ2 comparisons and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
-| New roster | Mammoth-1 and Drex Max approved and pinned; planned total fifteen | Native adapters, sealed runtimes and real 0A; do not attribute hosted Drex v1.1 scores to open v1 |
+| New roster | Fifteen selected; Mammoth-1 and Drex Max native adapters implemented and weights downloaded/hash-verified | Isolated builds 11807372/11807373 running; exact audits, B200 contracts, pilot and acceptance still required |
+
+### Native additions and RQ layout on 16 November
+
+- Production DATA checkout remains `6b4f2e51ef8b8bf28e5db2bac8b73d43adffc239`;
+  Liquid LFM3 jobs 11807002–11807019 were still queued at the latest check.
+  No production source, runtime seals or acceptance receipts were changed.
+- Download jobs Mammoth `11807280` (4m10s) and Drex `11807281` (2m58s) completed 0:0.
+  Their pinned files were hashed: 54,733,776,950 and 52,193,569,616 bytes respectively.
+  Canonical PROJECT checkpoint folders contain download receipts, not 0A acceptance.
+- Qualification uses DATA `manifests/native_additions_20261116/source/JEVPFN` under
+  experiment_0 and PROJECT `qualification/native_20261116/JEVPFN`. This temporary,
+  recorded exception lets new providers qualify without changing active consumers.
+  Immutable weights/control image are verified hardlinks; generated databases and model
+  containers are isolated. Build caches remain on native scratch. Retire the qualification
+  copy only after canonical acceptance and consumer checks; preserve its provenance.
+- CPU qualification/build jobs `11807372` and `11807373` were running. Dependent
+  two-node storage `11807384`; Mammoth prepare/shards/merge/contracts/pilot
+  `11807385`–`11807389`; Drex `11807390`–`11807394` were submitted. Shards are ten-task
+  CPU arrays. B200 jobs depend on successful builds, exact counts and storage checks;
+  pilots depend on contracts. These are qualification jobs, not full feature creation.
+  Initial download
+  attempts `11807211`/`11807212` failed before download due to a generated-script quoting
+  error; corrected attempts above passed. Historical failure logs are preserved.
+- Scientific source now routes regression readout to RQ2 and Strands adaptation to RQ3.
+  One notebook per RQ; all nine notebooks ran. Local checks: 1,427 passed, 26 skipped.
+  RQ1 controlled-query execution and RQ3 training still need their dedicated runners.
 
 ### Recovery and research organization on 16 November
 
@@ -116,8 +142,8 @@ pending statuses without changing the original evidence.
   the original campaign. The handover log is `logs/decision3_resume_20261112.log`
   under feature creation. Local recovery suite passed 204 tests with one Linux-only skip.
 - Nimble release `11791678` completed. Native QA `11791981` passed 190 tests
-  and the real GPFS publication and readback check. Source `d237af6eâ€¦` rebinds
-  campaign `2c6439a7â€¦`. The controller submitted Decision3 release `11791982`.
+  and the real GPFS publication and readback check. Source `d237af6e…` rebinds
+  campaign `2c6439a7…`. The controller submitted Decision3 release `11791982`.
 - Decision3 export `11791980` completed with 36 verified feature blocks on all
   18 datasets. The local import verified the 342,810,544-byte archive's SHA-256
   and retained the seven installed providers, yielding 288 blocks. Its receipt
@@ -149,10 +175,10 @@ pending statuses without changing the original evidence.
 
 ### Frozen PCA pilot and rollout on 12 November
 
-- Mindwell CPU job `11792883` completed in 2m21s at source `d237af6eâ€¦`. Readback
+- Mindwell CPU job `11792883` completed in 2m21s at source `d237af6e…`. Readback
   verified SQLite integrity, payload hashes and finite numeric parameters for 20 joint
-  PCA64 records and 60 separate PCA32 records (three text columns Ã— 20 training folds).
-- Mindwell arrays `11792898` and `11792899` cover the remaining 42 and 11 datasetâ€“encoder
+  PCA64 records and 60 separate PCA32 records (three text columns × 20 training folds).
+- Mindwell arrays `11792898` and `11792899` cover the remaining 42 and 11 dataset–encoder
   pairs, with three concurrent tasks per array. The audited submission receipts are in
   `5. experiment_2/manifests/pca_pilot_11792883/` under DATA output. Full 0B still rechecks
   training-row, artifact and parameter identities against the reviewed features.
@@ -198,7 +224,7 @@ GitHub `7e79f05` holds the restored code, which passed 1,313 tests with 26 skips
 ### VSC observation on 10 November
 
 At 10:35 CET, dispatcher PIDs 3837469/3838367 (login-3, started 9 November 10:51) were
-running source `82e19c09â€¦`. The DATA checkout is `f89688a` plus the reviewed uncommitted
+running source `82e19c09…`. The DATA checkout is `f89688a` plus the reviewed uncommitted
 patches. The campaign had 226 of 274 steps completed, with 3 submitted, 41 pending and
 4 failed. Complete decision models: Liquid, Strands, Perplexity, Cloudflare, Intern, H2O
 and SII. All 54 encoder jobs are complete. Kev release `11784791` was running, and
@@ -240,7 +266,7 @@ Cutover preparation (owner-authorized, 10 November):
   2 submitted, 41 pending, 4 failed). Receipt: `reviews/controller_stop_20261110.json`.
   Running jobs `11781957` and `11784836` were left untouched.
 - **QA ran in an isolated DATA checkout:** `f89688a`, plus the live uncommitted patches
-  reproduced byte-for-byte, plus patch `838d3e1fbb18â€¦`.
+  reproduced byte-for-byte, plus patch `838d3e1fbb18…`.
   - Recovery QA `11784949` passed 184 tests.
   - Real GPFS fallback QA `11784950` passed. The union ran in
     `publication-temporary/11784950` and the directory was removed; the leftover of
@@ -248,14 +274,14 @@ Cutover preparation (owner-authorized, 10 November):
   - Attempt `11784944` failed only because a test assumed directory order; it is
     retained as history.
   - The QA logs were copied to DATA logs and the QA checkout was removed.
-- **Next source:** `80491e04â€¦`, changing only `src/cluster/scratch_stage.py` and two test files.
+- **Next source:** `80491e04…`, changing only `src/cluster/scratch_stage.py` and two test files.
 - **Cutover tool:** `controller_tools/publication_fallback_cutover_838d3e1fbb18.py`. A
   rehearsal refused at `require_idle_vsc` and left the source and freeze unchanged.
 - **Detached waiter:** `publication_fallback_waiter_838d3e1fbb18.sh`, PID 3976274 on
   login-3, bounded to 30 h. Once both jobs are terminal and no JEVPFN job is queued, it
-  runs the launcher: cutover, source review, then `feature_admission --recover-from 48373214â€¦`.
+  runs the launcher: cutover, source review, then `feature_admission --recover-from 48373214…`.
   Log: `logs/publication_fallback_recovery_838d3e1fbb18.log`.
-- Before it fired, the waiter's patch was replaced by `fa21fa4d4d61â€¦`, which also skips
+- Before it fired, the waiter's patch was replaced by `fa21fa4d4d61…`, which also skips
   unchanged republication. QA `11785143` (186 passed) and `11785144` (50 passed, real GPFS
   fallback, scratch left clean) passed on it.
 
@@ -263,8 +289,8 @@ Cutover preparation (owner-authorized, 10 November):
 
 - **Cutover.** The waiter fired after Mercari `11781957` completed (14:51, 10 November) and
   Kev release `11784836` completed (17:35, published all 18 Kev stores).
-  - Recovered campaign `387b9b2aâ€¦` now runs source `2ed9574câ€¦`, with live `scratch_stage.py`
-    hash `51cc24caâ€¦`.
+  - Recovered campaign `387b9b2a…` now runs source `2ed9574c…`, with live `scratch_stage.py`
+    hash `51cc24ca…`.
   - Decision3 retries `11785955` and `11785956` completed. Nimble staging `11786046`
     completed and 18 Nimble jobs were queued or running.
   - 231 of 274 steps are complete.
@@ -352,7 +378,7 @@ was part of this documentation pass. Receipt:
 Durable output and terminal accounting confirmed all 18 datasets for
 Liquid d1-3B, Strands, Clef-Flash, H2O and Perplexity, and all 54 frozen embedding
 jobs. The remaining 108 decision dataset jobs and 13 prerequisites were submitted
-on Mindwell as IDs 11774808â€“11774928, with dependency admission and the existing
+on Mindwell as IDs 11774808–11774928, with dependency admission and the existing
 workspace limits. At that observation, H2O release 11774770 gated the next batch. Submission
 evidence is in the DATA review receipt `dependency_admission_verified_20261106.json`.
 The frozen VSC source at that observation was `f89688a`; the recovery above supersedes it.
@@ -391,7 +417,7 @@ execution, spending and terminal status; these offline checks do not prove live 
 The owner explicitly requested deployment/resubmission.
 Stopped the verified login-4 controller (Python PID 1239677, wrapper 1239565) under
 the campaign lock and verified its controller lease was released. Withdrew only
-PENDING H2O IDs 11772705â€“11772722; Slurm reports cancellation with zero runtime.
+PENDING H2O IDs 11772705–11772722; Slurm reports cancellation with zero runtime.
 At that handover, Clef publication 11772829 was running and its checkout was untouched.
 Recovery revision `f89688a` passed 1,265 local tests (26 environment/asset skips),
 lint and Bash syntax. Native GPFS QA `11772948` passed 169 tests and isolated
@@ -472,7 +498,7 @@ Current execution and budget boundaries are maintained in [AGENTS](../AGENTS.md#
 The dated migration, cleanup and recovery records below document completed actions;
 they do not authorize new submissions, spending or deletion.
 
-## GPFS PROJECT migration and resume (3â€“4 November)
+## GPFS PROJECT migration and resume (3–4 November)
 
 The owner-approved cutover stops admissions before changing roots. Controller
 806752/start ticks 121562803 on tier2-p-login-3 was verified and stopped under the
@@ -611,7 +637,7 @@ process are recorded in feature-creation output. Do not pull new main into VSC c
 No model pin, question, numerical feature implementation, dataset scope or Jev gate changes.
 
 Last confirmed progress before handover: Liquid 8/18 datasets, Strands 4/18; 24 feature
-blocks. Recovered jobs 11763392â€“11763395 completed and published successfully. Three
+blocks. Recovered jobs 11763392–11763395 completed and published successfully. Three
 known outstanding IDs are 11763745, 11763763 and 11763671. Their current state is unknown
 while Slurm accounting/cluster queries fail with `Address family '0' not supported`.
 The old controller retained IDs through that outage. After queries recovered, a Strands
@@ -694,7 +720,7 @@ Production freeze: Git `954c93fdb29290e85cb98bf3a374674d466e5ef8`, source
 `9b216097e5780189b8e3e547b52a69ee6dc9f27661df7ac686f92b3eccc3332d`. Handover CPU job
 62478168 completed 0:0. Campaign record on DATA:
 `output_JEVPFN/2. feature_creation/manifests/open_weight_campaign.json` (223 steps:
-198 decision Ã— dataset B200 jobs, 3 encoder jobs, stage/release pairs; 396 decision
+198 decision × dataset B200 jobs, 3 encoder jobs, stage/release pairs; 396 decision
 blocks and 54 embedding stores expected). Controller PID 538048 on a login node, receipt
 `2. feature_creation/manifests/controller_process.json`.
 
@@ -730,7 +756,7 @@ Direct read-only inspection, 17:20 UTC:
 
 ## Gates passed
 
-Historical acceptance evidence, primarily 29â€“30 October. Later relocation/recovery gates
+Historical acceptance evidence, primarily 29–30 October. Later relocation/recovery gates
 are recorded above; these passes do not qualify a changed benchmark runtime automatically.
 
 | Evidence | Result and scope |
@@ -741,7 +767,7 @@ are recorded above; these passes do not qualify a changed benchmark runtime auto
 | Native GPFS 11753505 | Passed; cross-node exclusion/reacquisition, release and snapshot restore. |
 | Basic B200 migration 11753506 | Passed CUDA 13.0, native sm_100 and BF16; not decision inference. |
 | Corrected controller integration 62471351 | Passed, 4m04s; four launch checks, two-node storage, eighteen datasets, 1,139 CPU contracts. |
-| Frozen VSC 0A | 192/192 steps, all 0:0, on `73807ee`: CPU/data/question checks, exact token audits (eleven providers Ã— eighteen datasets, zero overflow), eleven decision contracts/pilots, three encoder contracts. |
+| Frozen VSC 0A | 192/192 steps, all 0:0, on `73807ee`: CPU/data/question checks, exact token audits (eleven providers × eighteen datasets, zero overflow), eleven decision contracts/pilots, three encoder contracts. |
 | 0A operational review | CPU review/export 62477605 passed eleven evidence gates and backup; approval 62477630 signed eleven provider and three encoder acceptances. |
 | Jev 1.14 local 0A | All eight steps on `d24b79c`; 1,163 tests (25 skips), 31 live diagnostics, 288 dataset-pilot calls. Bounded review accepted. |
 | Jev 1.14 first-100-row pilot | Eighteen datasets, 7,643 requests, 36 numeric blocks, every cell rechecked against its raw response. Validation only. |
@@ -769,7 +795,7 @@ providers. Job IDs, report checksums and the removed monitor `jevpfn-0a-progress
   The twelve signed acceptances have a local ZIP copy, SHA-256
   `c4c073773ef942cdbe8187a414616082ab19755409c7597b8e5ad06a194fa1e4`.
 - Review retained instruction/option sensitivity and warm median request latencies of
-  0.026â€“0.298 s; batch sizes and pins stay fixed. Bounded observations are not population
+  0.026–0.298 s; batch sizes and pins stay fixed. Bounded observations are not population
   robustness or a full-run guarantee.
 - The backup first imported the VSC freeze as active local control. The receipt was kept
   under `manifests/imported_revisions/`; imports now always route foreign freezes there
@@ -804,7 +830,7 @@ spend and reservations must be read from the hosted receipt and dataset ledgers.
 
 ## Storage
 
-Historical reset, controller and retention evidence from 29â€“30 October. The later
+Historical reset, controller and retention evidence from 29–30 October. The later
 [GPFS migration](#gpfs-project-migration-and-resume-34-november) supersedes the old
 allocation paths and usage; none of these totals is a current quota check.
 
@@ -829,7 +855,7 @@ allocation paths and usage; none of these totals is a current quota check.
 - The final authorized reset removed local output and 84.2 GB of VSC output before 0A.
   Independent compact backup `PROJECT/uploads/local_0A_eb20d0e6.zip`, SHA-256
   `ab0e4140ebee5d3d7485f7bf5cd3155f530e4726078d2a2c73abcfae61aa651a`.
-- Local raw-data incident, 30 October 10:10â€“10:11 CET: all sixty raw CSV/metadata/marker
+- Local raw-data incident, 30 October 10:10–10:11 CET: all sixty raw CSV/metadata/marker
   files were recycled; the owner did not delete them and no responsible process was found.
   Do not attribute it to another agent or claim a compromise. All sixty were restored from
   the Recycle Bin and hash-checked (`storage_cleanup/local_raw_restore_20261030T094200Z.json`).

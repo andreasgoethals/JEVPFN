@@ -1,0 +1,785 @@
+diff --git a/qev/engine.py b/qev/engine.py
+index 2e4c7b0..cb79e4f 100644
+--- a/qev/engine.py
++++ b/qev/engine.py
+@@ -10,6 +10,7 @@ tolerance of 0.05 and only guards against structural failures (an unknown cache
+ """
+ from __future__ import annotations
+ 
++import contextlib
+ import copy
+ import hashlib
+ import logging
+@@ -19,6 +20,7 @@ from pathlib import Path
+ from typing import Any
+ 
+ from .answers import make_choice, make_noul, make_score
++from . import readout as ro
+ from .calibrate import Calibration, softmax
+ from .prompt import (DEFAULT_STYLE, LETTERS, MAX_SLOTS, PROMPT_VERSION, SLOT_LABELS, PromptStyle, RenderedQuestion,
+                      build_messages, render_question)
+@@ -102,11 +104,20 @@ class DecisionEngine:
+         self.model_type = config.model_type
+         self.template_kwargs = {"enable_thinking": False} if "qwen" in self.model_type else {}
+         self.slot_ids = self._verify_slots()
++        rcfg = ro.ReadoutConfig.load(model_path) if local else ro.ReadoutConfig()
++        self.readout = ro.Readout.attach(self.model, rcfg, slot_ids=self.slot_ids,
++                                         head_path=Path(model_path) / ro.HEAD_FILE if rcfg.head else None,
++                                         device=self.device)
++        if rcfg.head:
++            self.max_slots = min(self.max_slots, rcfg.n_slots)
++        if calibration is None and local and (Path(model_path) / "calibration.json").exists():
++            self.calibration = Calibration.load(Path(model_path) / "calibration.json")
+         self.pad_id = self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+         self.info = EngineInfo(model_path=model_path, model_type=self.model_type, dtype=dtype, device=str(self.device),
+                                fork_mode="sequential", fork_max_abs_diff=None,
+                                transformers_version=transformers.__version__, torch_version=torch.__version__,
+-                               extra={"head_dtype": head_dtype})
++                               extra={"head_dtype": head_dtype, "attention": rcfg.attention, "readout": rcfg.readout,
++                                      "calibration": self.calibration.source})
+         if fork_mode == "auto":
+             self._select_fork_mode()
+         else:
+@@ -190,6 +201,44 @@ class DecisionEngine:
+         with torch.no_grad():
+             torch.cuda.empty_cache() if self.device.type == "cuda" else None
+ 
++    def _split(self, state: Any, rendered: list[RenderedQuestion]):
++        """Prefix ids, suffix ids, and per branch the option token spans relative to its suffix (None for slot_lm).
++        The layout is the one train.common.batch_scores computes, so serving matches training: under noncausal
++        attention the cache boundary must be the prefix block boundary."""
++        prefix_ids, suffixes = self._prefix_and_suffix_ids(state, rendered)
++        cfg = self.readout.config
++        if not cfg.needs_layout:
++            return prefix_ids, suffixes, [None] * len(rendered)
++        P = len(prefix_ids)
++        spans = []
++        for r, suf in zip(rendered, suffixes):
++            prompt = self._render_prompt(state, r.suffix)
++            start = prompt.rindex(r.suffix)
++            ids, prefix, sp = ro.token_layout(self.tokenizer, prompt, start,
++                                              [(start + a, start + b) for a, b in r.option_spans or []])
++            if ids != prefix_ids + suf:
++                raise ValueError("layout tokenization differs from the branch tokenization")
++            if cfg.noncausal and prefix != P:
++                raise ValueError(f"prefix block ends at token {prefix} but the shared cache at {P}")
++            if any(a < P for a, _ in sp):
++                raise ValueError("an option span starts inside the shared prefix")
++            spans.append([(a - P, b - P) for a, b in sp])
++        return prefix_ids, suffixes, spans
++
++    def _blocks(self, prefixes: list[int], lengths: list[int], width: int):
++        if not self.readout.config.noncausal:
++            return contextlib.nullcontext()
++        return ro.blocks(ro.block_ids(prefixes, lengths, width, self.device))
++
++    def _scores(self, o, hidden, row: int, logit_pos: int, end: int, n_slots: int, spans) -> tuple[list[float], float]:
++        """Scores of one branch from a forward's output: the slot letters' LM logits, or the readout head over the
++        captured final hidden states (`end` and `spans` index the suffix tokens of this row)."""
++        if self.readout.head is None:
++            return self._readout(o.logits[row, logit_pos], n_slots)
++        h = hidden[row: row + 1]
++        scores = self.readout.head(h[:, end], ro.pool_options(h, [spans], n_slots))[0]
++        return scores.tolist(), 1.0
++
+     def _prefix_and_suffix_ids(self, state: Any, rendered: list[RenderedQuestion]) -> tuple[list[int], list[list[int]]]:
+         """Tokenize every branch fully, then find the longest common token prefix that ends at or
+         before the end of the state block, so the shared prefix is exact by construction."""
+@@ -218,21 +267,25 @@ class DecisionEngine:
+     def _run_sequential(self, state: Any, rendered: list[RenderedQuestion]) -> list[BranchResult]:
+         import torch
+ 
+-        prefix_ids, suffixes = self._prefix_and_suffix_ids(state, rendered)
++        prefix_ids, suffixes, spans = self._split(state, rendered)
+         dev = self.device
++        P = len(prefix_ids)
+         with torch.inference_mode():
+-            out = self.model(input_ids=torch.tensor([prefix_ids], device=dev),
+-                             attention_mask=torch.ones((1, len(prefix_ids)), dtype=torch.long, device=dev),
+-                             use_cache=True, return_dict=True, logits_to_keep=1)
++            with self._blocks([P], [P], P):
++                out = self.model(input_ids=torch.tensor([prefix_ids], device=dev),
++                                 attention_mask=torch.ones((1, P), dtype=torch.long, device=dev),
++                                 use_cache=True, return_dict=True, logits_to_keep=1)
+             base = out.past_key_values
+             del out
+             results = []
+-            for r, suf in zip(rendered, suffixes):
++            for r, suf, sp in zip(rendered, suffixes, spans):
+                 cache = copy.deepcopy(base)
+-                o = self.model(input_ids=torch.tensor([suf], device=dev),
+-                               attention_mask=torch.ones((1, len(prefix_ids) + len(suf)), dtype=torch.long, device=dev),
+-                               past_key_values=cache, use_cache=True, return_dict=True, logits_to_keep=1)
+-                logits, mass = self._readout(o.logits[0, -1], r.n_slots)
++                with self._blocks([P], [P + len(suf)], P + len(suf)):
++                    o = self.model(input_ids=torch.tensor([suf], device=dev),
++                                   attention_mask=torch.ones((1, P + len(suf)), dtype=torch.long, device=dev),
++                                   past_key_values=cache, use_cache=True, return_dict=True, logits_to_keep=1)
++                hidden = self.readout.capture.pop() if self.readout.capture else None
++                logits, mass = self._scores(o, hidden, 0, -1, len(suf) - 1, r.n_slots, sp)
+                 results.append(BranchResult(r.qid, r.kind, r.labels, r.descriptions, logits, mass, len(suf)))
+                 del o, cache
+             del base
+@@ -266,22 +319,23 @@ class DecisionEngine:
+         caller falls back to sequential branches."""
+         import torch
+ 
+-        prefix_ids, suffixes = self._prefix_and_suffix_ids(state, rendered)
++        prefix_ids, suffixes, spans = self._split(state, rendered)
+         dev = self.device
+         P = len(prefix_ids)
+         chunk = max(1, min(len(rendered), self.fork_token_budget // max(P, 1)))
+         results: list[BranchResult | None] = [None] * len(rendered)
+         with torch.inference_mode():
+-            out = self.model(input_ids=torch.tensor([prefix_ids], device=dev),
+-                             attention_mask=torch.ones((1, P), dtype=torch.long, device=dev),
+-                             use_cache=True, return_dict=True, logits_to_keep=1)
++            with self._blocks([P], [P], P):
++                out = self.model(input_ids=torch.tensor([prefix_ids], device=dev),
++                                 attention_mask=torch.ones((1, P), dtype=torch.long, device=dev),
++                                 use_cache=True, return_dict=True, logits_to_keep=1)
+             base = out.past_key_values
+             del out
+             start = 0
+             while start < len(rendered):
+                 idx = list(range(start, min(start + chunk, len(rendered))))
+                 try:
+-                    self._run_chunk(base, P, idx, rendered, suffixes, results)
++                    self._run_chunk(base, P, idx, rendered, suffixes, results, spans)
+                 except torch.OutOfMemoryError:
+                     torch.cuda.empty_cache()
+                     if chunk == 1:
+@@ -294,7 +348,7 @@ class DecisionEngine:
+             del base
+         return results
+ 
+-    def _run_chunk(self, base, P: int, idx: list[int], rendered, suffixes, results) -> None:
++    def _run_chunk(self, base, P: int, idx: list[int], rendered, suffixes, results, spans=None) -> None:
+         import torch
+ 
+         dev = self.device
+@@ -311,13 +365,16 @@ class DecisionEngine:
+             ends.append(len(s) - 1)
+         keep = sorted(set(ends))
+         cache = self._fork(base, len(idx))
++        spans = spans or [None] * len(rendered)
+         try:
+-            o = self.model(input_ids=ids, attention_mask=mask, position_ids=pos, past_key_values=cache,
+-                           use_cache=True, return_dict=True,
+-                           logits_to_keep=torch.tensor(keep, dtype=torch.long, device=dev))
++            with self._blocks([P] * len(idx), [P + len(s) for s in sufs], P + width):
++                o = self.model(input_ids=ids, attention_mask=mask, position_ids=pos, past_key_values=cache,
++                               use_cache=True, return_dict=True,
++                               logits_to_keep=torch.tensor(keep, dtype=torch.long, device=dev))
++            hidden = self.readout.capture.pop() if self.readout.capture else None
+             for row, i in enumerate(idx):
+                 r = rendered[i]
+-                logits, mass = self._readout(o.logits[row, keep.index(ends[row])], r.n_slots)
++                logits, mass = self._scores(o, hidden, row, keep.index(ends[row]), ends[row], r.n_slots, spans[i])
+                 results[i] = BranchResult(r.qid, r.kind, r.labels, r.descriptions, logits, mass, len(sufs[row]))
+             del o
+         finally:
+diff --git a/qev/prompt.py b/qev/prompt.py
+index 8eaadd3..de49cca 100644
+--- a/qev/prompt.py
++++ b/qev/prompt.py
+@@ -74,13 +74,14 @@ class RenderedQuestion:
+     labels: list[str]
+     descriptions: list[Any]
+     suffix: str
++    option_spans: list[tuple[int, int]] | None = None
+     n_slots: int = field(init=False)
+ 
+     def __post_init__(self) -> None:
+         self.n_slots = len(self.labels)
+ 
+ 
+-def _options_block(names: Sequence[str], descriptions: Sequence[Any], show_names: bool = True) -> str:
++def _options_lines(names: Sequence[str], descriptions: Sequence[Any], show_names: bool = True) -> list[str]:
+     lines = []
+     for letter, name, desc in zip(SLOT_LABELS, names, descriptions):
+         text = render_entry(desc)
+@@ -90,7 +91,11 @@ def _options_block(names: Sequence[str], descriptions: Sequence[Any], show_names
+             lines.append(f"{letter}. {name}: {text}")
+         else:
+             lines.append(f"{letter}. {name}")
+-    return "\n".join(lines)
++    return lines
++
++
++def _options_block(names: Sequence[str], descriptions: Sequence[Any], show_names: bool = True) -> str:
++    return "\n".join(_options_lines(names, descriptions, show_names))
+ 
+ 
+ def render_question(qid: str, q: Question, order: Sequence[int] | None = None, style: PromptStyle = DEFAULT_STYLE) -> RenderedQuestion:
+@@ -127,6 +132,7 @@ def render_question(qid: str, q: Question, order: Sequence[int] | None = None, s
+         descs = [descs[i] for i in order]
+ 
+     letters = list(SLOT_LABELS[: len(labels)])
++    spans = None
+     if style.layout == "json":
+         payload = {"criterion": instructions,
+                    "options": [{"letter": l, "description": (f"{n}: {render_entry(d)}" if (style.show_names and n is not None and render_entry(d)) else (render_entry(d) or n))}
+@@ -134,12 +140,17 @@ def render_question(qid: str, q: Question, order: Sequence[int] | None = None, s
+         suffix = json.dumps(payload, ensure_ascii=False)[1:]
+     else:
+         header = style.question_header if kind != "score" else style.score_header
++        head = f"{header} {instructions}\n\nOptions:\n"
++        lines = _options_lines(names, descs, style.show_names)
++        spans, pos = [], len(head)
++        for line in lines:
++            spans.append((pos, pos + len(line)))
++            pos += len(line) + 1
+         suffix = (
+-            f"{header} {instructions}\n\n"
+-            f"Options:\n{_options_block(names, descs, style.show_names)}\n\n"
++            head + "\n".join(lines) + "\n\n"
+             + (style.answer_line if len(letters) <= len(LETTERS) else style.answer_line_many).format(letters=", ".join(letters))
+         )
+-    return RenderedQuestion(qid=qid, kind=kind, labels=labels, descriptions=descs, suffix=suffix)
++    return RenderedQuestion(qid=qid, kind=kind, labels=labels, descriptions=descs, suffix=suffix, option_spans=spans)
+ 
+ 
+ def state_block(state: Any, style: PromptStyle = DEFAULT_STYLE) -> str:
+diff --git a/qev/readout.py b/qev/readout.py
+new file mode 100644
+index 0000000..02707ca
+@@ -0,0 +1,269 @@
++"""Readout variants, shared by training (train.common / train.sft) and serving (qev.engine).
++
++attention:
++  causal     the base model's mask.
++  noncausal  in the full-attention layers every token attends bidirectionally within its block and causally to
++             earlier blocks. A rendered prompt has two blocks: the shared prefix (system turn and state block) and
++             the question suffix (question, options, answer line, generation prompt). The prefix never sees a
++             suffix, so its cache is still shared exactly by all questions of a request, and one forward of a
++             suffix scores all of its options. The GatedDeltaNet (linear-attention) layers are recurrent and stay
++             causal.
++
++readout:
++  slot_lm    softmax over the LM-head logits of the slot letters at the answer position.
++  head       a learned head over the final (normed) hidden states:
++                 score_i = <w_i, h_ans> + <W_q h_ans, W_k mean(h over option i's line)> / sqrt(d)
++             w has one row per slot and starts as the LM-head rows of the slot letters, W_k starts at zero, so the
++             untrained head reproduces slot_lm exactly; the pointer term scores each option by its content.
++
++Both settings are recorded next to the weights, so a checkpoint is always served the way it was trained. The
++attention mask is declared per layer type under `modeling_overrides` in `config.json`, where serving stacks
++read it; `readout.json` holds the rest. Checkpoints without the overrides block carry `attention` in `readout.json`.
++"""
++from __future__ import annotations
++
++import bisect
++import contextlib
++import contextvars
++import importlib
++import json
++import math
++from dataclasses import asdict, dataclass
++from pathlib import Path
++from typing import Sequence
++
++import torch
++
++from .prompt import MAX_SLOTS
++
++CONFIG_FILE = "readout.json"
++MODEL_CONFIG_FILE = "config.json"
++OVERRIDES_KEY = "modeling_overrides"
++FULL_ATTENTION_MASK = {"causal": "causal", "noncausal": "block_bidirectional"}
++HEAD_FILE = "readout_head.pt"
++ATTENTION = ("causal", "noncausal")
++READOUT = ("slot_lm", "head")
++
++
++@dataclass
++class ReadoutConfig:
++    attention: str = "causal"
++    readout: str = "slot_lm"
++    head_dim: int = 256
++    n_slots: int = MAX_SLOTS
++
++    def __post_init__(self) -> None:
++        if self.attention not in ATTENTION:
++            raise ValueError(f"attention must be one of {ATTENTION}, got {self.attention!r}")
++        if self.readout not in READOUT:
++            raise ValueError(f"readout must be one of {READOUT}, got {self.readout!r}")
++
++    @property
++    def noncausal(self) -> bool:
++        return self.attention == "noncausal"
++
++    @property
++    def head(self) -> bool:
++        return self.readout == "head"
++
++    @property
++    def needs_layout(self) -> bool:
++        return self.noncausal or self.head
++
++    @classmethod
++    def load(cls, model_dir: str | Path) -> "ReadoutConfig":
++        path, model_path = Path(model_dir) / CONFIG_FILE, Path(model_dir) / MODEL_CONFIG_FILE
++        fields = json.loads(path.read_text()) if path.exists() else {}
++        overrides = json.loads(model_path.read_text()).get(OVERRIDES_KEY) if model_path.exists() else None
++        if overrides:
++            mask = overrides["attention"]["full_attention"]
++            attention = {v: k for k, v in FULL_ATTENTION_MASK.items()}.get(mask)
++            if attention is None:
++                raise ValueError(f"unsupported full_attention mask {mask!r} in {model_path}")
++            if fields.get("attention", attention) != attention:
++                raise ValueError(f"{path} says attention {fields['attention']!r} but {model_path} says {mask!r}")
++            fields["attention"] = attention
++        return cls(**fields)
++
++    def save(self, model_dir: str | Path) -> None:
++        fields = asdict(self)
++        model_path = Path(model_dir) / MODEL_CONFIG_FILE
++        if model_path.exists():  # LoRA adapters have no config.json; their readout.json keeps the attention
++            attention = fields.pop("attention")
++            config = json.loads(model_path.read_text())
++            config[OVERRIDES_KEY] = {"attention": {"full_attention": FULL_ATTENTION_MASK[attention],
++                                                   "linear_attention": "causal"}, **fields}
++            model_path.unlink()  # may be a symlink to the source checkpoint (model_v5/mkvariant.py)
++            model_path.write_text(json.dumps(config, indent=2) + "\n")
++        (Path(model_dir) / CONFIG_FILE).write_text(json.dumps(fields, indent=2))
++
++
++_BLOCKS: contextvars.ContextVar = contextvars.ContextVar("qev_readout_blocks", default=None)
++
++
++def install_noncausal(model) -> None:
++    """Route block ids (set with `blocks`) into the full-attention mask of the model's modeling module. Outside a
++    `blocks` context the model is unchanged. Needs a mask-based attention implementation (sdpa, eager, flex)."""
++    impl = getattr(model.config.get_text_config(), "_attn_implementation", None) or model.config._attn_implementation
++    if impl not in ("sdpa", "eager", "flex_attention"):
++        raise ValueError(f"noncausal attention needs sdpa, eager or flex_attention, not {impl}")
++    mod = importlib.import_module(type(model).__module__)
++    if getattr(mod, "_qev_noncausal", False):
++        return
++    if not hasattr(mod, "create_causal_mask"):
++        raise ValueError(f"{mod.__name__} builds no causal mask to extend")
++    original = mod.create_causal_mask
++
++    def create_causal_mask(*args, **kwargs):
++        ids = _BLOCKS.get()
++        if ids is not None and kwargs.get("block_sequence_ids") is None:
++            kwargs["block_sequence_ids"] = ids
++        return original(*args, **kwargs)
++
++    mod.create_causal_mask = create_causal_mask
++    mod._qev_noncausal = True
++
++
++@contextlib.contextmanager
++def blocks(ids):
++    """Block ids [B, kv_length] over absolute positions (cached prefix included); None leaves the mask causal."""
++    token = _BLOCKS.set(ids)
++    try:
++        yield
++    finally:
++        _BLOCKS.reset(token)
++
++
++def block_ids(prefix_lens: Sequence[int], lengths: Sequence[int], width: int, device) -> torch.Tensor:
++    """0 on the prefix, 1 on the suffix, -1 on right padding (causal, and masked as a key anyway)."""
++    pos = torch.arange(width, device=device)[None]
++    p = torch.tensor(list(prefix_lens), device=device)[:, None]
++    n = torch.tensor(list(lengths), device=device)[:, None]
++    return torch.where(pos < p, 0, torch.where(pos < n, 1, -1))
++
++
++def token_layout(tokenizer, prompt: str, suffix_start: int, option_spans: Sequence[tuple[int, int]] | None):
++    """Token ids of `prompt`, the prefix length (tokens that end at or before the suffix) and each option line's
++    token span [start, end), from the tokenizer's character offsets. Option spans are characters of the prompt."""
++    enc = tokenizer(prompt, add_special_tokens=False, return_offsets_mapping=True)
++    ids, offs = enc["input_ids"], enc["offset_mapping"]
++    ends = [e for _, e in offs]
++    starts = [s for s, _ in offs]
++    prefix = bisect.bisect_right(ends, suffix_start)
++    spans = []
++    for cs, ce in option_spans or []:
++        a = bisect.bisect_right(ends, cs)
++        b = bisect.bisect_left(starts, ce)
++        if b <= a:
++            raise ValueError(f"option span {cs}:{ce} covers no token")
++        spans.append((a, b))
++    return ids, prefix, spans
++
++
++class ReadoutHead(torch.nn.Module):
++    def __init__(self, hidden: int, n_slots: int = MAX_SLOTS, head_dim: int = 256):
++        super().__init__()
++        self.slot = torch.nn.Parameter(torch.zeros(n_slots, hidden))
++        self.q = torch.nn.Linear(hidden, head_dim, bias=False)
++        self.k = torch.nn.Linear(hidden, head_dim, bias=False)
++        torch.nn.init.normal_(self.q.weight, std=hidden ** -0.5)
++        torch.nn.init.zeros_(self.k.weight)
++
++    @classmethod
++    def from_lm_head(cls, lm_head_weight, slot_ids: Sequence[int], head_dim: int) -> "ReadoutHead":
++        rows = lm_head_weight.detach()[list(slot_ids)].float()
++        head = cls(rows.shape[1], rows.shape[0], head_dim)
++        with torch.no_grad():
++            head.slot.copy_(rows.to(head.slot.device))
++        return head
++
++    def forward(self, h_ans, h_opt):
++        """h_ans [B, H], h_opt [B, K, H] -> scores [B, K] (fp32)."""
++        h_ans, h_opt = h_ans.float(), h_opt.float()
++        k = h_opt.shape[1]
++        slot = h_ans @ self.slot[:k].T
++        ptr = torch.einsum("bd,bkd->bk", self.q(h_ans), self.k(h_opt)) / math.sqrt(self.q.out_features)
++        return slot + ptr
++
++
++def pool_options(hidden, spans: Sequence[Sequence[tuple[int, int]]], kmax: int):
++    """Mean of hidden [B, T, H] over each option's token span -> [B, kmax, H] fp32 (zeros past a row's options)."""
++    bsz, _, dim = hidden.shape
++    dev = hidden.device
++    rows, toks, segs = [], [], []
++    for b, sp in enumerate(spans):
++        for k, (s, e) in enumerate(sp):
++            n = e - s
++            rows.append(torch.full((n,), b, dtype=torch.long))
++            toks.append(torch.arange(s, e, dtype=torch.long))
++            segs.append(torch.full((n,), b * kmax + k, dtype=torch.long))
++    rows, toks, segs = (torch.cat(x).to(dev) for x in (rows, toks, segs))
++    flat = hidden[rows, toks].float()
++    total = torch.zeros(bsz * kmax, dim, dtype=torch.float32, device=dev).index_add(0, segs, flat)
++    count = torch.zeros(bsz * kmax, dtype=torch.float32, device=dev).index_add(
++        0, segs, torch.ones_like(segs, dtype=torch.float32))
++    return (total / count.clamp(min=1)[:, None]).view(bsz, kmax, dim)
++
++
++def final_norm(model):
++    """The final norm of a (possibly multimodal) Qwen-style decoder: its output is the readout hidden state."""
++    inner = getattr(model, "model", model)
++    inner = getattr(inner, "language_model", inner)
++    norm = getattr(inner, "norm", None)
++    if norm is None:
++        raise ValueError(f"cannot find the final norm of {type(model).__name__}")
++    return norm
++
++
++class HiddenCapture:
++    """Keeps the final-norm output of the latest forward (with its graph, so the head trains the backbone)."""
++
++    def __init__(self, model):
++        self.value = None
++        self.handle = final_norm(model).register_forward_hook(self._hook)
++
++    def _hook(self, module, args, output):
++        self.value = output
++
++    def pop(self):
++        out, self.value = self.value, None
++        if out is None:
++            raise RuntimeError("no hidden state captured; the forward did not reach the final norm")
++        return out
++
++
++@dataclass
++class Readout:
++    """A model's readout at runtime: its config, and for `head` the head module and the hidden-state hook."""
++
++    config: ReadoutConfig
++    head: ReadoutHead | None = None
++    capture: HiddenCapture | None = None
++
++    @classmethod
++    def attach(cls, model, config: ReadoutConfig, slot_ids: Sequence[int] | None = None,
++               head_path: str | Path | None = None, device=None) -> "Readout":
++        """Install the variant on `model`. A head is loaded from `head_path` when given, else initialised from the
++        model's LM-head rows of `slot_ids` (call before the model is sharded)."""
++        if config.noncausal:
++            install_noncausal(model)
++        if not config.head:
++            return cls(config)
++        if head_path is not None:
++            state = torch.load(head_path, map_location="cpu", weights_only=True)
++            head = ReadoutHead(state["slot"].shape[1], state["slot"].shape[0], state["q.weight"].shape[0])
++            head.load_state_dict(state)
++        else:
++            head = ReadoutHead.from_lm_head(model.get_output_embeddings().weight, slot_ids[: config.n_slots],
++                                            config.head_dim)
++        head = head.to(device or next(model.parameters()).device)
++        return cls(config, head, HiddenCapture(model))
++
++    def save(self, out_dir: str | Path) -> None:
++        self.config.save(out_dir)
++        if self.head is not None:
++            torch.save({k: v.detach().cpu() for k, v in self.head.state_dict().items()}, Path(out_dir) / HEAD_FILE)
++
++    @property
++    def max_slots(self) -> int:
++        return self.config.n_slots
+diff --git a/train/common.py b/train/common.py
+index 331206f..896e6d3 100644
+--- a/train/common.py
++++ b/train/common.py
+@@ -85,6 +85,8 @@ class Example:
+     target: list[float]
+     source: str
+     task: str
++    suffix_start: int = -1
++    option_spans: list[tuple[int, int]] | None = None
+ 
+ 
+ PAD_FAMILIES = ("next_action",)
+@@ -185,6 +187,8 @@ def render_example(row: dict, tmpl, idx: int, seed: int | None = None, augment:
+         compact = augment and rng.random() < 0.5
+     state = serialize_state(row.get("state"), compact)
+     prompt = tmpl(state, rendered.suffix)
++    suffix_start = prompt.rindex(rendered.suffix)
++    spans = [(suffix_start + a, suffix_start + b) for a, b in rendered.option_spans or []]
+     return Example(
+         idx=idx,
+         prompt=prompt,
+@@ -193,6 +197,8 @@ def render_example(row: dict, tmpl, idx: int, seed: int | None = None, augment:
+         target=target_vector(row["target"], rendered.labels),
+         source=str(row.get("source", "unknown")),
+         task=str(row.get("task", "unknown")),
++        suffix_start=suffix_start,
++        option_spans=spans or None,
+     )
+ 
+ 
+@@ -244,6 +250,7 @@ class Bundle:
+     template_kwargs: dict
+     processor: Any = None
+     counter: Any = None
++    readout: Any = None
+ 
+     @property
+     def multimodal(self) -> bool:
+@@ -403,6 +410,65 @@ def readout_logits(model, input_ids, attention_mask, ends):
+     return out.logits[rows, pos]
+ 
+ 
++def batch_scores(bundle: Bundle, model, examples: Sequence[Example], rows: Sequence[dict], device):
++    """Option scores [B, Kmax] (-inf past each row's options) and their mask for a right-padded batch, under the
++    bundle's readout (qev.readout): causal or noncausal attention, slot_lm or head scoring. The same function scores
++    training steps, in-training evals and train.eval_mm, and qev.engine reproduces it for serving."""
++    import torch
++
++    from qev import readout as ro
++
++    rd = bundle.readout
++    cfg = rd.config if rd is not None else ro.ReadoutConfig()
++    ks = [len(ex.labels) for ex in examples]
++    if bundle.multimodal:
++        from train import mm
++
++        inputs, ends = mm.mm_inputs(bundle.processor, [ex.prompt for ex in examples],
++                                    [r.get("media") or [] for r in rows], device)
++        shifts = [bundle.counter.media_extra(r.get("media") or []) for r in rows]
++    else:
++        input_ids, attention_mask, ends = pad_batch([bundle.encode(ex.prompt) for ex in examples], bundle.tokenizer.pad_token_id, device)
++        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
++        shifts = [0] * len(examples)
++    ctx = ro.blocks(None)
++    spans = None
++    if cfg.needs_layout:
++        prefixes, spans = [], []
++        for ex, shift, end in zip(examples, shifts, ends):
++            ids, prefix, sp = ro.token_layout(bundle.tokenizer, ex.prompt, ex.suffix_start, ex.option_spans)
++            if len(ids) + shift != end + 1:
++                raise ValueError(f"layout of row {ex.idx} has {len(ids) + shift} tokens, the batch has {end + 1}")
++            if cfg.head and len(sp) != len(ex.labels):
++                raise ValueError(f"row {ex.idx}: {len(sp)} option spans for {len(ex.labels)} options")
++            prefixes.append(prefix + shift)
++            spans.append([(a + shift, b + shift) for a, b in sp])
++        if cfg.noncausal:
++            width = inputs["input_ids"].shape[1]
++            ctx = ro.blocks(ro.block_ids(prefixes, [e + 1 for e in ends], width, device))
++    with ctx:
++        if cfg.head:
++            out = model(**inputs, use_cache=False, return_dict=True, logits_to_keep=1)
++            hidden = rd.capture.pop()
++            kmax = max(ks)
++            rows_ix = torch.arange(len(examples), device=hidden.device)
++            h_ans = hidden[rows_ix, torch.tensor(ends, device=hidden.device)]
++            scores = rd.head(h_ans, ro.pool_options(hidden, spans, kmax))
++            # every FSDP unit (the LM head too) must take part in the backward
++            scores = scores + 0.0 * out.logits.float().sum()
++            mask = torch.zeros((len(ks), kmax), dtype=torch.bool, device=scores.device)
++            for i, k in enumerate(ks):
++                mask[i, :k] = True
++            return scores.masked_fill(~mask, float("-inf")), mask
++        if bundle.multimodal:
++            from train import mm
++
++            vocab_logits = mm.mm_readout_logits(model, inputs, ends)
++        else:
++            vocab_logits = readout_logits(model, inputs["input_ids"], inputs["attention_mask"], ends)
++    return slot_view(vocab_logits, bundle.slot_ids, ks)
++
++
+ def slot_view(vocab_logits, slot_ids, ks):
+     """Gather the first K slot logits per row into a padded [B, Kmax] tensor plus a mask."""
+     import torch
+@@ -557,11 +623,7 @@ def collect_slot_logits(bundle: Bundle, rows: Sequence[dict], max_len: int = 409
+             readout_logits(bundle.model, ids, torch.ones_like(ids), [0])
+         for bi, batch in enumerate(batches):
+             exs = [examples[i] for i in batch]
+-            id_lists = [bundle.encode(ex.prompt) for ex in exs]
+-            input_ids, attention_mask, ends = pad_batch(id_lists, pad_id, dev)
+-            ks = [len(ex.labels) for ex in exs]
+-            vocab_logits = readout_logits(bundle.model, input_ids, attention_mask, ends)
+-            sel, _ = slot_view(vocab_logits, bundle.slot_ids, ks)
++            sel, _ = batch_scores(bundle, bundle.model, exs, [rows[ex.idx] for ex in exs], dev)
+             sel = sel.float().cpu().tolist()
+             for r, ex in enumerate(exs):
+                 out.append(Scored(kind=ex.kind, k=len(ex.labels), logits=sel[r][: len(ex.labels)],
+diff --git a/train/eval_mm.py b/train/eval_mm.py
+index e87e72d..03a6022 100644
+--- a/train/eval_mm.py
++++ b/train/eval_mm.py
+@@ -48,6 +48,13 @@ def main() -> int:
+         mm.set_root(args.media_root)
+     bundle = common.load_bundle(args.model, device=args.device, dtype="bfloat16", multimodal=args.multimodal,
+                                 chat_template=args.chat_template)
++    from qev.readout import HEAD_FILE, Readout, ReadoutConfig
++
++    rcfg = ReadoutConfig.load(args.model)
++    head_path = Path(args.model) / HEAD_FILE
++    bundle.readout = Readout.attach(bundle.model, rcfg, slot_ids=bundle.slot_ids,
++                                    head_path=head_path if rcfg.head else None)
++    print(f"readout: attention {rcfg.attention}, scores {rcfg.readout}", flush=True)
+     results = {}
+     for spec in args.evals:
+         name, _, path = spec.partition("=")
+diff --git a/train/sft.py b/train/sft.py
+index 4f6f7bd..ae428d9 100644
+--- a/train/sft.py
++++ b/train/sft.py
+@@ -108,6 +108,14 @@ def build_parser() -> argparse.ArgumentParser:
+                         "train one step on each listed micro-batch (one GPU), peak memory reset per step, no final eval")
+     p.add_argument("--dump-first-grad", default=None,
+                    help="test hook: after the first step's all-reduce, rank 0 saves the adapter gradients here")
++    p.add_argument("--attention", choices=["causal", "noncausal"], default="causal",
++                   help="noncausal: bidirectional within the prefix and within the question suffix in the full-attention "
++                        "layers (qev.readout)")
++    p.add_argument("--readout", choices=["slot_lm", "head"], default="slot_lm",
++                   help="head: learned slot + pointer head over the final hidden states instead of LM-head letter logits")
++    p.add_argument("--head-dim", type=int, default=256, help="pointer projection width of the readout head")
++    p.add_argument("--head-lr", type=float, default=1e-4, help="peak learning rate of the pointer projections "
++                                                              "(the head's slot rows use --lr)")
+     p.add_argument("--disable-fla-kernels", action="store_true",
+                    help="force the reference PyTorch gated delta rule instead of the fla kernel "
+                         "(needed on H100/H200 with Triton in [3.4.0, 3.7.1); correct but much slower)")
+@@ -326,10 +334,7 @@ def collect_mm(bundle, rows, max_len: int, batch_tokens: int, max_rows: int, dev
+             common.readout_logits(bundle.model, ids, torch.ones_like(ids), [0])
+         for b in batches:
+             exs = [examples[usable[j]] for j in b]
+-            inputs, ends = mm.mm_inputs(bundle.processor, [ex.prompt for ex in exs],
+-                                        [rows[ex.idx].get("media") or [] for ex in exs], device)
+-            vocab_logits = mm.mm_readout_logits(bundle.model, inputs, ends)
+-            sel, _ = common.slot_view(vocab_logits, bundle.slot_ids, [len(ex.labels) for ex in exs])
++            sel, _ = common.batch_scores(bundle, bundle.model, exs, [rows[ex.idx] for ex in exs], device)
+             sel = sel.float().cpu().tolist()
+             for r, ex in enumerate(exs):
+                 out.append(common.Scored(kind=ex.kind, k=len(ex.labels), logits=sel[r][: len(ex.labels)],
+@@ -339,6 +344,13 @@ def collect_mm(bundle, rows, max_len: int, batch_tokens: int, max_rows: int, dev
+ 
+ 
+ def save_weights(model, bundle, out_dir: Path, full: bool, sharded: bool = False, is_main: bool = True) -> None:
++    _save_weights(model, bundle, out_dir, full, sharded, is_main)
++    if is_main and bundle.readout is not None:
++        out_dir.mkdir(parents=True, exist_ok=True)
++        bundle.readout.save(out_dir)
++
++
++def _save_weights(model, bundle, out_dir: Path, full: bool, sharded: bool = False, is_main: bool = True) -> None:
+     """LoRA: the adapter. Full fine-tuning: the whole model in bf16 (from the fp32 master weights, copied to CPU),
+     with tokenizer and processor, loadable like the base checkpoint. Sharded (--fsdp): every rank must call it,
+     the weights are gathered to rank 0's CPU and written there as HF safetensors shards."""
+@@ -560,6 +572,8 @@ def main(argv=None) -> int:
+         raise SystemExit("--fsdp is implemented without --share-prefix")
+     if args.disable_fla_kernels:
+         common.block_fla_kernels()
++    if (args.attention != "causal" or args.readout != "slot_lm") and args.share_prefix:
++        raise SystemExit("--share-prefix supports only causal slot_lm")
+ 
+     import torch
+     from peft import LoraConfig, get_peft_model
+@@ -600,6 +614,16 @@ def main(argv=None) -> int:
+     if args.plan_only:
+         return plan_only(bundle, rows, args, world)
+     log.info("model_type=%s template_kwargs=%s", bundle.model_type, bundle.template_kwargs)
++    from qev.readout import Readout, ReadoutConfig
++
++    bundle.readout = Readout.attach(bundle.model, ReadoutConfig(attention=args.attention, readout=args.readout,
++                                                                head_dim=args.head_dim),
++                                    slot_ids=bundle.slot_ids, device=torch.device(args.device))
++    head = bundle.readout.head
++    if head is not None and world > 1:
++        for prm in head.parameters():
++            dist.broadcast(prm.data, 0)
++    log.info("readout: attention %s, scores %s", args.attention, args.readout)
+ 
+     if args.full_finetune:
+         model = bundle.model
+@@ -696,6 +720,13 @@ def main(argv=None) -> int:
+     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.95), eps=1e-8,
+                             fused=bool(args.full_finetune))
+     sched = get_cosine_schedule_with_warmup(opt, num_warmup_steps=warmup, num_training_steps=max(total_steps, 1))
++    head_opt = head_sched = None
++    if head is not None:
++        head_opt = torch.optim.AdamW([{"params": [head.slot], "lr": args.lr},
++                                      {"params": [head.q.weight, head.k.weight], "lr": args.head_lr}],
++                                     weight_decay=0.0, betas=(0.9, 0.95), eps=1e-8)
++        head_sched = get_cosine_schedule_with_warmup(head_opt, num_warmup_steps=warmup,
++                                                     num_training_steps=max(total_steps, 1))
+ 
+     logf = open(log_path, "a", encoding="utf-8") if is_main else open(os.devnull, "w")
+     step = 0
+@@ -729,25 +760,16 @@ def main(argv=None) -> int:
+                 examples.append(common.render_example(rows[i], bundle.template_for(rows[i]), i, seed=seed,
+                                                       augment=args.augment, option_pool=OPTION_POOL,
+                                                       pad_prob=args.pad_options))
+-            if bundle.multimodal:
+-                from train import mm
+-
+-                inputs, ends = mm.mm_inputs(bundle.processor, [ex.prompt for ex in examples],
+-                                            [rows[i].get("media") or [] for i in idx], device)
+-                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_autocast(args)):
+-                    vocab_logits = mm.mm_readout_logits(model, inputs, ends)
+-            else:
+-                id_lists = [bundle.encode(ex.prompt) for ex in examples]
+-                input_ids, attention_mask, ends = common.pad_batch(id_lists, pad_id, device)
+-                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_autocast(args)):
+-                    vocab_logits = common.readout_logits(model, input_ids, attention_mask, ends)
++            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_autocast(args)):
++                sel, mask = common.batch_scores(bundle, model, examples, [rows[i] for i in idx], device)
+             ks = [len(ex.labels) for ex in examples]
+             targets = [ex.target for ex in examples]
+         kmax = max(ks)
+         tgt = torch.zeros((len(ks), kmax), dtype=torch.float32, device=device)
+         for r, t in enumerate(targets):
+             tgt[r, : len(t)] = torch.tensor(t, dtype=torch.float32, device=device)
+-        sel, mask = common.slot_view(vocab_logits, bundle.slot_ids, ks)
++        if kind == "group":
++            sel, mask = common.slot_view(vocab_logits, bundle.slot_ids, ks)
+         return sel, mask, tgt
+ 
+     if eval_sets and args.eval_at_start:
+@@ -802,6 +824,17 @@ def main(argv=None) -> int:
+             gnorm = torch.nn.utils.clip_grad_norm_(params, args.max_grad_norm)
+             if hasattr(gnorm, "full_tensor"):
+                 gnorm = gnorm.full_tensor()
++            if head is not None:
++                for prm in head.parameters():
++                    if prm.grad is None:
++                        prm.grad = torch.zeros_like(prm)
++                    if world > 1:
++                        dist.all_reduce(prm.grad)
++                        prm.grad /= grad_scale
++                torch.nn.utils.clip_grad_norm_(list(head.parameters()), args.max_grad_norm)
++                head_opt.step()
++                head_sched.step()
++                head_opt.zero_grad(set_to_none=True)
+             try:
+                 opt.step()
+             except torch.OutOfMemoryError:

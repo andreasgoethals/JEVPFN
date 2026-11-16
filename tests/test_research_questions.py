@@ -31,7 +31,7 @@ def test_readout_uses_paired_regression_arms_and_real_width_profiles():
     assert len(plan) == 9 * 2 * n
     assert {a["view"] for a in plan} == {"probabilities"}
     assert {a["feature_set"] for a in plan} == {"non_text_plus_per_column"}
-    profiles = [a for a in profile_plan() if a["phase"] == "rq3"]
+    profiles = [a for a in profile_plan() if a["phase"] == "regression_readout"]
     assert {a["model"] for a in profiles} == {"linear", "catboost"}
     assert max(a["predictor_columns"] for a in profiles) == 132
     widths = regression_width_table().set_index("dataset_id")
@@ -93,11 +93,11 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
     assert additions["execution_enabled"] is False
     assert set(additions["models"]) == {"mammoth", "drex_max"}
     active = set(load_yaml("experiment_1/main")["candidate_extractors"])
-    assert not active & set(additions["models"])
+    assert set(additions["models"]) <= active
     for model in additions["models"].values():
         assert re.fullmatch(r"[0-9a-f]{40}", model["revision"])
         assert re.fullmatch(r"[0-9a-f]{40}", model["source_revision"])
-        assert model["status"] == "approved_pending_native_adapter_and_0A"
+        assert model["status"] == "native_adapter_implemented_requires_real_0A"
         assert "token_audit" in model["required"]
         assert "sealed_B200_runtime" in model["required"]
 
@@ -106,6 +106,6 @@ def test_summary_discovery_follows_research_order():
     from src.utils.run_notebooks import discover
 
     names = discover()
-    groups = [n.split("/")[0] for n in names]
+    groups = ["general" if n.startswith("general/") else paths.notebook_phase(n) for n in names]
     order = {"general": 0, "rq1": 1, "rq2": 2, "rq3": 3}
     assert [order[g] for g in groups] == sorted(order[g] for g in groups)

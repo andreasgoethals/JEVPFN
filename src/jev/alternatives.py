@@ -10,6 +10,7 @@ import json
 
 from src.jev.provider import QUESTION_ID, api_preview, semantic_question
 from src.jev.requests import require_nonempty_text
+from src.utils.config import load_yaml
 from src.utils.serialization import canonical_json
 
 PERPLEXITY_SOURCE = (
@@ -30,6 +31,11 @@ def preview(request, provider):
     questions = {QUESTION_ID: question}
     from src.jev.catalog import ADDED
 
+    if provider in {"mammoth", "drex_max"}:
+        return {"transport": "self_hosted_publisher_forward",
+                "arguments": {"state": state, "questions": questions},
+                "reference": load_yaml("extractors")["candidates"][provider]["reference"],
+                "live_verified": False}
     if provider == "glide":
         return {
             "transport": "self_hosted_publisher_decision_readout",
@@ -46,7 +52,6 @@ def preview(request, provider):
             "live_verified": False,
         }
     if provider in ADDED:
-        from src.utils.config import load_yaml
 
         return {
             "transport": "self_hosted_pinned_open_weights",

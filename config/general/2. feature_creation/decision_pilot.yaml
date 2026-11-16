@@ -13,6 +13,8 @@ providers:
 - decision3
 - nimble
 - glide
+- mammoth
+- drex_max
 extractor_catalog: extractors
 feature_config: feature_creation
 question_design: question_design

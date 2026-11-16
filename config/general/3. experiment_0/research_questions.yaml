@@ -12,7 +12,7 @@ rq2:
 - tar_outer_fold_identity
 - shared_baseline_and_splits
 - training_defined_subgroups
-rq3_readout:
+rq2_regression_readout:
 - nine_probability_order
 - mean_reconstruction
 - all_missing_block

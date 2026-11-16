@@ -16,10 +16,10 @@ representations within fixed predictors, then determine whether gains depend on 
 availability, length, repeated text and baseline difficulty. This is the existing benchmark,
 with explicit conditional analyses rather than only an average leaderboard.
 
-**RQ3 — Can preserving output information or targeted adaptation improve usefulness?**
-Separate a cheap representation change (nine regression probabilities instead of their
-mean) from a supervised Strands 2B case study. Improvement must be measured on held-out
-rows; fine-tuning is not assumed to help.
+**RQ3 — Can supervised adaptation improve Strands 2B decisions for tabular text?**
+Compare calibration, head-only training and LoRA plus head against the unchanged model.
+Use held-out rows and fixed training budgets; fine-tuning is not assumed to help.
+The regression probability-versus-mean ablation belongs to RQ2.
 
 The benchmark retains **18 datasets: three binary, six multiclass and nine regression**
 tasks. All 20 core MulTaBench text datasets remain in exploration. Spotify and Zomato
@@ -39,8 +39,8 @@ RQ1-C selects at most 100 unique input identities per dataset, deterministically
 without targets or observed model outcomes. Each applicable intervention has one paired
 variant; option order applies to unordered classification options, not reordered ordinal
 rubrics. Field order requires multiple available fields. Paraphrases require a recorded
-semantic-equivalence review. An upper bound is 18 × 13 × 100 × 3 = **70,200 variant
-requests**, before removing inapplicable cases; baseline responses are reused. With the approved fifteen-model roster, this ceiling becomes 81,000; hosted calls still need budget approval. This is a
+semantic-equivalence review. An upper bound is 18 × 15 × 100 × 3 = **81,000 variant requests**, before
+removing inapplicable cases; baseline responses are reused. Hosted calls need budget approval. This is a
 budget ceiling, not an already implemented/submitted inference grid. The existing 0A
 robustness diagnostics are interface evidence, not this full research experiment.
 
@@ -58,13 +58,15 @@ The dedicated controlled-query runner and label-linked behavioural panels remain
 ## RQ2: predictive usefulness
 
 The four established experiments below are RQ2-A through RQ2-D. Their machine IDs
-`experiment_1`…`experiment_4` and saved output paths stay unchanged for provenance/resume.
-Config files now live under `config/rq2/` and notebooks under `notebooks/rq2/`.
+`experiment_1`…`experiment_4` stay unchanged in scientific identities. Config files live
+under `config/rq2/`; one `notebooks/rq2_prediction.ipynb` presents all RQ2 experiments.
+New result trees live under `output_JEVPFN/rq2/<phase>/results/`. Existing trees move only
+at an idle, checksum-verified handover; the active extraction paths remain unchanged.
 
 ### RQ2-A / Experiment 1: decision features
 
 For each dataset, six predictors receive a shared structured baseline or one of three
-feature sets from each of thirteen decision models:
+feature sets from each of fifteen decision models:
 
 | Feature set | Added decision features |
 |---|---|
@@ -73,10 +75,11 @@ feature sets from each of thirteen decision models:
 | Joint | One question/response for all available named text fields in the row |
 | Both | The per-column and joint feature blocks together |
 
-The baseline runs once per dataset/predictor, not once per decision model. The thirteen
+The baseline runs once per dataset/predictor, not once per decision model. The fifteen
 extractors are Jev 1.14, Liquid d1-3B, Liquid d1-2B (LFM3), Perplexity Decider, Clef-Flash,
-Intern-Decision, Strands, H2O Lightning, SII-Decision, Kev, Decision3, Bespoke-Nimble and Fastino GLiDE-27B.
-Mammoth-1 and Drex Max were approved on 16 November as two further additions: the final planned roster is fifteen, while the executable catalogue remains thirteen until their native adapters and 0A qualify. Exact versions, licences and dependencies are in [extractors.yaml](<../config/general/2. feature_creation/extractors.yaml>).
+Intern-Decision, Strands, H2O Lightning, SII-Decision, Kev, Decision3, Bespoke-Nimble, Fastino GLiDE-27B, Baseten Mammoth-1 and Nace Drex Max.
+Mammoth-1 and Drex Max have pinned native adapters and isolated runtime dependencies.
+Their configuration entries remain disabled until separate real 0A evidence is accepted. Exact versions, licences and dependencies are in [extractors.yaml](<../config/general/2. feature_creation/extractors.yaml>).
 
 GLiDE is the 13 November addition. Its planned grid entries do not constitute runtime
 acceptance or completed features. Existing frozen campaign receipts retain their original
@@ -152,9 +155,7 @@ Report within-dataset effects, coverage and equal-dataset summaries. These are o
 associations, not causal effects of text. The cohort boundary helper is tested locally;
 full loss/cohort report integration still needs implementation before its analysis freeze.
 
-## RQ3: information preservation and adaptation
-
-### RQ3-A: mean versus nine probabilities
+### RQ2-F: mean versus nine probabilities
 
 The main regression feature is E[S] for the fixed evidence levels S = −4,…,+4. A response
 concentrated at zero and a response split equally between −4 and +4 both have mean zero,
@@ -163,21 +164,23 @@ information helps prediction. They sum to one (eight degrees of freedom), but we
 all nine named coordinates for consistent class semantics. This is **not eight extra
 questions** and costs no additional decision-model inference.
 
-Use the nine regression datasets, all thirteen extractors, the per-column mode, and two
+Use the nine regression datasets, all fifteen extractors, the per-column mode, and two
 prespecified predictors (linear and CatBoost). Existing RQ2 mean arms are the comparators;
-**9 × 13 × 2 = 234 new configurations / 1,170 outer fits** are required. The new arms use
+**9 × 15 × 2 = 270 new configurations / 1,350 outer fits** are required. The new arms use
 the same source features, split seed, rows, predictor settings and missingness flags.
 They are planned by `regression_readout_plan` and executable through the existing
-acceptance-gated campaign with `--phase rq3`; execution remains disabled.
+acceptance-gated campaign with `--phase regression_readout`; execution remains disabled.
 
 The widest dataset is Rotten Tomatoes: 13 text and 2 non-text fields. Including 13 text
 availability flags, separate nine-probability blocks give 2 + 13 + 13×9 = **132 columns**.
 Joint-only gives 24; both gives 141. A conservative Kumo count-encoding allowance raises
 the largest bound to **143**, below its 500-column limit. Actual model preprocessing
 still checks width. This bound is for one extractor, not concatenating all extractors.
-See `regression_width_table()` and the RQ3 notebook for all nine datasets.
+See `regression_width_table()` and the RQ2 notebook for all nine datasets.
 
-### RQ3-B: Strands 2B adaptation case study
+## RQ3: Strands 2B adaptation
+
+### RQ3-A: calibration; RQ3-B: head-only; RQ3-C: LoRA plus head
 
 Use Strands 2B because its released pointer-head model and training code support explicit
 head-only and backbone-LoRA adaptation. This is a controlled case study, not evidence
@@ -219,11 +222,12 @@ One configuration is a dataset × predictor × representation. Each has five out
 
 | Experiment | Configurations | Outer fits | Binary inner fits |
 |---|---:|---:|---:|
-| 1 | 18 × 6 × (1 + 13 × 3) = **4,320** | 21,600 | 10,800 |
+| RQ2-A / 1 | 18 × 6 × (1 + 15 × 3) = **4,968** | 24,840 | 12,420 |
 | 2 | 18 × 6 × 3 × 2 = **648** | 3,240 | 1,620 |
 | 3 | 18 × 6 × 1 × 2 = **216** | 1,080 | 0 |
 | 4 | 18 × 3 = **54** | 270 | 135 |
-| **Total** | **5,238** | **26,190** | **12,555** |
+| RQ2-F / regression readout | 9 × 15 × 2 = **270** | 1,350 | 0 |
+| **RQ2 total** | **6,156** | **30,780** | **14,175** |
 
 Experiments 2 and 3 reuse Experiment 1's structured baseline. Inner-fit counts are three
 binary datasets × configurations per dataset × five outer folds × three inner folds.
@@ -232,7 +236,6 @@ not completed runs or independent statistical observations; retries and 0B profi
 can add operational work. `src.evaluation.campaign.benchmark_plan` generates the grid;
 `src.evaluation.notebook_evidence.study_grid` checks these totals.
 
-After integrating the two approved additions, RQ2-A becomes 18 × 6 × (1 + 15 × 3) = 4,968 configurations; the complete RQ2 grid becomes 5,886 / 29,430 outer fits / 14,175 binary inner fits. RQ3-A becomes 9 × 15 × 2 = 270 configurations / 1,350 outer fits. No old extraction acceptance automatically covers these additions.
 
 Earlier large PCA grids, winner-selected combinations and the former Experiments 4/5 ablation plans are retired. The new RQ1/RQ3 studies are explicitly defined above; no grouped sensitivity or lexical TF-IDF/SVD arm is included.
 
@@ -295,8 +298,8 @@ No winner-selected follow-up is part of the confirmatory grid.
 | Feature creation | Accepted open-weight and frozen-encoder extraction; budgeted local Jev; resumable response/vector stores, verified publication and independent copies |
 | 0B preparation | Complete selected feature stores; fold-specific frozen PCA; 90 real TAR adapters and both TAR PCA recipes; sealed predictor runtimes |
 | 0B qualification | Integrity/identity and leakage screens, nine predictor contracts, difficult input/class/missingness/resume cases, full-size profiles covering dataset shape and binary inner-OOF fitting, published prediction readback and reviewed acceptance |
-| RQ2 and RQ3-A | Enabled, frozen, acceptance-bound arrays; five-fold records; paired descriptive analysis and approved inferential contrasts |
-| RQ1-C / RQ3-B | Additional controlled-query/training implementations, supplementary 0A and 0B gates, then bounded pilots before full scientific runs |
+| RQ2, including regression readout | Enabled, frozen, acceptance-bound arrays; five-fold records; paired descriptive analysis and approved inferential contrasts |
+| RQ1-C / RQ3 | Additional controlled-query/training implementations, supplementary 0A and 0B gates, then bounded pilots before full scientific runs |
 
 TAR preparation is part of getting 0B ready, not an assumption that its training was
 already tested in 0A. The generated qualification plan is authoritative for required
@@ -326,3 +329,23 @@ paired missingness and reviewed semantic equivalence. RQ3 adaptation needs relea
 initialization, frozen-backbone checks, LoRA gradient checks, disjoint partitions,
 held-out-label invariance, no truncation, resume and adapter replay. Implementing a test
 plan or passing synthetic tests does not establish these future GPU behaviours.
+
+## Stage order and notebook ownership
+
+0A qualifies extraction requests, exact counts, native runtimes, probability decoding,
+batching/replay and dataset pilots. Feature creation publishes complete stores. 0B then
+checks feature identities and missingness, fold-local fitting, PCA/TAR, all predictor
+interfaces, metrics, resume/publication and each enabled RQ2 arm. It must also exercise
+the RQ1 analysis and controlled-query contracts before those are accepted.
+
+Run RQ1 first to characterize the representations, then RQ2 using the prespecified grid.
+RQ1 findings may motivate future studies but must not silently select RQ2 winners or
+change its questions. RQ3 follows as the prespecified Strands case study. Its separate
+training gate tests gradients, frozen weights, split isolation, save/reload and resume
+on two bounded pilots before the 90-run expansion. Later code changes require targeted
+requalification, not a redundant complete output reset.
+
+There is one report notebook per RQ: `rq1_behavior`, `rq2_prediction`, `rq3_adaptation`.
+General preparation and validation notebooks remain in `notebooks/general/`. Figures,
+figure registries, captions and report intermediates are grouped by RQ/general. Missing
+results are shown as pending evidence, never simulated findings.

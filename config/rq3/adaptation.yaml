@@ -1,5 +1,4 @@
-research_question: Can preserving output information or targeted adaptation improve
-  decision models?
+research_question: Can supervised adaptation improve Strands 2B decisions for tabular text?
 status: approved_design_training_runner_not_implemented
 enabled: false
 provider: strands

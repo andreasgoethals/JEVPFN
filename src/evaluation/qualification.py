@@ -21,7 +21,7 @@ PHASE_CONFIGS = {
     "experiment_2": "experiment_2/embeddings",
     "experiment_3": "experiment_3/tar",
     "experiment_4": "experiment_4/native_text",
-    "rq3": "rq3/readout",
+    "regression_readout": "rq2/readout",
 }
 
 

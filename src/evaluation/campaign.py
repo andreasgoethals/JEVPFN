@@ -175,7 +175,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "experiment_2": "embeddings",
         "experiment_3": "tar",
         "experiment_4": "native_text",
-        "rq3": "readout",
+        "regression_readout": "readout",
     }
     cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
     enabled = (
@@ -197,7 +197,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         )
     from src.evaluation.research_questions import regression_readout_plan
 
-    plan_loader = regression_readout_plan if arm["phase"] == "rq3" else benchmark_plan
+    plan_loader = regression_readout_plan if arm["phase"] == "regression_readout" else benchmark_plan
     if arm not in _cached(("plan", arm["phase"]), plan_loader, copy_result=False):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     _retain_representation(arm.get("provider"), arm.get("encoder"))
@@ -399,7 +399,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
-    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4", "rq3"))
+    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4", "regression_readout"))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
     parser.add_argument("--pca-scope", choices=("per_column", "joint"))
@@ -418,7 +418,7 @@ def main():
     args = parser.parse_args()
     from src.evaluation.research_questions import regression_readout_plan
 
-    plan = regression_readout_plan() if args.phase == "rq3" else benchmark_plan()
+    plan = regression_readout_plan() if args.phase == "regression_readout" else benchmark_plan()
     selected = [
         a
         for a in plan

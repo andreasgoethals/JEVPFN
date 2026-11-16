@@ -7,13 +7,19 @@ The historical registry and tokenizer implementations remain byte-for-byte froze
 from src.jev import registry
 
 ADDED = registry.ADDED  # These five use ExtendedRuntime, not Liquid's native runner.
-SELF_HOSTED = (*registry.SELF_HOSTED, "liquid_lfm3", "glide")
+SELF_HOSTED = (*registry.SELF_HOSTED, "liquid_lfm3", "glide", "mammoth", "drex_max")
 HOSTED_UNAVAILABLE = registry.HOSTED_UNAVAILABLE
 PINS = {**registry.PINS, "liquid_lfm3": "cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41",
-        "glide": "4d32743ae96b74f0116f050d37742bbd43c04e7d"}
+        "glide": "4d32743ae96b74f0116f050d37742bbd43c04e7d",
+        "mammoth": "61cec44c281c693992e3d6ebeb44dd3402dfa186",
+        "drex_max": "005d4eb46cd2f2f56ae0e82c6444fba8363c9c17"}
 
 
 def asset_urls(provider):
+    if provider in {"mammoth", "drex_max"}:
+        from src.jev.frontier_decisions import asset_urls as urls
+
+        return urls(provider)
     if provider == "glide":
         from src.jev.glide import asset_urls as urls
 
@@ -27,7 +33,11 @@ def asset_urls(provider):
 
 def stage_tokenizers(providers=SELF_HOSTED):
     for provider in providers:
-        if provider == "glide":
+        if provider in {"mammoth", "drex_max"}:
+            from src.jev.frontier_decisions import stage_tokenizer
+
+            stage_tokenizer(provider)
+        elif provider == "glide":
             from src.jev.glide import stage_tokenizer
 
             stage_tokenizer()
@@ -40,6 +50,10 @@ def stage_tokenizers(providers=SELF_HOSTED):
 
 
 def ExactCounter(provider):
+    if provider in {"mammoth", "drex_max"}:
+        from src.jev.frontier_decisions import Counter
+
+        return Counter(provider)
     if provider == "glide":
         from src.jev.glide import Counter
 

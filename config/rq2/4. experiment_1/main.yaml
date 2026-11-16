@@ -48,6 +48,8 @@ candidate_extractors:
 - decision3
 - nimble
 - glide
+- mammoth
+- drex_max
 non_text_columns: all_original_numerical_and_categorical_features
 feature_selectors:
   jev: null
@@ -62,4 +64,6 @@ feature_selectors:
   kev: null
   decision3: null
   nimble: null
+  mammoth: null
+  drex_max: null
   glide: null

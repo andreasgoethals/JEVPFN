@@ -115,7 +115,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
                 dependencies = [provider + "_scratch", "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"]
                 if name.endswith("_pilot"):
                     dependencies.append(provider + "_contracts")
-                if provider in {"perplexity", "sii", "kev", "decision3", "glide"}:
+                if provider in {"perplexity", "sii", "kev", "decision3", "glide", "mammoth", "drex_max"}:
                     flags.extend(["--cpus-per-task=14"])
         result.append(
             {

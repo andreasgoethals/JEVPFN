@@ -14,7 +14,7 @@ from src.utils.serialization import digest
 
 def regression_readout_plan():
     """New full-vector fits only; mean comparators reuse RQ2's exact paired arms."""
-    cfg = load_yaml("rq3/readout")
+    cfg = load_yaml("rq2/readout")
     semantics = load_yaml("dataset_semantics")["datasets"]
     result = []
     for entry in selected_entries(load_catalog(), cfg):
@@ -27,7 +27,7 @@ def regression_readout_plan():
                         dataset_id=entry["id"],
                         model=model,
                         provider=provider,
-                        phase="rq3",
+                        phase="regression_readout",
                         feature_set="non_text_plus_" + mode,
                         view="probabilities",
                     )
@@ -48,7 +48,7 @@ def _metadata(entry):
 
 def regression_width_table():
     """Catalog widths, plus conservative Kumo expansion; actual fits still check width."""
-    cfg = load_yaml("rq3/readout")
+    cfg = load_yaml("rq2/readout")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
     for entry in selected_entries(load_catalog(), cfg):

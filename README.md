@@ -1,7 +1,7 @@
 # JEVPFN
 
 JEVPFN studies **how decision models represent real text, when their representations help
-prediction, and whether preserving information or adapting a model improves them**.
+prediction, and whether supervised adaptation improves them**.
 Eighteen text-rich tabular datasets provide linked outcomes and a shared test bed.
 The contribution connects model behaviour to predictive utility; it does not assume that
 confident or agreeing models are correct.
@@ -11,20 +11,18 @@ confident or agreeing models are correct.
 | Research question | Experiments | Compute |
 |---|---|---|
 | RQ1: behaviour | Distributions/agreement, joint versus separate context, controlled equivalent-input variations | Mostly existing outputs locally; new controlled variants on VSC |
-| RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems; fixed analyses of when text helps | Four existing benchmark grids on VSC; paired analysis locally |
-| RQ3: improvement | Full regression distributions versus their mean; Strands 2B calibration/head-only/LoRA case study | Saved-feature predictor fits and new fold-local training on VSC |
+| RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems, regression readout; when text helps | Predictor fits on VSC; paired analysis locally |
+| RQ3: adaptation | Strands 2B calibration, head-only and LoRA plus head | Fold-local training on VSC; held-out analysis locally |
 
-The core RQ2 grid remains 5,238 configurations / 26,190 outer fits. Its historical
-Experiments 1–4 identifiers are preserved. RQ3-A adds 234 configurations / 1,170 outer fits,
-reusing existing mean comparators. RQ3-B starts with four training pilots before any
-90-run expansion. Once the two approved additions are integrated, RQ2 becomes 5,886
-configurations / 29,430 outer fits, and RQ3-A becomes 270 configurations / 1,350 outer fits.
-These larger counts are planned, not enabled. See [Experiments](docs/EXPERIMENTS.md) for arithmetic, controls,
-training boundaries and which additions are still pending implementation.
+RQ2 has **6,156 configurations / 30,780 outer fits**, including 270 regression-readout
+ablations. The four main comparisons contribute 5,886 configurations; historical
+Experiments 1–4 retain their machine identifiers. RQ3 starts with four training pilots
+before a 90-run expansion. These are configured designs, not completed experiments.
+See [Experiments](docs/EXPERIMENTS.md) for counts and qualification gates.
 
-Six structured predictors compare features from thirteen configured extractors. The
-approved roster adds Mammoth-1 and Drex Max (fifteen total); both are pinned but still
-need native adapters and real 0A. The comparisons use three frozen encoders
+Six structured predictors compare features from fifteen extractors. Mammoth-1 and
+Drex Max now have pinned native adapters; their real 0A acceptance is still required.
+The comparisons use three frozen encoders
 (E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B) and supervised E5-small TAR. Both embedding
 tracks retain joint PCA64 and separate PCA32 per text field. TabSTAR v1.1, ConTextTab and
 AutoGluon-Multimodal are descriptive native-text system references.
@@ -42,10 +40,10 @@ have not passed or run. See [dated evidence](docs/AGENTS_MEMORY.md) for exact ID
 
 ## Repository navigation
 
-`config/` and `notebooks/` each have `general/`, `rq1/`, `rq2/`, `rq3/`.
-General contains data/question inspection, feature preparation and 0A/0B qualification.
-RQ folders follow the scientific story. Existing logical configuration names and numbered
-output paths remain valid. Source fingerprints change; completed scientific artifacts and
+`config/` has `general/`, `rq1/`, `rq2/`, `rq3/`. Each RQ has one notebook directly
+in `notebooks/`; preparation and 0A/0B notebooks stay in `notebooks/general/`.
+Scientific results and figures use RQ folders. Existing results require an idle verified
+layout migration; operational extraction, logs and acceptance records retain their paths. Source fingerprints change; completed scientific artifacts and
 recovery references remain intact, and new evaluation code requires fresh 0B evidence.
 [Model choices and evidence](docs/LITERATURE_REVIEW.md) · [Full design](docs/EXPERIMENTS.md)
 
@@ -79,7 +77,8 @@ Windows/Linux interpreter difference, see [CPU environment parity](docs/VSC.md#c
 ## Workflow and outputs
 
 Prepare inputs, qualify them and the runtimes in **0A**, create features, then run **0B**
-on the complete stores and predictor runtimes. RQ2 and RQ3-A require reviewed 0B evidence; controlled probes and Strands adaptation require their additional pilot gates.
+on the complete stores and predictor runtimes. Continue with RQ1, RQ2 and RQ3 in that
+order. New controlled probes and Strands training require their own targeted pilot gates.
 The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 [operational record](docs/AGENTS_MEMORY.md) preserves dated receipts and recovery history.
 
@@ -90,7 +89,9 @@ The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 | `data/jev_cache/` | Permanent response, accounting and feature stores, plus Jev diagnostic ledgers |
 | `data/decision_features/` | Verified portable snapshots of complete models for local analysis |
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
-| `output_JEVPFN/<phase>/` | Validation evidence, logs, PCA parameters and resumable prediction records |
+| `output_JEVPFN/<phase>/` | Operational validation evidence and logs |
+| `output_JEVPFN/rq2/<phase>/results/` | PCA, TAR and resumable benchmark records |
+| `output_JEVPFN/figures/<general-or-rq>/` | Figures and caption registries |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
 containers and results. Native scratch holds temporary working stores. Use the
@@ -111,9 +112,10 @@ Parquet. Only fully downloaded extractors enter comparisons; agreement is not ac
 | Stage | Notebooks |
 |---|---|
 | Explore and prepare | [Data](<notebooks/general/01_data_exploration.ipynb>), [input design](<notebooks/general/02_jev_input_design.ipynb>), [questions](<notebooks/general/01_prepare_questions.ipynb>) |
-| General validation and RQ1 behaviour | [Workload and feature widths](<notebooks/general/03_feature_creation.ipynb>), [decision features](<notebooks/rq1/04_decision_feature_comparison.ipynb>), [0A](<notebooks/general/01_before_feature_creation.ipynb>), [0B](<notebooks/general/02_after_feature_creation.ipynb>) |
-| RQ2 benchmark | [Decision features](<notebooks/rq2/01_paired_representation_effects.ipynb>), [frozen embeddings](<notebooks/rq2/01_frozen_embeddings.ipynb>), [TAR](<notebooks/rq2/01_target_aware_embeddings.ipynb>), [native text](<notebooks/rq2/01_native_text_systems.ipynb>), [synthesis](<notebooks/rq2/01_representation_comparison.ipynb>) |
-| RQ3 improvement | [Readout widths and adaptation design](<notebooks/rq3/01_improvement_studies.ipynb>) |
+| General validation | [Feature preparation](<notebooks/general/03_feature_creation.ipynb>), [0A](<notebooks/general/01_before_feature_creation.ipynb>), [0B](<notebooks/general/02_after_feature_creation.ipynb>) |
+| RQ1 | [Decision behaviour for tabular text](notebooks/rq1_behavior.ipynb) |
+| RQ2 | [Predictive utility and all benchmark comparisons](notebooks/rq2_prediction.ipynb) |
+| RQ3 | [Strands adaptation](notebooks/rq3_adaptation.ipynb) |
 
 ## Documentation
 
@@ -133,7 +135,7 @@ Parquet. Only fully downloaded extractors enter comparisons; agreement is not ac
 Use [CITATION.cff](CITATION.cff) to cite this software. Project code is [MIT licensed](LICENSE);
 datasets, weights and vendored code retain their own licences and attribution.
 
-The project follows the [research template](docs/TEMPLATE.md) with an approved RQ-based config/notebook layout and historical numbered output folders,
+The project follows the [research template](docs/TEMPLATE.md) with an approved RQ-based scientific layout and retained numbered operational folders,
 `output_JEVPFN`, project-specific aggregate report names, permanent paid-response stores,
 and separate local/VSC execution gates.
 The project also retains its staging-root/publication interface and its explicit destructive

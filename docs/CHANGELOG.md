@@ -2,6 +2,19 @@
 
 ## 16-11-2026
 
+- Implemented pinned native Mammoth-1 and Drex Max adapters, exact render/count contracts,
+  checkpoint staging and isolated B200 container dependencies. Downloaded and verified
+  both weight releases on GPFS PROJECT; qualification runs remain separate from frozen
+  production consumers, and full extraction still requires real 0A acceptance.
+- Consolidated research into one notebook per RQ. Moved the regression probability-vector
+  ablation into RQ2; RQ3 is Strands calibration/head/LoRA adaptation. New scientific results
+  and figures follow RQ folders, with an explicit verified idle migration for older results.
+- Fixed RQ result export and preservation of historical 0B evaluation databases during
+  predictor scratch staging. Added provider, layout and immutable qualification tests.
+- Local validation: 1,427 tests passed, 26 platform/asset-dependent skips; all nine notebooks
+  executed and twenty current figures visually reviewed. Real new-model 0A is still pending.
+
+
 - Organized config/notebooks around general preparation and three research questions,
   preserving historical configuration/output identities. Added explicit behavior and
   Strands adaptation plans, a readout notebook and executable full-probability regression
@@ -63,7 +76,7 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
 
 ## 11-11-2026
 
-- Bundle benchmark arrays per dataset Ã— predictor Ã— phase, keeping every arm's evaluation
+- Bundle benchmark arrays per dataset × predictor × phase, keeping every arm's evaluation
   unchanged. Pure inputs load once per task (deep-copied per arm), and checkpoint hashes
   are verified once per process.
 - Run several eight-thread workers per task: pinned CPU cores for CatBoost and
@@ -213,18 +226,18 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
   source; preserve accepted 0A evidence and identify historical failed logs separately.
 
 <details>
-<summary>Septemberâ€“October 2026 implementation history</summary>
+<summary>September–October 2026 implementation history</summary>
 
 ## 30-10-2026
 
 - Rewrite the documentation for the current stage. README now leads with status, the
-  RQ1â€“RQ3 design and the new figure index; VSC follows execution order (access, storage,
+  RQ1–RQ3 design and the new figure index; VSC follows execution order (access, storage,
   runtimes, pipeline, maintenance, transfer); AGENTS_MEMORY is newest-first and records the
   submitted open-weight campaign, including two Jigsaw publication-lock failures and the
   stopped controller observed at 17:20 UTC. Evidence, hashes and commands are preserved;
   DATA_SOURCES and LITERATURE_REVIEW drop stale pilot and 1.13 wording.
 
-- Rework notebook figures around the RQ1â€“RQ3 story in the paper notes. 0A now shows
+- Rework notebook figures around the RQ1–RQ3 story in the paper notes. 0A now shows
   runtime gates beside measured B200 memory/load/contract time (signed acceptances read),
   output profiles and pairwise agreement of all twelve decision models on 280 identical
   pinned-version pilot inputs, and a cross-model robustness matrix. Synthesis opens
@@ -522,7 +535,7 @@ Use [Experiments](EXPERIMENTS.md) for the active design, [VSC](VSC.md) for comma
 - Restored durable evaluation SQLite stores when staging predictor working sets,
   with transactional union and CV resume/publication tests across experiment phases.
 - Added SII single-token/unique-ID/cue validation before weight loading. The publisher
-  already filters labels beyond Aâ€“Z; no prompt/tokenizer identity was changed. Added
+  already filters labels beyond A–Z; no prompt/tokenizer identity was changed. Added
   statistical-resolution, method and Holm-rank diagnostics without approving a plan.
 - Earlier local validation before the parallel-testing update: 993 tests passed, 20 optional-runtime/platform skips;
   Ruff, dependencies and diff checks passed. No remote mutation, paid inference,

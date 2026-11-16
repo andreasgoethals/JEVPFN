@@ -10,23 +10,34 @@ queued consumers, publications and recovery state. After extraction finishes, fo
 [feature verification and 0B](#46-experiment-0b); a fresh reset is not required at that
 transition. Confirm live jobs and artifacts before acting on a dated status.
 
-[Access](#1-access) Â· [Storage](#2-storage-and-hardware) Â· [Runtimes](#3-runtimes-and-containers) Â·
-[Pipeline](#4-pipeline) Â· [Maintenance](#5-working-sets-and-storage-maintenance) Â· [Transfer](#6-utilization-and-transfer)
+[Access](#1-access) · [Storage](#2-storage-and-hardware) · [Runtimes](#3-runtimes-and-containers) ·
+[Pipeline](#4-pipeline) · [Maintenance](#5-working-sets-and-storage-maintenance) · [Transfer](#6-utilization-and-transfer)
 
 ## Research stages and active-source boundary
 
-Config/notebooks now follow `general/`, `rq1/`, `rq2/`, `rq3/`; existing logical
-configuration names and numbered output phases are preserved. Do not rename remote
-results or pull this reorganization while the extraction campaign consumes its frozen
-checkout. At the next idle handover, validate the new resolver and rerun affected 0B
-contracts before using the new readout grid.
+Configs use `general/`, `rq1/`, `rq2/`, `rq3/`; there is one report notebook per RQ.
+New scientific results live in `output_JEVPFN/rq2/<phase>/results/`, with figures under
+`figures/<rq>/`. Extraction and 0A/0B operational paths remain unchanged. Before any
+new benchmark/PCA work, stop result consumers and preview the supported migration:
 
-RQ1 saved-output analysis runs locally. Its controlled variants need a dedicated runner
-and accepted 0A contracts. RQ2 retains the four benchmark pipelines. RQ3's full-regression
-probability arms use the existing benchmark runner (`--phase rq3`) and are disabled until
-0B; Strands head/LoRA training remains an implementation/pilot gate. Mammoth-1 and Drex
-Max are pinned approved additions, not yet installed or qualified extractors. See the
-[design](EXPERIMENTS.md) for exact scope; do not submit these planned stages as production.
+```bash
+"$JEVPFN_PYTHON" -m src.cluster.research_layout --root "$JEVPFN_PROJECT_ROOT/JEVPFN/output_JEVPFN"
+```
+
+After reviewing that plan and confirming idle consumers, repeat with
+`--apply --writers-stopped`. The operation verifies database integrity and checksums,
+renames trees without changing scientific identities, and records a receipt. It refuses
+conflicting layouts, links and live database sidecars. Never run it inside the active
+frozen extraction campaign.
+
+RQ1 analysis uses complete stores; controlled interventions still require their runner
+and accepted pilot. RQ2 includes the regression probability ablation through
+`--phase regression_readout`; it remains disabled until 0B. RQ3 is exclusively Strands
+calibration/head/LoRA adaptation and still needs its training implementation and pilot.
+Mammoth and Drex native adapters are implemented locally; their downloads, images, exact
+audits, GPU contracts and dataset pilots do not count as accepted until verified. New
+canonical runtime markers must not be added while an existing frozen campaign pins the
+full runtime inventory. Downloads without canonical markers can proceed independently.
 
 ## 1. Access
 
@@ -271,8 +282,8 @@ mkdir -p "output_JEVPFN/2. feature_creation/logs"
 
 **Expanded campaign.** The reviewed `src.cluster.feature_admission` controller owns the
 expanded 274-step graph. It schedules 198 decision dataset jobs and 54 encoder dataset
-jobs, plus staging and release. The full output roster is 396 decision blocks (11 Ã— 18 Ã— 2) and 54 embedding
-stores (3 Ã— 18). These are planned totals, not counts of completed work. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
+jobs, plus staging and release. The full output roster is 396 decision blocks (11 × 18 × 2) and 54 embedding
+stores (3 × 18). These are planned totals, not counts of completed work. Ready datasets queue after native staging. Workspace quotas and the bulk-transfer
 limit still apply. See the [recorded handover](AGENTS_MEMORY.md#parallel-admission-2-november).
 
 **Monitor and recover.** Reconcile the manifest, Slurm accounting, and publication receipts.
@@ -398,7 +409,7 @@ decision features. Full 0B preflight, profiles and acceptance retain all complet
 
 After extraction and publication finish, reconcile terminal jobs and verify the durable
 feature stores. Import the independent local copy using [the transfer procedure](#6-utilization-and-transfer).
-The full thirteen-extractor roster also needs complete Jev features. A funded partial run
+The full fifteen-extractor roster also needs complete Jev features. A funded partial run
 or a portable notebook snapshot does not meet that gate.
 
 1. **Bind inputs.** Close the reviewed extraction stage using [the freeze procedure](#43-acceptance).
@@ -410,7 +421,7 @@ or a portable notebook snapshot does not meet that gate.
    decision extraction. Stage the reviewed predictor images and checkpoints separately.
    Set the 0B fixture and profile switches (`predictor_execution_enabled` and
    `full_fold_profile_enabled`), then record the 0B freeze. Submit one CPU preparation per
-   dataset and encoder (18 Ã— 3). Each job writes joint PCA64 and separate PCA32 for the
+   dataset and encoder (18 × 3). Each job writes joint PCA64 and separate PCA32 for the
    exact outer and binary inner training partitions.
 
    ```bash
@@ -450,7 +461,7 @@ or a portable notebook snapshot does not meet that gate.
    both frozen and TAR PCA recipes. It also includes a full-size binary profile for each
    predictor and recipe that fits an inner-OOF threshold. Use the current generated count.
    Each fits the first outer fold at full size, retains binary inner-OOF predictions
-   except for TARâ€™s fixed-threshold workflow, and
+   except for TAR’s fixed-threshold workflow, and
    verifies predictor width, row IDs and targets. Review resource use and publication.
 5. **Accept the stage.** Add the current preflight, nine contract reports and all required
    profiles to the checksummed evidence list. Verify the owner's reviewed record with
@@ -471,7 +482,7 @@ to print its submission command.
 python -m src.cluster.benchmark_jobs --phase experiment_2 --model tabpfn_3_5 --concurrency 8 --write
 ```
 
-**Bundled tasks.** Each array task owns one dataset Ã— predictor Ã— phase and runs all its
+**Bundled tasks.** Each array task owns one dataset × predictor × phase and runs all its
 supported arms; each arm still resumes its five folds from checksummed records.
 - **Shared inputs.** Mindwell predictors read reviewed decision features, frozen vectors
   and PCA parameters directly from GPFS PROJECT. Native scratch holds mutable evaluation
@@ -527,7 +538,7 @@ root. A released runtime must be restaged before GPU work; durable checkpoints a
 need no rebuild.
 
 **Publication unions.** Publishing a decision store builds and validates the merged copy
-before backing it up to PROJECT. That needs 2 Ã— (durable store + incoming) + 0.5 GiB of
+before backing it up to PROJECT. That needs 2 × (durable store + incoming) + 0.5 GiB of
 temporary space, about 140 GiB for a 62 GiB store. On Mindwell B200 nodes, `/tmp` is a
 590 GiB node-local volume shared by every job on the node (`TmpDisk=0`, nothing reserved).
 When it cannot hold the union, publication uses this job's own directory on Mindwell GPFS
@@ -536,7 +547,7 @@ bounded by the personal scratch allocation minus headroom. A normal exit removes
 directory. Directories left by killed jobs are removed only after `sacct` reports those jobs
 terminal; unknown or unverifiable jobs are kept. wICE never uses this fallback.
 
-Retention recorded at migration acceptance (3â€“4 November); check current manifests and
+Retention recorded at migration acceptance (3–4 November); check current manifests and
 consumers before retirement. These are documented exceptions, not a claim that scratch
 is empty or that every retained file is still needed today:
 
@@ -548,6 +559,24 @@ is empty or that every retained file is still needed today:
   once relocation acceptance and independent backup pass.
 - Build scratch is temporary. The build script does not retire successful build leaves
   itself; clean only verified owned leaves after the owner reviews the plan.
+
+### Isolated additions during an active frozen campaign
+
+Mammoth and Drex qualification runs use a hash-recorded source snapshot inside DATA's
+`experiment_0/manifests/native_additions_20261116/`, and the isolated GPFS PROJECT subtree
+`qualification/native_20261116/JEVPFN`. Verified weights/control files are hardlinked;
+no canonical checkpoint marker or production container seal changes. Runtime build and
+compiler caches use owned native scratch. Small qualification response databases live
+in this isolated native PROJECT tree and are tested there across two nodes; this is a
+bounded diagnostic exception, not the full-extraction storage route.
+
+The recorded Slurm chain is build → token prepare → ten parallel partitions → verified
+merge → B200 contracts → bounded dataset pilot; two-node storage is an additional GPU
+prerequisite. Failures block dependent work and retain exact logs/receipts. Review those
+artifacts before accepting or enabling either model. At an idle production handover,
+reconcile source/image/checkpoint identities and canonical acceptance, then use the
+normal scratch/publication campaign for full extraction. Do not point production at
+unreviewed qualification evidence or remove the shared hardlinks while consumers run.
 
 ## 6. Utilization and transfer
 

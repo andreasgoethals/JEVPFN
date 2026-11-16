@@ -32,7 +32,7 @@ class TimingJournal:
         }
         self._pending, self._lock = [], Lock()
         self.path = paths.require_project_output(
-            paths.large_outputs_dir() / paths.phase_folder(self.phase) / "results" / "timings"
+            paths.large_outputs_dir() / paths.result_relative(self.phase) / "timings"
             / f"{self.name}_{self.run_id}.sqlite3"
         )
 

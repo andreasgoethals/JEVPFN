@@ -10,7 +10,7 @@ models:
     source_revision: 81ce62f1597c91e46767d4d02d6ac2e18534fe94
     publisher_patch: serve.patch
     request_token_limit: 16384
-    status: approved_pending_native_adapter_and_0A
+    status: native_adapter_implemented_requires_real_0A
     required:
     - pinned_OneJev_plus_publisher_patch
     - exact_shared_prefix_token_count
@@ -28,7 +28,7 @@ models:
     source_revision: b932571901f531b2378b356fcab7d176048c2bcb
     request_token_limit: 16384
     architectural_context_max: 262144
-    status: approved_pending_native_adapter_and_0A
+    status: native_adapter_implemented_requires_real_0A
     version_note: Open v1 checkpoint; do not attribute hosted Max v1.1 leaderboard
       results to this exact artifact.
     required:

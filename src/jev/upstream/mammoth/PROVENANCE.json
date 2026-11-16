@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/OmniJev/OneJev",
+  "revision": "81ce62f1597c91e46767d4d02d6ac2e18534fe94",
+  "publisher_patch": "https://huggingface.co/baselabs/mammoth-1/blob/61cec44c281c693992e3d6ebeb44dd3402dfa186/serve.patch",
+  "files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "serve.patch": "f234c125f1d38d82104b9e1f24e75bde51e4401928acfba2fbf5c59ef2fb46b8",
+    "qev/answers.py": "09b06dba258c80a6a9afdaa5aacfd0f7523f9d2a087a7b6402ca03553ea6fba6",
+    "qev/calibrate.py": "3fa6013a81c7e79a702afcdcc0ebd089bee7047590c18cc44708850f5aeda1ee",
+    "qev/engine.py": "dc3eb95e0118cb056357bd3e68c0ed9f18b4656492b02087e9ca53773af8d3f0",
+    "qev/prompt.py": "f0763b5f747039c2919bc2a6d51e4ed88308fe3497e53498e6f298286b6169b2",
+    "qev/readout.py": "e084edead750ddeb39384b9f659182df52720d96294d9a95c9259a8001e3c20d",
+    "qev/schema.py": "bce4b7d353ac115a9e50aef284975ddeed9a3bb452e3fd928a556668705bc2f3"
+  }
+}

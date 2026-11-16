@@ -55,7 +55,7 @@ Compare default-threshold metrics across families; AUC does not depend on the th
 ## Storage and 0B evidence
 
 Immutable bundles live on native GPFS PROJECT under
-`output_JEVPFN/6. experiment_3/results/tar/<dataset>/fold_<n>/`: adapter files,
+`output_JEVPFN/rq2/6. experiment_3/results/tar/<dataset>/fold_<n>/`: adapter files,
 one float32 vector array per text column, and a manifest binding source, checkpoint,
 training/test row IDs, training-label digest, optimizer/validation membership,
 runtime seal, timing, truncation and file hashes. Each dataset has one transactional

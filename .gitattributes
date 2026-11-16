@@ -17,3 +17,6 @@
 *.npz binary
 *.parquet binary
 *.safetensors binary
+
+# Publisher patch is retained byte-for-byte; blank diff-context lines contain spaces.
+src/jev/upstream/mammoth/serve.patch -whitespace

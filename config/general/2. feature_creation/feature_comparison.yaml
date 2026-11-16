@@ -16,6 +16,8 @@ comparison:
   - decision3
   - nimble
   - glide
+  - mammoth
+  - drex_max
   representations:
   - per_column
   - joint

@@ -41,6 +41,7 @@ def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> Non
         / "staging"
         / paths.PROJECT_NAME
         / "output_JEVPFN"
+        / "rq2"
         / "4. experiment_1"
         / "results"
     )
@@ -76,12 +77,12 @@ def test_staging_override_works_off_cluster(tmp_path, monkeypatch) -> None:
 def test_figures_dir_is_per_notebook() -> None:
     root = paths.figures_dir()
     assert root == paths.outputs_dir() / "figures"
-    assert paths.figures_dir("some_notebook") == root / "0. exploration" / "some_notebook"
+    assert paths.figures_dir("some_notebook") == root / "general" / "some_notebook"
     assert paths.captions_path() == paths.figures_dir() / "Captions.md"
     assert paths.all_results_path() == paths.outputs_dir() / "All Results.md"
-    assert paths.figures_dir(phase="experiment_1") == root / "4. experiment_1"
+    assert paths.figures_dir(phase="experiment_1") == root / "rq2"
     assert (
-        paths.figures_dir("experiment_1_models") == root / "4. experiment_1" / "experiment_1_models"
+        paths.figures_dir("experiment_1_models") == root / "rq2" / "experiment_1_models"
     )
 
 
@@ -186,11 +187,11 @@ def test_phases_separate_large_results_and_small_logs(isolated_output):
     assert "vsc_data" in str(paths.logs_dir("experiment_0"))
     assert paths.figures_dir("03_feature_creation").parts[-3:] == (
         "figures",
-        "2. feature_creation",
+        "general",
         "03_feature_creation",
     )
     assert paths.reports_dir("01_data_exploration").parts[-3:] == (
-        "0. exploration",
+        "general",
         "01_data_exploration",
         "_report.txt",
     )

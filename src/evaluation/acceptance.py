@@ -20,7 +20,7 @@ def evaluation_identity():
         ("experiment_2", "embeddings"),
         ("experiment_3", "tar"),
         ("experiment_4", "native_text"),
-        ("rq3", "readout"),
+        ("regression_readout", "readout"),
     ):
         phases[phase] = load_yaml(phase + "/" + name)
     feature_fields = (

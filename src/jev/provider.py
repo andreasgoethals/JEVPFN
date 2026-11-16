@@ -20,7 +20,8 @@ PROBABILITY_VALIDATION_VERSION = "jev-two-decimal-simplex-v1"
 # Strands' pinned infer._to_answer rounds probabilities AND weighted scores to
 # four decimals. Jev's two-decimal precision is observed wire behaviour. Neither
 # policy applies to another runtime, and neither reconstructs lost precision.
-ROUNDING_DECIMALS = {"jev": 2, "strands": 4}
+# Mammoth qev.answers rounds all public probabilities to six decimal places.
+ROUNDING_DECIMALS = {"jev": 2, "strands": 4, "mammoth": 6}
 
 
 def _rounding_half_step(values, provider):
@@ -69,6 +70,7 @@ def probability_distribution(values, provider):
     return normalized, {
         "policy": (
             "strands-four-decimal-simplex-v1" if provider == "strands"
+            else "mammoth-six-decimal-simplex-v1" if provider == "mammoth"
             else PROBABILITY_VALIDATION_VERSION
         ),
         "reported_sum": total,

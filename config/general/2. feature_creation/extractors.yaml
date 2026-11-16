@@ -166,6 +166,30 @@ candidates:
     probability_policy: native_temperature_1.0_no_rescaling
     score_readout: mean_from_native_probabilities_preserve_native_modal_score
     reference: https://huggingface.co/fastino/GLiDE-27B
+  mammoth:
+    enabled: false
+    model: baselabs/mammoth-1
+    revision: 61cec44c281c693992e3d6ebeb44dd3402dfa186
+    delivery: self_hosted
+    context_tokens: 16384
+    max_options: 255
+    input_modalities:
+    - text
+    license: MIT
+    input_price_per_million_usd: null
+    reference: https://huggingface.co/baselabs/mammoth-1
+  drex_max:
+    enabled: false
+    model: nace-ai/drex-max-v1
+    revision: 005d4eb46cd2f2f56ae0e82c6444fba8363c9c17
+    delivery: self_hosted
+    context_tokens: 16384
+    max_options: 255
+    input_modalities:
+    - text
+    license: Nace.AI Open RAIL-M
+    input_price_per_million_usd: null
+    reference: https://huggingface.co/nace-ai/drex-max-v1
 readiness_required:
 - explicit_owner_roster_selection
 - verified_account_access_or_checkpoint_license
