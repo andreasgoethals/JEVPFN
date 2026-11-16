@@ -15,7 +15,8 @@ def numeric_feature_dimensions(audit, *, excluded=()):
     for row in audit.summary.itertuples(index=False):
         meta = audit.metadata(row.dataset_id)
         texts = len(meta.text_columns)
-        width = len(meta.classes) if meta.task_type == "multiclass_classification" else 1
+        width = (len(meta.classes) if meta.task_type == "multiclass_classification"
+                 else 9 if meta.task_type == "regression" else 1)
         separate, joint = texts * width, width
         combined = separate + (joint if texts > 1 else 0)
         records.append(
@@ -32,7 +33,7 @@ def numeric_feature_dimensions(audit, *, excluded=()):
                 "per_column_features": separate,
                 "joint_features": joint,
                 "combined_features": combined,
-                "predictor_columns_with_combined": len(meta.non_text_columns) + combined,
+                "predictor_columns_with_combined": len(meta.non_text_columns) + texts + combined,
                 "combined_numeric_values": int(row.rows) * combined,
                 "combined_float64_mib": int(row.rows) * combined * 8 / 1024**2,
             }

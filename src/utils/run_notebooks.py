@@ -1,7 +1,7 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only 01_data_exploration
+    python -m src.utils.run_notebooks --only general/01_data
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
     output_JEVPFN/figures/<phase>/<notebook>/*.pdf   written by the notebooks themselves

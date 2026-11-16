@@ -13,7 +13,7 @@ from src.utils.serialization import digest
 
 
 def regression_readout_plan():
-    """New full-vector fits only; mean comparators reuse RQ2's exact paired arms."""
+    """Appendix mean fits only; full-vector comparators reuse the primary RQ2 arms."""
     cfg = load_yaml("rq2/readout")
     semantics = load_yaml("dataset_semantics")["datasets"]
     result = []
@@ -29,7 +29,7 @@ def regression_readout_plan():
                         provider=provider,
                         phase="regression_readout",
                         feature_set="non_text_plus_" + mode,
-                        view="probabilities",
+                        view="mean",
                     )
                     arm.update(width_status(_metadata(entry), arm))
                     result.append(arm)
@@ -62,7 +62,7 @@ def regression_width_table():
             non_text_columns=len(meta.non_text_columns),
         )
         for mode in ("joint", "per_column", "both"):
-            for view in ("main", "probabilities"):
+            for view in ("mean", "probabilities"):
                 row[f"{mode}_{view}"] = feature_width(
                     meta, dict(feature_set="non_text_plus_" + mode, provider="strands", view=view)
                 )
@@ -97,6 +97,22 @@ def stable_probe_sample(input_keys, *, limit=100, seed=42):
     if type(limit) is not int or limit < 1:
         raise ValueError("Probe limit must be positive")
     return sorted(set(input_keys), key=lambda key: digest([seed, key]))[:limit]
+
+
+def random_probe_rows(row_ids, *, dataset_id, limit=500, seed=42):
+    """Uniform source-row sample without replacement; duplicates of text remain eligible.
+
+    Canonical row IDs, not text keys or targets, define the sampling population.
+    Store the returned IDs with the source fingerprint before running any variants.
+    """
+    rows = sorted(row_ids)
+    if not rows or len(rows) != len(set(rows)):
+        raise ValueError("Source row IDs must be nonempty and unique")
+    if type(limit) is not int or limit < 1 or not dataset_id:
+        raise ValueError("A positive limit and dataset identity are required")
+    rng = np.random.Generator(np.random.PCG64(int(digest([seed, dataset_id])[:16], 16)))
+    indices = rng.choice(len(rows), size=min(limit, len(rows)), replace=False)
+    return [rows[i] for i in indices]
 
 
 def align_permuted_probabilities(probabilities, original_indices):

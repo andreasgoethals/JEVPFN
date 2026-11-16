@@ -35,14 +35,53 @@ are not independent datasets for cross-task inference.
 | RQ1-B: information and context | Per-column versus joint outputs; whether disagreement coincides with missing/short/repeated text; direct classification discrimination and calibration where labels apply | Local paired analysis; label-based findings kept separate from label-free descriptions |
 | RQ1-C: controlled invariance | Same underlying input under option order, field order and a reviewed question paraphrase; class flips and aligned probability changes | New bounded VSC inference; Jev requires an explicit remaining budget |
 
-RQ1-C selects at most 100 unique input identities per dataset, deterministically and
-without targets or observed model outcomes. Each applicable intervention has one paired
-variant; option order applies to unordered classification options, not reordered ordinal
-rubrics. Field order requires multiple available fields. Paraphrases require a recorded
-semantic-equivalence review. An upper bound is 18 × 15 × 100 × 3 = **81,000 variant requests**, before
-removing inapplicable cases; baseline responses are reused. Hosted calls need budget approval. This is a
-budget ceiling, not an already implemented/submitted inference grid. The existing 0A
-robustness diagnostics are interface evidence, not this full research experiment.
+RQ1-C uses **500 uniformly sampled source rows per dataset**, without replacement,
+with seed 42 and a dataset-specific random stream. Freeze sampled row IDs and source
+hashes before querying. Duplicate texts remain separate eligible rows; missing or failed
+requests are never replaced. The original joint request is the reference. All models
+receive the same selected rows and each variant is compared directly with that reference,
+never with another variant. Identical cached requests may be reused without changing row weights.
+
+| Single changed factor | Binary | Multiclass | Regression |
+|---|---|---|---|
+| Question wording | One reviewed paraphrase of the question only | Same | Same |
+| Field order | Reverse nonempty named fields, if at least two | Same | Same |
+| Option order | Not applicable: preserve native Boolean semantics | Reverse options, preserve codes/descriptions, inverse-align probabilities | Not applicable: preserve the ordered nine-level rubric |
+
+For the wording variant, replace only the task question sentence with one independently
+reviewed equivalent sentence per dataset. Keep documentary target definitions, observation
+unit, field definitions, class descriptions, source text bytes and model settings unchanged.
+The 18 exact replacement sentences must be reviewed and frozen before dispatch; there is
+no automatic paraphrase generation. Exact proposed templates are stored in
+`config/rq1/behavior.yaml`; only existing target/class names fill their placeholders. Field order does not alter any field name/value. Native
+adapters must demonstrate that the order change reaches the model rather than being sorted away.
+An exact original-request replay controls for inference variability; it deliberately bypasses
+response reuse and remains outside the production response namespace.
+
+Binary outcomes: signed/absolute positive-probability change and flips at fixed 0.5.
+Multiclass: total variation after semantic alignment, per-class shifts and argmax flips.
+Regression: total variation of the nine probabilities, change in mean and variance, and
+modal-level changes. Ties, missingness, non-applicability and failures have separate counts.
+Report per-dataset paired distributions and equal-dataset summaries, not a pooled row-level
+significance test. Compare perturbation effects with replay variability. Do not select the
+most favourable paraphrase or permutation from observed outputs.
+
+With 15 models the ceiling is **315,000 variant calls** (18 wording + at most 18 field-order
++ 6 option-order dataset cases, each with 500 rows), plus at most **135,000 replay calls**.
+Actual calls fall with missing text and inapplicable field order. Cached original responses
+supply the reference. New hosted calls still require a budget. Sampling and alignment are
+implemented; the controlled runner, reviewed sentences and replay namespace are pending.
+The existing 0A diagnostics are historical interface evidence, not this 500-row experiment.
+
+A low-cost RQ1-B extension can use the same sampled rows to compare within-dataset/field
+cosine distances in each frozen encoder with total-variation distances in decision outputs.
+Freeze up to 10,000 uniformly sampled distinct unordered row pairs per dataset before
+checking representation availability, using a separate recorded random stream. Use those
+same pairs across fields, decision models and encoders; exclude only pairs missing either representation,
+report coverage and average within datasets. Never pool encoder coordinates or treat all
+pair distances as independent observations. This measures geometry agreement, not how much
+label information is retained; RQ2 tests predictive value. It needs no new encoder calls
+when complete vectors exist, but the distance analysis is not implemented yet.
 
 Probability normalization is not calibration. A single text field may not contain enough
 information to recover the row outcome. Regression evidence levels −4…+4 are not bins of
@@ -59,7 +98,7 @@ The dedicated controlled-query runner and label-linked behavioural panels remain
 
 The four established experiments below are RQ2-A through RQ2-D. Their machine IDs
 `experiment_1`…`experiment_4` stay unchanged in scientific identities. Config files live
-under `config/rq2/`; one `notebooks/rq2_prediction.ipynb` presents all RQ2 experiments.
+under `config/rq2/`; one notebook per experiment lives under `notebooks/rq2/`.
 New result trees live under `output_JEVPFN/rq2/<phase>/results/`. Existing trees move only
 at an idle, checksum-verified handover; the active extraction paths remain unchanged.
 
@@ -92,9 +131,9 @@ feedback are excluded. These are task-conditioned features without dataset-label
 pretrained models' exposure to public labels cannot be ruled out.
 
 A binary response contributes its positive-class probability; multiclass contributes
-the full class-probability vector; regression contributes the probability-weighted mean
-of nine ordered evidence levels from −4 to +4. Full responses remain stored. Regression
-features are evidence scores, not predictions in target units. Provider probabilities
+the full class-probability vector; regression contributes all nine ordered probabilities
+for evidence levels −4 to +4. Their mean is an appendix ablation only. Full responses remain
+stored. Regression probabilities concern evidence direction, not target-value bins. Provider probabilities
 and confidence fields are not automatically calibrated or interchangeable.
 
 ### RQ2-B / Experiment 2: frozen embeddings
@@ -151,25 +190,32 @@ AUC is a cohort-level measure, not a per-row loss. Fixed cohorts describe availa
 training-defined text-length quantiles and seen/unseen text; classification baseline
 uncertainty cutpoints must come from training out-of-fold predictions. The same rules
 apply across datasets, rather than hand-picking favourable subgroups for each task.
-Report within-dataset effects, coverage and equal-dataset summaries. These are observational
+Use training quartiles for length and baseline uncertainty, with missing text separate.
+For every prespecified representation, show baseline and augmented loss, their paired
+difference and the number of held-out rows in each cohort. Retain per-dataset panels
+alongside equal-dataset summaries; do not choose a different winning model in each cohort.
+The regression normalization is the outer-training target variance, recorded per fold;
+a zero-variance training target makes that normalized measure undefined. These are observational
 associations, not causal effects of text. The cohort boundary helper is tested locally;
 full loss/cohort report integration still needs implementation before its analysis freeze.
 
-### RQ2-F: mean versus nine probabilities
+### Appendix to RQ2-A: mean versus nine probabilities
 
-The main regression feature is E[S] for the fixed evidence levels S = −4,…,+4. A response
-concentrated at zero and a response split equally between −4 and +4 both have mean zero,
-but express different uncertainty. Retain all nine probabilities to test whether that
-information helps prediction. They sum to one (eight degrees of freedom), but we retain
-all nine named coordinates for consistent class semantics. This is **not eight extra
-questions** and costs no additional decision-model inference.
+The primary regression representation retains all nine probabilities (eight degrees of
+freedom). Their mean loses information: certainty at zero and equal mass at −4/+4 have
+the same mean but different uncertainty. Keep all nine named coordinates for stable level
+semantics; this requires no extra question or inference. The linear baseline is regularized.
 
-Use the nine regression datasets, all fifteen extractors, the per-column mode, and two
-prespecified predictors (linear and CatBoost). Existing RQ2 mean arms are the comparators;
-**9 × 15 × 2 = 270 new configurations / 1,350 outer fits** are required. The new arms use
-the same source features, split seed, rows, predictor settings and missingness flags.
-They are planned by `regression_readout_plan` and executable through the existing
-acceptance-gated campaign with `--phase regression_readout`; execution remains disabled.
+The appendix replaces the full vector by its mean on nine regression datasets, fifteen
+extractors, per-column mode, and linear/CatBoost: **270 mean configurations / 1,350 outer
+fits**. Compare with the matching primary full-vector arms, holding splits, rows, settings
+and missingness fixed. `regression_readout_plan` generates the mean arms under the stable
+phase ID `regression_readout`. The primary view is explicitly `probabilities`; appendix
+view is `mean`. Historical `main` mean records cannot satisfy new primary run identities.
+Execution stays acceptance-gated and disabled. There is no separate RQ2-F notebook.
+Frozen question-bank metadata retains its historical mean-readout wording because it is
+fingerprinted into existing requests. That is a provenance exception, not the current
+predictor recipe; changing a downstream view does not require paying for extraction again.
 
 The widest dataset is Rotten Tomatoes: 13 text and 2 non-text fields. Including 13 text
 availability flags, separate nine-probability blocks give 2 + 13 + 13×9 = **132 columns**.
@@ -197,12 +243,22 @@ compute and data budgets, trainable tensors, initial checkpoint, adapters and pr
 No silent input truncation or unapproved row cap is allowed. Regression adaptation is
 excluded because the nine-level rubric is not a supervised target-bin definition.
 
-Evaluate adapted decisions directly first. Feeding their in-sample training predictions
-into a downstream predictor would give the learner overly optimistic features. A later
-stacked-feature experiment would need inner cross-fitting (three inner fits plus an
-outer refit: 360 training runs for the two trained variants), and is **not included**.
-This differs from the existing TAR pipeline, which evaluates a supervised representation
-trained within outer training; do not call the two adaptation mechanisms identical.
+Evaluate adapted decisions directly first. A TAR-like supervised feature extension is
+feasible: split source rows first, fit an adapter using only outer-training labels, freeze
+it, generate probabilities for training/test rows and fit the downstream predictor on the
+training features. This is valid outer-fold evaluation; in-sample supervised features can
+overfit but are not automatically test leakage. Inner cross-fitting is an alternative
+stacking design, not an inherent requirement. A fixed binary threshold avoids inner
+threshold-selection fits; it does not itself prevent leakage.
+
+For the proposed feature extension, use one adapter per dataset/fold, train on per-field
+examples after source-row splitting (as TAR does), and reuse it across downstream predictors.
+Keep output meanings fixed and compare head-only with LoRA-plus-head under the same data
+budget. The publisher supports both mechanisms; it does not supply this tabular fold/cache
+workflow. Regression requires an explicit training-only target-bin scheme: the existing
+qualitative evidence levels are not empirical target bins. Start with classification and
+review the regression mapping separately. This extension is a proposal, not an enabled
+training runner or an accepted change to the current 90-run direct-decision grid.
 
 The training design and partition contracts are configured/tested; the dedicated Strands
 training runner, sealed training environment and real pilot are **not yet implemented or
@@ -233,7 +289,7 @@ One configuration is a dataset × predictor × representation. Each has five out
 | 2 | 18 × 6 × 3 × 2 = **648** | 3,240 | 1,620 |
 | 3 | 18 × 6 × 1 × 2 = **216** | 1,080 | 0 |
 | 4 | 18 × 3 = **54** | 270 | 135 |
-| RQ2-F / regression readout | 9 × 15 × 2 = **270** | 1,350 | 0 |
+| RQ2-A appendix / mean readout | 9 × 15 × 2 = **270** | 1,350 | 0 |
 | **RQ2 total** | **6,156** | **30,780** | **14,175** |
 
 Experiments 2 and 3 reuse Experiment 1's structured baseline. Inner-fit counts are three
@@ -326,7 +382,7 @@ representations; downstream held-out prediction determines their utility.
 
 The relocation preserves old output IDs but changes the source/configuration fingerprint;
 review it at an idle handover, never underneath a running campaign. New real 0B profiles
-include the largest/tallest regression probability-vector arms for linear and CatBoost.
+include full-vector primary regression for all six predictors and mean appendix arms for linear and CatBoost.
 Predictor contracts now include a nine-probability-per-field fixture with missing blocks.
 Record identities distinguish the probability view from the mean view.
 
@@ -361,7 +417,7 @@ training gate tests gradients, frozen weights, split isolation, save/reload and 
 on two bounded pilots before the 90-run expansion. Later code changes require targeted
 requalification, not a redundant complete output reset.
 
-There is one report notebook per RQ: `rq1_behavior`, `rq2_prediction`, `rq3_adaptation`.
-General preparation and validation notebooks remain in `notebooks/general/`. Figures,
+There is one notebook per experiment inside `notebooks/rq1/`, `rq2/` and `rq3/`.
+General has exactly `01_data`, `02_features` and `03_validation`. Figures,
 figure registries, captions and report intermediates are grouped by RQ/general. Missing
 results are shown as pending evidence, never simulated findings.

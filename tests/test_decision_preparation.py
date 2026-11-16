@@ -38,7 +38,7 @@ def fixture_dataset(task="cls", texts=2, classes=3):
     return LoadedDataset(frame, meta, official, {"data_identity": "fixed"}, [])
 
 
-@pytest.mark.parametrize("task,classes,width", [("cls", 2, 1), ("cls", 3, 3), ("reg", 3, 1)])
+@pytest.mark.parametrize("task,classes,width", [("cls", 2, 1), ("cls", 3, 3), ("reg", 3, 9)])
 @pytest.mark.parametrize("texts", [1, 2])
 def test_feature_widths_are_independent_of_row_counts_and_duplicates(task, classes, width, texts):
     dataset = fixture_dataset(task, texts, classes)
@@ -51,7 +51,7 @@ def test_feature_widths_are_independent_of_row_counts_and_duplicates(task, class
     assert table.per_column_features == texts * width
     assert table.joint_features == width
     assert table.combined_features == (texts + (texts > 1)) * width
-    assert table.predictor_columns_with_combined == table.combined_features + 1
+    assert table.predictor_columns_with_combined == table.combined_features + 1 + texts
     assert table.combined_numeric_values == 6 * table.combined_features
     assert table.combined_float64_mib == pytest.approx(8 * table.combined_numeric_values / 1024**2)
 

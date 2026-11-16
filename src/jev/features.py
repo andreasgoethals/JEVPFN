@@ -575,14 +575,16 @@ def assemble_features(dataset, blocks: list[FeatureBlock], *, view: str = "main"
 
 def feature_view(block: FeatureBlock, task: str, view: str = "main") -> pd.DataFrame:
     """Select the agreed model inputs without discarding the retained raw probabilities."""
-    if view not in {"main", "probabilities", "probabilities_plus_confidence", "retained"}:
+    if view not in {"main", "mean", "probabilities", "probabilities_plus_confidence", "retained"}:
         raise ValueError("Unknown feature view")
     if task not in {"binary_classification", "multiclass_classification", "regression"}:
         raise ValueError("Unknown task")
     columns = block.manifest["feature_columns"]
     if view == "retained":
         chosen = columns
-    elif view == "main" and task == "regression":
+    elif view == "mean":
+        if task != "regression":
+            raise ValueError("Mean view is only defined for regression")
         chosen = [c for c in columns if c.endswith("__expected_direction")]
     else:
         chosen = [c for c in columns if c.rsplit("__", 1)[-1].startswith("p_")]
@@ -657,7 +659,7 @@ def feature_plan(audit, cfg: dict) -> pd.DataFrame:
                     * (
                         len(metadata.classes)
                         if metadata.task_type == "multiclass_classification"
-                        else 1
+                        else 9 if metadata.task_type == "regression" else 1
                     ),
                     "status": "planned_only",
                 }

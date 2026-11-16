@@ -521,3 +521,29 @@ Negative results remain informative. One trained decision model supports a case 
 not a universal adaptation claim. Shuffled CV, public pretraining exposure, selected-task
 coverage and the TAR input-policy differences remain limitations, not problems erased
 by an extra experiment. Freeze hypotheses before inspecting comparative outcomes.
+
+
+## Controlled presentation and supervised features (16 November)
+
+[Large Language Models Sensitivity to The Order of Options in Multiple-Choice Questions](https://aclanthology.org/2024.findings-naacl.130/)
+(Pezeshkpour and Hruschka, Findings NAACL 2024) provides published evidence for testing
+option order. It does not establish the size of that effect in these decision checkpoints.
+Our one-factor question/field-order design and exact-replay control are methodological
+choices; reviewed equivalence and actual native input serialization remain necessary.
+
+MulTaBench's pinned `encoders/e5/e5_finetune.py::finetune_e5` splits source rows before
+expanding field examples; `finetune/lora.py::finetuning_split` bins regression targets.
+It trains a supervised encoder once per evaluation split and discards the auxiliary head.
+The analogous Strands proposal retains decision probabilities instead of hidden vectors.
+The DM snapshot `1ace5aaa86a8` exposes `training.train._init_from` and `freeze_torso`.
+These support continued-adapter and head-only training, not a ready-made tabular pipeline.
+Outer-training supervision followed by downstream fitting is not inherently test leakage;
+held-out evaluation must include the entire pipeline. Fixed thresholds remove threshold
+selection, not the need for split isolation. No new training result is claimed here.
+
+The upstream [checkpoint-loading report #131](https://github.com/strands-labs/strands-decider/issues/131)
+describes missing decoder weights when an incompatible locally saved base-checkpoint
+layout is loaded. The report explicitly distinguishes this from the normal Hub-base path;
+it is not evidence that our accepted extraction failed. The future adaptation gate must
+verify loaded base/adapter/head identities and reject missing trainable/base tensors,
+rather than accepting a successful constructor as proof that pretrained weights loaded.

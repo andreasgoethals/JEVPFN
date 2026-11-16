@@ -20,6 +20,28 @@ pending statuses without changing the original evidence.
 | Benchmark | RQ1/RQ2/RQ3 layout; four core RQ2 comparisons and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
 | New roster | Fifteen selected; Mammoth-1 and Drex Max native adapters implemented and weights downloaded/hash-verified. Builds, storage and token-audit jobs completed 0:0 | GPU contracts 11807388/11807393 queued for priority; pilots 11807389/11807394 depend on them. Artifacts and real 0A still require review |
 
+### Local notebook and regression update on 16 November
+
+- Implemented the subsequently approved layout: three general notebooks and one notebook
+  per experiment in each RQ folder (fourteen total). Nine regression probabilities are
+  primary; the explicit mean appendix reuses the same stored responses. New view identities
+  prevent legacy mean results from satisfying the new coverage plan.
+- RQ1C now samples 500 source rows uniformly without replacement, with reproducible
+  dataset-specific streams and no replacement of missing/failed cases. Controlled
+  inference still requires the runner, all eighteen rendered paraphrase reviews and
+  replay/order validation. The embedding-distance extension remains a proposal.
+- The TAR-like Strands feature extension is documented separately from the configured
+  direct-decision training grid. Neither the training runner nor its real GPU checks
+  are claimed implemented. No VSC connection, deployment, submission or cleanup occurred
+  in this local update; the earlier remote observations below remain dated snapshots.
+- Full local suite: **1,448 passed, 26 skipped**, 367.15 seconds. Skips require native
+  storage/POSIX, staged tokenizer assets or Torch; this does not replace real 0B acceptance.
+- All fourteen current notebooks executed successfully; all seventeen generated figures
+  were rendered and visually inspected. The two full saved-feature comparison reports
+  took 1,080 and 1,060 seconds. Superseded general/RQ report figures were retired through
+  the scoped notebook cleaner, and current aggregate captions/reports were rebuilt.
+  Scientific stores, remote output and historical operational evidence were preserved.
+
 ### Research-design and 0B review on 16 November
 
 - Read-only SSH confirmed production freeze at `6b4f2e51ef8b8bf28e5db2bac8b73d43adffc239`.

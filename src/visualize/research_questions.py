@@ -11,9 +11,9 @@ def regression_width_figure(table):
     fig, ax = plt.subplots(figsize=style.figsize(ratio=0.67))
     y = np.arange(len(frame))
     ax.hlines(
-        y, frame.per_column_main, frame.per_column_probabilities, color=style.GRID_COLOR, linewidth=2
+        y, frame.per_column_mean, frame.per_column_probabilities, color=style.GRID_COLOR, linewidth=2
     )
-    ax.scatter(frame.per_column_main, y, facecolors="white", edgecolors=style.FAMILY_COLORS["experiment_1"], label="Mean per text field", zorder=3)
+    ax.scatter(frame.per_column_mean, y, facecolors="white", edgecolors=style.FAMILY_COLORS["experiment_1"], label="Mean per text field", zorder=3)
     ax.scatter(
         frame.per_column_probabilities,
         y,

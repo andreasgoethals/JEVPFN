@@ -14,7 +14,7 @@ confident or agreeing models are correct.
 | RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems, regression readout; when text helps | Predictor fits on VSC; paired analysis locally |
 | RQ3: adaptation | Strands 2B calibration, head-only and LoRA plus head | Fold-local training on VSC; held-out analysis locally |
 
-RQ2 has **6,156 configurations / 30,780 outer fits**, including 270 regression-readout
+RQ2 has **6,156 configurations / 30,780 outer fits**, including 270 appendix mean-readout
 ablations. The four main comparisons contribute 5,886 configurations; historical
 Experiments 1–4 retain their machine identifiers. RQ3 starts with four training pilots
 before a 90-run expansion. These are configured designs, not completed experiments.
@@ -40,8 +40,8 @@ have not passed or run. See [dated evidence](docs/AGENTS_MEMORY.md) for exact ID
 
 ## Repository navigation
 
-`config/` has `general/`, `rq1/`, `rq2/`, `rq3/`. Each RQ has one notebook directly
-in `notebooks/`; preparation and 0A/0B notebooks stay in `notebooks/general/`.
+`config/` has `general/`, `rq1/`, `rq2/`, `rq3/`. Each RQ has a matching notebook subfolder,
+with one report per experiment. General has three reports: data, features and validation.
 Scientific results and figures use RQ folders. Existing results require an idle verified
 layout migration; operational extraction, logs and acceptance records retain their paths. Source fingerprints change; completed scientific artifacts and
 recovery references remain intact, and new evaluation code requires fresh 0B evidence.
@@ -91,7 +91,8 @@ The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
 | `output_JEVPFN/<phase>/` | Operational validation evidence and logs |
 | `output_JEVPFN/rq2/<phase>/results/` | PCA, TAR and resumable benchmark records |
-| `output_JEVPFN/figures/<general-or-rq>/` | Figures and caption registries |
+| `output_JEVPFN/figures/<general-or-rq>/` | Paper figures, with combined captions in `figures/Captions.md` |
+| `output_JEVPFN/manifests/notebooks/<general-or-rq>/` | Figure registries and notebook execution receipts |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
 containers and results. Native scratch holds temporary working stores. Use the
@@ -104,18 +105,21 @@ Notebooks run locally and write paper-width PDFs and printed reports. The runner
 `output_JEVPFN/figures/`, and the aggregate report is `output_JEVPFN/All Results.md`.
 Result figures appear as complete saved evidence becomes available.
 
-The feature-comparison notebook examines row-level vote splits, matching-class
+The RQ1 Outputs and Context notebooks examine row-level vote splits, matching-class
 correlations, full probability differences, confidence, text grouping and exact reuse.
-It includes hash-verified source examples and exports all joint rows to compressed
+They include hash-verified source examples and export all joint rows to compressed
 Parquet. Only fully downloaded extractors enter comparisons; agreement is not accuracy.
 
 | Stage | Notebooks |
 |---|---|
-| Explore and prepare | [Data](<notebooks/general/01_data_exploration.ipynb>), [input design](<notebooks/general/02_jev_input_design.ipynb>), [questions](<notebooks/general/01_prepare_questions.ipynb>) |
-| General validation | [Feature preparation](<notebooks/general/03_feature_creation.ipynb>), [0A](<notebooks/general/01_before_feature_creation.ipynb>), [0B](<notebooks/general/02_after_feature_creation.ipynb>) |
-| RQ1 | [Decision behaviour for tabular text](notebooks/rq1_behavior.ipynb) |
-| RQ2 | [Predictive utility and all benchmark comparisons](notebooks/rq2_prediction.ipynb) |
-| RQ3 | [Strands adaptation](notebooks/rq3_adaptation.ipynb) |
+| General | [Data](notebooks/general/01_data.ipynb), [Features](notebooks/general/02_features.ipynb), [Validation](notebooks/general/03_validation.ipynb) |
+| RQ1 | [Outputs](notebooks/rq1/01_outputs.ipynb), [Context](notebooks/rq1/02_context.ipynb), [Robustness](notebooks/rq1/03_robustness.ipynb) |
+| RQ2 | [Decisions](notebooks/rq2/01_decisions.ipynb), [Embeddings](notebooks/rq2/02_embeddings.ipynb), [TAR](notebooks/rq2/03_tar.ipynb), [Native text](notebooks/rq2/04_native.ipynb), [When text helps](notebooks/rq2/05_when_text_helps.ipynb) |
+| RQ3 | [Calibration](notebooks/rq3/01_calibration.ipynb), [Decision head](notebooks/rq3/02_head.ipynb), [LoRA](notebooks/rq3/03_lora.ipynb) |
+
+Regression uses **nine probabilities per text input**; the mean comparison sits in the
+RQ2A appendix. RQ1C specifies 500 random source rows per dataset and one-factor changes.
+RQ3 notebooks currently show plans and pending gates, not trained-model results.
 
 ## Documentation
 

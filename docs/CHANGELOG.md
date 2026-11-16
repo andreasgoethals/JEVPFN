@@ -2,6 +2,19 @@
 
 ## 16-11-2026
 
+- Replaced the general/RQ monoliths with three general reports and one notebook per
+  RQ experiment. Regression now uses nine probabilities by default; explicit primary
+  and appendix-mean identities protect resume and coverage from historical mean runs.
+  Added missing-block, width, paired-readout and uniform source-row sampling tests.
+- RQ1C now specifies 500 random rows per dataset, isolated one-factor interventions
+  and an unchanged-request replay. Controlled execution stays disabled pending rendered
+  question review and its runner. Corrected the claim that supervised training features
+  inherently leak test information; documented a TAR-like Strands proposal separately
+  from the current training grid. Active VSC consumers were left untouched.
+- Verified locally: 1,448 tests passed with 26 platform/asset-dependent skips; all fourteen
+  notebooks executed and seventeen current figures were visually inspected. Retired the
+  replaced notebooks' generated figures and rebuilt the combined reports and captions.
+
 - Strengthened 0B full-fold coverage for every task type and the largest class vocabulary,
   retaining deduplication across shape/task checks. Added regressions for all six pairs
   of optimizer/validation/calibration/test partitions and invalid partition contents.

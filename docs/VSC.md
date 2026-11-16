@@ -15,7 +15,7 @@ transition. Confirm live jobs and artifacts before acting on a dated status.
 
 ## Research stages and active-source boundary
 
-Configs use `general/`, `rq1/`, `rq2/`, `rq3/`; there is one report notebook per RQ.
+Configs use `general/`, `rq1/`, `rq2/`, `rq3/`; there is one report notebook per experiment inside each RQ folder.
 New scientific results live in `output_JEVPFN/rq2/<phase>/results/`, with figures under
 `figures/<rq>/`. Extraction and 0A/0B operational paths remain unchanged. Before any
 new benchmark/PCA work, stop result consumers and preview the supported migration:

@@ -38,6 +38,7 @@ are recorded in the README. Preserve unrelated local changes.
 - Decision requests are deterministic and label-free: no generated questions, non-text
   row values, true row targets, class frequencies, target statistics or model feedback.
   Keep original class vocabularies and sourced meanings in `dataset_semantics.yaml`.
+  Regression uses all nine ordered probabilities; the mean is an explicit RQ2 appendix view.
   Empty text retains missing features. Never silently truncate decision inputs, drop
   rows/classes/features or cap training rows.
 - Among precomputed representation arms, TAR fits the encoder to dataset labels only
@@ -116,8 +117,8 @@ Retirement requires consumer checks, verified publication/recovery and scoped au
 Preserve resumable failures, referenced images and other projects. Check byte/file quotas;
 never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
-Reusable Python belongs in `src/`. Config and scientific results use general/rq1/rq2/rq3. Keep one notebook per RQ
-at the notebooks root and general notebooks in their folder. Preserve scientific phase IDs;
+Reusable Python belongs in `src/`. Config and scientific results use general/rq1/rq2/rq3. Keep one notebook per experiment
+inside each RQ folder and exactly three general notebooks (data, features, validation). Preserve scientific phase IDs;
 move old result trees only through the verified idle migration. Operational paths stay stable.
 Do not create empty phase folders or duplicate question files. Permanent questions and
 response/features use per-dataset SQLite stores. PowerShell must work on Windows

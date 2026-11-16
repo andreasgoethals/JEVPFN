@@ -117,7 +117,7 @@ def input_design_figure():
     outputs = [
         ("Binary", "1", "p(positive class)"),
         ("Multiclass", "K", "class probabilities,\nfixed class order"),
-        ("Regression", "1", "expected direction;\nnine probabilities kept"),
+        ("Regression", "9", "ordered probability vector;\nmean in appendix"),
     ]
     y = 0.82
     for task, width, body in outputs:
@@ -145,7 +145,7 @@ def input_design_figure():
                              ("PCA of label-tuned E5 vectors", 0.27,
                               style.FAMILY_COLORS["experiment_3"])]),
     ]
-    experiments = {"+ frozen embedding": "Experiment 2", "+ TAR embedding": "Experiment 3"}
+    experiments = {"+ frozen embedding": "RQ2B", "+ TAR embedding": "RQ2C"}
     for i, (name, blocks) in enumerate(arms):
         top = 0.39 - i * 0.066
         ax.text(0.16, top - 0.025, name, ha="right", va="center", fontsize=7,
@@ -159,7 +159,7 @@ def input_design_figure():
                     color=style.TEXT_COLOR if light else style.BACKGROUND_COLOR,
                     transform=ax.transAxes)
             x += width
-        ax.text(0.99, top - 0.025, experiments.get(name, "Experiment 1"),
+        ax.text(0.99, top - 0.025, experiments.get(name, "RQ2A"),
                 ha="right", va="center", fontsize=7, color=ink, transform=ax.transAxes)
     return (
         fig,

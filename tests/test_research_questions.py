@@ -7,6 +7,7 @@ from src.evaluation.qualification import profile_plan
 from src.evaluation.research_questions import (
     adaptation_plan,
     align_permuted_probabilities,
+    random_probe_rows,
     regression_readout_plan,
     regression_width_table,
     stable_probe_sample,
@@ -29,11 +30,11 @@ def test_readout_uses_paired_regression_arms_and_real_width_profiles():
     plan = regression_readout_plan()
     n = len(load_yaml("experiment_1/main")["candidate_extractors"])
     assert len(plan) == 9 * 2 * n
-    assert {a["view"] for a in plan} == {"probabilities"}
+    assert {a["view"] for a in plan} == {"mean"}
     assert {a["feature_set"] for a in plan} == {"non_text_plus_per_column"}
     profiles = [a for a in profile_plan() if a["phase"] == "regression_readout"]
     assert {a["model"] for a in profiles} == {"linear", "catboost"}
-    assert max(a["predictor_columns"] for a in profiles) == 132
+    assert max(a["predictor_columns"] for a in profiles) == 36
     widths = regression_width_table().set_index("dataset_id")
     row = widths.loc["REG_TEXT_ROTTEN_TOMATOES"]
     assert (row.per_column_probabilities, row.both_probabilities, row.kumo_conservative_max) == (
@@ -67,6 +68,28 @@ def test_permutation_alignment_restores_class_meanings():
         align_permuted_probabilities(p, [0, 0, 2])
     with pytest.raises(ValueError):
         align_permuted_probabilities(p * 2, [0, 1, 2])
+
+
+def test_random_source_rows_are_uniform_reproducible_and_not_deduplicated_by_text():
+    rows = [f"csv:{i}" for i in range(1000)]
+    sample = random_probe_rows(rows, dataset_id="test")
+    assert len(sample) == len(set(sample)) == 500
+    assert sample == random_probe_rows(rows[::-1], dataset_id="test")
+    assert sample != rows[:500]
+    assert sample != random_probe_rows(rows, dataset_id="other")
+    assert set(random_probe_rows(rows[:20], dataset_id="small")) == set(rows[:20])
+    with pytest.raises(ValueError, match="unique"):
+        random_probe_rows(rows + [rows[0]], dataset_id="test")
+
+
+def test_primary_regression_probability_view_cannot_reuse_historical_mean_identity():
+    from src.evaluation.campaign import benchmark_plan
+    semantics = load_yaml("dataset_semantics")["datasets"]
+    arms = [a for a in benchmark_plan() if a["phase"] == "experiment_1"
+            and a.get("provider") and semantics[a["dataset_id"]]["task_type"] == "regression"]
+    assert arms and all(a["view"] == "probabilities" for a in arms)
+    assert max(a["predictor_columns"] for a in arms) == 141
+    assert all(a["view"] == "mean" for a in regression_readout_plan())
 
 
 def test_cohort_cutpoints_ignore_test_distribution():
@@ -120,6 +143,30 @@ def test_summary_discovery_follows_research_order():
     from src.utils.run_notebooks import discover
 
     names = discover()
-    groups = ["general" if n.startswith("general/") else paths.notebook_phase(n) for n in names]
+    groups = ["general" if n.startswith("general/") else paths.research_group(paths.notebook_phase(n)) for n in names]
     order = {"general": 0, "rq1": 1, "rq2": 2, "rq3": 3}
     assert [order[g] for g in groups] == sorted(order[g] for g in groups)
+
+
+def test_regression_readout_pairs_only_full_folds_and_identical_artifacts():
+    import pandas as pd
+
+    from src.evaluation.representation_views import regression_mean_comparison
+    rows = []
+    for fold in range(5):
+        base = dict(dataset_id="fixture", task_type="regression", model_id="linear",
+                    checkpoint_id="fixed", split_id="s", outer_fold=fold, metric="r2",
+                    provider="strands", feature_set="non_text_plus_per_column",
+                    feature_artifact_ids="same")
+        rows.extend([{**base, "arm_id":"v", "phase":"experiment_1", "view":"probabilities", "value":0.8},
+                     {**base, "arm_id":"m", "phase":"regression_readout", "view":"mean", "value":0.6}])
+    table = pd.DataFrame(rows)
+    comparison = regression_mean_comparison(table)
+    assert len(comparison) == 5
+    np.testing.assert_allclose(comparison.difference, -0.2)
+    assert regression_mean_comparison(table.iloc[:-1]).empty
+    table.loc[table.view.eq("mean"), "feature_artifact_ids"] = "different"
+    assert regression_mean_comparison(table).empty
+    table.loc[table.view.eq("mean"), "feature_artifact_ids"] = "same"
+    with pytest.raises(ValueError, match="Multiple"):
+        regression_mean_comparison(pd.concat([table, table.iloc[:1]]))

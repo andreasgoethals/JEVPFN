@@ -158,6 +158,15 @@ CONFIG_GROUPS = {phase: ("general" if phase in {
     "exploration", "question_preparation", "feature_creation", "experiment_0"
 } else "rq2") for phase in PHASES if phase not in {"rq1", "rq2", "rq3", "regression_readout"}}
 NOTEBOOK_PHASES = {
+    "01_data": "exploration",
+    "02_features": "feature_creation",
+    "03_validation": "experiment_0",
+    "01_decisions": "experiment_1",
+    "02_embeddings": "experiment_2",
+    "03_tar": "experiment_3",
+    "04_native": "experiment_4",
+    "05_when_text_helps": "synthesis",
+
     "01_data_exploration": "exploration", "02_jev_input_design": "exploration",
     "01_prepare_questions": "question_preparation", "03_feature_creation": "feature_creation",
     "04_decision_feature_comparison": "feature_creation",

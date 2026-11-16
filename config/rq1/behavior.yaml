@@ -4,7 +4,15 @@ status: approved_design_pending_controlled_probe_implementation
 saved_output_analysis: true
 controlled_queries_enabled: false
 seed: 42
-unique_inputs_per_dataset: 100
+source_rows_per_dataset: 500
+sampling: uniform_without_replacement
+sampling_unit: source_row
+representation: joint
+retain_duplicate_text_rows: true
+resample_missing_or_failed_rows: false
+baseline: original_frozen_request
+one_factor_at_a_time: true
+exact_replay_control: true
 variants:
 - option_order
 - field_order
@@ -20,4 +28,37 @@ requires:
 - reviewed_semantic_equivalence
 - complete_baseline_outputs
 - paired_option_alignment
+- native_rendered_field_order_verified
+- isolated_replay_and_variant_namespace
 - explicit_jev_budget
+
+variant_scope:
+  question_paraphrase: all_tasks_one_reviewed_paraphrase_per_dataset
+  field_order: all_tasks_reverse_nonempty_fields_if_at_least_two
+  option_order: multiclass_only_reverse_options_and_inverse_align
+protected:
+- source_text_bytes
+- class_meanings_and_codes
+- target_definition
+- regression_levels_and_order
+- model_checkpoint_and_inference_settings
+metrics:
+- total_variation
+- signed_and_absolute_probability_change
+- argmax_flip_rate_excluding_ties
+- regression_mean_and_variance_change
+- failure_and_inapplicable_rates
+
+paraphrase_templates_pending_review:
+  binary_classification: >-
+    Considering the supplied text about this row, is {positive} better supported
+    than {other} as the value of {target}?
+  multiclass_classification: >-
+    Which candidate value of {target} has the strongest support in the supplied
+    text about this row?
+  regression: >-
+    For this row, does the supplied text indicate a relatively lower or higher
+    {target} than is typical for this kind of observation? Judge the direction
+    and strength of that evidence, not a difference measured in target units.
+paraphrase_substitution: canonical_existing_target_and_class_names_only
+semantic_review_status: pending_all_18_rendered_questions

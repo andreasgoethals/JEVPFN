@@ -40,6 +40,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
                     "feature_set": recipe["feature_set"],
                     "feature_artifact_ids": json.dumps(recipe["feature_artifact_ids"]),
                     "provider": (recipe.get("representation_recipe") or {}).get("provider"),
+                    "view": (recipe.get("representation_recipe") or {}).get("view", "main"),
                     "inference_status": (recipe.get("representation_recipe") or {}).get(
                         "inference_status", "prespecified"
                     ),
@@ -137,6 +138,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
         "feature_set",
         "feature_artifact_ids",
         "provider",
+        "view",
         "inference_status",
         "binary_threshold_policy",
         "embedding_recipe_id",

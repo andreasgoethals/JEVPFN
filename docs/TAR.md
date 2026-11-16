@@ -36,6 +36,10 @@ and both PCA recipes: **90 encoder fits and 216 predictor configurations**. The
 Upstream does not train encoders inside an inner threshold-CV loop. TAR therefore uses
 fixed-0.5 binary decision metrics; it produces no inner-OOF threshold predictions.
 Compare default-threshold metrics across families; AUC does not depend on the threshold.
+A similar outer-fold supervised Strands feature learner is feasible in principle; it is
+a separate proposed RQ3 integration, not code supplied by this E5 implementation.
+Training a representation on outer-training labels is not itself test leakage; no held-out
+labels may influence weights, preprocessing or model selection.
 
 ## Explicit project differences
 

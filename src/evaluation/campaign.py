@@ -92,6 +92,12 @@ def benchmark_plan(main=None, text=None):
 
     for entry in selected:
         arms(entry, MAIN_MODELS, DECISION_FEATURE_SETS, "experiment_1")
+        # Explicit view distinguishes the new regression protocol from historical
+        # records whose implicit "main" view selected the mean.
+        if semantics[entry["id"]]["task_type"] == "regression":
+            for arm in rows:
+                if arm["dataset_id"] == entry["id"] and arm.get("provider"):
+                    arm["view"] = "probabilities"
         for encoder in embedding["encoders"]:
             for scope, components in pca_grid():
                 for model in MAIN_MODELS:

@@ -4,9 +4,11 @@ required_local_tests:
 - tests/test_feature_selection.py
 - tests/test_benchmark_qualification.py
 rq1:
-- stable_label_free_sampling
+- uniform_source_row_sampling_preserving_text_duplicates
 - option_permutation_inverse_alignment
 - paired_missingness
+- native_field_order_reaches_model
+- original_replay_is_not_a_cache_hit
 - semantic_equivalence_review
 rq2:
 - training_only_pca_and_thresholds
@@ -17,11 +19,16 @@ rq2:
 rq2_regression_readout:
 - nine_probability_order
 - mean_reconstruction
+- primary_probability_view_identity
+- mean_view_regression_only
 - all_missing_block
 - distinct_record_identity
+- legacy_mean_cannot_complete_primary_probability_plan
+- mean_vector_pairing_requires_identical_artifacts
 - largest_regression_width_profile
 rq3_adaptation:
 - training_runtime
+- checkpoint_load_matches_pinned_base_adapter_and_head
 - head_only_freeze
 - lora_gradient_flow
 - disjoint_optimizer_validation_calibration_test

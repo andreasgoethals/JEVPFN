@@ -84,7 +84,8 @@ def test_rotten_tomatoes_pca_width_limit_and_joint_alternative():
     assert feature_width(metadata, arm | {"pca_scope": "joint"}) == 79
     assert feature_width(metadata, arm | {"pca_components": 32}) == 431
     combined = arm | dict(feature_set="non_text_plus_both", providers=["jev", "liquid"])
-    assert feature_width(metadata, combined) == 2 + 13 + 2 * 14
+    assert feature_width(metadata, combined) == 2 + 13 + 2 * 14 * 9
+    assert feature_width(metadata, combined | {"view": "mean"}) == 2 + 13 + 2 * 14
 
 
 def test_kumo_guard_counts_publisher_category_expansion_before_silent_selection():

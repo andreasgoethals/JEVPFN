@@ -53,7 +53,7 @@ def dataset():
 
 
 
-def test_regression_default_view_is_one_direction_not_eleven_features():
+def test_regression_default_view_retains_nine_probabilities_and_explicit_mean():
     columns = [f"jev__all_text__p_{i}" for i in range(9)] + [
         "jev__all_text__confidence",
         "jev__all_text__expected_direction",
@@ -63,7 +63,10 @@ def test_regression_default_view_is_one_direction_not_eleven_features():
         pd.DataFrame(),
         {"feature_columns": columns},
     )
-    assert list(feature_view(block, "regression").columns) == ["row_id", columns[-1]]
+    assert list(feature_view(block, "regression").columns) == ["row_id", *columns[:9]]
+    assert list(feature_view(block, "regression", "mean").columns) == ["row_id", columns[-1]]
+    with pytest.raises(ValueError, match="only defined for regression"):
+        feature_view(block, "binary_classification", "mean")
     assert feature_view(block, "regression", "probabilities").shape[1] == 10
     assert feature_view(block, "regression", "retained").shape[1] == 12
     uncertainty = feature_view(block, "regression", "probabilities_plus_confidence")
@@ -351,3 +354,16 @@ def test_batch_cache_lookup_does_not_mutate_origins(tmp_path, dataset):
     assert cache.get_many(requests) == {requests[0].cache_key: supplied}
     with cache._connect() as db:
         assert db.execute("SELECT COUNT(*) FROM origins").fetchone()[0] == 1
+
+
+def test_probability_and_mean_views_keep_missing_blocks_and_level_order():
+    columns = [f"jev__all_text__p_{i}" for i in range(9)]
+    values = pd.DataFrame([["a", *([0.0]*8), 1.0, 4.0],
+                           ["b", *([float("nan")]*10)]],
+                          columns=["row_id", *columns, "jev__all_text__expected_direction"])
+    block = FeatureBlock(values, pd.DataFrame(), {"feature_columns":list(values.columns[1:])})
+    probabilities = feature_view(block, "regression")
+    mean = feature_view(block, "regression", "mean")
+    assert list(probabilities.columns[1:]) == columns
+    assert probabilities.iloc[1, 1:].isna().all() and mean.iloc[1, 1:].isna().all()
+    assert float(probabilities.iloc[0, 1:].to_numpy(dtype=float) @ np.arange(-4,5)) == mean.iloc[0, 1]

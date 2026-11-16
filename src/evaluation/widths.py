@@ -19,7 +19,7 @@ def feature_width(metadata, arm):
             len(metadata.classes) if metadata.task_type == "multiclass_classification" else 1
         )
         if (
-            arm.get("view") in {"probabilities", "probabilities_plus_confidence"}
+            arm.get("view", "main") != "mean"
             and metadata.task_type == "regression"
         ):
             per_input = 9

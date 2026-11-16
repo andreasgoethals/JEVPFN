@@ -9,6 +9,27 @@ PAIR_KEYS = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id",
 MODES = ["non_text_plus_joint", "non_text_plus_per_column", "non_text_plus_both"]
 
 
+def regression_mean_comparison(folds):
+    """Appendix mean minus primary vector, with identical artifacts and paired folds."""
+    if folds.empty:
+        return pd.DataFrame()
+    chosen = folds[folds.task_type.eq("regression") & folds.metric.eq("r2")]
+    complete = chosen.groupby("arm_id").outer_fold.nunique()
+    chosen = chosen[chosen.arm_id.isin(complete[complete.eq(5)].index)]
+    keys = PAIR_KEYS + ["provider", "feature_set", "feature_artifact_ids"]
+    mean = chosen[chosen.phase.eq("regression_readout") & chosen.view.eq("mean")]
+    vector = chosen[chosen.phase.eq("experiment_1") & chosen.view.eq("probabilities")]
+    if mean.empty or vector.empty:
+        return pd.DataFrame()
+    if mean.duplicated(keys).any() or vector.duplicated(keys).any():
+        raise ValueError("Multiple readout recipes match; select one campaign")
+    result = mean.merge(vector[keys + ["value"]].rename(columns={"value": "reference_value"}),
+                        on=keys, how="inner", validate="one_to_one")
+    result["difference"] = result.value - result.reference_value
+    result["reference"] = "nine_probabilities_same_artifacts"
+    return result
+
+
 def decision_vs_embedding(folds, phase="experiment_2"):
     """Pair every recipe for the three displayed descriptive metrics, without ranking.
 

@@ -22,7 +22,7 @@ include_non_text_features_in_jev: false
 feature_view:
   binary_classification: positive_class_probability
   multiclass_classification: full_class_probability_vector
-  regression: expected_direction
+  regression: full_class_probability_vector
 deduplicate_identical_columns_in_combined_view: true
 reuse_fits_between_identical_named_arms: false
 requires:

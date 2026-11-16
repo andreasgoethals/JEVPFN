@@ -311,7 +311,8 @@ def shared_pilot_outputs(pilot):
 def pilot_agreement(shared):
     """Pairwise agreement on identical inputs, per task.
 
-    Binary and regression: Spearman rank correlation of the main scalar feature.
+    Binary: positive-probability Spearman correlation. Regression: descriptive
+    expected-direction correlation, not the primary nine-coordinate predictor view.
     Multiclass: share of inputs on which both models put most probability on the same class.
     """
     providers = shared.attrs.get("providers") or sorted(shared.provider.unique())

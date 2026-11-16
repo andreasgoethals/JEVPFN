@@ -96,7 +96,7 @@ def test_no_empty_coverage_figures_before_results_exist():
 
 
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
-    for folder in ("general", ""):
+    for folder in ("general", "rq1", "rq2", "rq3"):
         notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
         assert notebooks
         for filename in notebooks:
@@ -122,3 +122,16 @@ def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():
     for fig, _, _ in burden_figures(table):
         fig.canvas.draw()
         plt.close(fig)
+
+
+def test_historical_mean_folds_cannot_complete_primary_probability_plan():
+    from src.evaluation.campaign import benchmark_plan
+    arm = next(a for a in benchmark_plan() if a.get("view") == "probabilities")
+    rows = pd.DataFrame([{**arm, "model_id":arm["model"], "arm_id":"legacy", "view":"main",
+                          "task_type":"regression", "metric":"r2", "value":0.5,
+                          "outer_fold":i, "encoder":None, "pca_scope":None,
+                          "pca_components":None} for i in range(5)])
+    old = study.planned_coverage(rows, "experiment_1")
+    assert old.completed.sum() == 0
+    current = study.planned_coverage(rows.assign(view="probabilities"), "experiment_1")
+    assert current.completed.sum() == 1

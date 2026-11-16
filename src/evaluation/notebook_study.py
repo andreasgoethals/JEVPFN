@@ -12,7 +12,7 @@ from src.utils import paths
 from src.utils.config import load_yaml
 
 RECIPE = ["phase", "dataset_id", "model_id", "feature_set", "provider", "encoder",
-          "pca_scope", "pca_components"]
+          "pca_scope", "pca_components", "view"]
 IDENTITY = ["arm_id", "phase", "dataset_id", "task_type", "model_id", "checkpoint_id",
             "feature_set", "provider", "encoder", "pca_scope", "pca_components", "split_id"]
 
@@ -24,10 +24,14 @@ def planned_coverage(folds, phase):
         if name not in plan:
             plan[name] = None
     plan = plan[RECIPE].copy()
+    plan["view"] = plan["view"].fillna("main")
     plan["complete"] = False
     if not folds.empty:
         observed = folds[folds.phase.isin(plan.phase.unique()) & folds.metric.eq(folds.task_type.map(HEADLINES))]
         observed = observed.copy()
+        if "view" not in observed:
+            observed["view"] = "main"
+        observed["view"] = observed["view"].fillna("main")
         observed["defined"] = observed.value.notna()
         by_arm = observed.groupby(RECIPE + ["arm_id"], dropna=False).agg(
             outer_folds=("outer_fold", "nunique"), defined_folds=("defined", "sum")
