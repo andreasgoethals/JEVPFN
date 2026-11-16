@@ -129,12 +129,16 @@ def training_defined_bins(training_values, query_values, *, quantiles=(0.25, 0.5
     return bins, edges
 
 
-def validate_adaptation_partition(optimizer_rows, validation_rows, test_rows):
-    """Reject leakage before training, calibration or checkpoint selection."""
-    groups = [list(x) for x in (optimizer_rows, validation_rows, test_rows)]
+def validate_adaptation_partition(optimizer_rows, validation_rows, calibration_rows, test_rows):
+    """Require four distinct roles before training or fitting a temperature.
+
+    Checkpoint selection and temperature fitting must not silently share rows.
+    The caller must additionally bind these identities to the saved outer split.
+    """
+    groups = [list(x) for x in (optimizer_rows, validation_rows, calibration_rows, test_rows)]
     if any(not x or len(x) != len(set(x)) for x in groups):
         raise ValueError("Adaptation partitions must be nonempty and unique")
     sets = [set(x) for x in groups]
-    if any(sets[i] & sets[j] for i, j in ((0, 1), (0, 2), (1, 2))):
-        raise ValueError("Optimizer, validation and test rows must be disjoint")
+    if any(sets[i] & sets[j] for i in range(len(sets)) for j in range(i + 1, len(sets))):
+        raise ValueError("Optimizer, validation, calibration and test rows must be disjoint")
     return True

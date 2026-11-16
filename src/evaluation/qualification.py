@@ -92,13 +92,21 @@ def profile_plan(arms=None):
             max(group, key=tall),
             max(group, key=lambda a: (width(a), height(a), encoder_width(a))),
         ]
-        binary = [
-            arm for arm in group
-            if arm["phase"] != "experiment_3"
-            and semantics[arm["dataset_id"]]["task_type"] == "binary_classification"
-        ]
-        if binary:
-            extremes.append(max(binary, key=tall))
+        # Shape extremes alone can omit an entire prediction task. In particular,
+        # regression can dominate both extrema without exercising real multiclass
+        # probability ordering, or TAR's binary path (which has no inner OOF fits).
+        tasks = {semantics[a["dataset_id"]]["task_type"] for a in group}
+        for task in sorted(tasks):
+            cases = [a for a in group if semantics[a["dataset_id"]]["task_type"] == task]
+            covered = [a for a in extremes if semantics[a["dataset_id"]]["task_type"] == task]
+            largest_vocabulary = max(len(semantics[a["dataset_id"]].get("classes", []))
+                                     for a in cases)
+            if covered and max(len(semantics[a["dataset_id"]].get("classes", []))
+                               for a in covered) == largest_vocabulary:
+                continue
+            extremes.append(max(cases, key=lambda a: (
+                len(semantics[a["dataset_id"]].get("classes", [])), *tall(a)
+            )))
         for arm in extremes:
             selected[digest(arm)] = arm
     return list(selected.values())

@@ -136,6 +136,28 @@ def test_real_profile_plan_covers_inner_oof_for_each_applicable_recipe():
     assert actual == expected
 
 
+def test_full_fold_profiles_cover_every_task_and_largest_class_vocabulary():
+    from src.evaluation.campaign import benchmark_plan
+
+    semantics = q.load_yaml("dataset_semantics")["datasets"]
+    arms = [a for a in benchmark_plan() if a["width_status"] != "unsupported_width"]
+
+    def group(a):
+        return a["phase"], a["model"], a.get("pca_scope"), a.get("pca_components")
+
+    def task(a):
+        return semantics[a["dataset_id"]]["task_type"]
+
+    profiles = q.profile_plan(arms)
+    assert {(group(a), task(a)) for a in profiles} == {(group(a), task(a)) for a in arms}
+    for key in {group(a) for a in arms}:
+        expected = max(len(semantics[a["dataset_id"]].get("classes", []))
+                       for a in arms if group(a) == key)
+        observed = max(len(semantics[a["dataset_id"]].get("classes", []))
+                       for a in profiles if group(a) == key)
+        assert observed == expected
+
+
 def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     isolated_output, monkeypatch
 ):

@@ -18,7 +18,22 @@ pending statuses without changing the original evidence.
 | Frozen embeddings | All 54 encoder/dataset jobs completed and published; all 54 frozen-PCA jobs completed 0:0. | Verify all training-fold cache keys in full 0B |
 | Local Jev | Prefix pilot verified; existing-balance extraction has a cumulative USD 5.50 ceiling | Read hosted receipts for live spend/coverage; full coverage needs further funding |
 | Benchmark | RQ1/RQ2/RQ3 layout; four core RQ2 comparisons and TAR implemented locally | Real TAR bundles, predictor contracts, full-fold profiles and reviewed 0B acceptance; then separately authorized benchmark |
-| New roster | Fifteen selected; Mammoth-1 and Drex Max native adapters implemented and weights downloaded/hash-verified | Isolated builds 11807372/11807373 running; exact audits, B200 contracts, pilot and acceptance still required |
+| New roster | Fifteen selected; Mammoth-1 and Drex Max native adapters implemented and weights downloaded/hash-verified. Builds, storage and token-audit jobs completed 0:0 | GPU contracts 11807388/11807393 queued for priority; pilots 11807389/11807394 depend on them. Artifacts and real 0A still require review |
+
+### Research-design and 0B review on 16 November
+
+- Read-only SSH confirmed production freeze at `6b4f2e51ef8b8bf28e5db2bac8b73d43adffc239`.
+  Native builds `11807372/11807373` completed in 51m21s each; storage `11807384`,
+  prepare/shard/merge jobs completed 0:0. GPU contracts remain pending for priority,
+  pilots for dependencies. Liquid LFM3's eighteen jobs remain queued for priority.
+- Read the installed Strands configuration: Qwen3.5-2B base, pointer head dimension 768,
+  LoRA rank 48/alpha 96, 4096-token window. The newer library training snapshot supports
+  checkpoint initialization and frozen-torso training but is not the extraction runtime.
+- Local 0B changes add missing task/vocabulary profiles and separate calibration rows
+  from checkpoint selection. No frozen VSC sources, inputs, jobs or results were changed.
+  Notebook consolidation and making full regression vectors primary remain proposals.
+- Local full suite passed: **1,443 passed, 26 skipped**, 441.73 seconds. Skips require
+  native storage/POSIX, staged tokenizers or Torch; they are not VSC acceptance.
 
 ### Native additions and RQ layout on 16 November
 

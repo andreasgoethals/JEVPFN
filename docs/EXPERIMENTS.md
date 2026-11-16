@@ -191,8 +191,8 @@ in each outer fold, using joint text requests and the original class definitions
 Start with Jigsaw and Product Sentiment, one fold each: two datasets × two trained variants
 = **four pilot training runs**. If real B200, save/reload and leakage checks pass, expand
 to the nine classification datasets × five folds × two trained variants = **90 training
-runs**, plus 45 cheap temperature fits. Optimizer, internal validation/calibration and
-outer-test rows must be disjoint; all selection happens inside outer training. Record
+runs**, plus 45 cheap temperature fits. Optimizer, checkpoint-selection, calibration and
+outer-test rows must be pairwise disjoint; all selection happens inside outer training. Record
 compute and data budgets, trainable tensors, initial checkpoint, adapters and predictions.
 No silent input truncation or unapproved row cap is allowed. Regression adaptation is
 excluded because the nine-level rubric is not a supervised target-bin definition.
@@ -209,6 +209,13 @@ training runner, sealed training environment and real pilot are **not yet implem
 accepted**. B200 feasibility is plausible from the publisher's 2B training recipe, but
 runtime and memory must be measured. No duration estimate is claimed from the unrelated
 TAR pilot. Scientific execution is disabled in `config/rq3/adaptation.yaml`.
+
+The newer publisher snapshot `1ace5aaa86a8c59d949ac97810f9f2e3b79a1ff8` provides
+`training.train._init_from` and `freeze_torso` for continuing a released adapter/head
+or training its head alone. It is newer than the extraction runtime pin. A training
+integration must first reproduce the frozen checkpoint's predictions. Its collator
+uses truncation and its periodic saves contain model weights, not a complete optimizer
+resume state; neither behaviour establishes our no-truncation or exact-resume contract.
 
 ## Predictors and exact grid
 
@@ -297,7 +304,7 @@ No winner-selected follow-up is part of the confirmatory grid.
 | 0A | Local CPU/question and hosted-interface/pilot checks; VSC storage/locking, exact token coverage, real B200 decision and frozen-encoder contracts and dataset pilots; reviewed acceptance |
 | Feature creation | Accepted open-weight and frozen-encoder extraction; budgeted local Jev; resumable response/vector stores, verified publication and independent copies |
 | 0B preparation | Complete selected feature stores; fold-specific frozen PCA; 90 real TAR adapters and both TAR PCA recipes; sealed predictor runtimes |
-| 0B qualification | Integrity/identity and leakage screens, nine predictor contracts, difficult input/class/missingness/resume cases, full-size profiles covering dataset shape and binary inner-OOF fitting, published prediction readback and reviewed acceptance |
+| 0B qualification | Integrity/identity and leakage screens, nine predictor contracts, difficult input/class/missingness/resume cases, full-size profiles covering shape, every task type, largest class vocabulary and required binary inner-OOF fitting, published prediction readback and reviewed acceptance |
 | RQ2, including regression readout | Enabled, frozen, acceptance-bound arrays; five-fold records; paired descriptive analysis and approved inferential contrasts |
 | RQ1-C / RQ3 | Additional controlled-query/training implementations, supplementary 0A and 0B gates, then bounded pilots before full scientific runs |
 
@@ -337,6 +344,15 @@ batching/replay and dataset pilots. Feature creation publishes complete stores. 
 checks feature identities and missingness, fold-local fitting, PCA/TAR, all predictor
 interfaces, metrics, resume/publication and each enabled RQ2 arm. It must also exercise
 the RQ1 analysis and controlled-query contracts before those are accepted.
+
+Full-fold 0B profiles cover each available task type within each predictor/representation
+recipe, including the largest classification vocabulary. Tallest/widest profiles alone
+can miss real regression, binary TAR or large-class multiclass behaviour. Profiles are
+deduplicated: the current plan has 136 one-outer-fold profiles (previously 76), not another
+full five-fold benchmark. Required binary inner-OOF fits still run. The adaptation
+partition contract separately checks optimizer, checkpoint-selection, calibration and
+test rows; no two roles may overlap. These checks do not substitute for the pending
+Strands training-runtime tests.
 
 Run RQ1 first to characterize the representations, then RQ2 using the prespecified grid.
 RQ1 findings may motivate future studies but must not silently select RQ2 winners or

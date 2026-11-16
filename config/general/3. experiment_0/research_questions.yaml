@@ -2,6 +2,7 @@ status: local_contracts_plus_pending_real_gates
 required_local_tests:
 - tests/test_research_questions.py
 - tests/test_feature_selection.py
+- tests/test_benchmark_qualification.py
 rq1:
 - stable_label_free_sampling
 - option_permutation_inverse_alignment
@@ -12,6 +13,7 @@ rq2:
 - tar_outer_fold_identity
 - shared_baseline_and_splits
 - training_defined_subgroups
+- full_fold_profiles_for_each_task_and_largest_class_vocabulary
 rq2_regression_readout:
 - nine_probability_order
 - mean_reconstruction
@@ -22,7 +24,7 @@ rq3_adaptation:
 - training_runtime
 - head_only_freeze
 - lora_gradient_flow
-- disjoint_optimizer_validation_test
+- disjoint_optimizer_validation_calibration_test
 - held_out_label_invariance
 - no_silent_truncation
 - save_reload_and_resume

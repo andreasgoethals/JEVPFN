@@ -80,10 +80,24 @@ def test_adaptation_is_direct_and_train_validation_test_are_disjoint():
     plan = adaptation_plan()
     assert len(plan) == 90 and sum(a["pilot"] for a in plan) == 4
     assert not any(a["execution_enabled"] for a in plan)
-    assert validate_adaptation_partition([1, 2], [3], [4])
-    for parts in [([1, 2], [2], [3]), ([1], [2], [1]), ([1, 1], [2], [3])]:
-        with pytest.raises(ValueError):
-            validate_adaptation_partition(*parts)
+    assert validate_adaptation_partition([1, 2], [3], [4], [5])
+
+
+@pytest.mark.parametrize("left,right", [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)])
+def test_adaptation_rejects_overlap_between_every_pair_of_roles(left, right):
+    groups = [[1], [2], [3], [4]]
+    groups[right].append(groups[left][0])
+    with pytest.raises(ValueError, match="disjoint"):
+        validate_adaptation_partition(*groups)
+
+
+@pytest.mark.parametrize("role", range(4))
+@pytest.mark.parametrize("invalid", [[], [9, 9]])
+def test_adaptation_rejects_empty_or_duplicate_roles(role, invalid):
+    groups = [[1], [2], [3], [4]]
+    groups[role] = invalid
+    with pytest.raises(ValueError, match="nonempty and unique"):
+        validate_adaptation_partition(*groups)
 
 
 def test_approved_additions_are_pinned_but_not_silently_executable():

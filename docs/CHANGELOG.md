@@ -2,6 +2,11 @@
 
 ## 16-11-2026
 
+- Strengthened 0B full-fold coverage for every task type and the largest class vocabulary,
+  retaining deduplication across shape/task checks. Added regressions for all six pairs
+  of optimizer/validation/calibration/test partitions and invalid partition contents.
+  Documented the newer Strands training interface and its remaining integration gaps;
+  scientific grids and active VSC consumers are unchanged.
 - Implemented pinned native Mammoth-1 and Drex Max adapters, exact render/count contracts,
   checkpoint staging and isolated B200 container dependencies. Downloaded and verified
   both weight releases on GPFS PROJECT; qualification runs remain separate from frozen
