@@ -22,7 +22,7 @@ def test_all_entry_points_require_separate_native_acceptance(provider):
     assert catalog.PINS[provider] == cfg["revision"]
     assert provider in catalog.SELF_HOSTED and not cfg["enabled"]
     assert cfg["context_tokens"] == native.LIMIT
-    assert load_yaml("experiment_0/self_hosted")["accepted_before_extraction_manifests"][provider] is None
+    assert load_yaml("experiment_0/self_hosted")["accepted_before_extraction_manifests"][provider].endswith(f"/before_extraction/accepted_{provider}.json")
     steps = {s["name"]: s for s in plan([provider])}
     assert provider + "_build" in steps[provider + "_tokens_prepare"]["dependencies"]
     assert provider + "_tokens" in steps[provider + "_scratch"]["dependencies"]
@@ -32,6 +32,7 @@ def test_all_entry_points_require_separate_native_acceptance(provider):
 
 
 def mammoth_counter():
+    pytest.importorskip("pydantic", reason="Mammoth renderer dependency; also exercised in its native GPU contracts")
     root, _ = native.vendor_files()
     c = native.Counter.__new__(native.Counter)
     c.provider = "mammoth"

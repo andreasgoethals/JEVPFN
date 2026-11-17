@@ -54,7 +54,7 @@ def test_roster_pins_native_runtime_and_effective_context_limit():
     assert config["input_modalities"] == ["text"]
     assert {"glide/prompt.py", "glide/model.py", "glide/recurrent.py", "LICENSE", "licenses/Qwen3.8-27B-LICENSE"} <= set(glide.asset_urls())
     assert all(glide.REVISION in url for url in glide.asset_urls().values())
-    assert load_yaml("experiment_0/self_hosted")["accepted_before_extraction_manifests"]["glide"] is None
+    assert load_yaml("experiment_0/self_hosted")["accepted_before_extraction_manifests"]["glide"].endswith("/before_extraction/accepted_glide.json")
     assert "glide" in load_yaml("experiment_0/gpu_contracts")["providers"]
     assert "glide" in load_yaml("experiment_1/main")["candidate_extractors"]
     assert batch_size_for("glide") == 2

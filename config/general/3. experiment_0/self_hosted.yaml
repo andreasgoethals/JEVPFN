@@ -10,9 +10,9 @@ max_recorded_failures_per_dataset: 10  # --continue-on-error remains incomplete,
 full_feature_creation_enabled: true  # All eleven frozen 0A reviews accepted on 30 October.
 accepted_before_extraction_manifest: null
 accepted_before_extraction_manifests:
-  mammoth: null
-  drex_max: null
-  glide: null  # Newly selected; requires its own reviewed 0A before any full extraction.
+  mammoth: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_mammoth.json'
+  drex_max: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_drex_max.json'
+  glide: 'output_JEVPFN/3. experiment_0/manifests/before_extraction/accepted_glide.json'
   liquid: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_liquid.json'
   liquid_lfm3: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_liquid_lfm3.json'
   strands: 'output_JEVPFN/3. experiment_0/manifests/storage_migration/accepted_strands.json'

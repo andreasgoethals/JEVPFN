@@ -121,7 +121,7 @@ def test_matching_correlations_match_scipy_with_ties_and_constants():
     assert result["correlation_dimensions"] == 0
 
 
-def test_case_text_is_hash_matched_and_html_is_escaped(tmp_path, monkeypatch):
+def test_case_text_is_hash_matched(tmp_path, monkeypatch):
     from src.jev import inputs
     from src.utils import paths
     result = compare([[.9], [.1]])
@@ -131,12 +131,21 @@ def test_case_text_is_hash_matched_and_html_is_escaped(tmp_path, monkeypatch):
     monkeypatch.setattr(inputs, "prepared_row", lambda *a, **kw: [{"payload_sha256": "h0", "payload": {"text": "<script>bad</script>"}}])
     cases = inspect_cases(result)
     assert cases.payload_status.eq("Exact payload hash verified").all()
-    html = case_browser(cases).data
-    assert "<script>bad</script>" not in html
-    assert "&lt;script&gt;bad&lt;/script&gt;" in html
     monkeypatch.setattr(inputs, "prepared_row", lambda *a, **kw: [{"payload_sha256": "different", "payload": {"text": "wrong"}}])
     with pytest.raises(ValueError, match="does not match"):
         inspect_cases(result)
+
+
+@pytest.mark.notebook
+def test_case_browser_html_is_escaped():
+    pytest.importorskip("IPython", reason="Rich display is a local notebook dependency")
+    cases = compare([[.9], [.1]]).table("cases").copy()
+    assert not cases.empty
+    cases["payload_json"] = json.dumps({"text": "<script>bad</script>"})
+    cases["payload_status"] = "Synthetic escaping test"
+    html = case_browser(cases).data
+    assert "<script>bad</script>" not in html
+    assert "&lt;script&gt;bad&lt;/script&gt;" in html
 
 
 @pytest.mark.parametrize("task,k", [("binary_classification", 2), ("multiclass_classification", 3), ("regression", 9)])
