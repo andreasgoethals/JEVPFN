@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Standalone copies run from the protected DATA checkout through its CPU image.
@@ -43,6 +43,8 @@ from src.utils.serialization import digest, file_sha256, write_json
 RETRYABLE_STATES = frozenset({"TIMEOUT", "NODE_FAIL", "BOOT_FAIL", "PREEMPTED"})
 MAX_SCHEDULER_RETRIES = 2
 MAX_CAPACITY_RETRIES = 12  # A full scratch budget clears when another runtime releases.
+MAX_WAIT_RETRIES = 12  # A release waits for queued consumers, leases or the queue check.
+WAIT_BACKOFF_SECONDS = (900, 1800, 3600, 7200, 14400)  # Then 4 h per attempt (~37 h total).
 
 
 def retry_interrupted(step):
@@ -60,10 +62,14 @@ def retry_interrupted(step):
     if (step["scheduler_state"] not in RETRYABLE_STATES and not transient_release_failure
             and not capacity_wait):
         return
-    attempts = step.setdefault("capacity_retries" if capacity_wait else "scheduler_retries", [])
-    if len(attempts) >= (MAX_CAPACITY_RETRIES if capacity_wait else MAX_SCHEDULER_RETRIES):
+    key, limit = (("capacity_retries", MAX_CAPACITY_RETRIES) if capacity_wait
+                  else ("release_wait_retries", MAX_WAIT_RETRIES) if transient_release_failure
+                  else ("scheduler_retries", MAX_SCHEDULER_RETRIES))
+    attempts = step.setdefault(key, [])
+    if len(attempts) >= limit:
         return
-    attempt = {"retried_utc": datetime.now(UTC).isoformat()}
+    now = datetime.now(UTC)
+    attempt = {"retried_utc": now.isoformat()}
     for key in (
         "job_id", "scheduler_state", "exit_code", "submission_started_utc",
         "submission_diagnostics", "submission_policy_sha256", "accounting_diagnostics",
@@ -72,6 +78,11 @@ def retry_interrupted(step):
             attempt[key] = step.pop(key)
     attempts.append(attempt)
     step["status"] = "pending"
+    if capacity_wait or transient_release_failure:
+        # Waiting conditions clear only after other jobs finish (often hours):
+        # resubmitting at once would exhaust every attempt within minutes.
+        delay = WAIT_BACKOFF_SECONDS[min(len(attempts), len(WAIT_BACKOFF_SECONDS)) - 1]
+        step["not_before_utc"] = (now + timedelta(seconds=delay)).isoformat()
     print(f"Retry queued for {step['name']} after {attempt['scheduler_state']} "
           f"({attempt['job_id']}, retry {len(attempts)})", flush=True)
 

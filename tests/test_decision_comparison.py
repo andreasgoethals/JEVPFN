@@ -232,7 +232,7 @@ def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, 
         lambda dataset: tmp_path / "portable" / f"{dataset}.sqlite3",
     )
     result = compare_saved_features(cfg, progress=None)
-    assert len(result.table("inventory")) == 18 * 15 * 2
+    assert len(result.table("inventory")) == 18 * 17 * 2
     assert result.table("inventory").status.eq("not_created").all()
     assert result.table("pairs").empty
     assert not (tmp_path / "protected").exists()
@@ -278,8 +278,22 @@ def test_real_sqlite_contract_and_ambiguous_versions(isolated_output, monkeypatc
     result = compare_saved_features(cfg, progress=None)
     assert result.table("pairs").agreement.eq(1).all()
     assert result.table("coverage").missing_text_rows.eq(1).all()
+    # Workers must retain global eligibility and deterministic table order.
+    with monkeypatch.context() as scope:
+        scope.setattr(comparison, "load_catalog", lambda _: {"datasets": [
+            {"id": "fixture", "name": "Fixture"}, {"id": "empty", "name": "Empty"},
+        ]})
+        serial = compare_saved_features(cfg, progress=None)
+        parallel = compare_saved_features(cfg, progress=None, workers=2)
+        for name in ("pairs", "inventory", "coverage", "row_diagnostics"):
+            pd.testing.assert_frame_equal(parallel.table(name), serial.table(name))
     # A changed code version is a different artifact; never silently use the newest.
     block.manifest["identity"]["code_sha256"] = "another-code-version"
+    block.manifest["artifact_id"] = digest(block.manifest["identity"])
+    with pytest.raises(ValueError, match="Equivalent feature publication"):
+        save_block(block, path)
+    # Different model versions can legitimately coexist; readers must pin one.
+    block.manifest["identity"]["version"] = "2"
     block.manifest["artifact_id"] = digest(block.manifest["identity"])
     save_block(block, path)
     with pytest.raises(ValueError, match="Multiple versions"):
@@ -364,7 +378,7 @@ def test_every_plot_path_accepts_realistic_synthetic_results(task):
     plt.close(fig)
 
 
-def test_fifteen_models_paginate_all_105_duplicate_sensitivity_pairs():
+def test_all_configured_models_paginate_all_duplicate_sensitivity_pairs():
     from itertools import combinations
 
     result = Comparison()
@@ -385,8 +399,9 @@ def test_fifteen_models_paginate_all_105_duplicate_sensitivity_pairs():
             shown.extend(labels)
             pages += 1
         plt.close(fig)
-    assert pages == 9
-    assert len(set(shown)) == 105
+    expected_pairs = len(providers) * (len(providers) - 1) // 2
+    assert pages == (expected_pairs + 11) // 12
+    assert len(set(shown)) == expected_pairs
 
 
 def test_thirty_class_example_keeps_all_probabilities_legible_across_pages():
@@ -407,3 +422,14 @@ def test_thirty_class_example_keeps_all_probabilities_legible_across_pages():
         shown.extend(tick.get_text() for tick in ax.get_yticklabels())
         plt.close(fig)
     assert shown == labels
+
+
+def test_exact_ties_are_undecided_not_votes_for_class_order():
+    import numpy as np
+
+    from src.evaluation.decision_comparison import TIED, _choices
+
+    binary = np.array([[0.5, 0.5], [0.4, 0.6], [0.6, 0.4]])
+    assert _choices(binary, "binary_classification", 0).tolist() == [TIED, 1, 0]
+    multi = np.array([[0.4, 0.4, 0.2], [0.2, 0.3, 0.5], [1 / 3, 1 / 3, 1 / 3]])
+    assert _choices(multi, "multiclass_classification", 0).tolist() == [TIED, 2, TIED]

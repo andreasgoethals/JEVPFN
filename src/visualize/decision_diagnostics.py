@@ -142,7 +142,7 @@ def peer_majority_figure(table):
     for spine in ax.spines.values():
         spine.set_visible(False)
     bar = fig.colorbar(image, ax=ax, shrink=.6, ticks=[0, .25, .5, .75, 1], format=PercentFormatter(1))
-    bar.set_label("Agrees with majority of the other models")
+    bar.set_label("Agreement with the other models’ unique plurality")
     yield fig, "agreement_with_peer_majority", (
         "Share of distinct nonmissing joint-text inputs on which a model's answer equals the plurality answer of all other compared models "
         "(binary: positive-class probability ≥ 0.5; multiclass: most probable class; regression: sign of the expected evidence score). "

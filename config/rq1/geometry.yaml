@@ -1,0 +1,20 @@
+research_question: Do decision outputs preserve the same text relationships as frozen encoders?
+status: implemented_requires_real_artifacts
+execution: vsc_cpu_then_local_summary
+representation: per_column
+seed: 42
+sampling_unit: distinct_nonempty_text_within_dataset_and_field
+texts_per_group: 500
+sampling: uniform_without_replacement
+pairs: all_unordered_distinct_pairs
+maximum_pairs_per_group: 124750
+encoders: [e5_small_v2, e5_large_v2, qwen3_embedding_0_6b]
+encoder_view: raw_vectors_before_pca
+encoder_distance: cosine
+decision_distance: total_variation
+providers: all_prespecified_available_models_same_input_ids
+metrics: [spearman_distance_correlation, neighbourhood_agreement]
+uncertainty_unit: texts_then_datasets_not_pairs
+permutation_null: permute_text_correspondence_within_group
+incomplete_coverage: report_without_resampling
+reuse: compute_each_encoder_and_decision_distance_vector_once_per_group

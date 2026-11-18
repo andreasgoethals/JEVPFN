@@ -1,30 +1,35 @@
 status: local_contracts_plus_pending_real_gates
 required_local_tests:
+- tests/test_comparison_report.py
 - tests/test_research_questions.py
+- tests/test_geometry.py
+- tests/test_downstream_studies.py
 - tests/test_feature_selection.py
 - tests/test_benchmark_qualification.py
 rq1:
-- uniform_source_row_sampling_preserving_text_duplicates
+- compact_outputs_retain_artifact_identity_and_report_checksums
+- uniform_distinct_request_sampling_shared_across_models
+- independent_500_applicable_field_order_sample
+- three_reviewed_paraphrases_frozen_original_unchanged
 - option_permutation_inverse_alignment
 - paired_missingness
 - native_field_order_reaches_model
-- original_replay_is_not_a_cache_hit
-- semantic_equivalence_review
+- three_fresh_originals_bypass_cache
+- geometry_raw_vectors_same_ordered_text_ids
+- geometry_constant_outputs_undefined_not_zero
+- geometry_uncertainty_resamples_texts_not_pairs
 rq2:
 - training_only_pca_and_thresholds
 - tar_outer_fold_identity
 - shared_baseline_and_splits
 - training_defined_subgroups
 - full_fold_profiles_for_each_task_and_largest_class_vocabulary
-rq2_regression_readout:
+rq2_regression_features:
 - nine_probability_order
-- mean_reconstruction
 - primary_probability_view_identity
-- mean_view_regression_only
 - all_missing_block
 - distinct_record_identity
 - legacy_mean_cannot_complete_primary_probability_plan
-- mean_vector_pairing_requires_identical_artifacts
 - largest_regression_width_profile
 rq3_adaptation:
 - training_runtime
@@ -36,4 +41,17 @@ rq3_adaptation:
 - no_silent_truncation
 - save_reload_and_resume
 - real_b200_pilot
+- source_row_split_before_field_expansion
+- shared_adapter_across_fields_and_predictors
+- five_outer_folds_no_inner_threshold_refits
+- full_backbone_gradient_and_reload_checks
+native_rq1b_qualification:
+  script: scripts/slurm/experiment_0_robustness.slurm
+  scope: each_qualified_open_weight_provider
+  evidence: frozen_input_ids_and_settings_match_before_scientific_dispatch
+native_rq1c_qualification:
+  entry_point: src.evaluation.geometry_study
+  invocation: --dataset DATASET --pilot
+  coverage: complete_selected_providers_and_three_frozen_encoders
+  max_distinct_texts_per_field: 12
 scientific_execution_enabled: false

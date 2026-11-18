@@ -45,6 +45,7 @@ def reports(monkeypatch):
                 "status": "passed",
                 "task_type": "regression",
                 "data_identity": "raw",
+                "text_columns": 1,
                 "split_id": "split",
             }
         ],
@@ -63,11 +64,11 @@ def reports(monkeypatch):
                 "encoder_id": "encoder",
                 "status": "passed",
                 "artifact_id": "vectors",
-                "prepared_pca_keys": 5,
+                "prepared_pca_keys": 10,
             }
         ],
     }
-    preflight["tar_artifacts"] = [{"dataset_id": "data", "encoder_id": "e5_small_v2_tar", "status": "passed", "artifact_ids": [f"tar{i}" for i in range(5)], "prepared_pca_keys": ["pca"]}]
+    preflight["tar_artifacts"] = [{"dataset_id": "data", "encoder_id": "e5_small_v2_tar", "status": "passed", "artifact_ids": [f"tar{i}" for i in range(5)], "prepared_pca_keys": [f"p{i}" for i in range(10)]}]
     runtime = {"container_id": "seal"}
     predictors = [
         {
@@ -182,7 +183,8 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
         dataset, features, DummyClassifier, specification=split,
         model_id="linear", checkpoint_id="test", feature_set="non_text",
         phase="experiment_0", allow_model_runs=True, fold_numbers=[0],
-        estimator_settings={"fixture": "dummy"},
+        estimator_settings={"fixture": "dummy", "execution_runtime": {"container_id": "test"}},
+        representation_recipe={"provider": None, "embedding": None},
     )
     with pytest.raises(ValueError, match="lacks required prediction roles"):
         q.save_profile(arm, dataset, features, {"container_id": "test"}, records[:1])
@@ -200,6 +202,12 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     durable = paths.staging_override()
     monkeypatch.setattr(paths, "durable_project_override", lambda: durable)
     q.verify_published_profile(report)
+    with pytest.raises(ValueError, match="Published 0B predictions differ"):
+        q.verify_published_profile(report | {"arm": report["arm"] | {"model": "different"}})
+    with pytest.raises(ValueError, match="completed fold recipe"):
+        q.verify_published_profile(report | {"fold_recipe_id": "wrong"})
+    with pytest.raises(ValueError, match="omits or duplicates"):
+        q.verify_published_profile(report | {"roles": report["roles"][:1]})
     report["roles"][0]["record_id"] = "missing"
     with pytest.raises(ValueError, match="Missing evaluation record"):
         q.verify_published_profile(report)
@@ -306,3 +314,20 @@ def test_benchmark_publication_copies_only_selected_evaluation_store(tmp_path):
     assert (target / "evaluation" / "DATA1.sqlite3").is_file()
     assert not (target / "evaluation" / "DATA2.sqlite3").exists()
     assert (target / "splits" / "split.json").is_file()
+
+@pytest.mark.parametrize("corrupt", ["partial_frozen", "duplicate_tar", "empty_checksum", "empty_fold", "binary_inner"])
+def test_0b_requires_real_partition_coverage(reports, corrupt):
+    _, bodies = reports
+    preflight = bodies[0]
+    if corrupt == "partial_frozen":
+        preflight["embedding_artifacts"][0]["prepared_pca_keys"] -= 1
+    elif corrupt == "duplicate_tar":
+        preflight["tar_artifacts"][0]["prepared_pca_keys"][-1] = "p0"
+    elif corrupt == "empty_fold":
+        preflight["tar_artifacts"][0]["artifact_ids"][-1] = None
+    elif corrupt == "binary_inner":
+        preflight["datasets"][0]["task_type"] = "binary_classification"
+    else:
+        preflight["decision_artifacts"][0]["artifact_checksums"]["joint"] = ""
+    with pytest.raises(ValueError):
+        q.feature_evidence(preflight)

@@ -18,6 +18,8 @@ comparison:
   - glide
   - mammoth
   - drex_max
+  - knowline
+  - sieve
   representations:
   - per_column
   - joint

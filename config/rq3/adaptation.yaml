@@ -1,8 +1,8 @@
-research_question: Can supervised adaptation improve Strands 2B decisions for tabular text?
-status: approved_design_training_runner_not_implemented
+research_question: Can supervised Strands adaptation improve per-field text features?
+status: design_updated_training_runner_not_implemented
 enabled: false
 provider: strands
-representation: joint
+representation: per_column
 tasks:
 - binary_classification
 - multiclass_classification
@@ -11,9 +11,10 @@ variants:
 - temperature_scaling
 - head_only
 - lora_and_head
+- full_backbone_and_head
 outer_folds: 5
 seed: 42
-evaluation: direct_decision_probabilities
+evaluation: direct_probabilities_and_all_six_downstream_predictors
 downstream_stacking: false
 calibration_partition: outer_training_only
 early_stopping_partition: outer_training_only
@@ -32,3 +33,22 @@ requires:
 - adapter_replay
 - resume_identity
 - b200_pilot_acceptance
+- full_backbone_gradient_checks
+- full_weights_save_reload_optimizer_rng_resume
+- shared_field_weights_and_source_row_split_before_expansion
+- same_training_budget_across_methods
+- frozen_vs_adapter_initial_function_equivalence
+- predictor_reuse_without_retraining_adapter
+shared_weights_across_text_columns: true
+training_unit: dataset_outer_fold_method
+training_variants:
+- head_only
+- lora_and_head
+- full_backbone_and_head
+training_examples: pool_nonempty_text_fields_after_source_row_split
+training_loss: unweighted_cross_entropy_on_row_class
+missing_text: skip_training_example_preserve_missing_feature_block
+binary_threshold: 0.5
+inner_adapter_refits: false
+encoder_selection: internal_validation_only
+training_hyperparameters_status: requires_frozen_pilot_recipe_before_dispatch

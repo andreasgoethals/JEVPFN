@@ -88,7 +88,7 @@ def plan(providers=None):
             )
         )
         for dataset in ids:
-            large = provider in {"perplexity", "sii", "kev", "decision3", "glide", "mammoth", "drex_max"}
+            large = provider in {"perplexity", "sii", "kev", "decision3", "glide", "mammoth", "drex_max", "knowline", "sieve"}
             steps.append(
                 dict(
                     name=provider + "_" + dataset,

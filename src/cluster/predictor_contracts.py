@@ -131,16 +131,14 @@ def feature_cases(dataset, model):
     blocks = {}
     text_missing = dataset.frame[list(dataset.metadata.text_columns)].isna().to_numpy()
     task = dataset.metadata.task_type
-    width = len(dataset.metadata.classes) if task == "multiclass_classification" else 1
+    width = 9 if task == "regression" else len(dataset.metadata.classes) if task == "multiclass_classification" else 1
     for mode in ("per_column", "joint"):
         masks = text_missing.T if mode == "per_column" else [text_missing.all(axis=1)]
         columns = {}
         for group, missing in enumerate(masks):
             values = rng.uniform(size=(len(base), width))
-            if task == "multiclass_classification":
+            if width > 1:
                 values /= values.sum(axis=1, keepdims=True)
-            elif task == "regression":
-                values = values * 8 - 4
             values[missing] = np.nan
             columns.update({f"synthetic_decision__{mode}__{group}_{i}": values[:, i]
                             for i in range(width)})
@@ -152,7 +150,7 @@ def feature_cases(dataset, model):
     result.attrs.update(feature_artifact_ids=[])
     yield "decision_both", result, None
     if task == "regression":
-        # RQ3 retains the complete ordered nine-level distribution per text field.
+        # Exercise the standalone nine-probability fixture as well as the three production modes.
         columns = {}
         for group, missing in enumerate(text_missing.T):
             values = rng.dirichlet(np.ones(9), size=len(base))
@@ -232,6 +230,8 @@ def run(model, *, execute=False):
                 feature_set=f"predictor_fixture__{case}",
                 representation_recipe={
                     "contract_version": CONTRACT_VERSION,
+                    "evaluation_identity": report["evaluation_identity"],
+                    "runtime_identity": report["runtime_identity"],
                     "pca_components": components,
                     "synthetic_vectors": components is not None,
                 },

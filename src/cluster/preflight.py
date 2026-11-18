@@ -232,12 +232,24 @@ def runtime_parity():
     }
 
 
-def decision_feature_checks(cfg):
-    """Exercise the exact production decision selector and combined matrix for every pair."""
+def validate_decision_group(values, missing, width):
+    """Observed text has a valid probability block; absent text has only missing values."""
     import numpy as np
 
+    if values.loc[missing].notna().any().any():
+        raise ValueError("Missing text has nonmissing decision features")
+    array = values.loc[~missing].to_numpy(dtype=float)
+    if (array.shape[1] != width or not np.isfinite(array).all()
+            or ((array < 0) | (array > 1)).any()
+            or (width > 1 and not np.allclose(array.sum(axis=1), 1, atol=1e-5, rtol=0))):
+        raise ValueError("Decision feature values violate the benchmark input contract")
+
+
+def decision_feature_checks(cfg):
+    """Exercise the production selectors and feature modes for each dataset and provider."""
+
     from src.evaluation.features import assemble_feature_set, load_feature_selection, missing_column
-    from src.evaluation.qualification import decision_selector
+    from src.evaluation.qualification import decision_artifact_pins, decision_selector
     from src.jev.features import feature_view
 
     results = []
@@ -250,8 +262,10 @@ def decision_feature_checks(cfg):
             item = {"dataset_id": entry["id"], "provider": provider, "status": "failed"}
             try:
                 selector = decision_selector(cfg, provider)
-                blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector)
-                assemble_feature_set(dataset, blocks, "non_text_plus_both", selector=selector)
+                pins = decision_artifact_pins(cfg, entry["id"], provider)
+                blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector, artifact_pins=pins)
+                for feature_set in ("non_text_plus_per_column", "non_text_plus_joint", "non_text_plus_both"):
+                    assemble_feature_set(dataset, blocks, feature_set, selector=selector)
                 ids, checksums = {}, {}
                 for block in blocks:
                     manifest = block.manifest
@@ -280,28 +294,10 @@ def decision_feature_checks(cfg):
                         seen = refs.status.reindex(base.index).eq("missing_text")
                         if not seen.equals(expected_missing):
                             raise ValueError("Decision request availability differs from raw text")
-                        scores = values.loc[
-                            ~expected_missing, [f"__{group}__" in c for c in values]
-                        ]
-                        width = (
-                            len(meta.classes)
-                            if meta.task_type == "multiclass_classification"
-                            else 1
-                        )
-                        low, high = (-4, 4) if meta.task_type == "regression" else (0, 1)
-                        array = scores.to_numpy(dtype=float)
-                        if (
-                            array.shape[1] != width
-                            or not np.isfinite(array).all()
-                            or ((array < low) | (array > high)).any()
-                            or (
-                                width > 1
-                                and not np.allclose(array.sum(axis=1), 1, atol=1e-5, rtol=0)
-                            )
-                        ):
-                            raise ValueError(
-                                "Decision feature values violate the benchmark input contract"
-                            )
+                        width = (len(meta.classes) if meta.task_type == "multiclass_classification"
+                                 else 9 if meta.task_type == "regression" else 1)
+                        group_values = values.loc[:, [f"__{group}__" in column for column in values]]
+                        validate_decision_group(group_values, expected_missing, width)
                     ids[mode] = manifest["artifact_id"]
                     checksums[ids[mode]] = digest(manifest["sha256"])
                 item.update(

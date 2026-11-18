@@ -34,11 +34,14 @@ jevpfn_cleanup_runtime_cache() {
 trap jevpfn_cleanup_runtime_cache EXIT
 export MPLCONFIGDIR="$XDG_CACHE_HOME/matplotlib"
 # Every model's durable weights belong on project storage, including HF/Torch downloads.
-export TORCH_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("torch"))')"
-export HF_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("huggingface"))')"
+TORCH_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("torch"))')"
+export TORCH_HOME
+HF_HOME="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("huggingface"))')"
+export HF_HOME
 export HF_HUB_CACHE="$HF_HOME/hub"
 export HF_XET_CACHE="$HF_HOME/xet"
-export TABPFN_MODEL_CACHE_DIR="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("tabpfn"))')"
+TABPFN_MODEL_CACHE_DIR="$(python -c 'from src.utils.paths import checkpoints_dir; print(checkpoints_dir("tabpfn"))')"
+export TABPFN_MODEL_CACHE_DIR
 export TRITON_CACHE_DIR="$XDG_CACHE_HOME/triton"
 export CUDA_CACHE_PATH="$XDG_CACHE_HOME/nv"
 # Transformers' generated remote-code modules are disposable per-job imports,

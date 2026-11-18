@@ -31,7 +31,7 @@ def preview(request, provider):
     questions = {QUESTION_ID: question}
     from src.jev.catalog import ADDED
 
-    if provider in {"mammoth", "drex_max"}:
+    if provider in {"mammoth", "drex_max", "knowline", "sieve"}:
         return {"transport": "self_hosted_publisher_forward",
                 "arguments": {"state": state, "questions": questions},
                 "reference": load_yaml("extractors")["candidates"][provider]["reference"],

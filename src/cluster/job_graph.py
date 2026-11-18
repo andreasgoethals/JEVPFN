@@ -195,6 +195,9 @@ def advance(steps, *, settings, state, submit, save, retry=None):
         if step.get("job_id") or step.get("status") in TERMINAL:
             continue
         kind = pool(step)
+        not_before = step.get("not_before_utc")
+        if not_before and datetime.now(UTC) < datetime.fromisoformat(not_before):
+            continue  # A waiting retry is not due yet.
         if (
             sum(active.values()) >= settings["max_active_jobs"]
             or active[kind] >= settings["test_pool_limits"][kind]

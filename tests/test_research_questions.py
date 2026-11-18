@@ -6,9 +6,10 @@ import pytest
 from src.evaluation.qualification import profile_plan
 from src.evaluation.research_questions import (
     adaptation_plan,
+    adaptation_prediction_plan,
     align_permuted_probabilities,
+    random_probe_requests,
     random_probe_rows,
-    regression_readout_plan,
     regression_width_table,
     stable_probe_sample,
     training_defined_bins,
@@ -26,15 +27,14 @@ def test_research_layout_keeps_legacy_config_and_output_identities():
     assert load_yaml("rq3/adaptation")["enabled"] is False
 
 
-def test_readout_uses_paired_regression_arms_and_real_width_profiles():
-    plan = regression_readout_plan()
-    n = len(load_yaml("experiment_1/main")["candidate_extractors"])
-    assert len(plan) == 9 * 2 * n
-    assert {a["view"] for a in plan} == {"mean"}
-    assert {a["feature_set"] for a in plan} == {"non_text_plus_per_column"}
-    profiles = [a for a in profile_plan() if a["phase"] == "regression_readout"]
-    assert {a["model"] for a in profiles} == {"linear", "catboost"}
-    assert max(a["predictor_columns"] for a in profiles) == 36
+def test_removed_readout_is_absent_from_benchmark_and_qualification():
+    from src.evaluation.campaign import benchmark_plan
+    from src.evaluation.qualification import PHASE_CONFIGS
+    plan = benchmark_plan()
+    assert len(plan) == 6534
+    assert {a["phase"] for a in plan} == set(PHASE_CONFIGS) == {
+        "experiment_1", "experiment_2", "experiment_3", "experiment_4"}
+    assert all(a["phase"] != "regression_readout" for a in profile_plan())
     widths = regression_width_table().set_index("dataset_id")
     row = widths.loc["REG_TEXT_ROTTEN_TOMATOES"]
     assert (row.per_column_probabilities, row.both_probabilities, row.kumo_conservative_max) == (
@@ -89,7 +89,6 @@ def test_primary_regression_probability_view_cannot_reuse_historical_mean_identi
             and a.get("provider") and semantics[a["dataset_id"]]["task_type"] == "regression"]
     assert arms and all(a["view"] == "probabilities" for a in arms)
     assert max(a["predictor_columns"] for a in arms) == 141
-    assert all(a["view"] == "mean" for a in regression_readout_plan())
 
 
 def test_cohort_cutpoints_ignore_test_distribution():
@@ -99,11 +98,31 @@ def test_cohort_cutpoints_ignore_test_distribution():
     assert bins[-1] == -1
 
 
-def test_adaptation_is_direct_and_train_validation_test_are_disjoint():
+def test_adaptation_shares_fields_and_predictors_but_never_outer_folds():
     plan = adaptation_plan()
-    assert len(plan) == 90 and sum(a["pilot"] for a in plan) == 4
+    assert len(plan) == 135 and sum(a["pilot"] for a in plan) == 6
+    assert len({(a['dataset_id'], a['fold'], a['variant']) for a in plan}) == 135
+    assert {a['representation'] for a in plan} == {'per_column'}
+    assert all(a['shared_across_text_columns'] for a in plan)
+    predictions = adaptation_prediction_plan()
+    assert len(predictions) == 1350
+    assert len({a['predictor'] for a in predictions}) == 6
+    assert all(a['binary_threshold'] == 0.5 for a in predictions)
     assert not any(a["execution_enabled"] for a in plan)
+    assert not any(a["execution_enabled"] for a in predictions)
     assert validate_adaptation_partition([1, 2], [3], [4], [5])
+
+
+def test_request_sampling_deduplicates_calls_and_separates_study_streams():
+    keys = [f'request:{i}' for i in range(1000)]
+    a = random_probe_requests(keys, dataset_id='x')
+    assert len(a) == len(set(a)) == 500
+    assert a == random_probe_requests(keys[::-1] * 2, dataset_id='x')
+    assert a != random_probe_requests(keys, dataset_id='x', study='field_order')
+    applicable = keys[:200]
+    assert set(random_probe_requests(applicable, dataset_id='x')) == set(applicable)
+    with pytest.raises(ValueError):
+        random_probe_requests([''], dataset_id='x')
 
 
 @pytest.mark.parametrize("left,right", [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)])
@@ -128,7 +147,7 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
 
     additions = load_yaml("feature_creation/approved_additions")
     assert additions["execution_enabled"] is False
-    assert set(additions["models"]) == {"mammoth", "drex_max"}
+    assert set(additions["models"]) == {"mammoth", "drex_max", "knowline", "sieve"}
     active = set(load_yaml("experiment_1/main")["candidate_extractors"])
     assert set(additions["models"]) <= active
     for model in additions["models"].values():
@@ -148,25 +167,17 @@ def test_summary_discovery_follows_research_order():
     assert [order[g] for g in groups] == sorted(order[g] for g in groups)
 
 
-def test_regression_readout_pairs_only_full_folds_and_identical_artifacts():
-    import pandas as pd
+def test_replay_control_precedes_interventions():
+    from src.utils.config import load_yaml
 
-    from src.evaluation.representation_views import regression_mean_comparison
-    rows = []
-    for fold in range(5):
-        base = dict(dataset_id="fixture", task_type="regression", model_id="linear",
-                    checkpoint_id="fixed", split_id="s", outer_fold=fold, metric="r2",
-                    provider="strands", feature_set="non_text_plus_per_column",
-                    feature_artifact_ids="same")
-        rows.extend([{**base, "arm_id":"v", "phase":"experiment_1", "view":"probabilities", "value":0.8},
-                     {**base, "arm_id":"m", "phase":"regression_readout", "view":"mean", "value":0.6}])
-    table = pd.DataFrame(rows)
-    comparison = regression_mean_comparison(table)
-    assert len(comparison) == 5
-    np.testing.assert_allclose(comparison.difference, -0.2)
-    assert regression_mean_comparison(table.iloc[:-1]).empty
-    table.loc[table.view.eq("mean"), "feature_artifact_ids"] = "different"
-    assert regression_mean_comparison(table).empty
-    table.loc[table.view.eq("mean"), "feature_artifact_ids"] = "same"
-    with pytest.raises(ValueError, match="Multiple"):
-        regression_mean_comparison(pd.concat([table, table.iloc[:1]]))
+    studies = load_yaml("rq1/behavior")["studies"]
+    assert list(studies) == ["B1_replay", "B2_wording", "B3_field_order", "B4_option_order"]
+    assert studies["B1_replay"]["eligible"] == "union_of_B2_B3_B4_samples"
+    assert studies["B1_replay"]["total_fresh_executions"] == 3
+
+
+def test_tied_cutpoints_keep_quartile_meaning_of_each_bin():
+    bins, edges = training_defined_bins([1, 1, 1, 1, 1, 5, 9], [0, 1, 4, 10])
+    assert len(edges) == 3  # Tied cut-offs are kept, never renumbered.
+    # bin_k = number of training quartile cut-offs at or below the value.
+    assert bins.tolist() == [0, 2, 3, 3]

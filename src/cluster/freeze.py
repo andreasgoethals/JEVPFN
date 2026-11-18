@@ -65,7 +65,7 @@ def source_snapshot():
         ("src", {".py"}),
         ("tests", {".py"}),
         ("scripts", {".sh", ".slurm"}),
-        ("config", {".yaml", ".toml"}),
+        ("config", {".yaml", ".toml", ".csv"}),
     ):
         for path in sorted((root / directory).rglob("*")):
             if path.is_file() and path.suffix in suffixes and not path.name.endswith(".local.yaml"):

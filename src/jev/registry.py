@@ -1,4 +1,4 @@
-"""Active eleven-extractor registry; preserve the five historical counter identities.
+"""Original eleven-extractor registry (the active 17-model catalogue is src/jev/catalog.py); preserve the five historical counter identities.
 
 New tokenizers/renderers are staged explicitly, without importing Torch or loading
 weights. The two older fingerprinted tokenizer modules are deliberately unchanged.
@@ -123,7 +123,7 @@ def stage_tokenizers(providers=SELF_HOSTED):
                 records[name] = dict(url=url, sha256=file_sha256(path), bytes=path.stat().st_size)
             identity = dict(provider=provider, revision=PINS[provider], files=records)
             manifest = folder / "manifest.json"
-            if manifest.exists() and json.loads(manifest.read_text()) != identity:
+            if manifest.exists() and json.loads(manifest.read_text(encoding="utf-8")) != identity:
                 raise ValueError("Staged assets changed; preserve and review the previous assets")
             write_json(manifest, identity)
         print(f"{provider}: staged pinned tokenizer/source assets; no model weights", flush=True)
@@ -227,7 +227,7 @@ class ExtendedCounter:
             self.labels = self.renderer.option_labels(self.tokenizer)
         elif p == "decision3":
             self.renderer = source_module(f, "d3_format.py", "jevpfn_d3_format")
-            self.labels = json.loads((f / "decision_config.json").read_text())["codes"]
+            self.labels = json.loads((f / "decision_config.json").read_text(encoding="utf-8"))["codes"]
         elif p == "nimble":
             name = "jevpfn_nimble_schema"
             package = types.ModuleType(name)
@@ -236,7 +236,7 @@ class ExtendedCounter:
             for file in ("parallel_schema", "extended_schema", "serving_schema"):
                 self.renderer = source_module(f, file + ".py", name + "." + file)
         elif p == "h2o":
-            tree = ast.parse((f / "h2o_lightning_shim.py").read_text())
+            tree = ast.parse((f / "h2o_lightning_shim.py").read_text(encoding="utf-8"))
             constants = {}
             for node in tree.body:
                 if isinstance(node, ast.Assign):
@@ -256,7 +256,7 @@ class ExtendedCounter:
                 },
                 {**constants, "Unprocessable": ValueError},
             )
-            self.config = json.loads((f / "serve_config.json").read_text())
+            self.config = json.loads((f / "serve_config.json").read_text(encoding="utf-8"))
         else:
             self.api = pure_functions(
                 f / "source/kev/api.py", {"render", "option_text", "question_keys", "to_record"}

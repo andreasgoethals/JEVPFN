@@ -181,7 +181,6 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "experiment_2": "embeddings",
         "experiment_3": "tar",
         "experiment_4": "native_text",
-        "regression_readout": "readout",
     }
     cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
     enabled = (
@@ -201,10 +200,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             lambda: benchmark_evidence(acceptance, arm),
             copy_result=False,
         )
-    from src.evaluation.research_questions import regression_readout_plan
-
-    plan_loader = regression_readout_plan if arm["phase"] == "regression_readout" else benchmark_plan
-    if arm not in _cached(("plan", arm["phase"]), plan_loader, copy_result=False):
+    if arm not in _cached(("plan", arm["phase"]), benchmark_plan, copy_result=False):
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     _retain_representation(arm.get("provider"), arm.get("encoder"))
     catalog = load_yaml("experiment_1/models")
@@ -218,6 +214,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     settings["code_sha256"] = code_identity(
         [
             "src/evaluation/models.py",
+            "src/evaluation/limix_preprocessing.py",
             "src/evaluation/protocol.py",
             "src/evaluation/features.py",
             "src/evaluation/metrics.py",
@@ -242,11 +239,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         raise ValueError(f"Unsupported width: {status}; no columns are silently discarded")
     decision_set = decision_feature_set(arm["feature_set"])
     providers = [arm["provider"]] if arm["provider"] else []
-    from src.evaluation.qualification import decision_selector
+    from src.evaluation.qualification import decision_artifact_pins, decision_selector
 
     selectors, additions, checksums = {}, [], {}
     for provider in providers:
         selector = decision_selector(cfg, provider)
+        pins = decision_artifact_pins(cfg, entry["id"], provider)
         modes = (
             ("per_column", "joint")
             if decision_set == "non_text_plus_both"
@@ -259,9 +257,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
                 block
                 for mode in modes
                 for block in _cached(
-                    ("decision", provider, entry["id"], digest(selector), mode),
-                    lambda mode=mode, selector=selector: load_feature_selection(
-                        paths.dataset_cache_path(entry["id"]), selector, (mode,),
+                    ("decision", provider, entry["id"], digest(selector), digest(pins), mode),
+                    lambda mode=mode, selector=selector, pins=pins: load_feature_selection(
+                        paths.dataset_cache_path(entry["id"]), selector, (mode,), artifact_pins=pins,
                     ),
                 )
             ]
@@ -405,7 +403,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
-    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4", "regression_readout"))
+    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4"))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
     parser.add_argument("--pca-scope", choices=("per_column", "joint"))
@@ -422,9 +420,7 @@ def main():
         help="Experiment 0B: full first outer fold, no row cap",
     )
     args = parser.parse_args()
-    from src.evaluation.research_questions import regression_readout_plan
-
-    plan = regression_readout_plan() if args.phase == "regression_readout" else benchmark_plan()
+    plan = benchmark_plan()
     selected = [
         a
         for a in plan

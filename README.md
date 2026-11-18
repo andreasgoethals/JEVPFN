@@ -3,25 +3,23 @@
 JEVPFN studies **how decision models represent real text, when their representations help
 prediction, and whether supervised adaptation improves them**.
 Eighteen text-rich tabular datasets provide linked outcomes and a shared test bed.
-The contribution connects model behaviour to predictive utility; it does not assume that
-confident or agreeing models are correct.
+A decision model reads a named text field or a group of fields and answers a fixed question about the task. We follow its answer probabilities from the original text to a held-out prediction. This lets us test whether two models that describe the same text differently also give a tabular learner different predictive information.
+
+Prior studies compare direct decisions on whole table rows, and existing software already feeds Jev probabilities into a tabular predictor. We give the decision models the same questions and text. We then compare their probabilities with frozen and supervised text embeddings using the same tabular predictors and held-out rows. [Typed Decision Models on Tabular Data](https://arxiv.org/abs/2610.19536) · [tab-jev](https://github.com/edamame-labs/tab-jev) · [MulTaBench](https://arxiv.org/abs/2605.10616)
 
 ## Study at a glance
 
 | Research question | Experiments | Compute |
 |---|---|---|
-| RQ1: behaviour | Distributions/agreement, joint versus separate context, controlled equivalent-input variations | Mostly existing outputs locally; new controlled variants on VSC |
-| RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems, regression readout; when text helps | Predictor fits on VSC; paired analysis locally |
-| RQ3: adaptation | Strands 2B calibration, head-only and LoRA plus head | Fold-local training on VSC; held-out analysis locally |
+| RQ1: behaviour | Outputs/context, controlled robustness, decision–encoder geometry | Local reports; controlled GPU calls and geometry CPU analysis on VSC |
+| RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems; when decision features help | Predictor fits on VSC; paired analysis locally |
+| RQ3: adaptation | Strands 2B calibration, head-only, LoRA and full adaptation | Fold-local training on VSC; held-out analysis locally |
 
-RQ2 has **6,156 configurations / 30,780 outer fits**, including 270 appendix mean-readout
-ablations. The four main comparisons contribute 5,886 configurations; historical
-Experiments 1–4 retain their machine identifiers. RQ3 starts with four training pilots
-before a 90-run expansion. These are configured designs, not completed experiments.
+RQ2 has **6,534 configurations / 32,670 outer fits** across four comparisons; historical
+Experiments 1–4 retain their machine identifiers. RQ3 is a design proposal awaiting review. Its notebooks describe candidate comparisons.
 The [study configuration](config/) defines the comparisons and qualification checks.
 
-Six structured predictors compare features from fifteen extractors. Mammoth-1 and
-Drex Max now have pinned native adapters; their real 0A acceptance is still required.
+Six tabular predictors use a shared structured baseline and features from 17 decision models: hosted Jev and 16 open-weight releases. For regression, each question produces nine probabilities over a signed evidence scale. These describe the text; the tabular predictor estimates the numeric target.
 The comparisons use three frozen encoders
 (E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B) and supervised E5-small TAR. Both embedding
 tracks retain joint PCA64 and separate PCA32 per text field. TabSTAR v1.1, ConTextTab and
@@ -29,14 +27,14 @@ AutoGluon-Multimodal are descriptive native-text system references.
 
 ## Current evidence
 
-**16 November 2026, live VSC inspection:** ten original open-weight providers have completed
-all eighteen dataset jobs and publication/release; all 54 frozen encoder and 54 PCA jobs
-previously passed. Liquid d1-2B staging recovered from a publication-lock failure; its
-eighteen remaining dataset jobs were all submitted and queued on Mindwell at 10:47 CET.
-GLiDE is locally integrated but still
-needs separate real 0A acceptance and extraction. Jev full coverage remains budget-limited.
-One real TAR pilot and the linear/CatBoost contracts passed; full 0B and the benchmark
-have not passed or run.
+**18 November 2026.** The VSC has published all eighteen datasets for each of the eleven
+original open-weight decision models. All 54 frozen encoder and 54 fold-PCA stores are
+also verified locally. Mammoth, Drex Max and GLiDE passed the production GPU checks and
+eighteen-dataset pilots. Review 11819179 accepted all three and the extraction dispatcher
+started on 18 November. KnowLine-31B and Sieve-31B-v3 have verified weights and sealed Mindwell containers. Both passed cross-node storage checks and exact token audits on all 18 datasets. Each B200 contract is followed by a dataset pilot. Full Jev remains incomplete.
+
+One real TAR pilot and the linear/CatBoost checks passed. Full 0B and the benchmark
+remain ahead.
 
 ## Repository navigation
 
@@ -100,20 +98,20 @@ Notebooks run locally and write paper-width PDFs and printed reports. The runner
 `output_JEVPFN/figures/`, and the aggregate report is `output_JEVPFN/All Results.md`.
 Result figures appear as complete saved evidence becomes available.
 
-The RQ1 Outputs and Context notebooks examine row-level vote splits, matching-class
+The RQ1 Outputs notebook examines row-level vote splits, matching-class
 correlations, full probability differences, confidence, text grouping and exact reuse.
-They include hash-verified source examples and export all joint rows to compressed
-Parquet. Only fully downloaded extractors enter comparisons; agreement is not accuracy.
+Mindwell CPU checks the published inputs and writes the joint-row Parquet and a compact report.
+The local notebook renders that report, including hash-verified examples, and identifies its model coverage.
+Only extractors with both feature blocks on all 18 datasets enter the comparisons.
 
 | Stage | Notebooks |
 |---|---|
 | General | [Data](notebooks/general/01_data.ipynb), [Features](notebooks/general/02_features.ipynb), [Validation](notebooks/general/03_validation.ipynb) |
-| RQ1 | [Outputs](notebooks/rq1/01_outputs.ipynb), [Context](notebooks/rq1/02_context.ipynb), [Robustness](notebooks/rq1/03_robustness.ipynb) |
-| RQ2 | [Decisions](notebooks/rq2/01_decisions.ipynb), [Embeddings](notebooks/rq2/02_embeddings.ipynb), [TAR](notebooks/rq2/03_tar.ipynb), [Native text](notebooks/rq2/04_native.ipynb), [When text helps](notebooks/rq2/05_when_text_helps.ipynb) |
-| RQ3 | [Calibration](notebooks/rq3/01_calibration.ipynb), [Decision head](notebooks/rq3/02_head.ipynb), [LoRA](notebooks/rq3/03_lora.ipynb) |
+| RQ1 | [Outputs](notebooks/rq1/01_outputs.ipynb), [Robustness](notebooks/rq1/02_robustness.ipynb), [Geometry](notebooks/rq1/03_geometry.ipynb) |
+| RQ2 | [Decisions](notebooks/rq2/01_decisions.ipynb), [Embeddings](notebooks/rq2/02_embeddings.ipynb), [TAR](notebooks/rq2/03_tar.ipynb), [Native text](notebooks/rq2/04_native.ipynb), [When decision features help](notebooks/rq2/05_when_text_helps.ipynb) |
+| RQ3 | [Calibration](notebooks/rq3/01_calibration.ipynb), [Decision head](notebooks/rq3/02_head.ipynb), [LoRA](notebooks/rq3/03_lora.ipynb), [Full adaptation](notebooks/rq3/04_full.ipynb) |
 
-Regression uses **nine probabilities per text input**; the mean comparison sits in the
-RQ2A appendix. RQ1C specifies 500 random source rows per dataset and one-factor changes.
+Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 texts per dataset/field.
 RQ3 notebooks currently show plans and pending gates, not trained-model results.
 
 ## Citation and licensing

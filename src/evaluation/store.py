@@ -176,8 +176,24 @@ def completed(recipe, phase):
     return result
 
 
-def recipes(phase):
-    for path in sorted(paths.results_dir("evaluation", phase=phase).glob("*.sqlite3")):
+def all_recipes(phase, *, dataset_id=None):
+    """Store recipes plus legacy per-fold JSON markers, deduplicated by identity."""
+    legacy = [
+        json.loads(p.read_text(encoding="utf-8"))["recipe"]
+        for p in sorted(paths.results_dir("cv_folds", phase=phase).glob("*.json"))
+    ]
+    if dataset_id is not None:
+        legacy = [r for r in legacy if r.get("dataset_id") == dataset_id]
+    return list({digest(r): r for r in [*legacy, *recipes(phase, dataset_id=dataset_id)]}.values())
+
+
+def recipes(phase, *, dataset_id=None):
+    if dataset_id is None:
+        files = sorted(paths.results_dir("evaluation", phase=phase).glob("*.sqlite3"))
+    else:
+        path = database(dataset_id, phase)
+        files = [path] if path.is_file() else []
+    for path in files:
         with readonly(path) as db:
             for (recipe,) in db.execute("SELECT recipe FROM folds ORDER BY id"):
                 yield json.loads(recipe)

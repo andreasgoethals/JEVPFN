@@ -10,20 +10,17 @@ import json
 import pandas as pd
 
 from src.evaluation.records import completed_fold
-from src.evaluation.store import recipes
+from src.evaluation.store import all_recipes
 from src.utils import paths
 from src.utils.serialization import digest, write_json
 
 
-def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4", "regression_readout")):
+def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4")):
     rows = []
     for phase in phases:
-        legacy = [
-            json.loads(p.read_text(encoding="utf-8"))["recipe"]
-            for p in sorted(paths.results_dir("cv_folds", phase=phase).glob("*.json"))
-        ]
-        unique = {digest(r): r for r in [*legacy, *recipes(phase)]}
-        for recipe in unique.values():
+        for recipe in all_recipes(phase):
+            if type(recipe["outer_fold"]) is not int or recipe["outer_fold"] not in range(5):
+                raise ValueError("Stored outer fold is outside the registered five-fold protocol")
             records = completed_fold(recipe, phase)
             arm_id = digest({k: v for k, v in recipe.items() if k != "outer_fold"})
             for path in records:
@@ -33,6 +30,8 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
                 base = {
                     "arm_id": arm_id,
                     "phase": phase,
+                    "pairing_identity": digest({k: recipe.get(k) for k in
+                        ("data_identity", "task_schema_sha256", "protocol_sha256", "estimator_settings")}),
                     "dataset_id": recipe["dataset_id"],
                     "task_type": recipe["task_type"],
                     "model_id": recipe["model_id"],
@@ -70,11 +69,9 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
                     # A representation recipe is shared across datasets; row artifact IDs are not.
                     # Legacy records without one remain separate rather than silently pooling providers.
                     "comparison_id": digest(
-                        recipe.get("representation_recipe")
-                        or {
-                            "legacy_artifacts": recipe["feature_artifact_ids"],
-                            "feature_set": recipe["feature_set"],
-                        }
+                        {"feature_set": recipe["feature_set"],
+                         "representation": recipe.get("representation_recipe")
+                         or {"legacy_artifacts": recipe["feature_artifact_ids"]}}
                     ),
                     "split_id": recipe["split_id"],
                     "outer_fold": recipe["outer_fold"],
@@ -162,6 +159,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
         "checkpoint_id",
         "split_id",
         "outer_fold",
+        "pairing_identity",
         "metric",
     ]
     baseline = chosen.loc[
@@ -183,11 +181,15 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
     paired["reference"] = "non_text"
     paired["reference_value"] = paired.non_text_value
     paired["difference"] = paired.difference_from_non_text
+    # Arms whose run identity (e.g. estimator settings or code hash) matches no baseline
+    # would otherwise vanish from effect tables without a trace.
+    unpaired = paired.loc[paired.non_text_value.isna(), "arm_id"].nunique()
     return (
         {
             "status": "collected",
             "complete_arms": len(complete),
             "incomplete_arms": int((counts != 5).sum()),
+            "augmented_arms_without_matching_baseline": int(unpaired),
             "difference_definition": "augmented minus the same predictor and split using non_text; improvement direction depends on metric",
             "fold_sd": "descriptive variation; not a standard error or confidence interval",
             "native_text_results": "descriptive original-text system references; cross-system comparisons in synthesis",
@@ -198,6 +200,49 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
         paired,
     )
 
+
+
+def collect_for_notebook(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4")):
+    """Verify compact prediction stores once per notebook run and share their metric tables."""
+    import os
+
+    from src.utils.locking import file_lock
+    from src.utils.serialization import file_sha256
+
+    if not os.environ.get("JEVPFN_NOTEBOOK_SCRATCH"):
+        return collect(phases)
+    # Legacy fold files have external prediction paths. Always verify their complete chain.
+    if any(any(paths.results_dir("cv_folds", phase=p).glob("*.json")) for p in phases):
+        return collect(phases)
+
+    def inventory():
+        files = []
+        for phase in phases:
+            for path in sorted(paths.results_dir("evaluation", phase=phase).glob("*.sqlite3*")):
+                stat = path.stat()
+                files.append((str(path.resolve()), stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+        return files
+
+    initial = inventory()
+    cache = paths.notebook_cache_dir("evaluation", digest({"phases": phases, "files": initial}))
+    cache.mkdir(parents=True, exist_ok=True)
+    marker = cache / "receipt.json"
+    files = [cache / (name + ".parquet") for name in ("folds", "datasets", "paired")]
+    with file_lock(cache / "collect.lock", timeout=7200):
+        if marker.is_file():
+            receipt = json.loads(marker.read_text(encoding="utf-8"))
+            if [file_sha256(p) for p in files] != receipt["checksums"]:
+                raise ValueError("Notebook metric cache checksum mismatch")
+            result = (receipt["status"], *(pd.read_parquet(p) for p in files))
+        else:
+            result = collect(phases)
+            for frame, path in zip(result[1:], files, strict=True):
+                frame.to_parquet(path, index=False)
+            write_json(marker, {"status": result[0], "checksums": [file_sha256(p) for p in files]})
+        if inventory() != initial:
+            marker.unlink(missing_ok=True)
+            raise ValueError("Published evaluation stores changed during notebook collection; rerun on a stable snapshot")
+        return result
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

@@ -26,16 +26,17 @@ Start with the [README](README.md) and [study configuration](config/). When work
 
 ## Scientific constraints
 
-- The approved scope is RQ1 decision behavior, RQ2 predictive utility (historical
-  Experiments 1–4, including regression readout) and RQ3 Strands adaptation, with general preparation and 0A/0B.
-  Mammoth-1 and Drex Max are approved additions, native adapters implemented but disabled pending real
-  0A validation. Strands 2B adaptation is approved in design; its training runner
-  still needs implementation and a bounded pilot. Do not add grouped sensitivity,
+- The approved scope is RQ1A outputs/context, RQ1B controlled robustness, RQ1C geometry,
+  RQ2 predictive utility (historical
+  Experiments 1–4) and RQ3 Strands adaptation, with general preparation and 0A/0B.
+  Production extraction requires a signed native 0A review for each added provider.
+  Compute full-store RQ1A reports on native Mindwell CPU and render their compact tables locally.
+  Strands 2B is the RQ3 candidate; the adaptation design and training budget await owner approval. Do not add grouped sensitivity,
   lexical baselines or selected-winner combinations. Microsoft remains excluded.
 - Decision requests are deterministic and label-free: no generated questions, non-text
   row values, true row targets, class frequencies, target statistics or model feedback.
   Keep original class vocabularies and sourced meanings in `dataset_semantics.yaml`.
-  Regression uses all nine ordered probabilities; the mean is an explicit RQ2 appendix view.
+  Regression uses all nine ordered probabilities; no mean-readout ablation is included.
   Empty text retains missing features. Never silently truncate decision inputs, drop
   rows/classes/features or cap training rows.
 - Among precomputed representation arms, TAR fits the encoder to dataset labels only

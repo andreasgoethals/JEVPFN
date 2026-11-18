@@ -21,7 +21,6 @@ PHASE_CONFIGS = {
     "experiment_2": "experiment_2/embeddings",
     "experiment_3": "experiment_3/tar",
     "experiment_4": "experiment_4/native_text",
-    "regression_readout": "rq2/readout",
 }
 
 
@@ -35,6 +34,10 @@ def decision_selector(config, provider):
     ):
         raise ValueError(f"Select the exact model, settings and question recipe for {provider}")
     return selector
+
+
+def decision_artifact_pins(config, dataset_id, provider):
+    return config.get("dataset_feature_artifacts", {}).get(dataset_id, {}).get(provider)
 
 
 def execution_runtime():
@@ -62,13 +65,12 @@ def execution_runtime():
 def profile_plan(arms=None):
     """Profile shape extremes and the real inner-OOF workload for each applicable recipe."""
     from src.evaluation.campaign import benchmark_plan
-    from src.evaluation.research_questions import regression_readout_plan
 
     rows = {e["id"]: e["paper_summary"]["rows"] for e in load_catalog()["datasets"]}
     semantics = load_yaml("dataset_semantics")["datasets"]
     encoders = load_yaml("feature_creation/embedding_models")["models"]
     groups = {}
-    for arm in benchmark_plan() + regression_readout_plan() if arms is None else arms:
+    for arm in benchmark_plan() if arms is None else arms:
         if arm["width_status"] != "unsupported_width":
             key = (arm["phase"], arm["model"], arm.get("pca_scope"), arm.get("pca_components"))
             groups.setdefault(key, []).append(arm)
@@ -109,6 +111,24 @@ def profile_plan(arms=None):
             )))
         for arm in extremes:
             selected[digest(arm)] = arm
+    # Cover distinct input paths cheaply in addition to the stress profiles.
+    # One linear predictor suffices for these path checks; every predictor retains its extremes.
+    for group in groups.values():
+        if group[0]["model"] != "linear":
+            continue
+        paths_to_check = {}
+        for arm in group:
+            if arm["phase"] == "experiment_1":
+                family = (arm["feature_set"], arm.get("provider") == "jev")
+            elif arm["phase"] == "experiment_2":
+                family = (arm.get("encoder"),)
+            else:
+                continue
+            key = (rows[arm["dataset_id"]], arm["dataset_id"], arm.get("provider") or "")
+            if family not in paths_to_check or key < paths_to_check[family][0]:
+                paths_to_check[family] = (key, arm)
+        for _, arm in paths_to_check.values():
+            selected[digest(arm)] = arm
     return list(selected.values())
 
 
@@ -137,12 +157,40 @@ def source_leakage_diagnostics(dataset, splits):
             == classes
         ):
             recodings.append(str(name))
+    name_mentions = {}
+    if getattr(dataset.metadata, "dataset_id", None) == "MUL_TEXT_WINE_REVIEW":
+        import re
+        for field in dataset.metadata.text_columns:
+            texts = predictors[field]
+            matches = sum(
+                bool(re.search(r"(?<!\w)" + re.escape(str(label)) + r"(?!\w)", str(text), re.IGNORECASE))
+                for text, label in zip(texts, target, strict=True) if pd.notna(text) and pd.notna(label)
+            )
+            name_mentions[field] = {"whole_label_mentions": matches, "rows": len(target)}
     return {
+        "literal_target_mentions": name_mentions,
         "exact_target_copies": copies,
         "exact_class_target_recodings": recodings,
         "exact_feature_row_overlap_by_fold": overlap,
         "test_rows_by_fold": [len(fold["test"]) for fold in splits["folds"]],
     }
+
+
+def verify_arm_recipe(metadata, arm, artifact_ids, runtime):
+    """Match the saved fit to the planned arm even when two recipes have equal width."""
+    recipe = metadata.get("representation_recipe")
+    if not isinstance(recipe, dict):
+        raise ValueError("Published 0B predictions differ: missing fold recipe")
+    embedding = recipe.get("embedding") or {}
+    expected = (arm["model"], arm["dataset_id"], arm["feature_set"], arm.get("provider"),
+                arm.get("encoder"), arm.get("pca_scope"), arm.get("pca_components"),
+                arm.get("view", "main"))
+    actual = (metadata["model_id"], metadata["dataset_id"], metadata["feature_set"],
+              recipe.get("provider"), embedding.get("encoder_id"), embedding.get("pca_scope"),
+              embedding.get("pca_components_per_column"), recipe.get("view", "main"))
+    if (expected != actual or sorted(metadata["feature_artifact_ids"]) != sorted(artifact_ids)
+            or metadata["estimator_settings"].get("execution_runtime") != runtime):
+        raise ValueError("Published 0B predictions differ from the planned fold recipe, runtime or input artifacts")
 
 
 def save_profile(arm, dataset, features, runtime, records):
@@ -157,14 +205,17 @@ def save_profile(arm, dataset, features, runtime, records):
     if dataset.metadata.task_type == "binary_classification" and arm["phase"] != "experiment_3":
         roles["inner_oof_binary_threshold"] = fold["train"]
     verified = []
+    fold_ids = set()
     for record in records:
         body = json.loads(record.read_text(encoding="utf-8"))
         meta = body["metadata"]
         role = meta["prediction_role"]
+        fold_ids.add(meta["fold_recipe_id"])
         positions = roles.pop(role)
         table = read_predictions(record)
         if meta.get("representation_feature_count") != arm["predictor_columns"]:
             raise ValueError("Full-fold profile predictor width differs from the planned recipe")
+        verify_arm_recipe(meta, arm, features.attrs["feature_artifact_ids"], runtime)
         if (
             meta["split_id"] != split["split_id"]
             or meta["outer_fold"] != 0
@@ -184,8 +235,11 @@ def save_profile(arm, dataset, features, runtime, records):
         )
     if roles:
         raise ValueError("Full-fold profile lacks required prediction roles")
+    if len(fold_ids) != 1:
+        raise ValueError("0B roles belong to different completed folds")
     report = {
         "status": "full_fold_profile_passed",
+        "fold_recipe_id": fold_ids.pop(),
         "evaluation_identity": evaluation_identity(),
         "arm": arm,
         "runtime_identity": runtime,
@@ -241,45 +295,73 @@ def feature_evidence(report):
         {(d, e) for d in datasets for e in load_yaml("experiment_2/embeddings")["encoders"]},
         "encoder feature",
     )
-    if any(
-        set(item.get("artifact_ids", {})) != {"joint", "per_column"}
-        or len(set(item["artifact_ids"].values())) != 2
-        or not all(item["artifact_ids"].values())
-        or set(item.get("artifact_checksums", {})) != set(item["artifact_ids"].values())
-        for item in decisions.values()
-    ) or any(
-        not item.get("artifact_id") or not item.get("prepared_pca_keys")
-        for item in embeddings.values()
-    ):
-        raise ValueError("0B requires exact artifact IDs for both decision modes and every encoder")
+    def valid_ids(values, count):
+        return (isinstance(values, list) and len(values) == count
+                and all(isinstance(v, str) and v for v in values)
+                and len(set(values)) == count)
+
+    def outer_pca_keys(dataset_id):
+        row = data[dataset_id,]
+        columns = row.get("text_columns")
+        if type(columns) is not int or columns < 1:
+            raise ValueError("0B lacks the verified text-column count")
+        from src.evaluation.design import pca_grid
+
+        return 5 * sum(columns if scope == "per_column" else 1 for scope, _ in pca_grid())
+
+    for item in decisions.values():
+        ids = item.get("artifact_ids", {})
+        sums = item.get("artifact_checksums", {})
+        if (set(ids) != {"joint", "per_column"} or not valid_ids(list(ids.values()), 2)
+                or set(sums) != set(ids.values()) or not all(sums.values())):
+            raise ValueError("0B requires exact artifact IDs and checksums for both decision modes")
+    for (dataset_id, _), item in embeddings.items():
+        inner = 4 if data[dataset_id,]["task_type"] == "binary_classification" else 1
+        if not item.get("artifact_id") or item.get("prepared_pca_keys") != inner * outer_pca_keys(dataset_id):
+            raise ValueError("0B requires exact artifact IDs and complete frozen PCA partition counts")
     from src.evaluation.tar import ENCODER
     tar = _complete(report.get("tar_artifacts", []), ("dataset_id", "encoder_id"),
                     {(d, ENCODER) for d in datasets}, "TAR fold feature")
     for key, item in tar.items():
-        if len(set(item.get("artifact_ids", []))) != 5 or not item.get("prepared_pca_keys"):
-            raise ValueError("0B requires all five TAR folds and their PCA parameters")
+        if (not valid_ids(item.get("artifact_ids"), 5)
+                or not valid_ids(item.get("prepared_pca_keys"), outer_pca_keys(key[0]))):
+            raise ValueError("0B requires all five TAR folds and their distinct PCA parameters")
         embeddings[key] = item
     return data, decisions, embeddings
 
 
 def verify_published_profile(report):
     """Reopen the durable records, including their Parquet payloads, at 0B review."""
-    from src.evaluation.store import RecordRef, database, read_predictions
+    from src.evaluation.store import RecordRef, database, read_predictions, readonly
 
     if paths.on_vsc() and paths.staging_override() != paths.durable_project_override():
         raise ValueError("Verify published 0B profiles against durable PROJECT, outside scratch")
     db = database(report["arm"]["dataset_id"], "experiment_0")
+    with readonly(db) as connection:
+        marker = connection.execute("SELECT recipe, records FROM folds WHERE id=?", (report.get("fold_recipe_id"),)).fetchone()
+    if marker is None or digest(json.loads(marker[0])) != report["fold_recipe_id"]:
+        raise ValueError("Published 0B predictions differ: missing completed fold recipe")
+    registered = {r["id"]: r["sha256"] for r in json.loads(marker[1])}
     for item in report["roles"]:
         record = RecordRef(db, item["record_id"])
         saved = json.loads(record.read_text())
+        if registered.get(item["record_id"]) != digest(saved) or saved["metadata"]["fold_recipe_id"] != report["fold_recipe_id"]:
+            raise ValueError("Published 0B predictions differ from the completed fold")
+        verify_arm_recipe(saved["metadata"], report["arm"], report["feature_artifact_ids"], report["runtime_identity"])
         if (
             saved["metadata"]["prediction_role"] != item["role"]
+            or saved["metadata"]["outer_fold"] != 0
+            or saved["metadata"]["data_identity"] != report["data_identity"]
+            or saved["metadata"]["model_id"] != report["arm"]["model"]
+            or saved["metadata"]["feature_set"] != report["arm"]["feature_set"]
             or saved["metadata"]["split_id"] != report["split_id"]
             or saved["metadata"].get("representation_feature_count") != report["predictor_columns"]
             or saved["predictions"]["sha256"] != item["prediction_sha256"]
             or len(read_predictions(record)) != item["rows"]
         ):
             raise ValueError("Published 0B predictions differ from the profile receipt")
+    if sorted(registered) != sorted(item["record_id"] for item in report["roles"]):
+        raise ValueError("0B profile omits or duplicates a completed fold record")
 
 
 def benchmark_evidence(filename, arm, *, verify_publication=False):
@@ -322,7 +404,8 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
             and all(f.get("resume_without_refitting") for f in r["fixtures"])
         )
     }
-    if set(predictors) != set(MAIN_MODELS + TEXT_MODELS):
+    approved_contracts = [r for r in live if r.get("status") == "predictor_contracts_passed_requires_full_fold_profile"]
+    if len(approved_contracts) != len(predictors) or set(predictors) != set(MAIN_MODELS + TEXT_MODELS):
         raise ValueError("0B requires passing real predictor contracts for all nine models")
     for model, report in predictors.items():
         cases = {(f["task_type"], f["classes"], f["feature_case"]) for f in report["fixtures"]}
@@ -333,6 +416,8 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
         ):
             raise ValueError(f"0B predictor fixtures or sealed runtime are incomplete for {model}")
     profiles = {digest(r["arm"]): r for r in live if r.get("status") == "full_fold_profile_passed"}
+    if len(profiles) != sum(r.get("status") == "full_fold_profile_passed" for r in live):
+        raise ValueError("Select exactly one full-fold profile per planned arm")
     for planned in profile_plan():
         report = profiles.get(digest(planned))
         dataset = features[0][planned["dataset_id"],]

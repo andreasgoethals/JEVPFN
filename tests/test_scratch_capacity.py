@@ -437,3 +437,36 @@ def test_only_identical_redundant_publication_snapshots_can_retire(roots):
     result = cap.retire_publication_snapshots(work)
     assert [Path(x["path"]).name for x in result["retired"]] == [".publish-identical"]
     assert older.is_file() and unknown.is_file() and source.path.is_file()
+
+
+def test_release_lists_array_tasks_and_defers_on_active_consumers(monkeypatch):
+    from src.cluster import scratch_capacity as capacity
+
+    calls = []
+
+    def scheduler(command):
+        calls.append(command)
+        if command[0] == "squeue":
+            return "12345_7|jevpfn-benchmark|/data/JEVPFN\n" if "mindwell" in command[1] else ""
+        return "JobId=12345 Command=/data/JEVPFN/scripts/slurm/benchmark_array.slurm"
+
+    monkeypatch.setattr(capacity.paths, "on_vsc", lambda: True)
+    monkeypatch.setattr(capacity, "_scheduler_read", scheduler)
+    with pytest.raises(capacity.ScratchConsumerActive):
+        capacity.require_runtime_idle("kev")
+    assert all("--array" in c for c in calls if c[0] == "squeue")
+    assert ["scontrol", "--clusters=mindwell", "show", "job", "12345_7", "-o"] in calls
+    assert issubclass(capacity.ScratchConsumerActive, capacity.QueueCheckUnavailable)
+
+
+def test_nested_unpublished_store_blocks_retirement(tmp_path):
+    from src.cluster.scratch_capacity import retire_published_mutable
+
+    work = tmp_path / "JEVPFN"
+    nested = work / "data/jev_cache/merge_backups/backup.sqlite3"
+    nested.parent.mkdir(parents=True)
+    nested.write_bytes(b"x")
+    (work / "data/jev_cache/fixture.sqlite3").write_bytes(b"y")
+    with pytest.raises(ValueError, match="Unpublished working file"):
+        retire_published_mutable(work)
+    assert nested.is_file()

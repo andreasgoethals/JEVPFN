@@ -9,25 +9,12 @@ PAIR_KEYS = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id",
 MODES = ["non_text_plus_joint", "non_text_plus_per_column", "non_text_plus_both"]
 
 
-def regression_mean_comparison(folds):
-    """Appendix mean minus primary vector, with identical artifacts and paired folds."""
-    if folds.empty:
-        return pd.DataFrame()
-    chosen = folds[folds.task_type.eq("regression") & folds.metric.eq("r2")]
-    complete = chosen.groupby("arm_id").outer_fold.nunique()
-    chosen = chosen[chosen.arm_id.isin(complete[complete.eq(5)].index)]
-    keys = PAIR_KEYS + ["provider", "feature_set", "feature_artifact_ids"]
-    mean = chosen[chosen.phase.eq("regression_readout") & chosen.view.eq("mean")]
-    vector = chosen[chosen.phase.eq("experiment_1") & chosen.view.eq("probabilities")]
-    if mean.empty or vector.empty:
-        return pd.DataFrame()
-    if mean.duplicated(keys).any() or vector.duplicated(keys).any():
-        raise ValueError("Multiple readout recipes match; select one campaign")
-    result = mean.merge(vector[keys + ["value"]].rename(columns={"value": "reference_value"}),
-                        on=keys, how="inner", validate="one_to_one")
-    result["difference"] = result.value - result.reference_value
-    result["reference"] = "nine_probabilities_same_artifacts"
-    return result
+def _complete_headlines(folds, phases):
+    chosen = folds[folds.phase.isin(phases) & folds.metric.eq(folds.task_type.map(HEADLINES))]
+    if chosen.duplicated(["arm_id", "outer_fold"]).any():
+        raise ValueError("Multiple headline records for one arm and fold; select one campaign")
+    complete = chosen.groupby("arm_id").value.count()
+    return chosen[chosen.arm_id.isin(complete[complete.eq(5)].index)]
 
 
 def decision_vs_embedding(folds, phase="experiment_2"):
@@ -38,24 +25,22 @@ def decision_vs_embedding(folds, phase="experiment_2"):
     """
     if folds.empty:
         return pd.DataFrame()
-    complete = folds.groupby("arm_id").outer_fold.nunique()
-    chosen = folds[folds.arm_id.isin(complete[complete.eq(5)].index)]
-    metric = chosen.task_type.map(HEADLINES)
-    chosen = chosen[chosen.metric.eq(metric)]
+    chosen = _complete_headlines(folds, ("experiment_1", phase))
     decisions = chosen[chosen.phase.eq("experiment_1") & chosen.feature_set.isin(MODES)]
     embeddings = chosen[chosen.phase.eq(phase) & chosen.encoder.notna()]
     embedding_recipe = pd.MultiIndex.from_frame(embeddings[["pca_scope", "pca_components"]])
     embeddings = embeddings[embedding_recipe.isin(pca_grid())]
     if decisions.empty or embeddings.empty:
         return pd.DataFrame()
+    pair_keys = PAIR_KEYS + (["pairing_identity"] if "pairing_identity" in folds else [])
     for table in (decisions, embeddings):
-        if table.duplicated(PAIR_KEYS + ["comparison_id"]).any():
+        if table.duplicated(pair_keys + ["comparison_id"]).any():
             raise ValueError("Multiple recipes/records for a contrast; select one campaign")
-    other = embeddings[PAIR_KEYS + ["arm_id", "comparison_id", "encoder", "pca_scope", "pca_components", "value"]]
+    other = embeddings[pair_keys + ["arm_id", "comparison_id", "encoder", "pca_scope", "pca_components", "value"]]
     other = other.rename(columns={"arm_id": "embedding_arm_id", "comparison_id": "embedding_comparison_id", "value": "reference_value"})
     # Cartesian product is intentional ONLY within the exact pair keys. All recipe
     # dimensions stay explicit; no best-performing recipe is selected or averaged away.
-    result = decisions.drop(columns=["encoder", "pca_scope", "pca_components"]).merge(other, on=PAIR_KEYS, how="inner")
+    result = decisions.drop(columns=["encoder", "pca_scope", "pca_components"]).merge(other, on=pair_keys, how="inner")
     result["difference"] = result.value - result.reference_value
     result["reference"] = "matched_embedding_recipe"
     return result
@@ -85,12 +70,8 @@ def tar_vs_frozen(folds):
     """Prespecified same-E5 and PCA comparison; input policies are not identical."""
     if folds.empty:
         return pd.DataFrame()
-    chosen = folds[folds.metric.eq(folds.task_type.map(HEADLINES))]
-    if chosen.duplicated(["arm_id", "outer_fold", "metric"]).any():
-        raise ValueError("Multiple records for a TAR/frozen fold; select one campaign")
-    complete = chosen.groupby("arm_id").value.count()
-    chosen = chosen[chosen.arm_id.isin(complete[complete.eq(5)].index)]
-    keys = PAIR_KEYS + ["pca_scope", "pca_components"]
+    chosen = _complete_headlines(folds, ("experiment_2", "experiment_3"))
+    keys = PAIR_KEYS + (["pairing_identity"] if "pairing_identity" in folds else []) + ["pca_scope", "pca_components"]
     tar = chosen[chosen.phase.eq("experiment_3")]
     frozen = chosen[chosen.phase.eq("experiment_2") & chosen.encoder.eq("e5_small_v2")]
     if tar.empty or frozen.empty:

@@ -63,6 +63,6 @@ def make_question(metadata: TaskMetadata, *, scores: list[int] | None = None) ->
         "allowed_answers": [{"score": v, "meaning": REGRESSION_LABELS[v]} for v in scores],
         # Historical question-bank metadata is fingerprinted; preserve it for
         # extraction identity. Predictor readouts are selected in features.feature_view:
-        # all nine probabilities are now primary, the mean is appendix-only.
+        # all nine probabilities are the predictor features; keep this frozen metadata unchanged.
         "intended_output": "preserve all nine probabilities; main numeric feature is expected direction: sum(score * probability)",
     }

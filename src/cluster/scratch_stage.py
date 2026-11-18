@@ -29,6 +29,10 @@ _PUBLISHED_IDENTITIES = {}
 PUBLICATION_PROGRESS = "_JEVPFN_PUBLICATION_PROGRESS.json"
 
 
+class WorkspaceBusy(RuntimeError):
+    """Another job holds this B200 working set's lease."""
+
+
 class PublicationLockUnavailable(TimeoutError):
     """A writer could not obtain the durable store's publication lock."""
 
@@ -83,7 +87,7 @@ def workspace_lease(root, *, shared=False):
         try:
             stack.enter_context(file_lock(lock, timeout=1, shared=shared))
         except TimeoutError as exc:
-            raise RuntimeError("B200 working set is in use; do not restage an active runtime") from exc
+            raise WorkspaceBusy("B200 working set is in use; do not restage an active runtime") from exc
         yield
 
 

@@ -51,7 +51,7 @@ def fixture_paired():
 def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
     folds = fixture_folds()
     paired = decision_vs_embedding(folds)
-    assert len(paired) == 3 * 5 * 15 * 3 * 2
+    assert len(paired) == 3 * 5 * len(LABELS) * len(MODES) * len(pca_grid())
     assert (paired.difference == paired.value - paired.reference_value).all()
     bad = folds.copy()
     bad.loc[bad.phase.eq("experiment_2"), "checkpoint_id"] = "different"
@@ -61,6 +61,9 @@ def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
     assert decision_vs_embedding(bad).empty
     incomplete = folds[~(folds.encoder.notna() & folds.outer_fold.eq(4))]
     assert decision_vs_embedding(incomplete).empty
+    undefined = folds.copy()
+    undefined.loc[undefined.encoder.notna() & undefined.outer_fold.eq(4), "value"] = float("nan")
+    assert decision_vs_embedding(undefined).empty
     with pytest.raises(ValueError, match="Multiple"):
         decision_vs_embedding(pd.concat([folds, folds.iloc[[0]]]))
 
@@ -94,7 +97,7 @@ def test_tar_contrasts_retain_split_pairing_and_exclude_incomplete_folds():
     paired = tar_vs_frozen(pd.concat([source, adapted]))
     assert len(paired) == 3 * 5 * 2
     assert (paired.difference - .02).abs().max() < 1e-12
-    assert len(decision_vs_embedding(pd.concat([source, adapted]), phase="experiment_3")) == 3*5*15*3*2
+    assert len(decision_vs_embedding(pd.concat([source, adapted]), phase="experiment_3")) == 3 * 5 * len(LABELS) * len(MODES) * len(pca_grid())
     wrong = adapted.copy()
     wrong["split_id"] += "different"
     assert tar_vs_frozen(pd.concat([source, wrong])).empty

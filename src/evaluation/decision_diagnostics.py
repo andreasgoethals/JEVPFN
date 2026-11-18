@@ -64,7 +64,11 @@ def add_diagnostics(result, base, names, reference, ps, common, hashes, choices,
     count = len(names)
     pair_tv = np.stack([np.abs(p[i] - p[j]).sum(axis=1) / 2
                         for i, j in combinations(range(count), 2)])
-    vote_counts = np.stack([(decisions == c).sum(axis=0) for c in np.unique(decisions)])
+    from src.evaluation.decision_comparison import TIED
+
+    # An exactly tied model casts no vote; all-tied inputs have an empty pattern.
+    options = [c for c in np.unique(decisions) if c != TIED] or [TIED]
+    vote_counts = np.stack([((decisions == c) & (decisions != TIED)).sum(axis=0) for c in options])
     largest = vote_counts.max(axis=0)
     patterns = np.sort(vote_counts, axis=0)[::-1].T
     patterns = np.array([":".join(str(v) for v in row if v) for row in patterns])
@@ -123,6 +127,8 @@ def add_diagnostics(result, base, names, reference, ps, common, hashes, choices,
         rows[name] = column
     for i, name in enumerate(names):
         rows[f"choice_{name}"] = pd.Series(decisions[i], index=idx)
+        individual_ties = (p[i] == p[i].max(axis=1, keepdims=True)).sum(axis=1) > 1
+        rows[f"tie_{name}"] = pd.Series(individual_ties if scores is None else False, index=idx)
         if scores is not None:
             rows[f"score_{name}"] = pd.Series(scores[i], index=idx)
     result.frames.setdefault("row_diagnostics", []).append(rows)
@@ -158,16 +164,37 @@ def peer_majority_agreement(result):
         columns = [c for c in frame.columns if c.startswith("choice_") and frame[c].notna().all()]
         if len(columns) < 3:
             continue
+        from src.evaluation.decision_comparison import TIED
+
         choices = frame[columns].to_numpy(dtype=int)
-        values = np.unique(choices)
+        values = np.array([v for v in np.unique(choices) if v != TIED])
+        if not len(values):
+            continue
+        # Exactly tied outputs (TIED) are abstentions, never votes for an option.
         counts = np.stack([(choices == v).sum(axis=1) for v in values], axis=1)
         for i, column in enumerate(columns):
+            own = choices[:, i] != TIED
             others = counts.copy()
-            others[np.arange(len(choices)), np.searchsorted(values, choices[:, i])] -= 1
+            rows_own = np.flatnonzero(own)
+            others[rows_own, np.searchsorted(values, choices[rows_own, i])] -= 1
             top = others.max(axis=1, keepdims=True)
-            decided = (others == top).sum(axis=1) == 1
+            decided = own & ((others == top).sum(axis=1) == 1) & (top[:, 0] > 0)
             agree = values[others.argmax(axis=1)] == choices[:, i]
+            tie_cols = [c.replace("choice_", "tie_", 1) for c in columns]
+            sensitivity = np.nan
+            n_abstention = None
+            if all(c in frame for c in tie_cols):
+                valid = ~frame[tie_cols].to_numpy(dtype=bool)
+                eligible = valid.copy()
+                eligible[:, i] = False
+                votes = np.stack([((choices == v) & eligible).sum(axis=1) for v in values], axis=1)
+                top_votes = votes.max(axis=1)
+                usable = valid[:, i] & (top_votes > 0) & ((votes == top_votes[:, None]).sum(axis=1) == 1)
+                n_abstention = int(usable.sum())
+                if n_abstention:
+                    sensitivity = float((values[votes.argmax(axis=1)] == choices[:, i])[usable].mean())
             records.append({"dataset_id": dataset_id, "dataset": dataset, "task": task,
+                            "agreement_tied_models_abstain": sensitivity, "n_tied_models_abstain": n_abstention,
                             "provider": column.removeprefix("choice_"),
                             "agreement": float(agree[decided].mean()) if decided.any() else np.nan,
                             "n": int(decided.sum()), "tied_peers": int((~decided).sum())})

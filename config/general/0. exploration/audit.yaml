@@ -25,7 +25,7 @@ jev:
   missing_text_policy: skip_empty_store_nan
   cache_location: jev_cache  # One dataset-ID.sqlite3; exploration uses temporary storage.
 cost:
-  input_price_per_million: 0.042  # Or JEV_INPUT_PRICE_PER_MILLION; verify before paid calls.
+  input_price_per_million: 0.042  # Paid dispatch reserves at this reviewed price; JEV_INPUT_PRICE_PER_MILLION affects notebook estimates only.
   currency: USD
   checked_on: '2026-10-30'
   source: https://docs.typesafe.ai/models

@@ -15,6 +15,8 @@ providers:
 - glide
 - mammoth
 - drex_max
+- knowline
+- sieve
 extractor_catalog: extractors
 feature_config: feature_creation
 question_design: question_design

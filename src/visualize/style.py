@@ -180,6 +180,7 @@ DECISION_COLORS = {
     "glide": "#386F93",
     "mammoth": "#654A91",
     "drex_max": "#995A33",
+    "knowline": "#605D89", "sieve": "#386D51",
 }
 # One label per decision model in every figure: family plus size where the name has none.
 DECISION_SHORT = {
@@ -187,6 +188,7 @@ DECISION_SHORT = {
     "perplexity": "Perplexity 27B", "cloudflare": "Clef-flash", "intern": "Intern 4B",
     "strands": "Strands 2B", "h2o": "H2O 4B", "sii": "SII 27B", "kev": "Kev 27B",
     "decision3": "D3-turbo", "nimble": "Nimble 9B", "glide": "GLiDE 27B", "mammoth": "Mammoth 27B", "drex_max": "Drex Max 27B",
+    "knowline": "KnowLine 31B", "sieve": "Sieve 31B v3",
 }
 EVIDENCE_MARKS = {"observed": "#2E7D4F", "failed": "#B03A2E", "unknown": "#FFFFFF",
                   "not_applicable": "#E6E9EC", "review": "#D8A23A"}

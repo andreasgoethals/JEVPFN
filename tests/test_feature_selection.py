@@ -75,6 +75,19 @@ def test_two_providers_coexist_and_are_selected_explicitly(tmp_path, isolated_ou
         load_feature_selection(path, {"provider": "unselected_provider"}, ("per_column",))
 
 
+def test_republished_features_require_the_reviewed_identity_per_mode():
+    from src.evaluation.features import match_artifact_pins
+    from src.evaluation.qualification import decision_artifact_pins
+
+    table = pd.DataFrame({"representation": ["joint", "joint", "per_column"],
+                          "artifact_id": ["old", "accepted", "column"]})
+    cfg = {"dataset_feature_artifacts": {"a": {"p": {"joint": "accepted", "per_column": "column"}}}}
+    assert decision_artifact_pins(cfg, "b", "p") is None
+    pins = decision_artifact_pins(cfg, "a", "p")
+    assert match_artifact_pins(table, pins).artifact_id.tolist() == ["accepted", "column"]
+    assert match_artifact_pins(table, {"joint": "column"}).empty
+
+
 def test_inventory_never_creates_empty_dataset_cache(tmp_path):
     path = tmp_path / "absent.sqlite3"
     assert feature_inventory(path).empty

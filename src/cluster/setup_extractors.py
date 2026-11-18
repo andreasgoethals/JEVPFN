@@ -27,7 +27,7 @@ from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import digest, write_json
 
-LARGE = {"perplexity", "sii", "kev", "decision3", "glide", "mammoth", "drex_max"}
+LARGE = {"perplexity", "sii", "kev", "decision3", "glide", "mammoth", "drex_max", "knowline", "sieve"}
 
 
 def plan(providers, *, reuse=()):
@@ -84,7 +84,7 @@ def plan(providers, *, reuse=()):
             )
             ready = provider + "_build"
         token_dependencies = [provider + "_stage"]
-        if provider in {"liquid_lfm3", "glide", "mammoth", "drex_max"}:
+        if provider in {"liquid_lfm3", "glide", "mammoth", "drex_max", "knowline", "sieve"}:
             token_dependencies = list(dict.fromkeys([*token_dependencies, ready]))
         steps.extend(token_plan(provider, root, dependencies=token_dependencies))
         steps.append(

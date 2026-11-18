@@ -17,7 +17,7 @@ def test_all_encoders_dimensions_and_providers_are_prespecified():
     from src.evaluation.qualification import profile_plan
 
     profiles = profile_plan(main)
-    assert {a["encoder"] for a in profiles} <= {"e5_large_v2", "qwen3_embedding_0_6b"}
+    assert {a["encoder"] for a in profiles} == {"e5_small_v2", "e5_large_v2", "qwen3_embedding_0_6b"}
     assert {(a["model"], a["pca_scope"], a["pca_components"]) for a in profiles} == {
         (model, scope, count) for model in MAIN_MODELS
         for scope, count in (("per_column", 32), ("joint", 64))

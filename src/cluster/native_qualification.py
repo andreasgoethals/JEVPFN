@@ -11,10 +11,13 @@ import os
 import shutil
 from pathlib import Path
 
-from src.jev.frontier_decisions import MODELS, asset_urls, stage_tokenizer
+from src.jev import arena_decisions, frontier_decisions
+from src.jev.catalog import asset_urls, stage_tokenizers
 from src.utils import paths
 from src.utils.locking import file_lock
 from src.utils.serialization import file_sha256, write_json
+
+MODELS = {**frontier_decisions.MODELS, **arena_decisions.MODELS}
 
 
 def verified_links(source, destination, records):
@@ -62,7 +65,7 @@ def prepare(provider, canonical):
     target = root / "checkpoints/decision_models" / provider
     with file_lock(root / f".{provider}.qualification.lock", timeout=1):
         verified_links(source, target, receipt["files"])
-        stage_tokenizer(provider)
+        stage_tokenizers([provider])
         for name in asset_urls(provider):
             file = paths.tokenizer_dir(provider) / name
             dest = target / name

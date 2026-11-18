@@ -75,6 +75,7 @@ decision-open = ["transformers==5.17.0", "torch==2.12.1", "torchvision==0.27.1",
 # GLiDE's publisher pins differ from token-audit. Use its own sealed CUDA image on CPU and GPU.
 glide = ["torch==2.14.0", "transformers==5.17.0", "tokenizers==0.23.2", "safetensors==0.8.0", "huggingface-hub==1.33.0", "jinja2==3.1.6", "numpy==2.5.3", "pillow==12.3.0", "flash-linear-attention==0.5.2"]
 mammoth = ["torch==2.14.0", "transformers==5.19.0", "tokenizers==0.23.3", "accelerate==1.15.0", "safetensors==0.8.0", "pydantic>=2,<3", "einops>=0.8", "flash-linear-attention==0.5.2"]
+arena-decisions = ["torch==2.14.0", "transformers==5.17.0", "tokenizers==0.23.3", "accelerate==1.15.0", "safetensors==0.8.0", "requests>=2"]
 drex-max = ["torch==2.14.0", "transformers==5.17.0", "tokenizers==0.23.3", "accelerate==1.15.0", "safetensors==0.8.0", "pillow==12.3.0", "flash-linear-attention==0.5.2", "kernels==0.16.1"]
 # Perplexity supplies a checkpoint-specific requirements.txt; see docs/VSC.md.
 

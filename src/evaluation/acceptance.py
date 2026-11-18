@@ -20,7 +20,6 @@ def evaluation_identity():
         ("experiment_2", "embeddings"),
         ("experiment_3", "tar"),
         ("experiment_4", "native_text"),
-        ("regression_readout", "readout"),
     ):
         phases[phase] = load_yaml(phase + "/" + name)
     feature_fields = (
@@ -31,6 +30,7 @@ def evaluation_identity():
         "modes",
         "views",
         "feature_selectors",
+        "dataset_feature_artifacts",
         "dataset_selection",
     )
     body = {
@@ -52,6 +52,13 @@ def evaluation_identity():
         },
         "embeddings": {
             key: load_yaml("experiment_2/embeddings")[key] for key in ("encoders", "pca_grid")
+        },
+
+        "rq1_questions": source_hash(paths.REPO_ROOT / "config/rq1/question_versions.csv"),
+
+        "downstream_contracts": {
+            name: {k:v for k,v in load_yaml(name).items() if k not in {"enabled","experiment_0_acceptance"}}
+            for name in ("rq1/behavior","rq1/geometry","experiment_0/research_questions")
         },
         "tar": {k: v for k, v in load_yaml("experiment_3/tar").items()
                 if k not in {"enabled", "prepare_enabled", "experiment_0_acceptance"}},

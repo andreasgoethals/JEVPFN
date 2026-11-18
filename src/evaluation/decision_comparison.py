@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import closing
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import closing, nullcontext
 from dataclasses import dataclass, field
+from functools import partial
 from itertools import combinations
 from pathlib import Path
 
@@ -179,13 +181,17 @@ def js_divergence(p: np.ndarray, q: np.ndarray) -> np.ndarray:
     )
 
 
+TIED = -99  # An exact top-probability tie is no decision, never a vote for class order.
+
+
 def _choices(p: np.ndarray, task: str, neutral: float) -> np.ndarray:
     if task == "regression":
         score = p @ np.arange(-4, 5)
         return np.where(score > neutral, 1, np.where(score < -neutral, -1, 0))
     if task == "binary_classification":
-        return (p[:, 1] >= 0.5).astype(int)
-    return p.argmax(axis=1)  # Canonical class order breaks exact ties; ties are counted below.
+        return np.where(p[:, 1] == 0.5, TIED, (p[:, 1] > 0.5).astype(int))
+    top = p.max(axis=1, keepdims=True)
+    return np.where((p == top).sum(axis=1) > 1, TIED, p.argmax(axis=1))
 
 
 def _scalar(p: np.ndarray, task: str) -> np.ndarray:
@@ -308,12 +314,14 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 continue
             p, q = ps[i, idx], ps[j, idx]
             delta = np.abs(scalars[i, idx] - scalars[j, idx])
-            same = choices[i, idx] == choices[j, idx]
-            options_seen = np.unique(choices[[i, j]][:, idx])
+            a, b = choices[i, idx], choices[j, idx]
+            decided = (a != TIED) & (b != TIED)
+            same = a[decided] == b[decided]
+            options_seen = np.unique(np.concatenate([a[decided], b[decided]]))
             expected_agreement = sum(
-                np.mean(choices[i, idx] == option) * np.mean(choices[j, idx] == option)
+                np.mean(a[decided] == option) * np.mean(b[decided] == option)
                 for option in options_seen
-            )
+            ) if decided.any() else np.nan
             record = {
                 **base,
                 "model_a": names[i],
@@ -324,10 +332,11 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 "unique_inputs": u,
                 "agree_count": int(same.sum()),
                 "disagree_count": int((~same).sum()),
-                "agreement": float(same.mean()),
+                "tied_either_count": int((~decided).sum()),
+                "agreement": float(same.mean()) if decided.any() else np.nan,
                 "marginal_expected_agreement": float(expected_agreement),
                 "cohen_kappa": float((same.mean() - expected_agreement) / (1 - expected_agreement))
-                if expected_agreement < 1 else np.nan,
+                if decided.any() and expected_agreement < 1 else np.nan,
                 "probability_mae": float(np.abs(p - q).mean()),
                 "total_variation": float((np.abs(p - q).sum(axis=1) / 2).mean()),
                 "js_divergence": float(js_divergence(p, q).mean()),
@@ -399,8 +408,10 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 },
             )
         decisions = choices[:, idx]
-        max_votes = np.max(
-            np.stack([(decisions == c).sum(axis=0) for c in np.unique(decisions)]), axis=0
+        options = [c for c in np.unique(decisions) if c != TIED]
+        max_votes = (
+            np.max(np.stack([(decisions == c).sum(axis=0) for c in options]), axis=0)
+            if options else np.zeros(decisions.shape[1], dtype=int)
         )
         for count in range(1, len(names) + 1):
             result.add(
@@ -440,7 +451,7 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 )
 
 
-def compare_saved_features(cfg: dict, *, progress=print) -> Comparison:
+def compare_saved_features(cfg: dict, *, progress=print, workers=1) -> Comparison:
     """Load one dataset/representation at a time; never pick a 'latest' model version."""
     options = cfg["comparison"]
     if (
@@ -466,90 +477,102 @@ def compare_saved_features(cfg: dict, *, progress=print) -> Comparison:
     comparison_options = {**options, "providers": [
         provider for provider in options["providers"] if provider in ready_providers
     ]}
-    for number, entry in enumerate(entries, 1):
-        dataset_id = entry["id"]
-        inventory = inventories[dataset_id]
-        if progress:
-            progress(
-                f"[{number}/{len(entries)}] {dataset_id}: {len(inventory)} saved feature artifacts",
-                flush=True,
+    work = partial(_compare_dataset, options=options, comparison_options=comparison_options)
+    if not isinstance(workers, int) or workers < 1:
+        raise ValueError("Comparison workers must be a positive integer.")
+    sources = [inventories[e["id"]] for e in entries]
+    parallel = workers > 1 and len(entries) > 1
+    with ProcessPoolExecutor(max_workers=min(workers, len(entries))) if parallel else nullcontext() as pool:
+        dataset_results = (pool.map if parallel else map)(work, entries, sources)
+        for number, (entry, one) in enumerate(zip(entries, dataset_results, strict=True), 1):
+            for name, records in one.records.items():
+                result.records.setdefault(name, []).extend(records)
+            for name, frames in one.frames.items():
+                result.frames.setdefault(name, []).extend(frames)
+            if progress:
+                progress(f"[{number}/{len(entries)}] {entry['id']}: comparison complete", flush=True)
+    return result
+
+
+def _compare_dataset(entry, inventory, *, options, comparison_options):
+    result = Comparison()
+    dataset_id = entry["id"]
+    for representation in options["representations"]:
+        blocks, hash_maps = [], []
+        for provider in options["providers"]:
+            matches = inventory[
+                inventory.provider.eq(provider) & inventory.representation.eq(representation)
+            ]
+            pinned = (
+                options.get("artifacts", {})
+                .get(dataset_id, {})
+                .get(provider, {})
+                .get(representation)
             )
-        for representation in options["representations"]:
-            blocks, hash_maps = [], []
-            for provider in options["providers"]:
-                matches = inventory[
-                    inventory.provider.eq(provider) & inventory.representation.eq(representation)
-                ]
-                pinned = (
-                    options.get("artifacts", {})
-                    .get(dataset_id, {})
-                    .get(provider, {})
-                    .get(representation)
-                )
-                if pinned:
-                    matches = matches[matches.artifact_id.eq(pinned)]
-                    if len(matches) != 1:
-                        raise ValueError(
-                            f"Pinned artifact absent: {dataset_id}/{provider}/{representation}"
-                        )
-                if len(matches) > 1:
+            if pinned and not matches.empty:
+                matches = matches[matches.artifact_id.eq(pinned)]
+                if len(matches) != 1:
                     raise ValueError(
-                        f"Multiple versions: pin comparison.artifacts for {dataset_id}/{provider}/{representation}"
+                        f"Pinned artifact absent: {dataset_id}/{provider}/{representation}"
                     )
-                row = {
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Multiple versions: pin comparison.artifacts for {dataset_id}/{provider}/{representation}"
+                )
+            row = {
+                "dataset_id": dataset_id,
+                "dataset": entry.get("name", dataset_id),
+                "provider": provider,
+                "representation": representation,
+                "status": ("available" if provider in comparison_options["providers"] else "provider_incomplete")
+                if len(matches) else "not_created",
+            }
+            if len(matches):
+                selected = matches.iloc[0]
+                row.update(selected.drop(labels=["feature_store", "portable"]).to_dict())
+                if provider not in comparison_options["providers"]:
+                    result.add("inventory", row)
+                    continue
+                artifact_id = selected.artifact_id
+                path = Path(selected.feature_store)
+                block = load_block(path, artifact_id=artifact_id)
+                if block.manifest["identity"]["dataset_id"] != dataset_id:
+                    raise ValueError("Feature file belongs to a different dataset")
+                blocks.append(block)
+                hash_maps.append(
+                    verified_payload_hashes(path, block.requests.request_key.dropna().unique())
+                    if selected.portable else payload_hashes(path, block)
+                )
+            result.add("inventory", row)
+        if not blocks:
+            continue
+        group_names = (
+            [f"text_{i:03d}" for i in range(len(blocks[0].manifest["text_columns"]))]
+            if (representation == "per_column")
+            else ["all_text"]
+        )
+        for group in group_names:
+            title = (
+                blocks[0].manifest["text_columns"][int(group[5:])]
+                if group != "all_text"
+                else "All available text columns"
+            )
+            normalized = [
+                normalize_group(block, group, hashes)
+                for block, hashes in zip(blocks, hash_maps)
+            ]
+            analyze_group(
+                normalized,
+                {
                     "dataset_id": dataset_id,
                     "dataset": entry.get("name", dataset_id),
-                    "provider": provider,
                     "representation": representation,
-                    "status": ("available" if provider in ready_providers else "provider_incomplete")
-                    if len(matches) else "not_created",
-                }
-                if len(matches):
-                    selected = matches.iloc[0]
-                    row.update(selected.drop(labels=["feature_store", "portable"]).to_dict())
-                    if provider not in ready_providers:
-                        result.add("inventory", row)
-                        continue
-                    artifact_id = selected.artifact_id
-                    path = Path(selected.feature_store)
-                    block = load_block(path, artifact_id=artifact_id)
-                    if block.manifest["identity"]["dataset_id"] != dataset_id:
-                        raise ValueError("Feature file belongs to a different dataset")
-                    blocks.append(block)
-                    hash_maps.append(
-                        verified_payload_hashes(path, block.requests.request_key.dropna().unique())
-                        if selected.portable else payload_hashes(path, block)
-                    )
-                result.add("inventory", row)
-            if not blocks:
-                continue
-            group_names = (
-                [f"text_{i:03d}" for i in range(len(blocks[0].manifest["text_columns"]))]
-                if (representation == "per_column")
-                else ["all_text"]
+                    "group": group,
+                    "text_column": title,
+                },
+                comparison_options,
+                result,
             )
-            for group in group_names:
-                title = (
-                    blocks[0].manifest["text_columns"][int(group[5:])]
-                    if group != "all_text"
-                    else "All available text columns"
-                )
-                normalized = [
-                    normalize_group(block, group, hashes)
-                    for block, hashes in zip(blocks, hash_maps)
-                ]
-                analyze_group(
-                    normalized,
-                    {
-                        "dataset_id": dataset_id,
-                        "dataset": entry.get("name", dataset_id),
-                        "representation": representation,
-                        "group": group,
-                        "text_column": title,
-                    },
-                    comparison_options,
-                    result,
-                )
     return result
 
 

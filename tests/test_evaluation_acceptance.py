@@ -19,8 +19,10 @@ def configuration(monkeypatch):
         "experiment_2/embeddings",
         "experiment_3/tar",
         "experiment_4/native_text",
-        "regression_readout/readout",
         "feature_creation/embedding_models",
+        "rq1/behavior",
+        "rq1/geometry",
+        "experiment_0/research_questions",
         "datasets",
         "dataset_semantics",
     ]
@@ -64,6 +66,9 @@ def test_untested_recipes_invalidate_0b_identity(configuration, change):
 def test_changed_code_invalidates_0b_identity(configuration, monkeypatch, tmp_path):
     root = tmp_path / "workspace"
     (root / "src").mkdir(parents=True)
+    questions = root / "config/rq1/question_versions.csv"
+    questions.parent.mkdir(parents=True)
+    questions.write_text("dataset,original\nexample,Sentence?\n", encoding="utf-8")
     source = root / "src" / "pipeline.py"
     source.write_text("pass\n", encoding="utf-8")
     (root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")

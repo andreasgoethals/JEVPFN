@@ -270,6 +270,11 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected in {"exploration", "feature_creation"}:
         return notebook_cache_dir(selected, "results", *parts)
+    if selected in {"rq1", "rq2"} and on_vsc():
+        durable = durable_project_override()
+        if durable is None:
+            raise ValueError("Research study results require an allocated durable PROJECT root")
+        return _under(durable, OUTPUT_DIR_NAME, str(result_relative(selected)), *parts)
     return large_outputs_dir().joinpath(result_relative(selected), *parts)
 
 
@@ -486,8 +491,6 @@ def config_path(name: str) -> Path:
         "extractors": "feature_creation",
         "feature_comparison": "feature_creation",
     }
-    if stem == "regression_readout/readout":
-        stem = "rq2/readout"
     if stem in prerequisites:
         stem = f"{phase_folder(prerequisites[stem])}/{stem}"
     elif "/" in stem and stem.split("/")[0] in PHASES or re.match(r"experiment_[0-9]+/", stem):

@@ -32,6 +32,10 @@ class QueueCheckUnavailable(RuntimeError):
     """The scheduler could not confirm that a scratch workspace is idle."""
 
 
+class ScratchConsumerActive(QueueCheckUnavailable):
+    """A queued/running JEVPFN job may still use this working set; release later."""
+
+
 def tree_bytes(root):
     """Conservative logical bytes, without following links into other allocations."""
     total = 0
@@ -186,7 +190,8 @@ def require_runtime_idle(runtime):
 
     for cluster in ("wice", "mindwell"):
         listing = _scheduler_read(
-            ["squeue", "--clusters=" + cluster, "--me", "--noheader", "--format=%i|%j|%Z"]
+            ["squeue", "--clusters=" + cluster, "--me", "--noheader", "--array",
+             "--format=%i|%j|%Z"]
         )
         for line in listing.splitlines():
             if not line.strip() or line.startswith("CLUSTER:"):
@@ -227,7 +232,8 @@ def require_runtime_idle(runtime):
             # Unknown JEVPFN consumers fail closed, including manually queued scripts
             # whose omitted arguments select a default runtime.
             if runtime in owners or not owners:
-                raise RuntimeError(f"Scratch release refused: JEVPFN job {job} may use {runtime}")
+                raise ScratchConsumerActive(
+                    f"Scratch release deferred: JEVPFN job {job} may use {runtime}")
 
 
 def retire_publication_snapshots(work):
@@ -394,7 +400,7 @@ def retire_published_mutable(work):
         relative = p.relative_to(work)
         if relative.as_posix() in {MARKER, PUBLICATION_PROGRESS, ".workspace.lock"}:
             continue
-        dataset = (len(relative.parts) >= 3 and relative.parts[:2] in {
+        dataset = (len(relative.parts) == 3 and relative.parts[:2] in {
             ("data", "jev_cache"), ("data", "text_embeddings")}
             and (p.suffix in {".sqlite3", ".lock"} or p.name.endswith(("-wal", "-shm", "-journal"))))
         result = (len(relative.parts) >= 4 and relative.parts[0] == "output_JEVPFN"
@@ -414,7 +420,7 @@ def retire_published_mutable(work):
 def main():
     from src.cluster.containers import RUNTIMES
     from src.cluster.scheduling import require_cpu_staging
-    from src.cluster.scratch_stage import PublicationLockUnavailable
+    from src.cluster.scratch_stage import PublicationLockUnavailable, WorkspaceBusy
 
     parser = argparse.ArgumentParser(description=__doc__)
     selection = parser.add_mutually_exclusive_group(required=True)
@@ -434,6 +440,11 @@ def main():
         except PublicationLockUnavailable as exc:
             print(exc, flush=True)
             return PUBLICATION_LOCK_UNAVAILABLE
+        except (WorkspaceBusy, TimeoutError) as exc:
+            # A GPU job still holds the workspace lease, or another stage/release holds
+            # the capacity lease: both clear by themselves, so the dispatcher retries.
+            print(exc, flush=True)
+            return QUEUE_CHECK_UNAVAILABLE
 
 
 if __name__ == "__main__":

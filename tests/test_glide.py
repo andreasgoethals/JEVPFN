@@ -80,7 +80,7 @@ def test_container_pins_do_not_mix_historical_tokenizer_requirements():
     deps = tomllib.loads((paths.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
     assert {"torch==2.14.0", "transformers==5.17.0", "tokenizers==0.23.2", "flash-linear-attention==0.5.2"} <= set(deps["glide"])
     script = (paths.REPO_ROOT / "scripts/build_decision_container.sh").read_text(encoding="utf-8")
-    branch = script.split("elif provider in {'glide', 'mammoth', 'drex_max'}:")[1].split("elif provider in")[0]
+    branch = script.split("elif provider in {'glide', 'mammoth', 'drex_max', 'knowline', 'sieve'}:")[1].split("elif provider in")[0]
     assert ".[dev,{extra}]" in branch and "token-audit" not in branch
     audit = (paths.REPO_ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text(encoding="utf-8")
     assert 'elif [[ "${2:-}" == glide ||' in audit

@@ -11,8 +11,7 @@ repository-code: https://github.com/andreasgoethals/JEVPFN
 url: https://github.com/andreasgoethals/JEVPFN
 license: MIT
 abstract: >-
-  Research software studying decision-model behaviour, predictive usefulness,
-  full-probability regression readouts and controlled adaptation. It compares decision features, frozen text
+  Research software studying how decision models represent text and when their outputs improve tabular prediction. Supervised decision-model adaptation is a proposed extension. It compares decision features, frozen text
   embeddings, supervised target-aware E5 embeddings and native-text prediction
   systems on 18 selected MulTaBench datasets. Decision requests use fixed task
   definitions and row text without fitting to dataset labels. Decision and embedding

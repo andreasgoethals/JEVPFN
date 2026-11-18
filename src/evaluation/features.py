@@ -187,7 +187,14 @@ def select_feature_blocks(blocks, selector):
     return selected
 
 
-def load_feature_selection(path, selector, representations=("per_column", "joint")):
+def match_artifact_pins(inventory, pins):
+    """An explicit representation pin can distinguish repeated publications."""
+    if pins is None:
+        return inventory
+    return inventory.loc[inventory.artifact_id.eq(inventory.representation.map(pins))]
+
+
+def load_feature_selection(path, selector, representations=("per_column", "joint"), *, artifact_pins=None):
     """Load only selected artifacts from one dataset file, rejecting missing/ambiguous matches."""
     from src.jev.features import feature_inventory, load_block
 
@@ -199,7 +206,7 @@ def load_feature_selection(path, selector, representations=("per_column", "joint
         or not set(representations) <= {"per_column", "joint"}
     ):
         raise ValueError("Invalid requested representations")
-    inventory = feature_inventory(path)
+    inventory = match_artifact_pins(feature_inventory(path), artifact_pins)
     for key, value in selector.items():
         inventory = inventory.loc[
             inventory[key].isna() if value is None else inventory[key].eq(value)

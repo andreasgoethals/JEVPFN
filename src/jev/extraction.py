@@ -376,9 +376,11 @@ class DatasetExtractor:
             response = json.loads(saved[1])
             try:
                 response_features(request, response)
-                self.cache.put(request, response, kind="verified_response")
             except Exception as exc:
                 return self._update(request, "invalid_response", error=type(exc).__name__)
+            # Storage failures (locked/full store, identity conflict) are not model
+            # failures: they propagate; the paid raw response stays saved for recovery.
+            self.cache.put(request, response, kind="verified_response")
             self._update(request, "completed")
             self.timings.record("recovered_response", dataset_id=self.cache.dataset_id,
                                 item_keys=[request.cache_key])
@@ -461,9 +463,10 @@ class DatasetExtractor:
                 raise RuntimeError("Verified billing-token bound was exceeded; stop extraction")
             try:
                 response_features(request, response)
-                self.cache.put(request, response, kind="verified_response")
             except Exception as exc:
                 return self._update(request, "invalid_response", error=type(exc).__name__)
+            # Storage failures propagate (see recovery above); never "invalid_response".
+            self.cache.put(request, response, kind="verified_response")
             return self._update(request, "completed")
         return "attempt_limit"
 

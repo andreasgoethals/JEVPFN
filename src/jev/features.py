@@ -304,6 +304,16 @@ def save_block(
         db.execute(
             "CREATE TABLE IF NOT EXISTS feature_artifacts (artifact_id TEXT PRIMARY KEY, manifest_json TEXT NOT NULL, features_parquet BLOB NOT NULL, requests_parquet BLOB NOT NULL)"
         )
+        from src.jev.feature_retirement import canonical_equivalent
+
+        incoming = (artifact_id, json.dumps(manifest), buffers["features.parquet"], buffers["requests.parquet"])
+        retained_id = canonical_equivalent(db, incoming)
+        if retained_id:
+            kept = json.loads(db.execute(
+                "SELECT manifest_json FROM feature_artifacts WHERE artifact_id=?", (retained_id,)
+            ).fetchone()[0])
+            _record_saved_block(path, kept, reused=True, phase=phase)
+            return path
         existing = db.execute(
             "SELECT manifest_json FROM feature_artifacts WHERE artifact_id=?", (artifact_id,)
         ).fetchone()

@@ -63,7 +63,7 @@ def predictor_width_figure(plan, summary):
         "Planned number of predictor input columns for each Experiment 1 and Experiment 2 arm. "
         "Every structured arm includes one missing-text flag per text column. "
         "Decision widths are the same for all selected extractors (1 feature per request for "
-        "binary and regression, K for multiclass) and embedding widths the same for all three "
+        "binary, 9 for regression, K for multiclass) and embedding widths the same for all three "
         "encoders. Separate PCA adds 32 coordinates per text column; joint PCA adds 64 total. Arms "
         "wider than 500 columns are excluded for Kumo rather than silently reduced.",
     )
@@ -117,7 +117,7 @@ def input_design_figure():
     outputs = [
         ("Binary", "1", "p(positive class)"),
         ("Multiclass", "K", "class probabilities,\nfixed class order"),
-        ("Regression", "9", "ordered probability vector;\nmean in appendix"),
+        ("Regression", "9", "probabilities over\nordered evidence levels"),
     ]
     y = 0.82
     for task, width, body in outputs:
@@ -171,7 +171,7 @@ def input_design_figure():
         "training-only PCA (32 components per text column, or 64 jointly) of frozen E5-small/large "
         "or Qwen3 vectors, or of E5-small vectors fine-tuned on each outer-training fold's labels "
         "(TAR). Native text systems (Experiment 4) replace both the representation and the "
-        "predictor and are not shown. Flags mark missing text and are shared by every arm shown. The value f is 1 for binary and regression and K for "
+        "predictor and are not shown. Flags mark missing text and are shared by every arm shown. The value f is 1 for binary, 9 for regression and K for "
         "multiclass. Identical requests are answered once and reused across rows. With a single "
         "text column the joint block equals the per-column block and is included once.",
     )

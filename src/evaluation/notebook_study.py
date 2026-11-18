@@ -60,9 +60,10 @@ def headline_summary(folds):
     table = folds[folds.metric.eq(folds.task_type.map(HEADLINES))]
     if table.duplicated(["arm_id", "outer_fold", "metric"]).any():
         raise ValueError("Duplicate headline record within a fold")
-    return table.groupby(IDENTITY + ["metric"], dropna=False).value.agg(
+    complete = table.groupby("arm_id").outer_fold.transform(lambda x: set(x) == set(range(5)))
+    return table.loc[complete].groupby(IDENTITY + ["metric"], dropna=False).value.agg(
         mean="mean", descriptive_fold_sd="std", defined_folds="count"
-    ).reset_index()
+    ).reset_index().loc[lambda x: x.defined_folds.eq(5)]
 
 
 

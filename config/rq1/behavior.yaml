@@ -1,64 +1,43 @@
-research_question: How do decision models represent real text, and which systematic
-  behaviours and limitations do their outputs show?
-status: approved_design_pending_controlled_probe_implementation
-saved_output_analysis: true
-controlled_queries_enabled: false
+research_question: How sensitive are decision probabilities to equivalent presentations?
+status: implemented_requires_provider_pilots
+scientific_dispatch: explicit_reviewed_0b_and_passing_native_pilots
 seed: 42
-source_rows_per_dataset: 500
 sampling: uniform_without_replacement
-sampling_unit: source_row
-representation: joint
-retain_duplicate_text_rows: true
-resample_missing_or_failed_rows: false
-baseline: original_frozen_request
+sampling_unit: distinct_frozen_semantic_request
+requests_per_dataset: 500
+representations: [per_column, joint]
+provider_sample: shared
+baseline: fresh_replay_of_exact_frozen_request
 one_factor_at_a_time: true
-exact_replay_control: true
-variants:
-- option_order
-- field_order
-- question_paraphrase
-pairing:
-- dataset
-- source_row
-- text_group
-- question_identity
-- model_revision
+resample_failed_requests: false
+retry_policy: repair_and_retry_same_request_preserve_attempts
+studies:
+  B1_replay:
+    eligible: union_of_B2_B3_B4_samples
+    requests_per_dataset: 500
+    total_fresh_executions: 3
+    additional_repeats_after_reference: 2
+    response_cache: bypass
+  B2_wording:
+    eligible: all_nonempty_requests
+    reviewed_alternatives: 3
+    frozen_original_unchanged: true
+  B3_field_order:
+    eligible: joint_with_at_least_two_nonempty_named_fields
+    requests_per_dataset: 500
+    sampling_stream: independent_applicable_sample
+    transformation: reverse_fields_only
+  B4_option_order:
+    eligible: multiclass_requests_in_wording_sample
+    transformation: reverse_options_only
+    align_outputs_by: original_class_identity
+pairing: [dataset, frozen_bank, text_group, request_identity, model_revision]
 aggregation: within_dataset_then_equal_dataset_weight
-requires:
-- reviewed_semantic_equivalence
-- complete_baseline_outputs
-- paired_option_alignment
-- native_rendered_field_order_verified
-- isolated_replay_and_variant_namespace
-- explicit_jev_budget
-
-variant_scope:
-  question_paraphrase: all_tasks_one_reviewed_paraphrase_per_dataset
-  field_order: all_tasks_reverse_nonempty_fields_if_at_least_two
-  option_order: multiclass_only_reverse_options_and_inverse_align
-protected:
-- source_text_bytes
-- class_meanings_and_codes
-- target_definition
-- regression_levels_and_order
-- model_checkpoint_and_inference_settings
-metrics:
-- total_variation
-- signed_and_absolute_probability_change
-- argmax_flip_rate_excluding_ties
-- regression_mean_and_variance_change
-- failure_and_inapplicable_rates
-
-paraphrase_templates_pending_review:
-  binary_classification: >-
-    Considering the supplied text about this row, is {positive} better supported
-    than {other} as the value of {target}?
-  multiclass_classification: >-
-    Which candidate value of {target} has the strongest support in the supplied
-    text about this row?
-  regression: >-
-    For this row, does the supplied text indicate a relatively lower or higher
-    {target} than is typical for this kind of observation? Judge the direction
-    and strength of that evidence, not a difference measured in target units.
-paraphrase_substitution: canonical_existing_target_and_class_names_only
-semantic_review_status: pending_all_18_rendered_questions
+protected: [original_question, source_text_bytes, target_definition, class_meanings_and_codes,
+  regression_levels_and_order, model_checkpoint_and_inference_settings]
+metrics: [total_variation, signed_and_absolute_probability_change,
+  argmax_flip_rate_excluding_ties, regression_mean_and_variance_change]
+requires: [reviewed_three_semantically_equivalent_questions_per_dataset,
+  exact_frozen_original_identity, option_alignment, native_field_order_reaches_model,
+  isolated_attempt_namespace, complete_same_sample_coverage, explicit_jev_budget]
+qualifying_datasets: [BIN_TEXT_FAKE_JOB_POSTING, MUL_TEXT_WINE_REVIEW, REG_TEXT_MERCARI_MARKETPLACE]

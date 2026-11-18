@@ -115,6 +115,19 @@ def _decisions(y, predicted, k, positive=None):
     return result
 
 
+def observed_log_losses(p, y):
+    """Negative log probability of each observed class under benchmark validation."""
+    if not np.isfinite(p).all() or (p < 0).any() or (p > 1).any():
+        raise ValueError("Probabilities must be finite and in [0, 1]")
+    row_sums = p.sum(axis=1)
+    # Model adapters may return float32 probabilities before conversion to float64.
+    # Match the CV adapter's tolerance while preserving the supplied values exactly.
+    if not np.allclose(row_sums, 1, atol=PROBABILITY_SUM_ATOL, rtol=0):
+        raise ValueError("Probability rows must sum to one; never silently renormalize")
+    eps = np.finfo(float).eps
+    return -np.log(np.clip(p[np.arange(len(y)), y], eps, 1 - eps))
+
+
 def classification_metrics(
     y_true,
     probabilities,
@@ -142,13 +155,8 @@ def classification_metrics(
     k = len(classes)
     if not len(y) or p.shape != (len(y), k):
         raise ValueError("Expected nonempty n-by-K probabilities matching targets/classes")
-    if not np.isfinite(p).all() or (p < 0).any() or (p > 1).any():
-        raise ValueError("Probabilities must be finite and in [0, 1]")
+    losses = observed_log_losses(p, y)
     row_sums = p.sum(axis=1)
-    # Model adapters may return float32 probabilities before conversion to float64.
-    # Match the CV adapter's tolerance while preserving the supplied values exactly.
-    if not np.allclose(row_sums, 1, atol=PROBABILITY_SUM_ATOL, rtol=0):
-        raise ValueError("Probability rows must sum to one; never silently renormalize")
     result = _report()
     result.update(
         task="binary_classification" if k == 2 else "multiclass_classification",
@@ -164,9 +172,7 @@ def classification_metrics(
     # The standard negative log probability of the observed class, using sklearn's
     # float64 endpoint clipping. Its separate float64 sum check would warn about
     # valid float32 roundoff after our already-completed probability validation.
-    epsilon = np.finfo(float).eps
-    observed_probability = np.clip(p[np.arange(len(y)), y], epsilon, 1 - epsilon)
-    _put(result, "log_loss", -np.log(observed_probability).mean())
+    _put(result, "log_loss", losses.mean())
     _put(result, "brier_multiclass_sum", np.square(p - onehot).sum(axis=1).mean())
     result["brier_multiclass_range"] = [0, 2]
     all_present = len(np.unique(y)) == k

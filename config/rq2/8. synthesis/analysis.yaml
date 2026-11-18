@@ -10,3 +10,21 @@ contrasts: []
 undefined_or_incomplete: stop_inferential_analysis_and_report_missing_results
 native_text_baselines: descriptive_original_text_system_references
 pretraining_overlap: unknown_unless_documented_evidence_establishes_otherwise
+# Proposal of 18 November 2026; inactive until the owner approves it and it is moved
+# into `contrasts` (the confirmatory runner reads only `contrasts`). Pooled normalised-
+# gain contrasts need a new contrast type in src/evaluation/inference.py after approval.
+proposal:
+  status: awaiting_owner_approval
+  headline_estimand: headroom_normalised_gain_over_same_predictor_non_text
+  headline_metric: {binary: roc_auc, multiclass: roc_auc_ovr_macro, regression: r2}
+  aggregation: equal_dataset_weight_all_18_datasets
+  uncertainty: percentile_bootstrap_over_datasets
+  primary_contrasts:
+  - decision_features_vs_non_text
+  - decision_features_vs_frozen_embeddings
+  - decision_features_vs_tar
+  contrast_scope: each_predictor_separately_median_over_decision_models
+  decision_modes_reported: [per_column, joint, both]
+  ranking_stability: kendall_tau_b_between_predictors
+  task_types: descriptive_only_never_separate_inference
+  when_text_helps_axes: [availability, length, novelty, baseline_entropy, prediction_shift, field_type]

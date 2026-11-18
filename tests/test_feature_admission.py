@@ -346,7 +346,8 @@ def test_retry_transient_exit_only_for_workspace_release(release, exit_code):
     dispatch.retry_interrupted(step)
     if release:
         assert step["status"] == "pending"
-        assert step["scheduler_retries"][0]["job_id"] == "7"
+        assert step["release_wait_retries"][0]["job_id"] == "7"
+        assert "scheduler_retries" not in step and step["not_before_utc"]
     else:
         assert step["status"] == "failed"
 
@@ -431,3 +432,39 @@ def test_source_review_cannot_label_inference_as_non_extraction(tmp_path):
                    'non_extraction_changes': {name: 'cannot waive inference'}})
     with pytest.raises(ValueError, match='Unrecognized'):
         dispatch.validate_source_review(old, new, {name}, p, 'reviewer')
+
+
+def test_waiting_retries_back_off_and_are_not_resubmitted_early():
+    from datetime import UTC, datetime, timedelta
+
+    step = {"status": "failed", "job_id": "9", "name": "kev_scratch", "workspace_stage": "kev",
+            "cluster": "mindwell", "scheduler_state": "FAILED",
+            "exit_code": f"{dispatch.SCRATCH_CAPACITY_UNAVAILABLE}:0"}
+    dispatch.retry_interrupted(step)
+    due = datetime.fromisoformat(step["not_before_utc"])
+    assert timedelta(minutes=14) < due - datetime.now(UTC) <= timedelta(minutes=15)
+    calls = []
+    settings = {"max_active_jobs": 4, "max_resident_workspaces": 2,
+                "test_pool_limits": {"transfer": 1}}
+    advance([step], settings=settings, state=lambda job, **_: None, retry=dispatch.retry_interrupted,
+            submit=lambda s: calls.append(s["name"]), save=lambda: None)
+    assert calls == []  # Not due yet.
+    step["not_before_utc"] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+    advance([step], settings=settings, state=lambda job, **_: None, retry=dispatch.retry_interrupted,
+            submit=lambda s: calls.append(s["name"]), save=lambda: None)
+    assert calls == ["kev_scratch"]
+
+
+def test_backoff_grows_then_caps_at_four_hours():
+    from datetime import UTC, datetime
+
+    step = {"name": "kev_release", "workspace_release": "kev", "scheduler_state": "FAILED",
+            "exit_code": f"{dispatch.QUEUE_CHECK_UNAVAILABLE}:0", "status": "failed"}
+    delays = []
+    for attempt in range(dispatch.MAX_WAIT_RETRIES):
+        step.update(status="failed", job_id=str(attempt), scheduler_state="FAILED",
+                    exit_code=f"{dispatch.QUEUE_CHECK_UNAVAILABLE}:0")
+        dispatch.retry_interrupted(step)
+        delays.append(round((datetime.fromisoformat(step["not_before_utc"])
+                             - datetime.now(UTC)).total_seconds() / 900))
+    assert delays[:5] == [1, 2, 4, 8, 16] and set(delays[5:]) == {16}

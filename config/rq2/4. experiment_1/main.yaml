@@ -50,7 +50,16 @@ candidate_extractors:
 - glide
 - mammoth
 - drex_max
+- knowline
+- sieve
 non_text_columns: all_original_numerical_and_categorical_features
+# Two publications of this dataset have identical features and request bytes.
+# The completed recovery job 11794789 wrote the selected revision.
+dataset_feature_artifacts:
+  MUL_TEXT_US_ACCIDENTS:
+    nimble:
+      per_column: fc29e6bbe75bafe7e7cc072aaeb684de83770298a36b4ed17d227767285d75e9
+      joint: 70bf81c3b07118c7cf68934f2800eb22b5b8187637f89eb5f5fdee59157c8d57
 feature_selectors:
   jev: null
   liquid: null
@@ -66,4 +75,6 @@ feature_selectors:
   nimble: null
   mammoth: null
   drex_max: null
+  knowline: null
+  sieve: null
   glide: null

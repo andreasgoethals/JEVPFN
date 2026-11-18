@@ -7,33 +7,9 @@ import pandas as pd
 
 from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
-from src.evaluation.widths import feature_width, width_status
+from src.evaluation.widths import feature_width
 from src.utils.config import load_yaml
 from src.utils.serialization import digest
-
-
-def regression_readout_plan():
-    """Appendix mean fits only; full-vector comparators reuse the primary RQ2 arms."""
-    cfg = load_yaml("rq2/readout")
-    semantics = load_yaml("dataset_semantics")["datasets"]
-    result = []
-    for entry in selected_entries(load_catalog(), cfg):
-        if semantics[entry["id"]]["task_type"] != "regression":
-            continue
-        for model in cfg["candidate_models"]:
-            for provider in cfg["candidate_extractors"]:
-                for mode in cfg["modes"]:
-                    arm = dict(
-                        dataset_id=entry["id"],
-                        model=model,
-                        provider=provider,
-                        phase="regression_readout",
-                        feature_set="non_text_plus_" + mode,
-                        view="mean",
-                    )
-                    arm.update(width_status(_metadata(entry), arm))
-                    result.append(arm)
-    return result
 
 
 def _metadata(entry):
@@ -48,7 +24,7 @@ def _metadata(entry):
 
 def regression_width_table():
     """Catalog widths, plus conservative Kumo expansion; actual fits still check width."""
-    cfg = load_yaml("rq2/readout")
+    cfg = load_yaml("experiment_1/main")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
     for entry in selected_entries(load_catalog(), cfg):
@@ -62,7 +38,7 @@ def regression_width_table():
             non_text_columns=len(meta.non_text_columns),
         )
         for mode in ("joint", "per_column", "both"):
-            for view in ("mean", "probabilities"):
+            for view in ("probabilities",):
                 row[f"{mode}_{view}"] = feature_width(
                     meta, dict(feature_set="non_text_plus_" + mode, provider="strands", view=view)
                 )
@@ -72,7 +48,7 @@ def regression_width_table():
 
 
 def adaptation_plan():
-    """Direct classifier evaluation: no reuse as supervised downstream training features."""
+    """One shared per-field learner per dataset/fold/method; no training dispatch."""
     cfg = load_yaml("rq3/adaptation")
     main = load_yaml("experiment_1/main")
     semantics = load_yaml("dataset_semantics")["datasets"]
@@ -82,14 +58,42 @@ def adaptation_plan():
             fold=fold,
             provider=cfg["provider"],
             variant=variant,
+            representation=cfg["representation"],
+            shared_across_text_columns=True,
             pilot=e["id"] in cfg["pilot_datasets"] and fold in cfg["pilot_folds"],
             execution_enabled=False,
         )
         for e in selected_entries(load_catalog(), main)
         if semantics[e["id"]]["task_type"] in cfg["tasks"]
         for fold in range(cfg["outer_folds"])
-        for variant in ("head_only", "lora_and_head")
+        for variant in cfg["training_variants"]
     ]
+
+
+def adaptation_prediction_plan():
+    """All six predictors reuse each fold's probabilities; these are not encoder fits."""
+    cfg = load_yaml("rq3/adaptation")
+    predictors = load_yaml("experiment_1/main")["candidate_models"]
+    folds = sorted({(r["dataset_id"], r["fold"]) for r in adaptation_plan()})
+    return [dict(dataset_id=dataset, fold=fold, variant=variant, predictor=predictor,
+                 representation=cfg["representation"], binary_threshold=0.5,
+                 execution_enabled=False)
+            for dataset, fold in folds for variant in cfg["variants"]
+            for predictor in predictors]
+
+
+def random_probe_requests(request_keys, *, dataset_id, limit=500, seed=42, study="wording"):
+    """Uniform distinct semantic requests, shared across providers; never sample outcomes.
+
+    Keys must bind the frozen bank, text group, definitions and input bytes. Repeated
+    row occurrences of an identical request do not give it extra sampling weight.
+    Field-order callers first restrict eligibility to >=2 nonempty named fields.
+    """
+    keys = list(request_keys)
+    if not dataset_id or not study or any(not isinstance(k, str) or not k for k in keys):
+        raise ValueError("Nonempty semantic request keys are required")
+    return random_probe_rows(sorted(set(keys)), dataset_id=f"{dataset_id}:{study}",
+                             limit=limit, seed=seed)
 
 
 def stable_probe_sample(input_keys, *, limit=100, seed=42):
@@ -139,7 +143,10 @@ def training_defined_bins(training_values, query_values, *, quantiles=(0.25, 0.5
     observed = training[np.isfinite(training)]
     if not len(observed):
         raise ValueError("No observed training values for cohort boundaries")
-    edges = np.unique(np.quantile(observed, quantiles))
+    # Keep tied cut-offs: dropping them would renumber the bins, so "bin_2" would
+    # mean a different quartile in different folds/datasets before pooling.
+    # Ties simply leave some bins empty.
+    edges = np.quantile(observed, quantiles)
     bins = np.searchsorted(edges, query, side="right")
     bins[~np.isfinite(query)] = -1
     return bins, edges

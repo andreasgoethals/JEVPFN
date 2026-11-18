@@ -14,6 +14,7 @@ from contextlib import closing
 from pathlib import Path
 
 from src.jev.cache import ResponseCache
+from src.jev.feature_retirement import canonical_equivalent
 from src.jev.features import load_block
 from src.jev.requests import IntendedRequest
 from src.utils import paths
@@ -340,6 +341,8 @@ def merge_cache(
                             raise ValueError(
                                 f"Conflicting feature artifact: {artifact_id}; no rows merged"
                             )
+                        counts["artifacts_reused"] += 1
+                    elif canonical_equivalent(db, row):
                         counts["artifacts_reused"] += 1
                     else:
                         db.execute("INSERT INTO feature_artifacts VALUES (?,?,?,?)", row)
