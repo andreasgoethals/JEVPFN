@@ -255,8 +255,7 @@ def save_profile(arm, dataset, features, runtime, records):
         "created_at": datetime.now(UTC).isoformat(),
     }
     write_json(
-        paths.manifests_dir("experiment_0")
-        / "after_extraction"
+        paths.phase_path("experiment_0", "manifests", "after_extraction")
         / f"profile_{arm['model']}_{uuid4().hex}.json",
         report,
     )

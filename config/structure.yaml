@@ -1,0 +1,134 @@
+# Physical and human-facing layout of config/, notebooks/ and output_JEVPFN/.
+# Numbering approved by the owner on 18 November 2026.
+#
+# Folder names only. Internal phase IDs (exploration, question_preparation,
+# feature_creation, experiment_0..4, synthesis, rq1..rq3, regression_readout) remain the
+# keys of hashes, recipes, receipts and manifests and are never renamed here.
+# Each internal phase has one home folder (`phases`, the first listed phase owns the
+# folder's output tree); `routes` send named sub-trees of a phase to another folder.
+# `nested` gives a retired phase a sub-folder of its home. Notebook IDs are
+# `<folder>/<name>`; `legacy` lists the previous IDs, kept as aliases.
+# Paper placement is decided separately under `paper:` and never encoded in a folder.
+schema: jevpfn.structure.v1
+approved: 18-11-2026
+entries:
+- id: data
+  folder: 00_data
+  title: Data exploration and question preparation
+  phases: [question_preparation, exploration]
+  notebooks:
+    data: {phase: exploration, legacy: [general/01_data]}
+  configs: [audit, datasets, dataset_semantics, question_design, question_preparation]
+- id: exp0a
+  folder: 01_exp0a
+  title: Experiment 0A, qualification before feature creation
+  phases: [experiment_0]
+  configs: [control_runtime, debug, gpu_contracts, jev_prefix_pilot, jev_smoke,
+            research_questions, scheduling, self_hosted]
+- id: feature_creation
+  folder: 02_feature_creation
+  title: Feature creation
+  phases: [feature_creation]
+  notebooks:
+    features: {phase: feature_creation, legacy: [general/02_features]}
+  configs: [feature_creation, approved_additions, decision_pilot, embedding_models,
+            extractors, feature_comparison, text_embeddings]
+- id: exp0b
+  folder: 03_exp0b
+  title: Experiment 0B, qualification after feature creation
+  routes:
+    experiment_0: [manifests/after_extraction, logs/after_extraction, manifests/reports.json,
+                   All Results.md]
+  notebooks:
+    validation: {phase: experiment_0, legacy: [general/03_validation]}
+- id: exp01
+  folder: exp01_outputs
+  title: Decision outputs and context
+  phases: [rq1]
+  routes:
+    rq1: [results/outputs]
+  notebooks:
+    outputs: {phase: rq1, legacy: [rq1/01_outputs]}
+- id: exp02
+  folder: exp02_robustness
+  title: Controlled presentation robustness
+  routes:
+    rq1: [results/robustness, results/hosted_ledgers]
+  notebooks:
+    robustness: {phase: rq1, legacy: [rq1/02_robustness]}
+  configs: [behavior, question_versions.csv]
+- id: exp03
+  folder: exp03_geometry
+  title: Decision and encoder geometry
+  routes:
+    rq1: [results/geometry, results/geometry_pilots]
+  notebooks:
+    geometry: {phase: rq1, legacy: [rq1/03_geometry]}
+  configs: [geometry]
+- id: exp04
+  folder: exp04_decision_features
+  title: Decision features in fixed predictors
+  phases: [experiment_1]
+  nested: {regression_readout: regression_readout}
+  notebooks:
+    decisions: {phase: experiment_1, legacy: [rq2/01_decisions]}
+  configs: [main, models, protocol]
+- id: exp05
+  folder: exp05_frozen_embeddings
+  title: Frozen text embeddings
+  phases: [experiment_2]
+  notebooks:
+    embeddings: {phase: experiment_2, legacy: [rq2/02_embeddings]}
+  configs: [embeddings]
+- id: exp06
+  folder: exp06_tar
+  title: Target-aware embeddings (TAR)
+  phases: [experiment_3]
+  notebooks:
+    tar: {phase: experiment_3, legacy: [rq2/03_tar]}
+  configs: [tar]
+- id: exp07
+  folder: exp07_native_text
+  title: Native-text systems
+  phases: [experiment_4]
+  notebooks:
+    native: {phase: experiment_4, legacy: [rq2/04_native]}
+  configs: [native_text]
+- id: exp08
+  folder: exp08_when_text_helps
+  title: When decision features help
+  phases: [rq2]
+  notebooks:
+    when_text_helps: {phase: rq2, legacy: [rq2/05_when_text_helps]}
+- id: exp09
+  folder: exp09_adaptation
+  title: Supervised Strands adaptation
+  phases: [rq3]
+  notebooks:
+    01_calibration: {phase: rq3, legacy: [rq3/01_calibration]}
+    02_head: {phase: rq3, legacy: [rq3/02_head]}
+    03_lora: {phase: rq3, legacy: [rq3/03_lora]}
+    04_full: {phase: rq3, legacy: [rq3/04_full]}
+  configs: [adaptation]
+- id: synthesis
+  folder: synthesis
+  title: Cross-experiment synthesis and paper figures
+  phases: [synthesis]
+  configs: [analysis]
+
+# Paper placement: main | appendix | undecided. Decided later, never by folder name.
+paper:
+  data: {placement: undecided, rq: preparation}
+  exp0a: {placement: undecided, rq: qualification}
+  feature_creation: {placement: undecided, rq: preparation}
+  exp0b: {placement: undecided, rq: qualification}
+  exp01: {placement: undecided, rq: RQ1A}
+  exp02: {placement: undecided, rq: RQ1B}
+  exp03: {placement: undecided, rq: RQ1C}
+  exp04: {placement: undecided, rq: RQ2-A}
+  exp05: {placement: undecided, rq: RQ2-B}
+  exp06: {placement: undecided, rq: RQ2-C}
+  exp07: {placement: undecided, rq: RQ2-D}
+  exp08: {placement: undecided, rq: RQ2-E}
+  exp09: {placement: undecided, rq: RQ3}
+  synthesis: {placement: undecided, rq: cross-experiment}

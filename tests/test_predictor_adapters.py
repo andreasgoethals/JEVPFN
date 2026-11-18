@@ -200,7 +200,7 @@ def test_constructor_contracts_and_full_context(monkeypatch, tmp_path):
     output_one = calls[-1]["output_dir"]
     _backend("tabstar", "binary_classification", settings, encoder, 9000)
     assert calls[-1]["output_dir"] != output_one
-    assert "7. experiment_4" in output_one
+    assert "exp07_native_text" in output_one
     _backend(
         "tabstar",
         "binary_classification",
@@ -208,7 +208,7 @@ def test_constructor_contracts_and_full_context(monkeypatch, tmp_path):
         encoder,
         9000,
     )
-    assert "3. experiment_0" in calls[-1]["output_dir"]
+    assert "01_exp0a" in calls[-1]["output_dir"]
     checkpoint.write_bytes(b"changed checkpoint")
     with pytest.raises(ValueError, match="SHA256"):
         _backend("tabicl_v2", "binary_classification", settings, encoder, 9000)

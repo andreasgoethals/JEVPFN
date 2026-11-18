@@ -14,7 +14,7 @@ import argparse
 import os
 from pathlib import Path
 
-from src.utils.paths import large_outputs_dir, notebook_outputs_dir, outputs_dir
+from src.utils.paths import large_outputs_dir, notebook_outputs_dir, outputs_dir, phase_folder
 
 KEEP = frozenset({".gitkeep", ".gitignore"})
 
@@ -58,7 +58,8 @@ def candidates(root: Path):
                 or relative.as_posix() in {"All Results.md", "all_results.md", "Captions.md"}
                 or (relative.parts[:2] == ("results", "notebooks") and name == "_report.txt")
                 or (
-                    relative.parts[:2] == ("1. question_preparation", "questions")
+                    relative.parts[:2] in {("1. question_preparation", "questions"),
+                                           (phase_folder("question_preparation"), "questions")}
                     and path.suffix == ".json"
                 )
             ):

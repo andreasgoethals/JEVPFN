@@ -59,7 +59,8 @@ def test_execution_catalog_and_metric_version_match_implementation():
         == METRICS_VERSION
     )
     for folder in (paths.REPO_ROOT / "config").iterdir():
-        assert folder.is_dir() and folder.name in {"general", "rq1", "rq2", "rq3"}
+        assert (folder.is_dir() and folder.name in paths.layout().folders) or (
+            folder.name == "structure.yaml")
 
 
 def test_citation_matches_project_metadata():

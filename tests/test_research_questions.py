@@ -21,9 +21,10 @@ from src.utils.config import load_yaml
 
 def test_research_layout_keeps_legacy_config_and_output_identities():
     assert paths.config_path("experiment_1/main") == paths.config_path("rq2/4. experiment_1/main")
+    assert paths.config_path("experiment_1/main").parent.name == "exp04_decision_features"
     assert paths.notebook_phase("rq2/01_frozen_embeddings") == "experiment_2"
     assert paths.notebook_phase("rq1/04_decision_feature_comparison") == "feature_creation"
-    assert paths.phase_folder("experiment_1") == "4. experiment_1"
+    assert paths.phase_folder("experiment_1") == "exp04_decision_features"
     assert load_yaml("rq3/adaptation")["enabled"] is False
 
 

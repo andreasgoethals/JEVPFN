@@ -453,7 +453,7 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
         ):
             evidence.append(str(p))
     if provider in PREDICTORS:
-        root = paths.manifests_dir("experiment_0") / "after_extraction"
+        root = paths.phase_path("experiment_0", "manifests", "after_extraction")
         for p in root.glob(f"predictor_{provider}_*.json"):
             report = json.loads(p.read_text(encoding="utf-8"))
             if (

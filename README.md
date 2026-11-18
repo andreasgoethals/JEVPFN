@@ -38,11 +38,25 @@ remain ahead.
 
 ## Repository navigation
 
-`config/` has `general/`, `rq1/`, `rq2/`, `rq3/`. Each RQ has a matching notebook subfolder,
-with one report per experiment. General has three reports: data, features and validation.
-Scientific results and figures use RQ folders. Existing results require an idle verified
-layout migration; operational extraction, logs and acceptance records retain their paths. Source fingerprints change; completed scientific artifacts and
-recovery references remain intact, and new evaluation code requires fresh 0B evidence.
+One registry, [`config/structure.yaml`](config/structure.yaml), names every folder. `config/`,
+`notebooks/` and `output_JEVPFN/` share the same folder per stage, in this order:
+
+| Folder | Content | Internal phase IDs |
+|---|---|---|
+| `00_data` | Data exploration and question preparation | `exploration`, `question_preparation` |
+| `01_exp0a` | Experiment 0A, qualification before feature creation | `experiment_0` |
+| `02_feature_creation` | Feature creation | `feature_creation` |
+| `03_exp0b` | Experiment 0B, qualification after feature creation | `experiment_0` (`after_extraction` records) |
+| `exp01_outputs` … `exp03_geometry` | Decision outputs, robustness, geometry | `rq1`, routed by study |
+| `exp04_decision_features` … `exp07_native_text` | Decision features, frozen embeddings, TAR, native text | `experiment_1` … `experiment_4` |
+| `exp08_when_text_helps` | When decision features help | `rq2` |
+| `exp09_adaptation` | Supervised Strands adaptation | `rq3` |
+| `synthesis` | Cross-experiment synthesis and paper figures | `synthesis` |
+
+Internal phase IDs stay the keys of hashes, recipes, receipts and manifests; previous config
+keys (`experiment_1/main`, `rq1/behavior`) remain aliases. Paper placement is recorded under
+`paper:` in the registry and never in a folder name. Existing output trees move only through
+the checksum-verified [layout migration](src/utils/layout_migration.py).
 
 ## Local setup
 
@@ -68,7 +82,7 @@ Prepare the pinned data and questions, audit the inputs, and run the notebooks.
 Check `$LASTEXITCODE` after each command and stop on failure. These commands do not launch
 paid API calls or VSC inference. Preparation reuses verified downloads.
 `src.jev.preparation --rebuild` regenerates the question stores transactionally while
-preserving paid responses and features. The [CPU runtime specification](config/general/3.%20experiment_0/control_runtime.yaml) records the shared dependencies.
+preserving paid responses and features. The [CPU runtime specification](config/01_exp0a/control_runtime.yaml) records the shared dependencies.
 
 ## Workflow and outputs
 
@@ -83,10 +97,10 @@ order. New controlled probes and Strands training require their own targeted pil
 | `data/jev_cache/` | Permanent response, accounting and feature stores, plus Jev diagnostic ledgers |
 | `data/decision_features/` | Verified portable snapshots of complete models for local analysis |
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
-| `output_JEVPFN/<phase>/` | Operational validation evidence and logs |
-| `output_JEVPFN/rq2/<phase>/results/` | PCA, TAR and resumable benchmark records |
-| `output_JEVPFN/figures/<general-or-rq>/` | Paper figures, with combined captions in `figures/Captions.md` |
-| `output_JEVPFN/manifests/notebooks/<general-or-rq>/` | Figure registries and notebook execution receipts |
+| `output_JEVPFN/<folder>/{logs,manifests}/` | Operational validation evidence and logs |
+| `output_JEVPFN/<folder>/results/` | PCA, TAR, study and resumable benchmark records |
+| `output_JEVPFN/figures/<folder>/<notebook>/` | Paper figures, with combined captions in `figures/Captions.md` |
+| `output_JEVPFN/manifests/notebooks/<folder>/` | Figure registries and notebook execution receipts |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
 containers and results. Native scratch holds temporary working stores. Transfer results with the [verified export/import tool](src/cluster/transfer.py).
@@ -96,6 +110,7 @@ containers and results. Native scratch holds temporary working stores. Transfer 
 Notebooks run locally and write paper-width PDFs and printed reports. The runner supports
 `--only NAME` and `--summaries-only`. Figures and captions are under
 `output_JEVPFN/figures/`, and the aggregate report is `output_JEVPFN/All Results.md`.
+Each experiment folder also receives its own `All Results.md` and `figures/<folder>/Captions.md`.
 Result figures appear as complete saved evidence becomes available.
 
 The RQ1 Outputs notebook examines row-level vote splits, matching-class
@@ -106,10 +121,10 @@ Only extractors with both feature blocks on all 18 datasets enter the comparison
 
 | Stage | Notebooks |
 |---|---|
-| General | [Data](notebooks/general/01_data.ipynb), [Features](notebooks/general/02_features.ipynb), [Validation](notebooks/general/03_validation.ipynb) |
-| RQ1 | [Outputs](notebooks/rq1/01_outputs.ipynb), [Robustness](notebooks/rq1/02_robustness.ipynb), [Geometry](notebooks/rq1/03_geometry.ipynb) |
-| RQ2 | [Decisions](notebooks/rq2/01_decisions.ipynb), [Embeddings](notebooks/rq2/02_embeddings.ipynb), [TAR](notebooks/rq2/03_tar.ipynb), [Native text](notebooks/rq2/04_native.ipynb), [When decision features help](notebooks/rq2/05_when_text_helps.ipynb) |
-| RQ3 | [Calibration](notebooks/rq3/01_calibration.ipynb), [Decision head](notebooks/rq3/02_head.ipynb), [LoRA](notebooks/rq3/03_lora.ipynb), [Full adaptation](notebooks/rq3/04_full.ipynb) |
+| Preparation and qualification | [Data](notebooks/00_data/data.ipynb), [Features](notebooks/02_feature_creation/features.ipynb), [0B validation](notebooks/03_exp0b/validation.ipynb) |
+| Exp 1–3 (RQ1) | [Outputs](notebooks/exp01_outputs/outputs.ipynb), [Robustness](notebooks/exp02_robustness/robustness.ipynb), [Geometry](notebooks/exp03_geometry/geometry.ipynb) |
+| Exp 4–8 (RQ2) | [Decisions](notebooks/exp04_decision_features/decisions.ipynb), [Embeddings](notebooks/exp05_frozen_embeddings/embeddings.ipynb), [TAR](notebooks/exp06_tar/tar.ipynb), [Native text](notebooks/exp07_native_text/native.ipynb), [When decision features help](notebooks/exp08_when_text_helps/when_text_helps.ipynb) |
+| Exp 9 (RQ3) | [Calibration](notebooks/exp09_adaptation/01_calibration.ipynb), [Decision head](notebooks/exp09_adaptation/02_head.ipynb), [LoRA](notebooks/exp09_adaptation/03_lora.ipynb), [Full adaptation](notebooks/exp09_adaptation/04_full.ipynb) |
 
 Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 texts per dataset/field.
 RQ3 notebooks currently show plans and pending gates, not trained-model results.

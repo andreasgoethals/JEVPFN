@@ -666,11 +666,14 @@ def stage(runtime, *, datasets=None):
             # Completed fold records and their predictions are resume inputs too.
             # A fresh native workspace must see durable attempts before fitting;
             # otherwise it would refit them and conflict when publishing back.
+            evaluation_phases = ("experiment_0", "experiment_1", "experiment_2", "experiment_3",
+                                 "experiment_4", "synthesis", "regression_readout")
             for folder in sorted(
-                list((durable / "output_JEVPFN/rq2").glob("*/results/evaluation"))
-                + list((durable / "output_JEVPFN").glob("3. experiment_0/results/evaluation"))
+                durable / "output_JEVPFN" / paths.result_relative(p, "evaluation") / "evaluation"
+                for p in evaluation_phases
             ):
-                paths.phase_name(folder.parents[1].name)  # Require canonical experiment numbering.
+                if not folder.is_dir():
+                    continue
                 for source in _dataset_stores(folder):
                     candidates[source.relative_to(durable)] = source
         for folder in inputs:

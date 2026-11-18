@@ -66,7 +66,7 @@ def test_untested_recipes_invalidate_0b_identity(configuration, change):
 def test_changed_code_invalidates_0b_identity(configuration, monkeypatch, tmp_path):
     root = tmp_path / "workspace"
     (root / "src").mkdir(parents=True)
-    questions = root / "config/rq1/question_versions.csv"
+    questions = root / "config/exp02_robustness/question_versions.csv"
     questions.parent.mkdir(parents=True)
     questions.write_text("dataset,original\nexample,Sentence?\n", encoding="utf-8")
     source = root / "src" / "pipeline.py"

@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from src.jev.merge import merge_cache, snapshot, validate_cache
-from src.utils import paths
+from src.utils import paths, structure
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import file_sha256, write_json
@@ -110,21 +110,8 @@ def export_bundle(*, include_token_counts=True) -> Path:
                     if not include_token_counts and "token_audit" in relative.parts:
                         continue  # Keep compact token receipts, omit reproducible count databases.
                     # Operational phases and RQ scientific results; notebook intermediates stay local.
-                    if not relative.parts or (relative.parts[0] not in {
-                        paths.phase_folder(p)
-                        for p in (
-                            "question_preparation",
-                            "feature_creation",
-                            "experiment_0",
-                            "experiment_1",
-                            "experiment_2",
-                            "experiment_3",
-                            "experiment_4",
-                        )
-                    } and not any(relative.is_relative_to(paths.result_relative(p)) for p in (
-                        "experiment_1", "experiment_2", "experiment_3", "experiment_4",
-                        "regression_readout", "synthesis", "rq1", "rq3"
-                    ))):
+                    # Every registry folder (config/structure.yaml) is a phase tree.
+                    if not relative.parts or relative.parts[0] not in paths.layout().folders:
                         continue
                     if (
                         source.name.startswith(".")
@@ -335,7 +322,9 @@ def import_bundle(bundle: Path) -> dict:
                     merge(source, cache_path(relative.stem, {"encoder_id": encoder_id}))
                 )
             else:
-                destination = paths.outputs_dir().joinpath(*relative.parts[1:])
+                # A bundle exported before the 18-11-2026 layout lands in the current folders.
+                moved = structure.translate_output(PurePosixPath(*relative.parts[1:]))
+                destination = paths.outputs_dir().joinpath(*(moved.parts if moved else relative.parts[1:]))
                 if relative.name == "frozen_revision.json" and relative.parts[-2] == "manifests":
                     # A remote freeze is evidence, never authority to freeze this host.
                     destination = (

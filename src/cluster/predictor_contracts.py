@@ -186,7 +186,7 @@ def run(model, *, execute=False):
     if model == "tabstar":
         settings["output_phase"] = "experiment_0"
     run_id = f"predictor_{model}_{uuid4().hex}"
-    manifest = paths.manifests_dir("experiment_0") / "after_extraction" / f"{run_id}.json"
+    manifest = paths.phase_path("experiment_0", "manifests", "after_extraction") / f"{run_id}.json"
     report = {
         "model": model,
         "settings": settings,

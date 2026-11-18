@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gpus-per-node=1
 #SBATCH --time=02:00:00
-#SBATCH --output="output_JEVPFN/2. feature_creation/manifests/storage_migration/gpu_%j.log"
-#SBATCH --error="output_JEVPFN/2. feature_creation/manifests/storage_migration/gpu_%j.log"
+#SBATCH --output="output_JEVPFN/02_feature_creation/manifests/storage_migration/gpu_%j.log"
+#SBATCH --error="output_JEVPFN/02_feature_creation/manifests/storage_migration/gpu_%j.log"
 set -euo pipefail
 requested="${1:-all}"
 case "$requested" in
@@ -20,7 +20,7 @@ esac
 if [[ $# -gt 1 ]]; then echo 'Pass at most one provider' >&2; exit 2; fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh
-retired_root="$(/usr/bin/python3 -c 'import json; from pathlib import Path; print(json.loads(Path("output_JEVPFN/2. feature_creation/manifests/storage_migration/copy_verified.json").read_text())["source"])')"
+retired_root="$(/usr/bin/python3 -c 'import json; from pathlib import Path; print(json.loads(Path("output_JEVPFN/02_feature_creation/manifests/storage_migration/copy_verified.json").read_text())["source"])')"
 base_bindpath="${APPTAINER_BINDPATH:-}"
 jevpfn_mask_retired_project() {
     mkdir -m 700 "$XDG_CACHE_HOME/retired_project"

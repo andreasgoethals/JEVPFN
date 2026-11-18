@@ -1,12 +1,15 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only general/01_data
+    python -m src.utils.run_notebooks --only 00_data/data
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
-    output_JEVPFN/figures/<phase>/<notebook>/*.pdf   written by the notebooks themselves
-    output_JEVPFN/figures/Captions.md               all figure captions
-    output_JEVPFN/All Results.md             every notebook's printed summary, research order
+    output_JEVPFN/figures/<folder>/<notebook>/*.pdf   written by the notebooks themselves
+    output_JEVPFN/figures/Captions.md                all figure captions
+    output_JEVPFN/All Results.md                     every notebook's printed summary
+    output_JEVPFN/<exp folder>/All Results.md        one experiment's summaries (+ its Captions.md)
+
+Folders and notebook IDs (`<folder>/<name>`) come from config/structure.yaml.
 
 Each notebook executes in a separate Python subprocess: matplotlib's figure registry must
 never be shared between notebooks. Lightweight coordinator threads launch those subprocesses,
@@ -40,13 +43,16 @@ from src.utils.paths import (
     all_results_path,
     captions_path,
     figures_dir,
-    manifests_dir,
+    layout,
     notebook_artifacts,
     notebook_cache_dir,
+    notebook_folder,
+    notebook_id,
     notebook_outputs_dir,
     notebook_phase,
     notebook_stem,
     notebooks_dir,
+    report_folder,
     reports_dir,
 )
 from src.utils.serialization import write_json
@@ -85,7 +91,7 @@ class NotebookResult:
 
 
 def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    """Recursively discover phase/name identifiers; accept an unambiguous legacy stem."""
+    """Recursively discover folder/name identifiers in registry order; accept legacy IDs."""
     found = tuple(
         sorted(
             p.relative_to(notebooks_dir()).with_suffix("").as_posix()
@@ -93,12 +99,9 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
             if ".ipynb_checkpoints" not in p.parts
         )
     )
-    order = {"general": 0, "rq1": 1, "rq2": 2, "rq3": 3}
-    from src.utils.paths import PHASES
-
+    folders = layout().folders
     found = tuple(sorted(found, key=lambda n: (
-        order.get(n.split("/")[0], order.get(notebook_phase(n), 4)),
-        PHASES.index(notebook_phase(n)) if n.split("/")[0] in order else 0, n)))
+        folders.index(n.split("/")[0]) if n.split("/")[0] in folders else len(folders), n)))
     if not names:
         return found
     selected = []
@@ -107,7 +110,7 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
         matches = [
             n
             for n in found
-            if n == name
+            if n in {name, notebook_id(name)}
             or notebook_stem(n) == name
             or (
                 "/" in name
@@ -116,7 +119,7 @@ def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
             )
         ]
         if len(matches) > 1:
-            raise ValueError(f"Ambiguous notebook {name}; use phase/name: {matches}")
+            raise ValueError(f"Ambiguous notebook {name}; use folder/name: {matches}")
         selected.append(matches[0] if matches else name)
     return tuple(dict.fromkeys(selected))
 
@@ -220,6 +223,12 @@ def run_one(
 # ---------------------------------------------------------------------------
 
 
+def _experiment_folders(notebooks: tuple[str, ...]) -> set[str]:
+    """Experiment folders (0A/0B, exp01...) with notebooks; each gets its own report and captions."""
+    return {notebook_folder(name) for name in notebooks
+            if notebook_folder(name) in layout().folders and report_folder(notebook_folder(name))}
+
+
 def _captured_text(name: str) -> str:
     path = reports_dir(name)
     if not path.is_file():
@@ -265,15 +274,9 @@ def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> P
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_text(path, "\n".join(lines))
     if phase is None:
-        for group in sorted(
-            {
-                notebook_phase(name)
-                for name in notebooks
-                if notebook_phase(name).startswith("experiment_")
-            }
-        ):
+        for group in sorted(_experiment_folders(notebooks)):
             write_captions(
-                tuple(name for name in notebooks if notebook_phase(name) == group), phase=group
+                tuple(name for name in notebooks if notebook_folder(name) == group), phase=group
             )
     return path
 
@@ -305,7 +308,7 @@ def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -
     atomic_text(path, "\n".join(lines))
     if phase is not None:
         write_json(
-            manifests_dir(phase) / "reports.json",
+            notebook_outputs_dir() / report_folder(phase) / "manifests" / "reports.json",
             {
                 "full_phase_report": str(path),
                 "full_project_report": str(all_results_path()),
@@ -314,15 +317,9 @@ def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -
             },
         )
     if phase is None:
-        for group in sorted(
-            {
-                notebook_phase(name)
-                for name in notebooks
-                if notebook_phase(name).startswith("experiment_")
-            }
-        ):
+        for group in sorted(_experiment_folders(notebooks)):
             write_all_results(
-                tuple(name for name in notebooks if notebook_phase(name) == group), phase=group
+                tuple(name for name in notebooks if notebook_folder(name) == group), phase=group
             )
     return path
 

@@ -61,7 +61,7 @@ def write_evidence(provider, identity):
     body = {"settings": settings, "settings_sha256": digest(settings)}
     root = paths.manifests_dir("experiment_0")
     if provider in containers.PREDICTORS:
-        target = root / "after_extraction" / f"predictor_{provider}_fixture.json"
+        target = paths.phase_path("experiment_0", "manifests", "after_extraction") / f"predictor_{provider}_fixture.json"
         body.update(
             model=provider,
             status="predictor_contracts_passed_requires_full_fold_profile",

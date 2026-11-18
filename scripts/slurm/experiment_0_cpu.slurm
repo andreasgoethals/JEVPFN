@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# Submit from $VSC_DATA/JEVPFN after creating "output_JEVPFN/3. experiment_0/logs".
+# Submit from $VSC_DATA/JEVPFN after creating "output_JEVPFN/01_exp0a/logs".
 #SBATCH --job-name=jevpfn-exp0-cpu
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=mindwell
@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=3
 # Use the partition memory-per-core default.
 #SBATCH --time=00:20:00
-#SBATCH --output="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/3. experiment_0/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/01_exp0a/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/01_exp0a/logs/%x_%j.log"
 set -euo pipefail
 source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=experiment_0

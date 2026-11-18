@@ -228,7 +228,7 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
         "src/jev/", "src/data/", "config/0. exploration/",
         "config/1. question_preparation/", "config/2. feature_creation/",
         "config/general/0. exploration/", "config/general/1. question_preparation/",
-        "config/general/2. feature_creation/",
+        "config/general/2. feature_creation/", "config/00_data/", "config/02_feature_creation/",
     )
     core = {
         "src/cluster/freeze.py", "src/cluster/feature_campaign.py",
@@ -238,8 +238,9 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
         "scripts/activate_conda.sh", "scripts/slurm/embedding_creation.slurm",
     }
     forbidden = {name for name in changed if name.startswith(protected) or name in core
-                 or (name.startswith(("config/3. experiment_0/", "config/general/3. experiment_0/"))
-                     and name not in {"config/3. experiment_0/debug.yaml", "config/general/3. experiment_0/debug.yaml"})}
+                 or (name.startswith(("config/3. experiment_0/", "config/general/3. experiment_0/", "config/01_exp0a/"))
+                     and name not in {"config/3. experiment_0/debug.yaml", "config/general/3. experiment_0/debug.yaml",
+                                      "config/01_exp0a/debug.yaml"})}
     # The original extraction checkout predates hosted-only credit handling and
     # read-only notebook repairs. Accept only these named, exactly reviewed paths;
     # request generation, self-hosted inference and feature construction stay protected.
@@ -248,7 +249,9 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
                 "src/jev/features.py", "config/general/2. feature_creation/feature_creation.yaml",
                 "config/general/2. feature_creation/feature_comparison.yaml",
                 "config/2. feature_creation/feature_creation.yaml",
-                "config/2. feature_creation/feature_comparison.yaml"}
+                "config/2. feature_creation/feature_comparison.yaml",
+                "config/02_feature_creation/feature_creation.yaml",
+                "config/02_feature_creation/feature_comparison.yaml"}
     if exceptions.keys() - eligible or any(not reason for reason in exceptions.values()):
         raise ValueError("Unrecognized non-extraction source exception")
     for name in forbidden & exceptions.keys():
@@ -285,6 +288,25 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
             "rationale": review["rationale"]}
 
 
+def layout_only_source_changes(old_freeze):
+    """Source paths changed only by the 18-11-2026 folder layout (byte-identical moves or
+    previous output folders rewritten). Scientific content changes are never explained."""
+    from src.cluster.freeze import source_snapshot
+    from src.utils.structure import layout_only_changes
+
+    def read_old(name):
+        try:
+            return subprocess.check_output(["git", "show", old_freeze["git_head"] + ":" + name],
+                                           cwd=paths.REPO_ROOT, timeout=30).decode("utf-8")
+        except (subprocess.SubprocessError, UnicodeDecodeError, KeyError, TypeError):
+            return None
+
+    def read_current(name):
+        return (paths.REPO_ROOT / name).read_text(encoding="utf-8")
+
+    return layout_only_changes(old_freeze["files"], source_snapshot()["files"], read_old, read_current)
+
+
 def recover_campaign(*, previous_identity, previous_freeze, expected_source, reviewed_by,
                      source_review=None):
     """Rebind an idle expanded grid after a reviewed operational-only source repair."""
@@ -298,6 +320,7 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
     current = source_snapshot()
     changed = {k for k in old_freeze["files"].keys() | current["files"].keys()
                if old_freeze["files"].get(k) != current["files"].get(k)}
+    changed -= layout_only_source_changes(old_freeze)
     allowed = {
         "AGENTS.md",  # Previously reviewed operational companion policy, no scientific inputs.
         "src/cluster/feature_admission.py", "src/cluster/scratch_stage.py",

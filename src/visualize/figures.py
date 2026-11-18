@@ -1,7 +1,7 @@
 """Saving figures. One folder per notebook, one PDF per figure, cleared before drawing.
 
-    output_JEVPFN/figures/<phase>/<notebook>/01_<name>.pdf     the figure — vector, for the paper
-    output_JEVPFN/manifests/notebooks/<phase>/<notebook>/_figures.json  ordered captions
+    output_JEVPFN/figures/<folder>/<notebook>/01_<name>.pdf    the figure — vector, for the paper
+    output_JEVPFN/manifests/notebooks/<folder>/<notebook>/_figures.json ordered captions
 
 PDF ONLY. Figures use A4 dimensions from `src/visualize/style.py`; dense audits are split
 across panels rather than shrinking labels below the print-size minimum.

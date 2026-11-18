@@ -67,6 +67,14 @@ def classify(relative):
 
 
 def phase_of(relative):
+    from src.utils import structure
+
+    # Current registry folders (phase trees and figure/notebook-record folders), including
+    # routed sub-trees (03_exp0b -> experiment_0).
+    for start in range(len(relative.parts) - 1):
+        owned = structure.registry().owner_of(relative.parts[start:-1])
+        if owned:
+            return owned[0]
     for part in relative.parts[:-1]:
         if part[:1].isdigit() and ". " in part:
             # Old output remains removable after retiring an experiment/renumbering synthesis.

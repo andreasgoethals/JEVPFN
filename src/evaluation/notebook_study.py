@@ -158,7 +158,7 @@ def predictor_evidence():
 
     current = evaluation_identity()
     catalog = load_yaml("experiment_1/models")["models"]
-    folder = paths.manifests_dir("experiment_0") / "after_extraction"
+    folder = paths.phase_path("experiment_0", "manifests", "after_extraction")
     required = profile_plan()
     profiles = {}
     for path in folder.glob("profile_*.json"):

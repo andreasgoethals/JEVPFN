@@ -54,7 +54,7 @@ def evaluation_identity():
             key: load_yaml("experiment_2/embeddings")[key] for key in ("encoders", "pca_grid")
         },
 
-        "rq1_questions": source_hash(paths.REPO_ROOT / "config/rq1/question_versions.csv"),
+        "rq1_questions": source_hash(paths.config_file("question_versions.csv")),
 
         "downstream_contracts": {
             name: {k:v for k,v in load_yaml(name).items() if k not in {"enabled","experiment_0_acceptance"}}

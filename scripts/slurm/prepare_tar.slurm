@@ -9,8 +9,8 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
 #SBATCH --array=0-4
-#SBATCH --output="output_JEVPFN/6. experiment_3/logs/%x_%A_%a.log"
-#SBATCH --error="output_JEVPFN/6. experiment_3/logs/%x_%A_%a.log"
+#SBATCH --output="output_JEVPFN/exp06_tar/logs/%x_%A_%a.log"
+#SBATCH --error="output_JEVPFN/exp06_tar/logs/%x_%A_%a.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh

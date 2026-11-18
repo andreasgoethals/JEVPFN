@@ -115,9 +115,14 @@ Retirement requires consumer checks, verified publication/recovery and scoped au
 Preserve resumable failures, referenced images and other projects. Check byte/file quotas;
 never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
-Reusable Python belongs in `src/`. Config and scientific results use general/rq1/rq2/rq3. Keep one notebook per experiment
-inside each RQ folder and exactly three general notebooks (data, features, validation). Preserve scientific phase IDs;
-move old result trees only through the verified idle migration. Operational paths stay stable.
+Reusable Python belongs in `src/`. Since 18 November 2026, `config/structure.yaml` is the one
+layout registry: `config/`, `notebooks/` and `output_JEVPFN/` (results and `figures/<folder>/`)
+use its folders `00_data`, `01_exp0a`, `02_feature_creation`, `03_exp0b`, `exp01_outputs` …
+`exp09_adaptation` and `synthesis`. Keep one notebook per experiment folder (Exp 9 keeps its four
+adaptation notebooks); add folders only through the registry, and record paper placement under its
+`paper:` mapping, never in folder names. Internal phase IDs (`experiment_0`…`4`, `rq1`…`rq3`, …)
+remain hash/recipe/receipt keys and config aliases; never rename them. Move existing output trees only
+with `src.utils.layout_migration` at a verified idle handover.
 Do not create empty phase folders or duplicate question files. Permanent questions and
 response/features use per-dataset SQLite stores. PowerShell must work on Windows
 PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.

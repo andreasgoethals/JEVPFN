@@ -96,7 +96,9 @@ def test_no_empty_coverage_figures_before_results_exist():
 
 
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
-    for folder in ("general", "rq1", "rq2", "rq3"):
+    from src.utils import structure
+
+    for folder in {n.folder for n in structure.registry().notebooks}:
         notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
         assert notebooks
         for filename in notebooks:
@@ -109,7 +111,7 @@ def test_every_experiment_has_thin_notebook_and_complete_printed_report():
 
 def test_synthesis_uses_general_notebook_output_without_fake_experiment():
     assert paths.notebook_phase("8. synthesis/01_representation_comparison") == "synthesis"
-    assert paths.phase_folder("synthesis") == "8. synthesis"
+    assert paths.phase_folder("synthesis") == "synthesis"
 
 
 def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():

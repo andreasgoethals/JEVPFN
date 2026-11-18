@@ -22,7 +22,7 @@ from src.utils.serialization import canonical_json, digest, write_json
 
 
 def catalogue():
-    with (paths.REPO_ROOT / "config/rq1/question_versions.csv").open(
+    with paths.config_file("question_versions.csv").open(
         encoding="utf-8-sig", newline=""
     ) as f:
         rows = list(csv.DictReader(f))

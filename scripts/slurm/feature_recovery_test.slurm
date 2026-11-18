@@ -8,8 +8,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
 #SBATCH --time=01:00:00
-#SBATCH --output="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/2. feature_creation/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/02_feature_creation/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/02_feature_creation/logs/%x_%j.log"
 set -euo pipefail
 # A separately published DATA checkout permits QA while the old publisher finishes.
 cd "${1:-${VSC_DATA:?}/JEVPFN}"

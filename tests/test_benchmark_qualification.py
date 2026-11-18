@@ -191,7 +191,7 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     with pytest.raises(ValueError, match="predictor width"):
         q.save_profile(arm | {"predictor_columns": 1}, dataset, features, {}, records)
     q.save_profile(arm, dataset, features, {"container_id": "test"}, records)
-    path, = (paths.manifests_dir("experiment_0") / "after_extraction").glob("profile_*.json")
+    path, = (paths.phase_path("experiment_0", "manifests", "after_extraction")).glob("profile_*.json")
     report = json.loads(path.read_text(encoding="utf-8"))
     assert {r["role"]: r["rows"] for r in report["roles"]} == {
         "outer_test": len(split["folds"][0]["test"]),

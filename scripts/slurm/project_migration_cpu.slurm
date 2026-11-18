@@ -9,8 +9,8 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=01:00:00
-#SBATCH --output="output_JEVPFN/2. feature_creation/manifests/storage_migration/cpu_%j.log"
-#SBATCH --error="output_JEVPFN/2. feature_creation/manifests/storage_migration/cpu_%j.log"
+#SBATCH --output="output_JEVPFN/02_feature_creation/manifests/storage_migration/cpu_%j.log"
+#SBATCH --error="output_JEVPFN/02_feature_creation/manifests/storage_migration/cpu_%j.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh

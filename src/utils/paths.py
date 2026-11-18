@@ -29,6 +29,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from src.utils import structure
+
 _NOTEBOOK_SCRATCH = None
 
 #: The per-project folder name on BOTH shared tiers.
@@ -137,36 +139,19 @@ def _under(root: Path, *parts: str) -> Path:
 
 
 OUTPUT_DIR_NAME = "output_JEVPFN"
-PHASES = (
-    "exploration",
-    "question_preparation",
-    "feature_creation",
-    "experiment_0",
-    "experiment_1",
-    "experiment_2",
-    "experiment_3",
-    "experiment_4",
-    "synthesis",
-    "rq1",
-    "rq2",
-    "rq3",
-    "regression_readout",
-)
+#: Internal phase identities, unchanged by the 18-11-2026 layout (hash/recipe/receipt keys).
+PHASES = structure.PHASES
 
-# Keep scientific phase identities; move physical results only at an idle handover.
-CONFIG_GROUPS = {phase: ("general" if phase in {
-    "exploration", "question_preparation", "feature_creation", "experiment_0"
-} else "rq2") for phase in PHASES if phase not in {"rq1", "rq2", "rq3", "regression_readout"}}
+# Physical folders come from config/structure.yaml; phase identities never change.
+#: Phase -> config folder (home folder of the phase).
+CONFIG_GROUPS = {phase: structure.registry().home(phase).split("/")[0] for phase in PHASES}
+#: Notebook ID (current and previous) -> internal phase.
 NOTEBOOK_PHASES = {
-    "01_data": "exploration",
-    "02_features": "feature_creation",
-    "03_validation": "experiment_0",
-    "01_decisions": "experiment_1",
-    "02_embeddings": "experiment_2",
-    "03_tar": "experiment_3",
-    "04_native": "experiment_4",
-    "05_when_text_helps": "synthesis",
-
+    **{n.id: n.phase for n in structure.registry().notebooks},
+    **{legacy: n.phase for n in structure.registry().notebooks for legacy in n.legacy},
+}
+#: Retired pre-research notebook stems, still accepted as `<phase folder>/<stem>`.
+_RETIRED_NOTEBOOK_STEMS = {
     "01_data_exploration": "exploration", "02_jev_input_design": "exploration",
     "01_prepare_questions": "question_preparation", "03_feature_creation": "feature_creation",
     "04_decision_feature_comparison": "feature_creation",
@@ -177,64 +162,82 @@ NOTEBOOK_PHASES = {
 }
 
 
+#: Folders without their own per-experiment report (project-wide documents only).
+PREPARATION_FOLDERS = ("00_data", "02_feature_creation")
+
+
+def layout():
+    """The physical layout registry (config/structure.yaml)."""
+    return structure.registry()
+
+
 def phase_name(phase: str | None = None) -> str:
+    """Validate an internal phase; previous numbered folders and owning folders are aliases."""
     value = phase or os.environ.get("JEVPFN_PHASE", "exploration")
+    if value in PHASES:
+        return value
     numbered = re.fullmatch(r"([0-9]+)\. (.+)", value)
     if numbered:
-        original = value
-        value = numbered[2]
-        if phase_folder(value) != original:
-            raise ValueError(f"Incorrect phase number: {original}")
-    if value not in PHASES:
-        raise ValueError(f"Unknown research phase: {value}")
-    return value
+        if structure.legacy_phase(value) is None:
+            raise ValueError(f"Incorrect phase number: {value}")
+        return numbered[2]
+    owners = {e.owner_phase for e in layout().entries if e.folder == value}
+    if len(owners) == 1:
+        return owners.pop()
+    raise ValueError(f"Unknown research phase: {value}")
 
 
 def phase_folder(phase: str) -> str:
-    """Stable output identities; research folders are resolved separately."""
-    name = phase_name(phase)
-    if name in {"rq1", "rq2", "rq3", "regression_readout"}:
-        return name
-    if name == "synthesis":
-        return "8. synthesis"
-    index = (
-        int(name.removeprefix("experiment_")) + 3
-        if name.startswith("experiment_")
-        else ("exploration", "question_preparation", "feature_creation").index(name)
-    )
-    return f"{index}. {name}"
+    """The home folder of an internal phase, e.g. experiment_1 -> exp04_decision_features."""
+    return layout().home(phase_name(phase))
+
+
+def routed_folder(phase: str, *parts: str) -> str:
+    """The folder of `<phase>/<parts>`; registry routes split one phase across folders."""
+    return layout().folder_for(phase_name(phase), parts)
 
 
 def research_group(phase: str) -> str:
+    """Research question of an internal phase (human grouping; not a folder)."""
     phase = phase_name(phase)
     if phase in {"rq1", "rq2", "rq3"}:
         return phase
     return "rq2" if phase.startswith("experiment_") and phase != "experiment_0" or phase in {"synthesis", "regression_readout"} else "general"
 
 
-def result_relative(phase: str) -> Path:
-    """RQ result paths; operational 0A/token stores retain their frozen identities."""
-    phase = phase_name(phase)
-    if phase in {"rq1", "rq2", "rq3"}:
-        return Path(phase) / "results"
-    if research_group(phase) == "general":
-        return Path(phase_folder(phase)) / "results"
-    return Path(research_group(phase)) / phase_folder(phase) / "results"
+def result_relative(phase: str, *parts: str) -> Path:
+    """Results folder of a phase relative to an output root, routed by its first parts."""
+    return Path(routed_folder(phase, "results", *parts)) / "results"
+
+
+def notebook_id(notebook: str) -> str:
+    """Canonical `<folder>/<name>` of a registered notebook; other names are returned as given."""
+    _validate_notebook_name(notebook)
+    found = layout().notebook(notebook)
+    return found.id if found else notebook
+
+
+def _validate_notebook_name(notebook: str) -> list[str]:
+    parts = notebook.split("/")
+    if any(not p or p in {".", ".."} or "\\" in p or ":" in p for p in parts) or len(parts) > 2:
+        raise ValueError("Notebook must be a name or folder/name, without path traversal.")
+    return parts
 
 
 def notebook_phase(notebook: str) -> str:
     if notebook in {"rq1_behavior", "rq2_prediction", "rq3_adaptation"}:
         return notebook.split("_")[0]
-    parts = notebook.split("/")
-    if any(not p or p in {".", ".."} or "\\" in p or ":" in p for p in parts) or len(parts) > 2:
-        raise ValueError("Notebook must be a name or phase/name, without path traversal.")
+    parts = _validate_notebook_name(notebook)
+    found = layout().notebook(notebook)
+    if found:
+        return found.phase
     if len(parts) == 2:
-        if parts[0] in {"general", "rq1", "rq2", "rq3"}:
-            if parts[-1] in NOTEBOOK_PHASES:
-                return NOTEBOOK_PHASES[parts[-1]]
-            if parts[0] in {"rq1", "rq3"}:
-                return parts[0]
+        if parts[-1] in _RETIRED_NOTEBOOK_STEMS and parts[0] in {"general", "rq1", "rq2", "rq3"}:
+            return _RETIRED_NOTEBOOK_STEMS[parts[-1]]
+        if parts[0] in {"general", "rq2"}:
             raise ValueError("Unknown notebook in research layout")
+        if parts[0] in {"rq1", "rq3"}:
+            return parts[0]
         return phase_name(parts[0])
     if notebook == "03_feature_creation":
         return "feature_creation"
@@ -244,9 +247,21 @@ def notebook_phase(notebook: str) -> str:
     return "exploration"
 
 
+def notebook_folder(notebook: str) -> str:
+    """Physical folder of a notebook's figures and records."""
+    found = layout().notebook(notebook)
+    if found:
+        return found.folder
+    parts = notebook.split("/")
+    if len(parts) == 2 and parts[0] in layout().folders:
+        return parts[0]
+    return phase_folder(notebook_phase(notebook))
+
+
 def notebook_stem(notebook: str) -> str:
     notebook_phase(notebook)
-    return notebook.split("/")[-1]
+    found = layout().notebook(notebook)
+    return found.name if found else notebook.split("/")[-1]
 
 
 def outputs_dir() -> Path:
@@ -266,6 +281,22 @@ def phase_dir(phase: str | None = None) -> Path:
     return outputs_dir() / phase_folder(selected)
 
 
+def phase_path(phase: str, *parts: str) -> Path:
+    """A DATA-tier path inside a phase tree, honouring registry routes (e.g. 0B manifests)."""
+    selected = phase_name(phase)
+    if selected == "exploration":
+        return notebook_cache_dir("exploration", *parts)
+    if not parts:
+        return phase_dir(selected)
+    folder = routed_folder(selected, *parts)
+    if folder != phase_folder(selected):
+        return outputs_dir() / folder / Path(*parts)
+    # Unrouted: exactly the phase's own manifests/logs helpers.
+    kind, *rest = parts
+    base = {"manifests": manifests_dir, "logs": logs_dir}.get(kind)
+    return base(selected).joinpath(*rest) if base else phase_dir(selected).joinpath(*parts)
+
+
 def results_dir(*parts: str, phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected in {"exploration", "feature_creation"}:
@@ -274,8 +305,8 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
         durable = durable_project_override()
         if durable is None:
             raise ValueError("Research study results require an allocated durable PROJECT root")
-        return _under(durable, OUTPUT_DIR_NAME, str(result_relative(selected)), *parts)
-    return large_outputs_dir().joinpath(result_relative(selected), *parts)
+        return _under(durable, OUTPUT_DIR_NAME, str(result_relative(selected, *parts)), *parts)
+    return large_outputs_dir().joinpath(result_relative(selected, *parts), *parts)
 
 
 def tar_results_dir(*parts: str) -> Path:
@@ -284,7 +315,7 @@ def tar_results_dir(*parts: str) -> Path:
         root = durable_project_override()
         if root is None or not root.as_posix().startswith("/gpfs") or "/project/" not in root.as_posix():
             raise ValueError("TAR requires an allocated native GPFS PROJECT root")
-        return _under(root, OUTPUT_DIR_NAME, str(result_relative("experiment_3")), *parts)
+        return _under(root, OUTPUT_DIR_NAME, str(result_relative("experiment_3", *parts)), *parts)
     return results_dir(*parts, phase="experiment_3")
 
 
@@ -312,14 +343,18 @@ def manifests_dir(phase: str | None = None) -> Path:
     return phase_dir(phase) / "manifests"
 
 
-def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
-    """All figures share one root, then phase and notebook subdirectories."""
-    root = notebook_outputs_dir() / "figures"
+def _record_folder(notebook: str | None, phase: str | None) -> str | None:
     if notebook is not None:
-        inferred_phase = notebook_phase(notebook)  # Also validate a plain notebook name.
-        root = root / research_group(phase or inferred_phase)
-    elif phase is not None:
-        root = root / research_group(phase)
+        return notebook_folder(notebook) if phase is None else phase_folder(phase)
+    return phase_folder(phase).split("/")[0] if phase is not None else None
+
+
+def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
+    """All figures share one root, then the registry folder and notebook name."""
+    root = notebook_outputs_dir() / "figures"
+    folder = _record_folder(notebook, phase)
+    if folder is not None:
+        root = root / folder
     return root / notebook_stem(notebook) if notebook else root
 
 
@@ -329,10 +364,11 @@ def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", 
         raise ValueError("Notebook artifact kind must be manifests, logs or results")
     root = notebook_outputs_dir()
     folder = root / kind / "notebooks"
+    record = _record_folder(notebook, phase)
+    if record is not None:
+        folder = folder / record
     if notebook is not None:
-        folder = folder / research_group(phase or notebook_phase(notebook)) / notebook_stem(notebook)
-    elif phase is not None:
-        folder /= research_group(phase)
+        folder = folder / notebook_stem(notebook)
     for entry in (folder, *folder.parents):
         if entry.is_symlink() or getattr(entry, "is_junction", lambda: False)():
             raise ValueError(f"Linked notebook output is not allowed: {entry}")
@@ -346,18 +382,34 @@ def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
     return root / "_report.txt" if notebook else root
 
 
+def report_folder(selection: str | None) -> str | None:
+    """The experiment folder (0A/0B, exp01...) owning a per-experiment report; None otherwise.
+
+    Preparation folders (data, feature creation) only appear in the project-wide documents.
+    """
+    if selection is None:
+        return None
+    folder = selection if selection in layout().folders else phase_folder(selection).split("/")[0]
+    return None if folder in PREPARATION_FOLDERS else folder
+
+
 def captions_path(phase: str | None = None) -> Path:
+    """Project captions, or one experiment folder's captions (folder name or phase)."""
+    folder = report_folder(phase)
     root = figures_dir()
-    if phase and phase_name(phase).startswith("experiment_"):
-        root /= phase_folder(phase)
-    return root / "Captions.md"
+    return (root / folder if folder else root) / "Captions.md"
 
 
 def all_results_path(phase: str | None = None) -> Path:
+    """Project report, or one experiment folder's report (folder name or phase)."""
+    folder = report_folder(phase)
     root = notebook_outputs_dir()
-    if phase and phase_name(phase).startswith("experiment_"):
-        root /= phase_folder(phase)
-    return root / "All Results.md"
+    return (root / folder if folder else root) / "All Results.md"
+
+
+def recorded_output_path(value) -> Path:
+    """A path recorded before the 18-11-2026 layout migration, located in the current layout."""
+    return structure.recorded_output_path(value, OUTPUT_DIR_NAME)
 
 
 def output_component(value: str) -> str:
@@ -478,37 +530,48 @@ def token_audit_dir() -> Path:
 
 
 def config_path(name: str) -> Path:
-    """Resolve logical config IDs and explicit numbered paths without copying configs."""
+    """Resolve a logical config key through the layout registry.
+
+    Current keys (`exp04_decision_features/main`), internal-phase keys (`experiment_1/main`),
+    registered stems (`main`) and previous folders (`rq2/4. experiment_1/main`) all resolve to
+    the same file. Previous locations are read only when the current file is absent, so an
+    archived checkout or fixture keeps working.
+    """
     stem = name[:-5] if name.endswith(".yaml") else name
-    prerequisites = {
-        "audit": "exploration",
-        "datasets": "exploration",
-        "question_design": "question_preparation",
-        "dataset_semantics": "question_preparation",
-        "question_preparation": "question_preparation",
-        "feature_creation": "feature_creation",
-        "decision_pilot": "feature_creation",
-        "extractors": "feature_creation",
-        "feature_comparison": "feature_creation",
-    }
-    if stem in prerequisites:
-        stem = f"{phase_folder(prerequisites[stem])}/{stem}"
-    elif "/" in stem and stem.split("/")[0] in PHASES or re.match(r"experiment_[0-9]+/", stem):
-        prefix, rest = stem.split("/", 1)
-        stem = f"{phase_folder(prefix)}/{rest}"
+    if re.match(r"experiment_[0-9]+/", stem):
+        phase_name(stem.split("/")[0])  # Retired experiment numbers have no configuration.
     root = (REPO_ROOT / "config").resolve()
-    prefix = stem.split("/", 1)[0]
-    for phase, group in CONFIG_GROUPS.items():
-        if prefix == phase_folder(phase):
-            relocated = f"{group}/{stem}"
-            # Old paths remain readable for immutable archived checkouts/test fixtures.
-            if (root / f"{relocated}.yaml").exists() or not (root / f"{stem}.yaml").exists():
-                stem = relocated
-            break
-    path = (root / f"{stem}.yaml").resolve()
+    current = structure.config_relative(stem)
+    candidates = [current, stem, *_legacy_config_locations(stem, current)]
+    path = next(
+        (root / f"{c}.yaml" for c in candidates if (root / f"{c}.yaml").is_file()),
+        root / f"{current}.yaml",
+    ).resolve()
     if not path.is_relative_to(root):
         raise ValueError("Configuration must remain under config/.")
     return path
+
+
+def config_file(filename: str) -> Path:
+    """A registered non-YAML config file (e.g. `question_versions.csv`)."""
+    folder = structure.registry().config_index().get(filename)
+    if folder is None or Path(filename).name != filename:
+        raise ValueError(f"Unregistered config file: {filename}")
+    return REPO_ROOT / "config" / folder / filename
+
+
+def _legacy_config_locations(stem: str, current: str) -> list[str]:
+    folder, _, rest = current.partition("/")
+    if not rest:
+        return []
+    phases = [p for p in PHASES if layout().home(p).split("/")[0] == folder]
+    found = []
+    for phase in phases:
+        legacy = structure.LEGACY_PHASE_FOLDERS.get(phase)
+        if legacy:
+            found += [f"general/{legacy}/{rest}", f"rq2/{legacy}/{rest}", f"{legacy}/{rest}"]
+    found += [f"{group}/{rest}" for group in ("rq1", "rq3")]
+    return found
 
 
 def jev_cache_path(relative: str = "jev_cache") -> Path:

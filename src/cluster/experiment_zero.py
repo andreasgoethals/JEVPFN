@@ -167,7 +167,7 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
         if cfg["live_extraction"].get("enabled") is not True:
             raise ValueError("Enable the reviewed private pilot configuration first")
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
-    folder = paths.manifests_dir("experiment_0") / report["stage"]
+    folder = paths.phase_path("experiment_0", "manifests", report["stage"])
     receipt = folder / f"{run_id}.json"
     if site == "vsc":
         receipts = list(folder.glob("*.json"))
@@ -190,7 +190,7 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
             require_idle_vsc()
             folder.mkdir(parents=True, exist_ok=False)
     log = get_logger(
-        "jevpfn.exp0", paths.logs_dir("experiment_0") / report["stage"] / f"{run_id}.log"
+        "jevpfn.exp0", paths.phase_path("experiment_0", "logs", report["stage"]) / f"{run_id}.log"
     )
     report.update(status="running" if site == "local" else "submitting", run_id=run_id)
     write_json(receipt, report)
