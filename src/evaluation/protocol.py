@@ -182,6 +182,7 @@ def evaluate_cv(
     feature_artifact_ids: list[str] | None = None,
     fold_numbers: list[int] | None = None,
     representation_recipe: dict | None = None,
+    field_attribution: dict | None = None,
 ):
     """Fit only after an explicit opt-in; save inner and outer predictions on PROJECT.
 
@@ -190,6 +191,11 @@ def evaluate_cv(
     Synthetic tests use fake estimators, never train a prediction model.
     Adapters must provide resolved estimator settings and artifact IDs (an empty
     list for arms without cached features). These enter the immutable run identity.
+
+    ``field_attribution`` (resolved by ``attribution.settings_for_phase``) adds a
+    supplementary grouped-permutation record after the final fit and regular prediction.
+    It never enters the fold recipe, record identities, primary timings or warnings.
+    A fold reused on resume has no fitted model, so it receives no new attribution.
     """
     if allow_model_runs is not True:
         raise RuntimeError("Model execution is disabled; an explicit opt-in is required")
@@ -222,6 +228,15 @@ def evaluate_cv(
             "Resolved estimator settings and explicit feature artifact IDs are required"
         )
     feature_identity = feature_input_identity(features)
+    attribution_groups = None
+    if field_attribution is not None:
+        from src.evaluation import attribution
+
+        attribution.validate_settings(field_attribution)
+        if field_attribution["enabled"]:
+            # Assign every column before any fit; unknown columns fail loudly here.
+            attribution_groups = attribution.feature_groups(features, dataset.metadata)
+
     def partition_inputs(train, test, seed):
         return features.iloc[train].copy(), features.iloc[test].copy()
 
@@ -298,6 +313,7 @@ def evaluate_cv(
                 train, test = np.array(fold["train"]), np.array(fold["test"])
                 timer = PhaseTimer(device=device, synchronize=synchronize)
                 threshold, oof = (0.5 if binary else None), None
+                primary_resources = attribution_result = None
                 pca_diagnostics = []
                 if tune_threshold:
                     encoded = np.array([canonical_json(scalar(v)) for v in target.iloc[train]])
@@ -353,6 +369,26 @@ def evaluate_cv(
                             np.asarray(model.predict(outer_test), dtype=float)
                             if metadata.task_type == "regression"
                             else _probabilities(model, outer_test, classes)
+                        )
+                    if attribution_groups is not None:
+                        # Freeze the primary resource view before any permuted prediction.
+                        primary_resources = monitor.snapshot()
+                        attribution_result = attribution.run_fold(
+                            model,
+                            outer_test,
+                            target.iloc[test].to_numpy(),
+                            prediction,
+                            attribution_groups,
+                            predict=_attribution_predict(metadata.task_type, classes),
+                            classes=[] if metadata.task_type == "regression" else classes,
+                            variance=float(np.var(target.iloc[train].astype(float)))
+                            if metadata.task_type == "regression"
+                            else None,
+                            seed=specification["seed"],
+                            fold=number,
+                            settings=field_attribution,
+                            device=device,
+                            synchronize=synchronize,
                         )
                 finally:
                     del model
@@ -431,7 +467,7 @@ def evaluate_cv(
                             metadata=identity,
                             run_id=f"{digest(identity)}_{attempt_id}",
                             phase=phase,
-                            resources=monitor.snapshot(),
+                            resources=primary_resources or monitor.snapshot(),
                             warnings=[
                                 {"category": w.category.__name__, "message": str(w.message)[:2000]}
                                 for w in captured
@@ -439,4 +475,36 @@ def evaluate_cv(
                         )
                     )
             complete_fold(fold_recipe, records[record_start:], phase)
+            if field_attribution is not None:
+                # Saved only after the fold is complete, so it always refers to one.
+                from src.evaluation.store import save_attribution
+
+                outer = records[record_start]
+                save_attribution(
+                    attribution.record_body(
+                        {
+                            "dataset_id": metadata.dataset_id,
+                            "phase": phase,
+                            "task_type": metadata.task_type,
+                            "fold_recipe_id": digest(fold_recipe),
+                            "outer_fold": number,
+                            "split_id": specification["split_id"],
+                            "model_id": model_id,
+                            "checkpoint_id": checkpoint_id,
+                            "feature_set": feature_set,
+                            "representation_recipe": representation_recipe,
+                            "outer_test_record": getattr(outer, "key", None) or outer.name,
+                        },
+                        field_attribution,
+                        attribution_result,
+                    ),
+                    phase,
+                )
     return records
+
+
+def _attribution_predict(task_type, classes):
+    """The same prediction contract as the primary outer-test prediction."""
+    if task_type == "regression":
+        return lambda model, frame: np.asarray(model.predict(frame), dtype=float)
+    return lambda model, frame: _probabilities(model, frame, classes)

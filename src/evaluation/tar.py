@@ -317,6 +317,16 @@ class TarControl:
             self.classes_ = self.control.classes_
         return self
 
+    def attribution_inputs(self, x):
+        """Raw TAR vectors per text column for field attribution, and the fitted inner control."""
+        frame, groups = self._features(x)
+        names = [str(c) for c in self.dataset.metadata.text_columns]
+        return frame, [
+            {"group": f"embedding__text_{i:03d}", "kind": "embedding", "provider": None,
+             "mode": None, "text_index": i, "text_field": names[i], "columns": group}
+            for i, group in enumerate(groups)
+        ], self.control
+
     def predict(self, x):
         return self.control.predict(self._features(x)[0])
 

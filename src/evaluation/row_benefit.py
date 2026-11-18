@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -55,7 +56,181 @@ def prediction_shift_bands(reference, augmented, classes, variance):
     return np.array([f"shift_{b}" for b in np.searchsorted(edges, shift, side="right")])
 
 
-def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_lengths):
+# Fixed before any result (approved 18 Nov 2026), label-free decision-input cohorts:
+# confidence = the augmented arm's own decision blocks, max probability per available block
+# (classification classes, regression evidence levels), averaged over the row's blocks;
+# agreement = share of available decision models whose argmax equals the plurality choice,
+# averaged over the arm's text groups. Exact top ties abstain (decision_comparison.TIED).
+CONFIDENCE_EDGES = (0.5, 0.7, 0.9)
+CONFIDENCE_LABELS = ("lt_0.5", "0.5_to_0.7", "0.7_to_0.9", "ge_0.9")
+AGREEMENT_EDGES = (0.5, 0.75)
+AGREEMENT_LABELS = ("lt_0.5", "0.5_to_0.75", "0.75_to_1", "unanimous")
+UNAVAILABLE = -100  # No decision input for this row (missing text or no artifact).
+
+
+def block_probabilities(block, task, n_rows):
+    """Per text group: full-dataset probability matrix in csv row order, NaN rows if missing."""
+    columns = block.manifest["feature_columns"]
+    groups = (
+        [f"text_{i:03d}" for i in range(len(block.manifest["text_columns"]))]
+        if block.manifest["identity"]["representation"] == "per_column"
+        else ["all_text"]
+    )
+    positions = block.values.row_id.str.removeprefix("csv:").astype(int).to_numpy()
+    if len(positions) != n_rows or set(positions) != set(range(n_rows)):
+        raise ValueError("Decision block rows differ from the frozen dataset rows")
+    result = {}
+    for group in groups:
+        named = {c.rsplit("__", 1)[-1]: c for c in columns if f"__{group}__" in c}
+        if task == "binary_classification":
+            suffixes = ["p_positive"]
+        elif task == "regression":
+            suffixes = [f"p_{i}" for i in range(9)]
+        else:
+            suffixes = sorted(k for k in named if re.fullmatch(r"p_c\d{3}", k))
+        if not suffixes or not set(suffixes) <= set(named):
+            raise ValueError("Decision block lacks its complete probability vector")
+        values = block.values[[named[s] for s in suffixes]].to_numpy(dtype=float)
+        if task == "binary_classification":
+            values = np.column_stack([1 - values[:, 0], values[:, 0]])
+        matrix = np.full((n_rows, values.shape[1]), np.nan)
+        matrix[positions] = values
+        result[group] = matrix
+    return result
+
+
+def load_decision_block(dataset_id, provider, mode, cfg):
+    """The configured artifact from the canonical store, else the portable notebook copy.
+
+    Returns ``(block, source)``; an absent artifact is ``(None, reason)``. Checksum,
+    schema or ambiguity errors in a matching artifact are never treated as absence.
+    """
+    from src.evaluation.features import load_feature_selection, match_artifact_pins
+    from src.evaluation.portable_features import portable_path
+    from src.evaluation.qualification import decision_artifact_pins, decision_selector
+    from src.jev.features import feature_inventory
+
+    try:
+        selector = decision_selector(cfg, provider)
+    except ValueError:
+        return None, "no_configured_feature_selector"
+    pins = decision_artifact_pins(cfg, dataset_id, provider)
+    for path in (paths.dataset_cache_path(dataset_id), portable_path(dataset_id)):
+        if not path.is_file():
+            continue
+        inventory = match_artifact_pins(feature_inventory(path), pins)
+        for key, value in selector.items():
+            inventory = inventory.loc[inventory[key].isna() if value is None else inventory[key].eq(value)]
+        if inventory.representation.eq(mode).any():
+            (block,) = load_feature_selection(path, selector, (mode,), artifact_pins=pins)
+            return block, str(path)
+    return None, "artifact_not_found"
+
+
+class DecisionInputs:
+    """Label-free per-row decision summaries for one dataset, loaded lazily per provider/mode.
+
+    Only the max probability and argmax choice per row and text group are retained, so a
+    full roster fits in memory on a CPU allocation; probability matrices are discarded.
+    """
+
+    def __init__(self, dataset, cfg, *, loader=load_decision_block):
+        self.dataset, self.cfg, self.loader = dataset, cfg, loader
+        self.task = dataset.metadata.task_type
+        self.roster = list(cfg["candidate_extractors"])
+        self.blocks, self.status = {}, {}
+
+    def groups(self, provider, mode):
+        key = (provider, mode)
+        if key not in self.blocks:
+            block, source = self.loader(self.dataset.metadata.dataset_id, provider, mode, self.cfg)
+            self.status[f"{provider}/{mode}"] = source if block is not None else f"missing:{source}"
+            self.blocks[key] = None if block is None else {
+                group: decision_summaries(p)
+                for group, p in block_probabilities(block, self.task, len(self.dataset.frame)).items()
+            }
+        return self.blocks[key]
+
+    def confidence(self, provider, modes):
+        values = [top for mode in modes for top, _ in (self.groups(provider, mode) or {}).values()]
+        return row_nanmean(values) if values else np.full(len(self.dataset.frame), np.nan)
+
+    def agreement(self, modes):
+        per_group = []
+        for mode in modes:
+            loaded = {p: self.groups(p, mode) for p in self.roster}
+            names = sorted({g for groups in loaded.values() if groups for g in groups})
+            for group in names:
+                choices = np.stack([
+                    groups[group][1] if groups and group in groups
+                    else np.full(len(self.dataset.frame), UNAVAILABLE)
+                    for groups in loaded.values()
+                ])
+                per_group.append(group_agreement(choices))
+        return (row_nanmean(per_group) if per_group
+                else np.full(len(self.dataset.frame), np.nan))
+
+
+def decision_modes(recipe, feature_set, phase):
+    """Decision modes of a decision arm; None for baselines and embedding arms."""
+    from src.evaluation.aggregate import DECISION_MODES
+
+    mode = DECISION_MODES.get(feature_set)
+    if phase != "experiment_1" or mode is None or not (recipe or {}).get("provider"):
+        return None
+    return ("per_column", "joint") if mode == "both" else (mode,)
+
+
+def decision_summaries(p):
+    """Row max probability and argmax choice; exact top ties abstain, missing rows unavailable."""
+    from src.evaluation.decision_comparison import TIED
+
+    available = np.isfinite(p).all(axis=1)
+    top = np.where(available, np.nanmax(np.where(np.isfinite(p), p, -np.inf), axis=1), np.nan)
+    tied = available & ((p == top[:, None]).sum(axis=1) > 1)
+    choice = np.where(available, np.argmax(np.where(np.isfinite(p), p, -np.inf), axis=1), UNAVAILABLE)
+    return top, np.where(tied, TIED, choice).astype(int)
+
+
+def row_nanmean(arrays):
+    """Per-row mean over the available (finite) values; NaN when none is available."""
+    stack = np.vstack(arrays)
+    present = np.isfinite(stack)
+    total = np.where(present, stack, 0).sum(axis=0)
+    count = present.sum(axis=0)
+    return np.divide(total, count, out=np.full(stack.shape[1], np.nan), where=count > 0)
+
+
+def group_agreement(choices):
+    """Plurality share among available models (rows x models -> rows); < 2 models is NaN."""
+    from src.evaluation.decision_comparison import TIED
+
+    choices = np.asarray(choices)
+    available = choices != UNAVAILABLE
+    n = available.sum(axis=0)
+    options = [c for c in np.unique(choices) if c not in (UNAVAILABLE, TIED)]
+    votes = (
+        np.max(np.stack([(choices == c).sum(axis=0) for c in options]), axis=0)
+        if options else np.zeros(choices.shape[1], dtype=int)
+    )
+    return np.divide(votes, n, out=np.full(choices.shape[1], np.nan), where=n >= 2)
+
+
+def confidence_bands(values):
+    values = np.asarray(values, dtype=float)
+    codes = np.searchsorted(CONFIDENCE_EDGES, np.nan_to_num(values), side="right")
+    return np.where(np.isfinite(values), np.asarray(CONFIDENCE_LABELS)[codes], "missing")
+
+
+def agreement_bands(values):
+    values = np.asarray(values, dtype=float)
+    codes = np.searchsorted(AGREEMENT_EDGES, np.nan_to_num(values), side="right")
+    labels = np.where(values >= 1, AGREEMENT_LABELS[-1], np.asarray(AGREEMENT_LABELS[:-1])[codes])
+    return np.where(np.isfinite(values), labels, "missing")
+
+
+def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_lengths, *,
+                   decision=None):
     for col in ("row_id", "y_true", "text_present", "joint_text_seen_in_train"):
         if not reference[col].equals(augmented[col]):
             raise ValueError("Unmatched held-out rows, labels or overlap indicators")
@@ -85,6 +260,12 @@ def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_
             [0.25, 0.5, 0.75], uncertainty, side="right"
         ).astype(str)
     cohorts["prediction_shift"] = prediction_shift_bands(reference, augmented, classes, variance)
+    if decision is not None:
+        for name in ("confidence", "agreement"):
+            if len(decision[name]) != len(reference):
+                raise ValueError("Decision cohort inputs are misaligned with held-out rows")
+        cohorts["decision_confidence"] = confidence_bands(decision["confidence"])
+        cohorts["decision_agreement"] = agreement_bands(decision["agreement"])
     rows = []
     for axis, memberships in cohorts.items():
         memberships = np.asarray(memberships)
@@ -114,10 +295,18 @@ def outer_record(recipe, phase):
     return json.loads(record.read_text())["metadata"], read_predictions(record)
 
 
-def run(dataset_id):
+def run(dataset_id, *, decision_loader=load_decision_block):
+    """Pair saved predictions; decision arms also join their decision inputs by row ID.
+
+    Decision inputs come from the canonical per-dataset feature store (VSC CPU) or the
+    portable notebook copy (local). Absent artifacts put rows in the "missing" cohort.
+    """
     entry = next(e for e in load_catalog()["datasets"] if e["id"] == dataset_id)
     ds = load_dataset(entry, allow_download=False)
-    spec = shared_splits(ds, seed=load_yaml("experiment_1/main")["random_seed"], folds=5)
+    main = load_yaml("experiment_1/main")
+    spec = shared_splits(ds, seed=main["random_seed"], folds=5)
+    inputs = DecisionInputs(ds, main, loader=decision_loader)
+    decision_rows = {}
     lengths = np.zeros(len(ds.frame))
     present = np.zeros(len(ds.frame), dtype=bool)
     for col in ds.metadata.text_columns:
@@ -191,8 +380,19 @@ def run(dataset_id):
             ):
                 raise ValueError("Prediction rows or class order differ from the frozen dataset")
             variance = None if classes else float(np.var(target.iloc[train].astype(float)))
+            modes = decision_modes(r["representation_recipe"], r["feature_set"], phase)
+            decision = None
+            if modes is not None:
+                provider = r["representation_recipe"]["provider"]
+                if (provider, modes) not in decision_rows:
+                    decision_rows[provider, modes] = (
+                        inputs.confidence(provider, modes), inputs.agreement(modes)
+                    )
+                confidence, agreement = decision_rows[provider, modes]
+                decision = {"confidence": confidence[test], "agreement": agreement[test]}
             rows, edges = paired_cohorts(
-                reference, table, classes, variance, lengths[train], lengths[test]
+                reference, table, classes, variance, lengths[train], lengths[test],
+                decision=decision,
             )
             output.append(
                 dict(
@@ -218,6 +418,13 @@ def run(dataset_id):
             task=ds.metadata.task_type,
             folds=output,
             incomplete_or_unmatched=pending,
+            decision_inputs=dict(sorted(inputs.status.items())),
+            decision_cohorts=dict(
+                confidence_edges=list(CONFIDENCE_EDGES),
+                agreement_edges=list(AGREEMENT_EDGES),
+                agreement_minimum_models=2,
+                ties="exact top-probability ties abstain",
+            ),
         ),
     )
 

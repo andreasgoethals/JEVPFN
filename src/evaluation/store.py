@@ -41,6 +41,8 @@ def connect(path):
             id TEXT PRIMARY KEY, body TEXT NOT NULL, predictions BLOB NOT NULL);
         CREATE TABLE IF NOT EXISTS folds (
             id TEXT PRIMARY KEY, recipe TEXT NOT NULL, records TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS field_attribution (
+            id TEXT PRIMARY KEY, fold_recipe_id TEXT NOT NULL, body TEXT NOT NULL);
     """)
     db.execute("INSERT OR IGNORE INTO metadata VALUES ('schema', ?)", (SCHEMA,))
     db.commit()
@@ -199,6 +201,42 @@ def recipes(phase, *, dataset_id=None):
                 yield json.loads(recipe)
 
 
+def _has_table(db, name):
+    return db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None
+
+
+def save_attribution(body, phase):
+    """Supplementary per-fold field attribution, outside record/fold resume identities."""
+    path = paths.require_project_output(database(body["dataset_id"], phase))
+    key = digest({k: body[k] for k in ("fold_recipe_id", "settings")})
+    with connect(path) as db:
+        try:
+            db.execute(
+                "INSERT INTO field_attribution VALUES (?, ?, ?)",
+                (key, body["fold_recipe_id"], canonical_json(body)),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise FileExistsError("Immutable field attribution already exists") from exc
+    return key
+
+
+def attribution_bodies(phase, *, dataset_id=None):
+    """Stored attribution bodies; stores written before the table existed yield nothing."""
+    if dataset_id is None:
+        files = sorted(paths.results_dir("evaluation", phase=phase).glob("*.sqlite3"))
+    else:
+        path = database(dataset_id, phase)
+        files = [path] if path.is_file() else []
+    for path in files:
+        with readonly(path) as db:
+            if not _has_table(db, "field_attribution"):
+                continue
+            for (body,) in db.execute("SELECT body FROM field_attribution ORDER BY id"):
+                yield json.loads(body)
+
+
 def merge(source, destination):
     """Atomically union immutable records; refuse conflicts without changing destination."""
     with readonly(source) as incoming:
@@ -236,4 +274,20 @@ def merge(source, destination):
                 if prior is not None and prior != row:
                     raise ValueError("Conflicting completed evaluation fold")
                 local.execute("INSERT OR IGNORE INTO folds VALUES (?, ?, ?)", row)
+            if _has_table(incoming, "field_attribution"):
+                for row in incoming.execute("SELECT id, fold_recipe_id, body FROM field_attribution"):
+                    body = json.loads(row[2])
+                    if (
+                        body.get("dataset_id") != Path(destination).stem
+                        or body.get("fold_recipe_id") != row[1]
+                        or digest({k: body.get(k) for k in ("fold_recipe_id", "settings")}) != row[0]
+                    ):
+                        raise ValueError("Invalid incoming field attribution identity")
+                    prior = local.execute(
+                        "SELECT id, fold_recipe_id, body FROM field_attribution WHERE id=?",
+                        (row[0],),
+                    ).fetchone()
+                    if prior is not None and prior != row:
+                        raise ValueError("Conflicting field attribution")
+                    local.execute("INSERT OR IGNORE INTO field_attribution VALUES (?, ?, ?)", row)
     return "merged"

@@ -359,6 +359,13 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         synchronize = torch.cuda.synchronize
     phase = "experiment_0" if profile else arm["phase"]
+    from src.evaluation.attribution import settings_for_phase
+
+    # Structured phases permute feature groups after the final fit; native text is skipped
+    # and that reason is recorded per fold. 0B profiles include the attribution cost.
+    field_attribution = settings_for_phase(
+        load_yaml("experiment_1/protocol")["evaluation"]["field_attribution"], arm["phase"]
+    )
     log = paths.logs_dir(phase) / "benchmark.log"
     append_event(log, "arm_started", **arm)
     try:
@@ -379,6 +386,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             estimator_settings=settings,
             representation_recipe=representation,
             fold_numbers=[0] if profile else None,
+            field_attribution=field_attribution,
         )
     except Exception as exc:
         # Do not record raw text/row values from third-party exception messages.
