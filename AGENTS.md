@@ -1,9 +1,6 @@
 # Agent instructions — JEVPFN
 
-Read [README](README.md), [Experiments](docs/EXPERIMENTS.md), the relevant
-[Literature review](docs/LITERATURE_REVIEW.md) and dated [Operational evidence](docs/AGENTS_MEMORY.md)
-before changing this repository. Follow [TEMPLATE](docs/TEMPLATE.md); project deviations
-are recorded in the README. Preserve unrelated local changes.
+Start with the [README](README.md) and [study configuration](config/). When working in the owner's local checkout, also consult the private manuals in `docs/` for the template, study design, literature and operational history. They are optional local references and must stay outside Git. Preserve unrelated local changes.
 
 ## Authorized work
 

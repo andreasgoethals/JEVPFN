@@ -60,7 +60,6 @@ def test_execution_catalog_and_metric_version_match_implementation():
     )
     for folder in (paths.REPO_ROOT / "config").iterdir():
         assert folder.is_dir() and folder.name in {"general", "rq1", "rq2", "rq3"}
-    assert all(p.stem == p.stem.upper() for p in (paths.REPO_ROOT / "docs").glob("*.md"))
 
 
 def test_citation_matches_project_metadata():
@@ -76,20 +75,21 @@ def test_citation_matches_project_metadata():
     assert citation["license"] == (paths.REPO_ROOT / "LICENSE").read_text().split()[0]
 
 
-def test_durable_document_links_resolve():
-    for file in [paths.REPO_ROOT / "README.md", *(paths.REPO_ROOT / "docs").glob("*.md")]:
-        if file.name == "TEMPLATE.md":
-            continue  # Generic upstream reference contains example-project links.
-        for match in re.finditer(
-            r"\[[^\]]*\]\((<[^>]+>|[^)]+)\)", file.read_text(encoding="utf-8")
-        ):
-            target = match[1].strip("<>").split("#", 1)[0]
-            if target and not re.match(r"[a-z]+:", target):
-                assert (file.parent / unquote(target)).exists(), (file.name, target)
+def test_public_readme_links_resolve_without_private_manuals():
+    root = paths.REPO_ROOT
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    for match in re.finditer(r"\[[^\]]*\]\((<[^>]+>|[^)]+)\)", readme):
+        target = match[1].strip("<>").split("#", 1)[0]
+        if target and not re.match(r"[a-z]+:", target):
+            path = (root / unquote(target)).resolve()
+            assert not path.is_relative_to((root / "docs").resolve()), target
+            assert path.exists(), target
 
 
 def test_sensitive_and_large_artifacts_are_ignored():
     examples = [
+        "docs/TEMPLATE.md",
+        "docs/nested/new-manual.md",
         "data/raw/dataset/data.csv",
         "data/decision_inputs/dataset.sqlite3",
         "data/jev_cache/dataset.sqlite3",

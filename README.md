@@ -18,7 +18,7 @@ RQ2 has **6,156 configurations / 30,780 outer fits**, including 270 appendix mea
 ablations. The four main comparisons contribute 5,886 configurations; historical
 Experiments 1–4 retain their machine identifiers. RQ3 starts with four training pilots
 before a 90-run expansion. These are configured designs, not completed experiments.
-See [Experiments](docs/EXPERIMENTS.md) for counts and qualification gates.
+The [study configuration](config/) defines the comparisons and qualification checks.
 
 Six structured predictors compare features from fifteen extractors. Mammoth-1 and
 Drex Max now have pinned native adapters; their real 0A acceptance is still required.
@@ -36,7 +36,7 @@ eighteen remaining dataset jobs were all submitted and queued on Mindwell at 10:
 GLiDE is locally integrated but still
 needs separate real 0A acceptance and extraction. Jev full coverage remains budget-limited.
 One real TAR pilot and the linear/CatBoost contracts passed; full 0B and the benchmark
-have not passed or run. See [dated evidence](docs/AGENTS_MEMORY.md) for exact IDs and updates.
+have not passed or run.
 
 ## Repository navigation
 
@@ -45,7 +45,6 @@ with one report per experiment. General has three reports: data, features and va
 Scientific results and figures use RQ folders. Existing results require an idle verified
 layout migration; operational extraction, logs and acceptance records retain their paths. Source fingerprints change; completed scientific artifacts and
 recovery references remain intact, and new evaluation code requires fresh 0B evidence.
-[Model choices and evidence](docs/LITERATURE_REVIEW.md) · [Full design](docs/EXPERIMENTS.md)
 
 ## Local setup
 
@@ -71,16 +70,13 @@ Prepare the pinned data and questions, audit the inputs, and run the notebooks.
 Check `$LASTEXITCODE` after each command and stop on failure. These commands do not launch
 paid API calls or VSC inference. Preparation reuses verified downloads.
 `src.jev.preparation --rebuild` regenerates the question stores transactionally while
-preserving paid responses and features. For the full shared package lock and the
-Windows/Linux interpreter difference, see [CPU environment parity](docs/VSC.md#cpu-environment-parity).
+preserving paid responses and features. The [CPU runtime specification](config/general/3.%20experiment_0/control_runtime.yaml) records the shared dependencies.
 
 ## Workflow and outputs
 
 Prepare inputs, qualify them and the runtimes in **0A**, create features, then run **0B**
 on the complete stores and predictor runtimes. Continue with RQ1, RQ2 and RQ3 in that
 order. New controlled probes and Strands training require their own targeted pilot gates.
-The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
-[operational record](docs/AGENTS_MEMORY.md) preserves dated receipts and recovery history.
 
 | Location | Contents |
 |---|---|
@@ -95,8 +91,7 @@ The [VSC runbook](docs/VSC.md) gives commands and acceptance criteria. The
 | `output_JEVPFN/manifests/notebooks/<general-or-rq>/` | Figure registries and notebook execution receipts |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
-containers and results. Native scratch holds temporary working stores. Use the
-[verified export/import workflow](docs/VSC.md#6-utilization-and-transfer) to move results.
+containers and results. Native scratch holds temporary working stores. Transfer results with the [verified export/import tool](src/cluster/transfer.py).
 
 ### Notebooks
 
@@ -121,28 +116,8 @@ Regression uses **nine probabilities per text input**; the mean comparison sits 
 RQ2A appendix. RQ1C specifies 500 random source rows per dataset and one-factor changes.
 RQ3 notebooks currently show plans and pending gates, not trained-model results.
 
-## Documentation
+## Citation and licensing
 
-| Document | Purpose |
-|---|---|
-| [Experiments](docs/EXPERIMENTS.md) | Scientific design, grid, evaluation and qualification gates |
-| [Data sources](docs/DATA_SOURCES.md) | Dataset selection, text rules and question semantics |
-| [Literature review](docs/LITERATURE_REVIEW.md) | Evidence, model choices and interpretation |
-| [TAR](docs/TAR.md) | Upstream provenance and explicit project differences |
-| [VSC operations](docs/VSC.md) | Access, storage, runtimes, commands and recovery |
-| [Operational evidence](docs/AGENTS_MEMORY.md) | Dated results, receipts and unresolved validation |
-| [Changelog](docs/CHANGELOG.md) | Historical implementation changes |
-| [Agent instructions](AGENTS.md) | Authorization boundaries and maintenance rules |
+Use [CITATION.cff](CITATION.cff) to cite this software. The [MIT licence](LICENSE) covers project code. Datasets, model weights and vendored code retain their own licences and attribution.
 
-## Citation, licensing and template
-
-Use [CITATION.cff](CITATION.cff) to cite this software. Project code is [MIT licensed](LICENSE);
-datasets, weights and vendored code retain their own licences and attribution.
-
-The project follows the [research template](docs/TEMPLATE.md) with an approved RQ-based scientific layout and retained numbered operational folders,
-`output_JEVPFN`, project-specific aggregate report names, permanent paid-response stores,
-and separate local/VSC execution gates.
-The project also retains its staging-root/publication interface and its explicit destructive
-output-reset helper. Unlike routine template cleanup, that helper can remove result files;
-use it only for an authorized reset with required backups. Automatic desktop job monitoring is disabled;
-current chat and platform instructions govern any requested monitoring.
+JEVPFN uses the [research project template](https://github.com/andreasgoethals/0.-Template).

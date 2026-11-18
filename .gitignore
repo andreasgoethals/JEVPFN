@@ -68,3 +68,6 @@ kaggle.json
 /secrets/
 /credentials/
 /config/**/*.local.yaml
+
+# Private local manuals.
+/docs/
