@@ -57,10 +57,12 @@ def load_plan(raw: dict | None = None) -> dict:
         raise ValueError("Unknown Exp 8 analysis-plan schema")
     if raw.get("status") not in {STATUS, "approved"}:
         raise ValueError("Exp 8 analysis plan must be proposed before results or approved")
+    # Owner decision (19-11-2026): no moderator is singled out in advance. With an empty
+    # list every moderator is exploratory and BH-adjusted across the whole grid.
     primary = raw.get("primary_moderators") or []
     names = [p["name"] for p in primary]
-    if len(names) != len(set(names)) or not names:
-        raise ValueError("Primary moderators must be unique and non-empty")
+    if len(names) != len(set(names)):
+        raise ValueError("Primary moderators must be unique")
     if raw.get("exploratory_correction") != "benjamini_hochberg_fdr_across_the_exploratory_grid":
         raise ValueError("Exploratory moderators require Benjamini-Hochberg FDR control")
     if not 0 < float(raw.get("fdr_level", 0)) < 1:

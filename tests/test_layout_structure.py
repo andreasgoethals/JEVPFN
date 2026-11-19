@@ -22,7 +22,8 @@ def test_registry_order_folders_and_paper_mapping_default_undecided():
     assert reg.folders == FOLDERS
     assert sorted(FOLDERS) == list(FOLDERS)  # Digits sort before "exp"; exp10 after exp08.
     assert {v["placement"] for v in structure.paper_mapping().values()} == {"undecided"}
-    assert structure.paper_mapping()["exp04"]["rq"] == "RQ2-A"
+    # No RQ grouping yet (owner decision 19-11-2026): placement only.
+    assert structure.paper_mapping()["exp04"] == {"placement": "undecided"}
     for folder in FOLDERS:  # Folder names never encode paper placement.
         assert not any(word in folder for word in ("main", "appendix", "paper"))
 

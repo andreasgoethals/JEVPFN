@@ -269,7 +269,7 @@ def paper_mapping(path: Path | None = None) -> dict[str, dict]:
     reg = registry(path)
     return {
         e.id: {"placement": reg.paper.get(e.id, {}).get("placement", "undecided"),
-               "rq": reg.paper.get(e.id, {}).get("rq")}
+               }
         for e in reg.entries
     }
 

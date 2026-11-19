@@ -127,11 +127,10 @@ def test_unseen_and_free_text_shares_are_label_free():
 # ---------------------------------------------------------------------------- statistics
 
 
-def test_plan_config_is_proposed_before_results_with_four_primaries():
+def test_plan_config_singles_out_no_moderator_in_advance():
     plan = ms.load_plan()
     assert plan["status"] == "proposed_before_results"
-    assert list(ms.primary_columns(plan)) == ["free_text_share", "median_text_length",
-                                              "unseen_text_share", "baseline_headroom"]
+    assert ms.primary_columns(plan) == {}  # Owner decision 19-11-2026.
     broken = copy.deepcopy(plan)
     broken["exploratory_correction"] = "none"
     with pytest.raises(ValueError, match="Benjamini"):
@@ -156,8 +155,19 @@ def test_permutation_p_is_small_for_perfect_and_large_for_null():
     assert np.isnan(ms.permutation_p(x, np.ones(12), n_permutations=10, seed=1))
 
 
-def test_moderator_tests_flag_primary_and_adjust_only_exploratory():
+def test_without_primaries_every_moderator_is_fdr_adjusted():
     plan = {**ms.load_plan(), "n_permutations": 199, "n_boot": 50}
+    gains = aggregate.dataset_gains(_paired())
+    table = ms.moderator_tests(gains, _moderators(gains), plan)
+    assert set(table.role) == {"exploratory"}
+    tested = table[table.p_value.notna()]
+    assert len(tested) and tested.q_value.ge(tested.p_value - 1e-12).all()
+
+
+def test_moderator_tests_flag_primary_and_adjust_only_exploratory():
+    plan = {**ms.load_plan(), "n_permutations": 199, "n_boot": 50,
+            "primary_moderators": [{"name": n, "column": c} for n, c in (("free_text_share", "free_text_share"), ("median_text_length", "median_text_chars"),
+                                                         ("unseen_text_share", "unseen_text_share"), ("baseline_headroom", "baseline_headroom"))]}
     gains = aggregate.dataset_gains(_paired())
     table = ms.moderator_tests(gains, _moderators(gains), plan)
     assert set(table.role) == {"primary", "exploratory"}
@@ -180,7 +190,8 @@ def test_partial_spearman_removes_a_shared_driver():
     w = rng.standard_normal(200)
     assert ms.partial_spearman(w + z, w, z[:, None]) > 0.9
     assert np.isnan(ms.partial_spearman(x[:3], y[:3], z[:3, None]))
-    plan = {**ms.load_plan(), "n_boot": 20}
+    plan = {**ms.load_plan(), "n_boot": 20, "primary_moderators": [{"name": n, "column": c} for n, c in (("free_text_share", "free_text_share"), ("median_text_length", "median_text_chars"),
+                                                         ("unseen_text_share", "unseen_text_share"), ("baseline_headroom", "baseline_headroom"))]}
     gains = aggregate.dataset_gains(_paired())
     table = ms.partial_primary(gains, _moderators(gains), plan)
     assert set(table.moderator) == set(ms.primary_columns(plan))

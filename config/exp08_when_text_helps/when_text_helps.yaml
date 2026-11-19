@@ -12,24 +12,11 @@ outcomes: [gain, raw_gain]
 # The analysed grid: headline representations only (median over decision models per
 # decision mode; each frozen-embedding and TAR recipe), each predictor separately.
 grid: headline_representations
-# Primary moderators: four label-free dataset properties fixed before results. They are
-# reported with Spearman rho, a dataset-bootstrap interval, a permutation p-value without
-# multiplicity adjustment (prespecification is their protection) and a partial Spearman
-# rho controlling for the other three primary moderators.
-primary_moderators:
-  - name: free_text_share
-    column: free_text_share
-    meaning: share of text fields typed long_text or short_text (src.evaluation.field_types)
-  - name: median_text_length
-    column: median_text_chars
-    meaning: median characters over non-missing text cells
-  - name: unseen_text_share
-    column: unseen_text_share
-    meaning: share of text-bearing rows whose joint text occurs in no other row
-  - name: baseline_headroom
-    column: baseline_headroom
-    meaning: 1 minus the same predictor's no-text headline metric
-# Every other numeric moderator from moderators.dataset_moderators is exploratory.
+# No moderator is singled out in advance (owner decision, 19-11-2026): every
+# moderator is reported equally with Spearman rho, a dataset-bootstrap interval and
+# a Benjamini-Hochberg-adjusted permutation p-value across the whole grid.
+primary_moderators: []
+# All numeric moderators from moderators.dataset_moderators are analysed.
 exploratory: all_other_numeric_moderators
 exploratory_correction: benjamini_hochberg_fdr_across_the_exploratory_grid
 fdr_level: 0.10

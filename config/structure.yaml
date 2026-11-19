@@ -121,17 +121,17 @@ planned:
 
 # Paper placement: main | appendix | undecided. Decided later, never by folder name.
 paper:
-  data: {placement: undecided, rq: preparation}
-  exp0a: {placement: undecided, rq: qualification}
-  feature_creation: {placement: undecided, rq: preparation}
-  exp0b: {placement: undecided, rq: qualification}
-  exp01: {placement: undecided, rq: RQ1A}
-  exp02: {placement: undecided, rq: RQ1B}
-  exp03: {placement: undecided, rq: RQ1C}
-  exp04: {placement: undecided, rq: RQ2-A}
-  exp05: {placement: undecided, rq: RQ2-B}
-  exp06: {placement: undecided, rq: RQ2-C}
-  exp07: {placement: undecided, rq: RQ2-D}
-  exp08: {placement: undecided, rq: RQ2-E}
-  exp10: {placement: undecided, rq: RQ3}
-  synthesis: {placement: undecided, rq: cross-experiment}
+  data: {placement: undecided}
+  exp0a: {placement: undecided}
+  feature_creation: {placement: undecided}
+  exp0b: {placement: undecided}
+  exp01: {placement: undecided}
+  exp02: {placement: undecided}
+  exp03: {placement: undecided}
+  exp04: {placement: undecided}
+  exp05: {placement: undecided}
+  exp06: {placement: undecided}
+  exp07: {placement: undecided}
+  exp08: {placement: undecided}
+  exp10: {placement: undecided}
+  synthesis: {placement: undecided}
