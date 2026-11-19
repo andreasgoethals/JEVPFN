@@ -1,0 +1,49 @@
+# Planned paper figures (config/synthesis/paper_figures.yaml) -> owning notebook and saved figure stem(s). Proposed 19-11-2026.
+# Placement (main | appendix | undecided) is decided later and never by folder name; nothing
+# here moves a notebook, figure or result. `figures` are saved-figure stems as written by
+# FigureSaver (files are `NN_<stem>.pdf` under output_JEVPFN/figures/<notebook>/); a trailing
+# `*` matches a family of stems. `status: planned` marks figures whose notebook does not
+# produce them yet. Read by src.utils.paper_figures.
+schema: jevpfn.paper_figures.v1
+proposed: 19-11-2026
+figures:
+- id: fig1_headline_gain
+  title: Headline normalised gain over the no-text baseline
+  notebook: exp04_decision_features
+  section: aggregate
+  figures: [normalized_gain_headline, normalized_gain_decision_modes]
+  placement: undecided
+  status: planned
+  note: Currently rendered by exp08_when_text_helps (cross-representation synthesis); owner to move later.
+- id: fig2_per_predictor_gains_and_compute
+  title: Per-predictor decision-feature effects and compute burden
+  notebook: exp04_decision_features
+  figures: [effect_matrix_experiment_1_*, paired_*, fit_burden]
+  placement: undecided
+  status: planned
+- id: fig3_dataset_and_model_explanations
+  title: When do decision features help - dataset moderators and decision models
+  notebook: exp08_when_text_helps
+  figures: [raw_gain_vs_headroom, decision_models_ranked_*]
+  placement: undecided
+  status: available_when_results_exist
+- id: fig4_fields_rows_complementarity
+  title: Which fields and rows benefit, and complementarity with embeddings
+  notebook: exp08_when_text_helps
+  figures: [row_cohorts_*, row_benefit_complementarity, data_map_*]
+  placement: undecided
+  status: available_when_results_exist
+- id: exp09_representations_panel
+  title: Decision-model representations (label-free decision vectors)
+  notebook: exp09_representations
+  figures: []
+  placement: undecided
+  status: planned
+  note: Exp 9 is reserved in config/structure.yaml (planned_not_implemented); no notebook exists.
+- id: tab_rq3_adaptation
+  title: Supervised Strands adaptation (RQ3)
+  notebook: exp10_adaptation
+  kind: table
+  figures: []
+  placement: undecided
+  status: planned

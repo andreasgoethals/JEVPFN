@@ -5,12 +5,16 @@ Two things, both so the suite behaves the same on a laptop, in CI and on a compu
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: Real trees no test may create, modify or delete a file in (checked over the whole session).
+GUARDED_TREES = ("output_JEVPFN", "data")
 
 # `from src...` without an editable install, so the suite runs on a fresh clone. A suite that
 # half-works depending on whether someone ran `pip install -e .` is a suite people stop trusting.
@@ -64,6 +68,28 @@ def _isolate_routing_environment(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_repository_outputs(request, tmp_path, monkeypatch, _isolate_routing_environment):
+    """Off-cluster every tier collapses into the repository; tests collapse into `tmp_path`.
+
+    Without this, any test that resolves `outputs_dir()`, `logs_dir()` or a notebook folder
+    without setting its own roots writes build logs and stage manifests into the real
+    `output_JEVPFN/`. Explicit `VSC_DATA`/`VSC_SCRATCH`/staging variables still take effect.
+    Tests marked `real_repository_roots` only resolve (never write) the real local roots.
+    """
+    from src.utils import paths
+
+    if request.node.get_closest_marker("real_repository_roots"):
+        return None
+
+    local = tmp_path / "repo_outputs" / paths.PROJECT_NAME
+    monkeypatch.setattr(paths, "data_root", lambda: paths._env_path("VSC_DATA") or local)
+    monkeypatch.setattr(paths, "scratch_root", lambda: paths._env_path("VSC_SCRATCH") or local)
+    monkeypatch.setenv("JEVPFN_LOCAL_STORAGE_ROOT", str(local))
+    monkeypatch.setenv("JEVPFN_NOTEBOOK_SCRATCH", str(tmp_path / "notebook_scratch"))
+    return local
+
+
+@pytest.fixture(autouse=True)
 def _isolate_local_credentials(tmp_path, monkeypatch):
     """Never let synthetic tests read the owner's real, ignored credential file."""
     from src.jev import auth
@@ -98,3 +124,54 @@ def isolated_output(tmp_path, monkeypatch, _isolate_routing_environment):
     vsc_outputs = paths.outputs_dir
     monkeypatch.setattr(paths, "outputs_dir", lambda: vsc_outputs() if paths.on_vsc() else paths.notebook_outputs_dir())
     return tmp_path
+
+
+# ---------------------------------------------------------------------------
+# Session guard: the suite must leave the real output and data trees untouched.
+# ---------------------------------------------------------------------------
+
+
+def _tree_state() -> dict[str, tuple[int, int]]:
+    state = {}
+    for name in GUARDED_TREES:
+        for directory, _, files in os.walk(REPO_ROOT / name):
+            for file in files:
+                path = Path(directory, file)
+                try:
+                    info = path.stat()
+                except OSError:
+                    continue
+                state[path.relative_to(REPO_ROOT).as_posix()] = (info.st_mtime_ns, info.st_size)
+    return state
+
+
+def pytest_sessionstart(session):
+    session.config._jevpfn_tree_state = _tree_state()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    before = getattr(session.config, "_jevpfn_tree_state", None)
+    if before is None:
+        return
+    after = _tree_state()
+    changed = sorted(
+        [f"created  {p}" for p in after.keys() - before.keys()]
+        + [f"deleted  {p}" for p in before.keys() - after.keys()]
+        + [f"modified {p}" for p in before.keys() & after.keys() if before[p] != after[p]]
+    )
+    session.config._jevpfn_tree_changes = changed
+    if changed:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    changed = getattr(config, "_jevpfn_tree_changes", None)
+    if changed is None:
+        return
+    if changed:
+        terminalreporter.write_sep("=", "REAL TREE WRITES DETECTED", red=True)
+        for line in changed:
+            terminalreporter.write_line(line)
+    else:
+        terminalreporter.write_line(
+            f"Write guard: no file under {', '.join(t + '/' for t in GUARDED_TREES)} was created, modified or deleted.")

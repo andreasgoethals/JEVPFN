@@ -1,23 +1,28 @@
 # Physical and human-facing layout of config/, notebooks/ and output_JEVPFN/.
-# Numbering approved by the owner on 18 November 2026.
+# Numbering approved by the owner on 18 November 2026; revised 19 November 2026 (one flat
+# notebook per folder; supervised adaptation renumbered Exp 10, Exp 9 reserved).
 #
 # Folder names only. Internal phase IDs (exploration, question_preparation,
 # feature_creation, experiment_0..4, synthesis, rq1..rq3, regression_readout) remain the
 # keys of hashes, recipes, receipts and manifests and are never renamed here.
 # Each internal phase has one home folder (`phases`, the first listed phase owns the
 # folder's output tree); `routes` send named sub-trees of a phase to another folder.
-# `nested` gives a retired phase a sub-folder of its home. Notebook IDs are
-# `<folder>/<name>`; `legacy` lists the previous IDs, kept as aliases.
+# `nested` gives a retired phase a sub-folder of its home. Each folder has at most one
+# notebook, `notebooks/<folder>.ipynb`, whose ID is the folder name; `legacy` lists previous
+# notebook IDs (aliases whose records move to the folder) and `merged` lists previous IDs
+# combined into this notebook (aliases whose records are archived, since several cannot
+# share one record folder). `previous_folders` are earlier names of the same folder.
+# `planned` reserves an experiment number without creating any folder.
 # Paper placement is decided separately under `paper:` and never encoded in a folder.
-schema: jevpfn.structure.v1
+schema: jevpfn.structure.v2
 approved: 18-11-2026
+revised: 19-11-2026
 entries:
 - id: data
   folder: 00_data
   title: Data exploration and question preparation
   phases: [question_preparation, exploration]
-  notebooks:
-    data: {phase: exploration, legacy: [general/01_data]}
+  notebook: {phase: exploration, legacy: [general/01_data, 00_data/data]}
   configs: [audit, datasets, dataset_semantics, question_design, question_preparation]
 - id: exp0a
   folder: 01_exp0a
@@ -29,92 +34,90 @@ entries:
   folder: 02_feature_creation
   title: Feature creation
   phases: [feature_creation]
-  notebooks:
-    features: {phase: feature_creation, legacy: [general/02_features]}
+  notebook: {phase: feature_creation, legacy: [general/02_features, 02_feature_creation/features]}
   configs: [feature_creation, approved_additions, decision_pilot, embedding_models,
-            extractors, feature_comparison, text_embeddings]
+            extractors, feature_comparison, model_properties, text_embeddings]
 - id: exp0b
   folder: 03_exp0b
   title: Experiment 0B, qualification after feature creation
   routes:
     experiment_0: [manifests/after_extraction, logs/after_extraction, manifests/reports.json,
                    All Results.md]
-  notebooks:
-    validation: {phase: experiment_0, legacy: [general/03_validation]}
+  notebook: {phase: experiment_0, legacy: [general/03_validation, 03_exp0b/validation]}
 - id: exp01
   folder: exp01_outputs
   title: Decision outputs and context
   phases: [rq1]
   routes:
     rq1: [results/outputs]
-  notebooks:
-    outputs: {phase: rq1, legacy: [rq1/01_outputs]}
+  notebook: {phase: rq1, legacy: [rq1/01_outputs, exp01_outputs/outputs]}
 - id: exp02
   folder: exp02_robustness
   title: Controlled presentation robustness
   routes:
     rq1: [results/robustness, results/hosted_ledgers]
-  notebooks:
-    robustness: {phase: rq1, legacy: [rq1/02_robustness]}
+  notebook: {phase: rq1, legacy: [rq1/02_robustness, exp02_robustness/robustness]}
   configs: [behavior, question_versions.csv]
 - id: exp03
   folder: exp03_geometry
   title: Decision and encoder geometry
   routes:
     rq1: [results/geometry, results/geometry_pilots]
-  notebooks:
-    geometry: {phase: rq1, legacy: [rq1/03_geometry]}
+  notebook: {phase: rq1, legacy: [rq1/03_geometry, exp03_geometry/geometry]}
   configs: [geometry]
 - id: exp04
   folder: exp04_decision_features
   title: Decision features in fixed predictors
   phases: [experiment_1]
   nested: {regression_readout: regression_readout}
-  notebooks:
-    decisions: {phase: experiment_1, legacy: [rq2/01_decisions]}
+  notebook: {phase: experiment_1, legacy: [rq2/01_decisions, exp04_decision_features/decisions]}
   configs: [main, models, protocol]
 - id: exp05
   folder: exp05_frozen_embeddings
   title: Frozen text embeddings
   phases: [experiment_2]
-  notebooks:
-    embeddings: {phase: experiment_2, legacy: [rq2/02_embeddings]}
+  notebook: {phase: experiment_2, legacy: [rq2/02_embeddings, exp05_frozen_embeddings/embeddings]}
   configs: [embeddings]
 - id: exp06
   folder: exp06_tar
   title: Target-aware embeddings (TAR)
   phases: [experiment_3]
-  notebooks:
-    tar: {phase: experiment_3, legacy: [rq2/03_tar]}
+  notebook: {phase: experiment_3, legacy: [rq2/03_tar, exp06_tar/tar]}
   configs: [tar]
 - id: exp07
   folder: exp07_native_text
   title: Native-text systems
   phases: [experiment_4]
-  notebooks:
-    native: {phase: experiment_4, legacy: [rq2/04_native]}
+  notebook: {phase: experiment_4, legacy: [rq2/04_native, exp07_native_text/native]}
   configs: [native_text]
 - id: exp08
   folder: exp08_when_text_helps
   title: When decision features help
   phases: [rq2]
-  notebooks:
-    when_text_helps: {phase: rq2, legacy: [rq2/05_when_text_helps]}
-- id: exp09
-  folder: exp09_adaptation
+  notebook: {phase: rq2, legacy: [rq2/05_when_text_helps, exp08_when_text_helps/when_text_helps]}
+  configs: [when_text_helps]
+- id: exp10
+  folder: exp10_adaptation
+  previous_folders: [exp09_adaptation]
   title: Supervised Strands adaptation
   phases: [rq3]
-  notebooks:
-    01_calibration: {phase: rq3, legacy: [rq3/01_calibration]}
-    02_head: {phase: rq3, legacy: [rq3/02_head]}
-    03_lora: {phase: rq3, legacy: [rq3/03_lora]}
-    04_full: {phase: rq3, legacy: [rq3/04_full]}
+  notebook:
+    phase: rq3
+    merged: [exp09_adaptation/01_calibration, exp09_adaptation/02_head, exp09_adaptation/03_lora,
+             exp09_adaptation/04_full, rq3/01_calibration, rq3/02_head, rq3/03_lora, rq3/04_full]
   configs: [adaptation]
 - id: synthesis
   folder: synthesis
   title: Cross-experiment synthesis and paper figures
   phases: [synthesis]
-  configs: [analysis]
+  configs: [analysis, paper_figures]
+
+# Reserved experiment numbers: documented, never given a folder until implemented.
+planned:
+- id: exp09
+  folder: exp09_representations
+  title: Decision-model representations (label-free decision vectors)
+  status: planned_not_implemented
 
 # Paper placement: main | appendix | undecided. Decided later, never by folder name.
 paper:
@@ -130,5 +133,5 @@ paper:
   exp06: {placement: undecided, rq: RQ2-C}
   exp07: {placement: undecided, rq: RQ2-D}
   exp08: {placement: undecided, rq: RQ2-E}
-  exp09: {placement: undecided, rq: RQ3}
+  exp10: {placement: undecided, rq: RQ3}
   synthesis: {placement: undecided, rq: cross-experiment}

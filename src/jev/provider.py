@@ -22,6 +22,7 @@ PROBABILITY_VALIDATION_VERSION = "jev-two-decimal-simplex-v1"
 # policy applies to another runtime, and neither reconstructs lost precision.
 # Mammoth qev.answers rounds all public probabilities to six decimal places.
 ROUNDING_DECIMALS = {"jev": 2, "strands": 4, "mammoth": 6}
+LIQUID_ULTRA = "liquid_ultra"  # Hosted Liquid adapter: src.jev.liquid_hosted.
 
 
 def _rounding_half_step(values, provider):
@@ -132,6 +133,10 @@ def api_preview(request: IntendedRequest) -> dict:
     payload = json.loads(request.payload_json)
     require_nonempty_text(payload)
     settings = json.loads(request.settings_json)
+    if settings.get("provider") == LIQUID_ULTRA:
+        from src.jev.liquid_hosted import api_preview as liquid_preview
+
+        return liquid_preview(request)
     if settings.get("provider") != "jev":
         raise ValueError("This response/request adapter supports Jev only")
     if not settings["version"] or settings["model"] != f"jev-{settings['version']}":
@@ -192,7 +197,9 @@ def response_features(request: IntendedRequest, response: dict) -> dict[str, flo
     """Decode responses with only provider-specific bounded rounding correction."""
     settings = json.loads(request.settings_json)
     provider = settings.get("provider", "jev")
-    if provider == "jev":
+    if provider in {"jev", LIQUID_ULTRA}:
+        # Hosted Liquid shares the documented Noul/Choice/Score answer schema; its
+        # unknown rounding gets no envelope, so the strict sum/score checks apply.
         wire = api_preview(request)
     else:
         from src.jev.catalog import SELF_HOSTED

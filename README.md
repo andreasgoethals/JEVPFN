@@ -50,8 +50,12 @@ One registry, [`config/structure.yaml`](config/structure.yaml), names every fold
 | `exp01_outputs` … `exp03_geometry` | Decision outputs, robustness, geometry | `rq1`, routed by study |
 | `exp04_decision_features` … `exp07_native_text` | Decision features, frozen embeddings, TAR, native text | `experiment_1` … `experiment_4` |
 | `exp08_when_text_helps` | When decision features help | `rq2` |
-| `exp09_adaptation` | Supervised Strands adaptation | `rq3` |
+| `exp10_adaptation` | Supervised Strands adaptation (Exp 10) | `rq3` |
 | `synthesis` | Cross-experiment synthesis and paper figures | `synthesis` |
+
+Exp 9 is reserved for decision-model representations (label-free decision vectors); it is
+planned, not implemented, and has no folder yet. Each folder has at most one notebook,
+`notebooks/<folder>.ipynb`.
 
 Internal phase IDs stay the keys of hashes, recipes, receipts and manifests; previous config
 keys (`experiment_1/main`, `rq1/behavior`) remain aliases. Paper placement is recorded under
@@ -99,7 +103,7 @@ order. New controlled probes and Strands training require their own targeted pil
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
 | `output_JEVPFN/<folder>/{logs,manifests}/` | Operational validation evidence and logs |
 | `output_JEVPFN/<folder>/results/` | PCA, TAR, study and resumable benchmark records |
-| `output_JEVPFN/figures/<folder>/<notebook>/` | Paper figures, with combined captions in `figures/Captions.md` |
+| `output_JEVPFN/figures/<folder>/` | Paper figures of that folder's notebook, with combined captions in `figures/Captions.md` |
 | `output_JEVPFN/manifests/notebooks/<folder>/` | Figure registries and notebook execution receipts |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
@@ -121,13 +125,14 @@ Only extractors with both feature blocks on all 18 datasets enter the comparison
 
 | Stage | Notebooks |
 |---|---|
-| Preparation and qualification | [Data](notebooks/00_data/data.ipynb), [Features](notebooks/02_feature_creation/features.ipynb), [0B validation](notebooks/03_exp0b/validation.ipynb) |
-| Exp 1–3 (RQ1) | [Outputs](notebooks/exp01_outputs/outputs.ipynb), [Robustness](notebooks/exp02_robustness/robustness.ipynb), [Geometry](notebooks/exp03_geometry/geometry.ipynb) |
-| Exp 4–8 (RQ2) | [Decisions](notebooks/exp04_decision_features/decisions.ipynb), [Embeddings](notebooks/exp05_frozen_embeddings/embeddings.ipynb), [TAR](notebooks/exp06_tar/tar.ipynb), [Native text](notebooks/exp07_native_text/native.ipynb), [When decision features help](notebooks/exp08_when_text_helps/when_text_helps.ipynb) |
-| Exp 9 (RQ3) | [Calibration](notebooks/exp09_adaptation/01_calibration.ipynb), [Decision head](notebooks/exp09_adaptation/02_head.ipynb), [LoRA](notebooks/exp09_adaptation/03_lora.ipynb), [Full adaptation](notebooks/exp09_adaptation/04_full.ipynb) |
+| Preparation and qualification | [Data](notebooks/00_data.ipynb), [Features](notebooks/02_feature_creation.ipynb), [0B validation](notebooks/03_exp0b.ipynb) |
+| Exp 1–3 (RQ1) | [Outputs](notebooks/exp01_outputs.ipynb), [Robustness](notebooks/exp02_robustness.ipynb), [Geometry](notebooks/exp03_geometry.ipynb) |
+| Exp 4–8 (RQ2) | [Decisions](notebooks/exp04_decision_features.ipynb), [Embeddings](notebooks/exp05_frozen_embeddings.ipynb), [TAR](notebooks/exp06_tar.ipynb), [Native text](notebooks/exp07_native_text.ipynb), [When decision features help](notebooks/exp08_when_text_helps.ipynb) |
+| Exp 9 | Decision-model representations: planned, not implemented |
+| Exp 10 (RQ3) | [Adaptation](notebooks/exp10_adaptation.ipynb): calibration, decision head, LoRA and full adaptation in one notebook |
 
 Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 texts per dataset/field.
-RQ3 notebooks currently show plans and pending gates, not trained-model results.
+The RQ3 notebook currently shows plans and pending gates, not trained-model results.
 
 ## Citation and licensing
 

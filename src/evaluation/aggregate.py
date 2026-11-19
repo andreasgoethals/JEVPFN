@@ -38,7 +38,7 @@ SUMMARY_COLUMNS = [
 DATASET_COLUMNS = [
     "model_id", "checkpoint_id", "family", "aggregation", "representation", "feature_set",
     "provider", "encoder", "pca_scope", "pca_components", "dataset_id", "task_type",
-    "baseline", "augmented", "gain", "decision_models",
+    "baseline", "augmented", "gain", "decision_models", "raw_gain", "gain_variance",
 ]
 RANKING_COLUMNS = ["model_a", "model_b", "n_representations", "kendall_tau_b"]
 _KEYS = ["family", "aggregation", "representation", "feature_set", "provider", "encoder",
@@ -59,7 +59,14 @@ def _representation(row):
 
 
 def dataset_gains(paired, *, eps=1e-3):
-    """One normalised gain per predictor, representation and dataset with five paired folds."""
+    """One normalised gain per predictor, representation and dataset with five paired folds.
+
+    ``raw_gain`` is the unnormalised five-fold mean difference (augmented − baseline).
+    ``gain_variance`` is an approximate within-dataset sampling variance of ``gain``: the
+    variance over the five fold differences divided by five and by the squared headroom.
+    Outer folds share training rows, so this treats correlated folds as independent and
+    understates the true variance; it serves only as a meta-analysis weight.
+    """
     if paired.empty:
         return pd.DataFrame(columns=DATASET_COLUMNS)
     data = paired[paired.phase.isin(FAMILIES) & paired.metric.eq(paired.task_type.map(HEADLINES))]
@@ -78,10 +85,11 @@ def dataset_gains(paired, *, eps=1e-3):
     keys = ["phase", "model_id", "checkpoint_id", "dataset_id", "task_type", "split_id",
             "feature_set", "provider", "encoder", "pca_scope", "pca_components", "arm_id"]
     keys += [k for k in ("view",) if k in data]
+    data = data.assign(_fold_difference=data.value - data.non_text_value)
     arms = data.groupby(keys, dropna=False).agg(
         augmented=("value", "mean"), baseline=("non_text_value", "mean"),
         defined=("value", "count"), defined_baseline=("non_text_value", "count"),
-        folds=("outer_fold", "nunique"),
+        folds=("outer_fold", "nunique"), fold_difference_var=("_fold_difference", "var"),
     ).reset_index()
     # Arms lacking five defined, paired folds are excluded rather than partially averaged.
     arms = arms[arms.defined.eq(5) & arms.defined_baseline.eq(5) & arms.folds.eq(5)].copy()
@@ -94,6 +102,8 @@ def dataset_gains(paired, *, eps=1e-3):
         raise ValueError("Multiple arms/splits/views for one dataset and representation; select one campaign")
     headroom = np.maximum(1.0 - arms.baseline, eps)
     arms["gain"] = (arms.augmented - arms.baseline) / headroom
+    arms["raw_gain"] = arms.augmented - arms.baseline
+    arms["gain_variance"] = arms.fold_difference_var / 5 / headroom**2
     arms["decision_models"] = np.where(arms.family.eq("decision"), 1, np.nan)
     rows = arms[DATASET_COLUMNS].copy()
     per_model = rows[rows.family.eq("decision")]
@@ -105,8 +115,21 @@ def dataset_gains(paired, *, eps=1e-3):
                                     "task_type"], dropna=False).agg(
             gain=("gain", "median"), baseline=("baseline", "first"),
             augmented=("augmented", "median"), decision_models=("provider", "nunique"),
+            raw_gain=("raw_gain", "median"),
         ).reset_index().join(required, on=["model_id", "feature_set"])
         median = median[median.decision_models.eq(median.required)].drop(columns="required")
+        # Fold-level medians over decision models give the median arm's own fold variance.
+        ident = ["model_id", "dataset_id", "split_id", "arm_id"]
+        complete = pd.MultiIndex.from_frame(arms.loc[arms.family.eq("decision"), ident])
+        fold_rows = data[pd.MultiIndex.from_frame(data[ident]).isin(complete)]
+        per_fold = (fold_rows.groupby(["model_id", "checkpoint_id", "feature_set", "dataset_id",
+                                       "outer_fold"], dropna=False)._fold_difference.median()
+                    .groupby(["model_id", "checkpoint_id", "feature_set", "dataset_id"],
+                             dropna=False).var().rename("fold_difference_var").reset_index())
+        median = median.merge(per_fold, on=["model_id", "checkpoint_id", "feature_set",
+                                            "dataset_id"], how="left")
+        median["gain_variance"] = (median.fold_difference_var / 5
+                                   / np.maximum(1.0 - median.baseline, eps) ** 2)
         median = median.assign(family="decision", aggregation=MEDIAN, provider=None, encoder=None,
                                pca_scope=None, pca_components=np.nan)
         median["representation"] = "decision/" + median.feature_set.map(DECISION_MODES) + "/median"

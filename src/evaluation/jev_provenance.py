@@ -1,6 +1,6 @@
-"""Dated version and replay evidence for the hosted Jev model, which can change over time.
+"""Dated version and replay evidence for hosted decision models (default Jev), which can change.
 
-Read-only over the local Jev stores; never calls the API and never reads credentials.
+Read-only over the local hosted stores; never calls the API and never reads credentials.
 
 * version ledger: per dataset, requested version x server-reported model, with response
   counts and the first/last response time; flags any request answered by another model.
@@ -8,7 +8,7 @@ Read-only over the local Jev stores; never calls the API and never reads credent
   ("repeat") next to the original ("base"); report the largest probability change per case,
   within each round (replay noise) and between rounds of different versions (version drift).
 
-    python -m src.evaluation.jev_provenance --output PATH.json
+    python -m src.evaluation.jev_provenance --output PATH.json [--provider liquid_ultra]
 """
 
 from __future__ import annotations
@@ -23,25 +23,34 @@ import pandas as pd
 
 from src.utils import paths
 
+#: Hosted providers: store folder under jev_cache and the model a pinned version must report.
+#: Jev pins "1.14.0" and reports "jev-1.14.0"; Liquid pins "d1.2-ultra@<release_date>"
+#: (src.jev.liquid_hosted) and its response reports only "d1.2-ultra".
+HOSTED_PROVIDERS = {
+    "jev": ("", lambda version: f"jev-{version}"),
+    "liquid_ultra": ("liquid_ultra_cache", lambda version: str(version).split("@", 1)[0]),
+}
+
 
 def _stores(root: Path):
     return sorted(p for p in root.glob("*.sqlite3") if p.is_file())
 
 
-def version_ledger(root: Path | None = None) -> pd.DataFrame:
-    root = Path(root or paths.data_root() / "data" / "jev_cache")
+def version_ledger(root: Path | None = None, provider: str = "jev") -> pd.DataFrame:
+    folder, expected_model = HOSTED_PROVIDERS[provider]
+    root = Path(root or paths.data_root() / "data" / "jev_cache" / folder)
     rows = []
     for store in _stores(root):
         with closing(sqlite3.connect(store.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             for kind, requested, reported, count, first, last in db.execute(
                 "SELECT kind, json_extract(settings_json,'$.version'), json_extract(response_json,'$.model'),"
                 " COUNT(*), MIN(created_at), MAX(created_at) FROM responses"
-                " WHERE json_extract(settings_json,'$.provider')='jev' GROUP BY 1,2,3"
+                " WHERE json_extract(settings_json,'$.provider')=? GROUP BY 1,2,3", (provider,)
             ):
                 rows.append({"dataset_id": store.stem, "kind": kind, "requested_version": requested,
                              "reported_model": reported, "responses": count,
                              "first_response_utc": first, "last_response_utc": last,
-                             "version_mismatch": reported != f"jev-{requested}"})
+                             "version_mismatch": reported != expected_model(requested)})
     return pd.DataFrame(rows)
 
 
@@ -111,11 +120,12 @@ def version_drift(replays: pd.DataFrame, root: Path | None = None) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
-def report() -> dict:
-    ledger = version_ledger()
-    replays = replay_evidence()
+def report(provider: str = "jev") -> dict:
+    ledger = version_ledger(provider=provider)
+    # Replay rounds exist only for Jev's saved robustness suites.
+    replays = replay_evidence() if provider == "jev" else pd.DataFrame()
     drift = version_drift(replays)
-    return {
+    body = {
         "schema": "jevpfn.jev-provenance.v1",
         "versions": ledger.groupby(["requested_version", "reported_model"], dropna=False)
         .agg(responses=("responses", "sum"), datasets=("dataset_id", "nunique"),
@@ -129,15 +139,19 @@ def report() -> dict:
         "interpretation": "Dated responses per server-reported version; replay rows are identical "
                           "synthetic requests re-sent within a round; drift rows compare versions.",
     }
+    if provider != "jev":
+        body["provider"] = provider
+    return body
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--provider", choices=tuple(HOSTED_PROVIDERS), default="jev")
     args = parser.parse_args()
     from src.utils.serialization import write_json
 
-    body = report()
+    body = report(args.provider)
     write_json(args.output, body)
     print(json.dumps({"versions": body["versions"], "version_mismatches": body["version_mismatches"],
                       "replays": len(body["replays"]), "version_drift": len(body["version_drift"])},

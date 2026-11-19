@@ -1,4 +1,4 @@
-"""The 18-11-2026 layout registry, its aliases and the checksum-verified tree migration."""
+"""The layout registry (18-11-2026, revised 19-11-2026), its aliases and the verified tree migration."""
 
 import json
 import sqlite3
@@ -14,13 +14,13 @@ from src.utils.serialization import file_sha256
 FOLDERS = ("00_data", "01_exp0a", "02_feature_creation", "03_exp0b", "exp01_outputs",
            "exp02_robustness", "exp03_geometry", "exp04_decision_features",
            "exp05_frozen_embeddings", "exp06_tar", "exp07_native_text",
-           "exp08_when_text_helps", "exp09_adaptation", "synthesis")
+           "exp08_when_text_helps", "exp10_adaptation", "synthesis")
 
 
 def test_registry_order_folders_and_paper_mapping_default_undecided():
     reg = structure.registry()
     assert reg.folders == FOLDERS
-    assert sorted(FOLDERS) == list(FOLDERS)  # Digits sort before "exp"; no exp10 yet.
+    assert sorted(FOLDERS) == list(FOLDERS)  # Digits sort before "exp"; exp10 after exp08.
     assert {v["placement"] for v in structure.paper_mapping().values()} == {"undecided"}
     assert structure.paper_mapping()["exp04"]["rq"] == "RQ2-A"
     for folder in FOLDERS:  # Folder names never encode paper placement.
@@ -34,13 +34,14 @@ def test_internal_phase_identities_are_unchanged_and_homed_once():
         "feature_creation": "02_feature_creation", "experiment_0": "01_exp0a",
         "experiment_1": "exp04_decision_features", "experiment_2": "exp05_frozen_embeddings",
         "experiment_3": "exp06_tar", "experiment_4": "exp07_native_text", "synthesis": "synthesis",
-        "rq1": "exp01_outputs", "rq2": "exp08_when_text_helps", "rq3": "exp09_adaptation",
+        "rq1": "exp01_outputs", "rq2": "exp08_when_text_helps", "rq3": "exp10_adaptation",
         "regression_readout": "exp04_decision_features/regression_readout",
     }
     # Previous numbered folders and new folder names remain accepted phase aliases.
     assert paths.phase_name("3. experiment_0") == "experiment_0"
     assert paths.phase_name("03_exp0b") == "experiment_0"
     assert paths.phase_name("exp06_tar") == "experiment_3"
+    assert paths.phase_name("exp09_adaptation") == "rq3"  # Previous folder name of Exp 10.
     with pytest.raises(ValueError):
         paths.phase_name("9. experiment_1")
 
@@ -73,7 +74,8 @@ def test_routes_split_experiment_0_and_rq1_by_subtree():
     ("audit", "00_data/audit.yaml"),
     ("rq1/behavior", "exp02_robustness/behavior.yaml"),
     ("rq1/geometry", "exp03_geometry/geometry.yaml"),
-    ("rq3/adaptation", "exp09_adaptation/adaptation.yaml"),
+    ("rq3/adaptation", "exp10_adaptation/adaptation.yaml"),
+    ("exp09_adaptation/adaptation", "exp10_adaptation/adaptation.yaml"),
     ("structure", "structure.yaml"),
 ])
 def test_config_aliases_resolve_to_registry_files(key, expected):
@@ -100,22 +102,38 @@ def test_config_tree_and_notebooks_follow_registry():
     config = paths.REPO_ROOT / "config"
     assert {p.name for p in config.iterdir() if p.is_dir()} == {
         e.folder for e in structure.registry().entries if e.configs}
-    found = sorted(p.relative_to(paths.notebooks_dir()).with_suffix("").as_posix()
-                   for p in paths.notebooks_dir().rglob("*.ipynb") if ".ipynb_checkpoints" not in p.parts)
+    notebooks = paths.notebooks_dir()
+    assert not [p for p in notebooks.iterdir() if p.is_dir() and p.name != ".ipynb_checkpoints"]
+    found = sorted(p.stem for p in notebooks.glob("*.ipynb"))
     assert found == sorted(n.id for n in structure.registry().notebooks)
-    assert len(structure.registry().entry("exp09").notebooks) == 4
+    assert all(n.id == n.folder == n.name for n in structure.registry().notebooks)
+    assert len(structure.registry().entry("exp10").notebooks) == 1
+
+
+def test_planned_experiment_nine_is_reserved_without_a_folder():
+    reg = structure.registry()
+    planned = {p.id: p for p in reg.planned}
+    assert planned["exp09"].folder == "exp09_representations"
+    assert planned["exp09"].status == "planned_not_implemented"
+    assert "exp09_representations" not in reg.folders
+    for root in (paths.REPO_ROOT / "config", paths.notebooks_dir()):
+        assert not list(root.glob("exp09*"))
+    assert reg.previous_folders == {"exp09_adaptation": "exp10_adaptation"}
 
 
 def test_notebook_ids_aliases_and_figure_folders():
-    assert paths.notebook_id("rq2/01_decisions") == "exp04_decision_features/decisions"
-    assert paths.notebook_id("general/03_validation") == "03_exp0b/validation"
-    assert paths.notebook_phase("exp04_decision_features/decisions") == "experiment_1"
+    assert paths.notebook_id("rq2/01_decisions") == "exp04_decision_features"
+    assert paths.notebook_id("exp04_decision_features/decisions") == "exp04_decision_features"
+    assert paths.notebook_id("general/03_validation") == "03_exp0b"
+    assert paths.notebook_id("exp09_adaptation/02_head") == "exp10_adaptation"
+    assert paths.notebook_id("rq3/04_full") == "exp10_adaptation"
+    assert paths.notebook_phase("exp04_decision_features") == "experiment_1"
     assert paths.notebook_phase("rq2/01_decisions") == "experiment_1"
-    assert paths.figures_dir("rq2/01_decisions").parts[-3:] == (
-        "figures", "exp04_decision_features", "decisions")
-    assert paths.figures_dir("exp09_adaptation/02_head").parts[-2:] == ("exp09_adaptation", "02_head")
-    assert paths.notebook_artifacts("03_exp0b/validation", kind="logs").parts[-4:] == (
-        "logs", "notebooks", "03_exp0b", "validation")
+    assert paths.figures_dir("rq2/01_decisions").parts[-2:] == ("figures", "exp04_decision_features")
+    assert paths.figures_dir("exp10_adaptation").parts[-2:] == ("figures", "exp10_adaptation")
+    assert paths.figures_dir("exp09_adaptation/02_head") == paths.figures_dir("exp10_adaptation")
+    assert paths.notebook_artifacts("03_exp0b", kind="logs").parts[-3:] == (
+        "logs", "notebooks", "03_exp0b")
     assert paths.captions_path("experiment_1").parts[-3:] == (
         "figures", "exp04_decision_features", "Captions.md")
     assert paths.all_results_path("03_exp0b").parts[-2:] == ("03_exp0b", "All Results.md")
@@ -138,17 +156,31 @@ def test_notebook_ids_aliases_and_figure_folders():
     ("rq1/results/robustness/D/p/a.json", "exp02_robustness/results/robustness/D/p/a.json"),
     ("rq1/results/geometry/D.json", "exp03_geometry/results/geometry/D.json"),
     ("rq1/logs/x.log", "exp01_outputs/logs/x.log"),
-    ("rq3/results/a", "exp09_adaptation/results/a"),
-    ("figures/rq2/01_decisions/a.pdf", "figures/exp04_decision_features/decisions/a.pdf"),
+    ("rq3/results/a", "exp10_adaptation/results/a"),
+    ("figures/rq2/01_decisions/a.pdf", "figures/exp04_decision_features/a.pdf"),
     ("figures/4. experiment_1/Captions.md", "figures/exp04_decision_features/Captions.md"),
-    ("logs/notebooks/general/01_data/stdout.log", "logs/notebooks/00_data/data/stdout.log"),
+    ("logs/notebooks/general/01_data/stdout.log", "logs/notebooks/00_data/stdout.log"),
+    # 19-11-2026: flat notebook records, Exp 9 -> Exp 10, merged adaptation notebooks archived.
+    ("figures/exp04_decision_features/decisions/a.pdf", "figures/exp04_decision_features/a.pdf"),
+    ("manifests/notebooks/exp01_outputs/outputs/_figures.json",
+     "manifests/notebooks/exp01_outputs/_figures.json"),
+    ("results/notebooks/exp01_outputs/outputs/tables/pairs.csv",
+     "results/notebooks/exp01_outputs/tables/pairs.csv"),
+    ("exp09_adaptation/All Results.md", "exp10_adaptation/All Results.md"),
+    ("exp09_adaptation/manifests/reports.json", "exp10_adaptation/manifests/reports.json"),
+    ("figures/exp09_adaptation/Captions.md", "figures/exp10_adaptation/Captions.md"),
+    ("figures/exp09_adaptation/02_head/a.pdf",
+     "archives/layout_20261119/figures/exp09_adaptation/02_head/a.pdf"),
+    ("logs/notebooks/exp09_adaptation/01_calibration/stdout.log",
+     "archives/layout_20261119/logs/notebooks/exp09_adaptation/01_calibration/stdout.log"),
     ("figures/rq1/rq1_behavior/a.pdf", "archives/layout_20261118/figures/rq1/rq1_behavior/a.pdf"),
     # Current paths are fixed points; a current path in a routed folder re-routes correctly.
     ("01_exp0a/manifests/a.json", "01_exp0a/manifests/a.json"),
     ("exp02_robustness/All Results.md", "exp02_robustness/All Results.md"),
     ("exp03_geometry/manifests/reports.json", "exp03_geometry/manifests/reports.json"),
     ("03_exp0b/manifests/before_extraction/a.json", "01_exp0a/manifests/before_extraction/a.json"),
-    ("figures/exp04_decision_features/decisions/a.pdf", "figures/exp04_decision_features/decisions/a.pdf"),
+    ("figures/exp04_decision_features/a.pdf", "figures/exp04_decision_features/a.pdf"),
+    ("figures/exp10_adaptation/Captions.md", "figures/exp10_adaptation/Captions.md"),
     ("figures/Captions.md", "figures/Captions.md"),
     ("All Results.md", "All Results.md"),
 ])
@@ -184,12 +216,17 @@ def _legacy_tree(tmp_path):
         "rq1/results/geometry/D.json": b"geo",
         "figures/rq2/01_decisions/a.pdf": b"%PDF",
         "figures/general/01_data_exploration/old.pdf": b"%PDF-old",
+        "exp09_adaptation/All Results.md": b"# rq3",
+        "figures/exp09_adaptation/Captions.md": b"# captions",
+        "figures/exp09_adaptation/01_calibration/c.pdf": b"%PDF-c",
+        "figures/exp03_geometry/Captions.md": b"# geometry",
         "transfers/bundle.zip": b"bundle",
         "All Results.md": b"# all",
     }
     for relative, content in files.items():
         _write(root, relative, content)
     (root / "3. experiment_0/manifests/event_locks/builds").mkdir(parents=True)
+    (root / "figures/exp03_geometry/geometry").mkdir(parents=True)  # Empty previous record dir.
     with closing(sqlite3.connect(root / "rq2/5. experiment_2/results/pca/e5/D.sqlite3")) as db:
         db.execute("create table t(x)")
         db.commit()
@@ -207,7 +244,8 @@ def test_migration_previews_by_default_then_moves_with_verified_receipt(tmp_path
 
     receipt = layout_migration.migrate(root, writers_stopped=True)
     assert receipt["verified"] and receipt["deleted_files"] == 0
-    assert receipt["file_count"] == len(before) - 2  # transfers/ and All Results.md stay put.
+    # transfers/, All Results.md and a current folder's Captions.md stay put.
+    assert receipt["file_count"] == len(before) - 3
     after = {p.relative_to(root).as_posix(): file_sha256(p) for p in root.rglob("*")
              if p.is_file() and not p.name.startswith("layout_migration_")}
     expected = {}
@@ -222,7 +260,11 @@ def test_migration_previews_by_default_then_moves_with_verified_receipt(tmp_path
     assert (root / "exp04_decision_features/manifests/reports.json").is_file()
     assert (root / "exp03_geometry/results/geometry/D.json").is_file()
     assert (root / "archives/layout_20261118/figures/general/01_data_exploration/old.pdf").is_file()
-    for legacy in ("3. experiment_0", "4. experiment_1", "rq1", "rq2", "figures/general", "figures/rq2"):
+    assert (root / "figures/exp04_decision_features/a.pdf").is_file()
+    assert (root / "exp10_adaptation/All Results.md").read_bytes() == b"# rq3"
+    assert (root / "archives/layout_20261119/figures/exp09_adaptation/01_calibration/c.pdf").is_file()
+    for legacy in ("3. experiment_0", "4. experiment_1", "rq1", "rq2", "figures/general", "figures/rq2",
+                   "exp09_adaptation", "figures/exp09_adaptation", "figures/exp03_geometry/geometry"):
         assert not (root / legacy).exists(), legacy
     saved = json.loads(next((root / "manifests").glob("layout_migration_*.json")).read_text())
     assert saved["files"]["rq1/results/outputs/comparison.zip"]["destination"] == (

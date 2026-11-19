@@ -118,8 +118,9 @@ never wipe shared scratch. Historical retention exceptions are documented in the
 Reusable Python belongs in `src/`. Since 18 November 2026, `config/structure.yaml` is the one
 layout registry: `config/`, `notebooks/` and `output_JEVPFN/` (results and `figures/<folder>/`)
 use its folders `00_data`, `01_exp0a`, `02_feature_creation`, `03_exp0b`, `exp01_outputs` …
-`exp09_adaptation` and `synthesis`. Keep one notebook per experiment folder (Exp 9 keeps its four
-adaptation notebooks); add folders only through the registry, and record paper placement under its
+`exp08_when_text_helps`, `exp10_adaptation` and `synthesis` (Exp 9, decision-model
+representations, is reserved and has no folder). Keep at most one flat notebook per folder,
+`notebooks/<folder>.ipynb`; add folders only through the registry, and record paper placement under its
 `paper:` mapping, never in folder names. Internal phase IDs (`experiment_0`…`4`, `rq1`…`rq3`, …)
 remain hash/recipe/receipt keys and config aliases; never rename them. Move existing output trees only
 with `src.utils.layout_migration` at a verified idle handover.
@@ -134,7 +135,7 @@ PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.
 - `src/visualize/style.py` owns colors/sizes. Use `FigureSaver`, PDF and inline display;
   inspect figures at final A4 widths and split dense views into readable panels.
   Captions describe the figure without repeating the title.
-- Save figures to `output_JEVPFN/figures/<phase>/<notebook>/`, captions to
+- Save figures to `output_JEVPFN/figures/<folder>/`, captions to
   `figures/Captions.md`, and reports to `output_JEVPFN/All Results.md`.
 - Run `python -m pytest -q` before finishing. If notebooks or `src/visualize/` change,
   also run `python -m src.utils.run_notebooks` and inspect every affected figure.

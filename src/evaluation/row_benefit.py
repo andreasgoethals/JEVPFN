@@ -229,8 +229,21 @@ def agreement_bands(values):
     return np.where(np.isfinite(values), labels, "missing")
 
 
+#: Cohorts defined by the augmented model's own predictions: descriptive (post-treatment).
+POST_TREATMENT_AXES = ("prediction_shift",)
+POST_TREATMENT_LABEL = "descriptive (post-treatment)"
+NOVELTY_BY_TYPE = "novelty_by_field_type"
+
+
+def axis_interpretation(axis):
+    """How a cohort axis may be read: post-treatment axes are descriptive only."""
+    if axis in POST_TREATMENT_AXES:
+        return POST_TREATMENT_LABEL
+    return "pre-treatment (label-free, fixed before results)"
+
+
 def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_lengths, *,
-                   decision=None):
+                   decision=None, field_novelty=None):
     for col in ("row_id", "y_true", "text_present", "joint_text_seen_in_train"):
         if not reference[col].equals(augmented[col]):
             raise ValueError("Unmatched held-out rows, labels or overlap indicators")
@@ -266,6 +279,11 @@ def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_
                 raise ValueError("Decision cohort inputs are misaligned with held-out rows")
         cohorts["decision_confidence"] = confidence_bands(decision["confidence"])
         cohorts["decision_agreement"] = agreement_bands(decision["agreement"])
+    # Seen/unseen within each field type: one axis per type, each a partition of the rows.
+    for kind, memberships in sorted((field_novelty or {}).items()):
+        if len(memberships) != len(reference):
+            raise ValueError("Field novelty is misaligned with held-out rows")
+        cohorts[f"{NOVELTY_BY_TYPE}:{kind}"] = np.asarray(memberships)
     rows = []
     for axis, memberships in cohorts.items():
         memberships = np.asarray(memberships)
@@ -295,26 +313,86 @@ def outer_record(recipe, phase):
     return json.loads(record.read_text())["metadata"], read_predictions(record)
 
 
-def run(dataset_id, *, decision_loader=load_decision_block):
-    """Pair saved predictions; decision arms also join their decision inputs by row ID.
+def field_novelty(ds, train, test):
+    """Seen/unseen per field type for the outer-test rows (label-free, training-defined).
 
-    Decision inputs come from the canonical per-dataset feature store (VSC CPU) or the
-    portable notebook copy (local). Absent artifacts put rows in the "missing" cohort.
+    For each text-field type (``field_types``), a test row is ``unseen`` when any of its
+    present fields of that type has an exact text absent from the same column's training
+    rows, ``seen`` when all its present fields of that type occur there, and ``missing``
+    when it has no present field of that type. Types come from all non-empty values.
     """
-    entry = next(e for e in load_catalog()["datasets"] if e["id"] == dataset_id)
-    ds = load_dataset(entry, allow_download=False)
-    main = load_yaml("experiment_1/main")
-    spec = shared_splits(ds, seed=main["random_seed"], folds=5)
-    inputs = DecisionInputs(ds, main, loader=decision_loader)
-    decision_rows = {}
-    lengths = np.zeros(len(ds.frame))
-    present = np.zeros(len(ds.frame), dtype=bool)
-    for col in ds.metadata.text_columns:
-        text = ds.frame[col].map(text_value)
-        lengths += text.map(lambda v: 0 if v is None else len(str(v))).to_numpy()
-        present |= text.notna().to_numpy()
-    lengths[~present] = np.nan
+    from src.evaluation.field_types import classify_text_column
 
+    by_type = {}
+    for column in ds.metadata.text_columns:
+        kind = classify_text_column(ds.frame[column])["field_type"]
+        values = ds.frame[column].map(text_value)
+        training = set(values.iloc[train].dropna().astype(str))
+        tested = values.iloc[test]
+        present = tested.notna().to_numpy()
+        unseen = present & ~tested.astype(str).isin(training).to_numpy()
+        state = by_type.setdefault(kind, [np.zeros(len(test), bool), np.zeros(len(test), bool)])
+        state[0] |= present
+        state[1] |= unseen
+    return {kind: np.where(present, np.where(unseen, "unseen", "seen"), "missing")
+            for kind, (present, unseen) in sorted(by_type.items())}
+
+
+class Pairing:
+    """Saved outer-test predictions of one dataset, each arm paired with its baseline.
+
+    Shared by the cohort report (``run``) and the row-level complementarity/data-map export
+    (``complementarity.run``). Only arms with all five folds and a matching structured
+    baseline are iterated; the others are listed in ``pending``.
+    """
+
+    def __init__(self, dataset_id, *, decision_loader=load_decision_block):
+        entry = next(e for e in load_catalog()["datasets"] if e["id"] == dataset_id)
+        self.dataset_id = dataset_id
+        self.ds = ds = load_dataset(entry, allow_download=False)
+        main = load_yaml("experiment_1/main")
+        self.spec = spec = shared_splits(ds, seed=main["random_seed"], folds=5)
+        self.inputs = DecisionInputs(ds, main, loader=decision_loader)
+        lengths = np.zeros(len(ds.frame))
+        present = np.zeros(len(ds.frame), dtype=bool)
+        for col in ds.metadata.text_columns:
+            text = ds.frame[col].map(text_value)
+            lengths += text.map(lambda v: 0 if v is None else len(str(v))).to_numpy()
+            present |= text.notna().to_numpy()
+        lengths[~present] = np.nan
+        self.lengths = lengths
+        arms, baselines = {}, {}
+        for phase in ("experiment_1", "experiment_2", "experiment_3"):
+            for r in all_recipes(phase, dataset_id=dataset_id):
+                if r["dataset_id"] != dataset_id:
+                    continue
+                if (
+                    ds.source["data_identity"] != r["data_identity"]
+                    or spec["split_id"] != r["split_id"]
+                ):
+                    raise ValueError(
+                        "Select a single campaign matching the current source rows and splits"
+                    )
+                if phase == "experiment_1" and r["feature_set"] == "non_text":
+                    key = self.matching_key(r)
+                    if key in baselines:
+                        raise ValueError("Ambiguous structured baseline")
+                    baselines[key] = r
+                else:
+                    arm = digest({k: v for k, v in r.items() if k != "outer_fold"})
+                    arms.setdefault((phase, arm), []).append(r)
+        self.baselines = baselines
+        self.arms, self.pending = {}, []
+        for key, folds in arms.items():
+            if sorted(r["outer_fold"] for r in folds) != list(range(5)) or any(
+                self.matching_key(r) not in baselines for r in folds
+            ):
+                self.pending.append(key[1])
+            else:
+                self.arms[key] = sorted(folds, key=lambda r: r["outer_fold"])
+        self._baseline_cache = {}
+
+    @staticmethod
     def matching_key(r):
         return digest(
             {
@@ -332,82 +410,82 @@ def run(dataset_id, *, decision_loader=load_decision_block):
             }
         )
 
-    arms, baselines = {}, {}
-    for phase in ("experiment_1", "experiment_2", "experiment_3"):
-        for r in all_recipes(phase, dataset_id=dataset_id):
-            if r["dataset_id"] != dataset_id:
-                continue
-            if (
-                ds.source["data_identity"] != r["data_identity"]
-                or spec["split_id"] != r["split_id"]
-            ):
-                raise ValueError(
-                    "Select a single campaign matching the current source rows and splits"
-                )
-            if phase == "experiment_1" and r["feature_set"] == "non_text":
-                key = matching_key(r)
-                if key in baselines:
-                    raise ValueError("Ambiguous structured baseline")
-                baselines[key] = r
-            else:
-                arm = digest({k: v for k, v in r.items() if k != "outer_fold"})
-                arms.setdefault((phase, arm), []).append(r)
-    from functools import lru_cache
+    def baseline_record(self, key):
+        if key not in self._baseline_cache:
+            if len(self._baseline_cache) >= 5:
+                self._baseline_cache.pop(next(iter(self._baseline_cache)))
+            self._baseline_cache[key] = outer_record(self.baselines[key], "experiment_1")
+        return self._baseline_cache[key]
 
-    @lru_cache(maxsize=5)
-    def baseline_record(key):
-        return outer_record(baselines[key], "experiment_1")
-
-    output, pending = [], []
-    for (phase, arm), folds in arms.items():
-        if sorted(r["outer_fold"] for r in folds) != list(range(5)) or any(
-            matching_key(r) not in baselines for r in folds
-        ):
-            pending.append(arm)
-            continue
-        for r in folds:
-            fold = r["outer_fold"]
-            train, test = (spec["folds"][fold][k] for k in ("train", "test"))
-            meta, table = outer_record(r, phase)
-            base, reference = baseline_record(matching_key(r))
-            classes = list(ds.metadata.classes)
-            target = ds.frame[ds.metadata.target]
-            if (
-                meta["class_order"] != classes
-                or base["class_order"] != classes
-                or table.row_id.tolist() != [f"csv:{i}" for i in test]
-                or table.y_true.tolist() != target.iloc[test].tolist()
-            ):
-                raise ValueError("Prediction rows or class order differ from the frozen dataset")
-            variance = None if classes else float(np.var(target.iloc[train].astype(float)))
-            modes = decision_modes(r["representation_recipe"], r["feature_set"], phase)
-            decision = None
-            if modes is not None:
-                provider = r["representation_recipe"]["provider"]
-                if (provider, modes) not in decision_rows:
-                    decision_rows[provider, modes] = (
-                        inputs.confidence(provider, modes), inputs.agreement(modes)
-                    )
-                confidence, agreement = decision_rows[provider, modes]
-                decision = {"confidence": confidence[test], "agreement": agreement[test]}
-            rows, edges = paired_cohorts(
-                reference, table, classes, variance, lengths[train], lengths[test],
-                decision=decision,
-            )
-            output.append(
-                dict(
-                    phase=phase,
-                    arm=arm,
-                    fold=fold,
-                    model=r["model_id"],
-                    checkpoint=r["checkpoint_id"],
-                    feature_set=r["feature_set"],
-                    recipe=r["representation_recipe"],
-                    training_variance=variance,
-                    length_cutoffs=edges,
-                    cohorts=rows,
+    def folds(self, arms=None):
+        """Yield one validated paired fold per complete arm (all arms by default)."""
+        ds = self.ds
+        classes = list(ds.metadata.classes)
+        target = ds.frame[ds.metadata.target]
+        for (phase, arm), folds in (self.arms if arms is None else arms).items():
+            for r in folds:
+                fold = r["outer_fold"]
+                train, test = (self.spec["folds"][fold][k] for k in ("train", "test"))
+                meta, table = outer_record(r, phase)
+                base, reference = self.baseline_record(self.matching_key(r))
+                if (
+                    meta["class_order"] != classes
+                    or base["class_order"] != classes
+                    or table.row_id.tolist() != [f"csv:{i}" for i in test]
+                    or table.y_true.tolist() != target.iloc[test].tolist()
+                ):
+                    raise ValueError("Prediction rows or class order differ from the frozen dataset")
+                variance = None if classes else float(np.var(target.iloc[train].astype(float)))
+                yield dict(
+                    phase=phase, arm=arm, recipe=r, fold=fold, train=train, test=test,
+                    reference=reference, table=table, classes=classes, variance=variance,
+                    modes=decision_modes(r["representation_recipe"], r["feature_set"], phase),
                 )
+
+
+def run(dataset_id, *, decision_loader=load_decision_block):
+    """Pair saved predictions; decision arms also join their decision inputs by row ID.
+
+    Decision inputs come from the canonical per-dataset feature store (VSC CPU) or the
+    portable notebook copy (local). Absent artifacts put rows in the "missing" cohort.
+    Seen/unseen text is also reported within each field type (``novelty_by_field_type:*``).
+    """
+    pairing = Pairing(dataset_id, decision_loader=decision_loader)
+    ds, spec, inputs, lengths = pairing.ds, pairing.spec, pairing.inputs, pairing.lengths
+    decision_rows, novelty = {}, {}
+    output = []
+    for item in pairing.folds():
+        r, fold, train, test = item["recipe"], item["fold"], item["train"], item["test"]
+        modes = item["modes"]
+        decision = None
+        if modes is not None:
+            provider = r["representation_recipe"]["provider"]
+            if (provider, modes) not in decision_rows:
+                decision_rows[provider, modes] = (
+                    inputs.confidence(provider, modes), inputs.agreement(modes)
+                )
+            confidence, agreement = decision_rows[provider, modes]
+            decision = {"confidence": confidence[test], "agreement": agreement[test]}
+        if fold not in novelty:
+            novelty[fold] = field_novelty(ds, train, test)
+        rows, edges = paired_cohorts(
+            item["reference"], item["table"], item["classes"], item["variance"],
+            lengths[train], lengths[test], decision=decision, field_novelty=novelty[fold],
+        )
+        output.append(
+            dict(
+                phase=item["phase"],
+                arm=item["arm"],
+                fold=fold,
+                model=r["model_id"],
+                checkpoint=r["checkpoint_id"],
+                feature_set=r["feature_set"],
+                recipe=r["representation_recipe"],
+                training_variance=item["variance"],
+                length_cutoffs=edges,
+                cohorts=rows,
             )
+        )
     file = paths.results_dir("row_benefit", dataset_id + ".json", phase="rq2")
     return write_json(
         file,
@@ -417,7 +495,7 @@ def run(dataset_id, *, decision_loader=load_decision_block):
             data_identity=ds.source["data_identity"],
             task=ds.metadata.task_type,
             folds=output,
-            incomplete_or_unmatched=pending,
+            incomplete_or_unmatched=pairing.pending,
             decision_inputs=dict(sorted(inputs.status.items())),
             decision_cohorts=dict(
                 confidence_edges=list(CONFIDENCE_EDGES),
@@ -425,11 +503,17 @@ def run(dataset_id, *, decision_loader=load_decision_block):
                 agreement_minimum_models=2,
                 ties="exact top-probability ties abstain",
             ),
+            post_treatment_axes=list(POST_TREATMENT_AXES),
         ),
     )
 
 
 def summaries():
+    """Per-dataset cohort losses and equal-dataset means; ``interpretation`` labels each axis.
+
+    ``prediction_shift`` cohorts are defined by the augmented model's own predictions, so
+    they are labelled "descriptive (post-treatment)" and never read as pre-specified groups.
+    """
     frames = []
     for path in paths.results_dir("row_benefit", phase="rq2").glob("*.json"):
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -455,11 +539,13 @@ def summaries():
     by["benefit"] = (by.baseline_loss_sum - by.augmented_loss_sum) / by.defined.replace(0, np.nan)
     by["baseline_loss"] = by.baseline_loss_sum / by.defined.replace(0, np.nan)
     by["augmented_loss"] = by.augmented_loss_sum / by.defined.replace(0, np.nan)
+    by["interpretation"] = by.axis.map(axis_interpretation)
     if by.duplicated(["dataset", *keys]).any():
         raise ValueError("Multiple arms map to the same RQ2E comparison")
-    return by, by.groupby(keys, as_index=False).agg(
+    balanced = by.groupby([*keys, "interpretation"], as_index=False).agg(
         mean_benefit=("benefit", "mean"), datasets=("benefit", "count")
     )
+    return by, balanced
 
 
 if __name__ == "__main__":

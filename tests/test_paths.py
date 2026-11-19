@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.utils import paths
 
 
@@ -17,6 +19,7 @@ def test_repo_root_is_the_repository() -> None:
     assert (paths.REPO_ROOT / "src" / "utils" / "paths.py").is_file()
 
 
+@pytest.mark.real_repository_roots
 def test_off_cluster_everything_collapses_into_the_repo(monkeypatch) -> None:
     """No cluster, no overrides: one tree, inside the repository."""
     for var in ("VSC_DATA", "VSC_SCRATCH", "VSC_PROJECT_LUSTRE1", *paths.STAGING_ENV_VARS):
@@ -28,6 +31,7 @@ def test_off_cluster_everything_collapses_into_the_repo(monkeypatch) -> None:
     assert paths.checkpoints_dir() == paths.REPO_ROOT / "checkpoints"
 
 
+@pytest.mark.real_repository_roots
 def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> None:
     """Large artifacts stay on PROJECT; compact operational records stay on DATA."""
     monkeypatch.setenv("VSC_DATA", str(tmp_path / "data"))
@@ -53,6 +57,7 @@ def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> Non
     assert paths.manifests_dir("experiment_1").is_relative_to(tmp_path / "data")
 
 
+@pytest.mark.real_repository_roots
 def test_project_name_is_inserted_only_on_shared_tiers(tmp_path, monkeypatch) -> None:
     """A shared tier needs a `<Project>/` component; the repo root already IS the project. Without
     this the cluster path would be `<Project>/<Project>/output`."""
@@ -271,5 +276,5 @@ def test_project_root_aliases_and_explicit_native_working_set(tmp_path, monkeypa
 
 def test_direct_research_results_do_not_repeat_the_research_folder():
     for group, folder in (("rq1", "exp01_outputs"), ("rq2", "exp08_when_text_helps"),
-                          ("rq3", "exp09_adaptation")):
+                          ("rq3", "exp10_adaptation")):
         assert paths.result_relative(group) == Path(folder) / "results"

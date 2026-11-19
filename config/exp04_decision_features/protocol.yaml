@@ -101,6 +101,9 @@ evaluation:
     enabled: true  # Experiments 1-3 only; native-text systems record a skip reason.
     repeats: 3  # Joint permutations per feature group and outer fold.
     max_test_rows: null  # All outer-test rows; any cap is recorded with its row subset.
+    # Decision blocks and embedding groups move only among rows with the same text-availability
+    # flags (approved 19 Nov 2026); `unconditional` is the original v1 scheme. Recorded per fold.
+    permutation: conditional_on_availability
   preprocessing_fit_scope: training_partition_only
   model_tuning_budget: 0
   hyperparameters: pinned_library_defaults_with_explicit_seed_device_and_resource_settings

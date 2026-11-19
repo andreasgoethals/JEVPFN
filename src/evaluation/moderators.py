@@ -8,8 +8,23 @@ from RQ1A compact comparison tables when present; otherwise they are reported as
 ``moderator_associations`` computes, per predictor × representation, Spearman's rank
 correlation between per-dataset normalised gain (``aggregate.dataset_gains``) and each
 moderator across datasets, with a dataset-bootstrap percentile interval. Datasets carry
-equal weight. With about eighteen datasets these are exploratory associations, never
-p-values, causal claims or a basis for selecting a winning recipe.
+equal weight. With about eighteen datasets these are associations, never causal claims or
+a basis for selecting a winning recipe.
+
+Optional model-level covariates (``model_covariates``: verified parameter count, architecture
+family and readout type from `config/02_feature_creation/model_properties.yaml`) describe the
+decision models rather than the datasets. ``model_level_associations`` relates them to each
+provider's equal-dataset mean gain across decision models, per predictor and decision feature
+set (``model_gain_table`` ranks the decision models by that mean). When Exp 2 compact
+robustness summaries exist, ``model_robustness`` adds each model's replay noise and
+presentation sensitivity as further covariates; otherwise they are pending. Size, training
+data, readout and robustness are confounded across releases, so these too are descriptive.
+
+Every association is reported for the normalised gain and the raw (unnormalised) gain:
+normalisation divides by headroom, so normalised gain against ``baseline_headroom`` is
+partly mechanical, while raw gain against headroom shows the ceiling effect directly.
+Prespecified primary moderators, FDR control, meta-analysis and partial correlations live
+in ``moderator_statistics``.
 """
 
 from __future__ import annotations
@@ -28,11 +43,18 @@ DECISION_PROPERTIES = (
     "decision_mean_pairwise_agreement",
 )
 ASSOCIATION_COLUMNS = [
-    "model_id", "checkpoint_id", "family", "aggregation", "representation", "moderator",
+    "model_id", "checkpoint_id", "family", "aggregation", "representation", "outcome",
+    "moderator",
     "n_datasets", "spearman_rho", "ci_low", "ci_high", "n_boot", "defined_boot", "seed",
     "status", "dataset_ids",
 ]
 _REPRESENTATION_KEYS = ["model_id", "checkpoint_id", "family", "aggregation", "representation"]
+#: Model-level covariates (one value per decision model), all optional.
+MODEL_COVARIATES = ("log10_parameters", "architecture_family", "readout_type")
+MODEL_ASSOCIATION_COLUMNS = [
+    "model_id", "checkpoint_id", "feature_set", "covariate", "level", "statistic", "value",
+    "n_providers", "ci_low", "ci_high", "n_boot", "defined_boot", "seed", "status", "providers",
+]
 
 
 def dataset_covariates(dataset) -> dict:
@@ -52,6 +74,14 @@ def dataset_covariates(dataset) -> dict:
         repeated += int(text.duplicated(keep=False).sum())
         lengths.append(text.str.len().to_numpy())
     lengths = np.concatenate(lengths) if lengths else np.array([])
+    # Joint row text: a row whose combined text occurs in no other row is unseen in every
+    # training partition, whatever the split (a fold-free, label-free novelty share).
+    joint = (frame[text_columns].map(text_value).astype(object)
+             .apply(lambda row: None if row.isna().all() else
+                    "\x1f".join("" if v is None or v != v else str(v) for v in row), axis=1)
+             if text_columns else pd.Series(dtype=object))
+    joint = joint.dropna()
+    unique_rows = int((~joint.duplicated(keep=False)).sum())
     classification = metadata.task_type != "regression"
     row = {
         "dataset_id": metadata.dataset_id,
@@ -64,11 +94,14 @@ def dataset_covariates(dataset) -> dict:
         "missing_text_share": missing / cells if cells else np.nan,
         # Within each column: non-missing cells whose exact text occurs more than once.
         "repeated_text_share": repeated / present if present else np.nan,
+        "unseen_text_share": unique_rows / len(joint) if len(joint) else np.nan,
     }
     for kind in (*FIELD_TYPES, "empty"):
         row[f"share_{kind}"] = (
             sum(t == kind for t in types) / len(types) if types else np.nan
         )
+    row["free_text_share"] = (row["share_long_text"] + row["share_short_text"]
+                              if types else np.nan)
     return row
 
 
@@ -170,21 +203,21 @@ def spearman_rows(x, y):
                      where=scale > 0)
 
 
-def moderator_associations(gains, moderators, *, n_boot=2000, seed=0, min_datasets=5):
-    """Spearman rho per predictor × representation × moderator with a dataset bootstrap.
+def moderator_data(gains, moderators):
+    """Gains joined to dataset moderators; returns ``(data, moderator names)``.
 
     Headroom always comes from ``gains.baseline`` (the same predictor's no-text arm).
     Per-provider decision rows use that provider's own decision properties when the
-    moderator table carries them. Constant or undersized inputs are reported, not dropped.
+    moderator table carries them.
     """
-    if gains.empty or moderators.empty:
-        return pd.DataFrame(columns=ASSOCIATION_COLUMNS)
     per_dataset = moderators.drop(columns=["model_id", "baseline_headroom"], errors="ignore")
     per_dataset = per_dataset.drop_duplicates("dataset_id")
     names = [c for c in per_dataset if c not in {"dataset_id", "task_type"}
              and pd.api.types.is_numeric_dtype(per_dataset[c])]
     data = gains.merge(per_dataset, on="dataset_id", how="left", validate="many_to_one")
     data["baseline_headroom"] = 1.0 - data.baseline
+    if "raw_gain" not in data:
+        data["raw_gain"] = data.augmented - data.baseline
     properties = moderators.attrs.get("decision_properties")
     if properties is not None and not properties.empty and "provider" in data:
         specific = data[["dataset_id", "provider"]].merge(
@@ -193,34 +226,203 @@ def moderator_associations(gains, moderators, *, n_boot=2000, seed=0, min_datase
             shared = data[column].to_numpy(float) if column in data else np.full(len(data), np.nan)
             data[column] = np.where(data.provider.notna(), specific[column].to_numpy(), shared)
             names = names if column in names else [*names, column]
-    names = [*names, "baseline_headroom"]
+    return data, [*names, "baseline_headroom"]
+
+
+def bootstrap_spearman(x, y, *, n_boot, seed):
+    """Spearman rho with a percentile bootstrap over paired units; ``(rho, low, high, defined)``."""
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    rho = float(spearman_rows(x, y)[0]) if len(x) else np.nan
+    low = high = np.nan
+    defined = 0
+    if np.isfinite(rho) and n_boot > 0:
+        # Fixed seed per cell: moderators over the same units share resamples.
+        draws = np.random.default_rng(seed).integers(0, len(x), size=(n_boot, len(x)))
+        values = spearman_rows(x[draws], y[draws])
+        values = values[np.isfinite(values)]
+        defined = len(values)
+        if defined:
+            low, high = (float(v) for v in np.percentile(values, [2.5, 97.5]))
+    return rho, low, high, defined
+
+
+def moderator_associations(gains, moderators, *, n_boot=2000, seed=0, min_datasets=5,
+                           outcomes=("gain", "raw_gain")):
+    """Spearman rho per predictor × representation × outcome × moderator, dataset bootstrap.
+
+    ``outcome`` is the headroom-normalised ``gain`` or the unnormalised ``raw_gain``
+    (augmented − baseline headline metric). Both are reported because normalising by
+    headroom couples the gain to ``baseline_headroom`` by construction; raw gain against
+    headroom shows the ceiling effect directly. Constant or undersized inputs are
+    reported, not dropped.
+    """
+    if gains.empty or moderators.empty:
+        return pd.DataFrame(columns=ASSOCIATION_COLUMNS)
+    data, names = moderator_data(gains, moderators)
     records = []
     for key, group in data.groupby(_REPRESENTATION_KEYS, dropna=False, sort=True):
-        for moderator in names:
-            pair = group[["dataset_id", "gain", moderator]].dropna()
-            x, y = pair[moderator].to_numpy(float), pair.gain.to_numpy(float)
-            rho = float(spearman_rows(x, y)[0])
-            low = high = np.nan
-            defined = 0
-            if np.isfinite(rho) and n_boot > 0:
-                # Fixed seed per cell: moderators over the same datasets share resamples.
-                draws = np.random.default_rng(seed).integers(0, len(x), size=(n_boot, len(x)))
-                values = spearman_rows(x[draws], y[draws])
-                values = values[np.isfinite(values)]
-                defined = len(values)
-                if defined:
-                    low, high = (float(v) for v in np.percentile(values, [2.5, 97.5]))
-            status = (
-                "too_few_datasets" if len(x) < min_datasets
-                else "constant_input" if not np.isfinite(rho)
-                else "descriptive"
-            )
-            records.append(dict(zip(_REPRESENTATION_KEYS, key)) | {
-                "moderator": moderator, "n_datasets": len(x),
-                "spearman_rho": rho if status == "descriptive" else np.nan,
-                "ci_low": low if status == "descriptive" else np.nan,
-                "ci_high": high if status == "descriptive" else np.nan,
-                "n_boot": n_boot, "defined_boot": defined, "seed": seed, "status": status,
-                "dataset_ids": ", ".join(sorted(pair.dataset_id)),
-            })
+        for outcome in outcomes:
+            for moderator in names:
+                pair = group[["dataset_id", outcome, moderator]].dropna()
+                x, y = pair[moderator].to_numpy(float), pair[outcome].to_numpy(float)
+                rho, low, high, defined = bootstrap_spearman(x, y, n_boot=n_boot, seed=seed)
+                status = (
+                    "too_few_datasets" if len(x) < min_datasets
+                    else "constant_input" if not np.isfinite(rho)
+                    else "descriptive"
+                )
+                ok = status == "descriptive"
+                records.append(dict(zip(_REPRESENTATION_KEYS, key)) | {
+                    "outcome": outcome, "moderator": moderator, "n_datasets": len(x),
+                    "spearman_rho": rho if ok else np.nan,
+                    "ci_low": low if ok else np.nan, "ci_high": high if ok else np.nan,
+                    "n_boot": n_boot, "defined_boot": defined, "seed": seed, "status": status,
+                    "dataset_ids": ", ".join(sorted(pair.dataset_id)),
+                })
     return pd.DataFrame(records, columns=ASSOCIATION_COLUMNS)
+
+
+def model_covariates(properties=None):
+    """Verified model-level covariates per decision provider, or an empty pending table.
+
+    Returns ``(table, status)`` with columns ``provider`` and ``MODEL_COVARIATES``; an
+    unverified value is missing, never estimated.
+    """
+    columns = ["provider", *MODEL_COVARIATES]
+    try:
+        from src.evaluation.model_properties import covariates
+
+        table = covariates(properties)
+    except (FileNotFoundError, KeyError, ValueError) as error:
+        return pd.DataFrame(columns=columns), f"pending: {error}"
+    return table[columns], "available"
+
+
+ROBUSTNESS_COVARIATES = ("replay_noise_tv", "sensitivity_excess_tv")
+NUMERIC_MODEL_COVARIATES = ("log10_parameters", *ROBUSTNESS_COVARIATES)
+MODEL_GAIN_COLUMNS = [
+    "model_id", "checkpoint_id", "feature_set", "provider", "n_datasets", "mean_gain",
+    "mean_raw_gain", "rank", "dataset_ids",
+]
+
+
+def model_robustness(effects=None):
+    """Per decision model, Exp 2 replay noise and presentation sensitivity, or pending.
+
+    From the compact RQ1B summaries (``study_reports.robustness_tables``; validation pilots
+    excluded): ``replay_noise_tv`` is the equal-dataset mean total variation between unchanged
+    repeats (``repeat_1``/``repeat_2``); ``sensitivity_excess_tv`` is the equal-dataset mean,
+    over the controlled presentation variants, of their matched excess over replay noise.
+    Returns ``(table, status)``.
+    """
+    columns = ["provider", *ROBUSTNESS_COVARIATES, "robustness_datasets"]
+    if effects is None:
+        from src.evaluation.study_reports import robustness_tables
+
+        try:
+            effects, _ = robustness_tables()
+        except (OSError, ValueError, KeyError) as error:
+            return pd.DataFrame(columns=columns), f"pending: {error}"
+    if effects is None or effects.empty or not {"dataset", "provider", "variant"} <= set(effects):
+        return pd.DataFrame(columns=columns), "pending: no completed Exp 2 robustness summaries"
+    repeats = effects[effects.variant.isin(["repeat_1", "repeat_2"])]
+    noise = (repeats.groupby(["provider", "dataset"]).mean_tv.mean().groupby("provider").mean()
+             .rename("replay_noise_tv"))
+    perturbed = effects[~effects.variant.isin(["repeat_1", "repeat_2"])]
+    if "excess_tv" in perturbed:
+        excess = (perturbed.dropna(subset=["excess_tv"]).groupby(["provider", "dataset"])
+                  .excess_tv.mean().groupby("provider").mean().rename("sensitivity_excess_tv"))
+    else:
+        excess = pd.Series(dtype=float, name="sensitivity_excess_tv")
+    datasets = effects.groupby("provider").dataset.nunique().rename("robustness_datasets")
+    table = pd.concat([noise, excess, datasets], axis=1).reset_index().rename(
+        columns={"index": "provider"})
+    for column in columns:
+        if column not in table:
+            table[column] = np.nan
+    return table[columns], f"available: {len(table)} decision models"
+
+
+def model_gain_table(gains):
+    """Per predictor × decision feature set × decision model: equal-dataset mean gains.
+
+    Only datasets observed for every decision model of the cell enter, so all models are
+    ranked on the same datasets. ``mean_raw_gain`` is the unnormalised headline difference.
+    Rank 1 is the largest mean normalised gain. Descriptive; no model is selected.
+    """
+    if gains.empty:
+        return pd.DataFrame(columns=MODEL_GAIN_COLUMNS)
+    per_model = gains[gains.family.eq("decision") & gains.provider.notna()]
+    if per_model.empty:
+        return pd.DataFrame(columns=MODEL_GAIN_COLUMNS)
+    if "raw_gain" not in per_model:
+        raw = (per_model.augmented - per_model.baseline
+               if {"augmented", "baseline"} <= set(per_model) else np.nan)
+        per_model = per_model.assign(raw_gain=raw)
+    keys = ["model_id", "checkpoint_id", "feature_set"]
+    tables = []
+    for key, cell in per_model.groupby(keys, dropna=False, sort=True):
+        providers = cell.provider.nunique()
+        observed = cell.groupby("dataset_id").provider.nunique()
+        shared = sorted(observed.index[observed.eq(providers)])
+        table = (cell[cell.dataset_id.isin(shared)].groupby("provider")
+                 .agg(mean_gain=("gain", "mean"), mean_raw_gain=("raw_gain", "mean"),
+                      n_datasets=("dataset_id", "nunique")).reset_index())
+        table = table.assign(**dict(zip(keys, key)), dataset_ids=", ".join(shared))
+        table["rank"] = table.mean_gain.rank(ascending=False, method="min")
+        tables.append(table)
+    result = pd.concat(tables, ignore_index=True) if tables else pd.DataFrame()
+    return result[MODEL_GAIN_COLUMNS].sort_values([*keys, "rank"], kind="stable").reset_index(drop=True)
+
+
+def model_level_associations(gains, covariates=None, *, robustness=None, n_boot=2000, seed=0,
+                             min_providers=5):
+    """Decision-model covariates against each provider's equal-dataset mean gain.
+
+    Per predictor × decision feature set, over ``model_gain_table`` (shared datasets only):
+    Spearman rho of mean normalised gain with each numeric covariate (``log10_parameters``
+    and, when Exp 2 summaries exist, ``replay_noise_tv`` and ``sensitivity_excess_tv``), with
+    a percentile bootstrap over decision models; and the mean gain per architecture family and
+    readout type (``level``). Undersized or constant inputs are reported, not dropped. Size,
+    data, readout and robustness are confounded across releases: descriptive only.
+    """
+    if covariates is None:
+        covariates, _ = model_covariates()
+    table = model_gain_table(gains)
+    if table.empty or covariates.empty:
+        return pd.DataFrame(columns=MODEL_ASSOCIATION_COLUMNS)
+    if robustness is not None and not robustness.empty:
+        covariates = covariates.merge(robustness, on="provider", how="left")
+    numeric = [c for c in NUMERIC_MODEL_COVARIATES if c in covariates]
+    records = []
+    keys = ["model_id", "checkpoint_id", "feature_set"]
+    for key, cell in table.groupby(keys, dropna=False, sort=True):
+        means = cell[["provider", "mean_gain"]].rename(columns={"mean_gain": "gain"}).merge(
+            covariates, on="provider", how="left")
+        base = dict(zip(keys, key)) | {"n_boot": n_boot, "seed": seed}
+        for covariate in numeric:
+            pair = means[["provider", "gain", covariate]].dropna()
+            x, y = pair[covariate].to_numpy(float), pair.gain.to_numpy(float)
+            rho, low, high, defined = bootstrap_spearman(x, y, n_boot=n_boot, seed=seed)
+            status = ("too_few_providers" if len(x) < min_providers
+                      else "constant_input" if not np.isfinite(rho) else "descriptive")
+            ok = status == "descriptive"
+            records.append(base | {
+                "covariate": covariate, "level": None, "statistic": "spearman_rho",
+                "value": rho if ok else np.nan, "n_providers": len(x),
+                "ci_low": low if ok else np.nan, "ci_high": high if ok else np.nan,
+                "defined_boot": defined, "status": status,
+                "providers": ", ".join(sorted(pair.provider)),
+            })
+        for covariate in ("architecture_family", "readout_type"):
+            if covariate not in means:
+                continue
+            for level, group in means.dropna(subset=[covariate]).groupby(covariate, sort=True):
+                records.append(base | {
+                    "covariate": covariate, "level": level, "statistic": "mean_gain",
+                    "value": float(group.gain.mean()), "n_providers": len(group),
+                    "ci_low": np.nan, "ci_high": np.nan, "defined_boot": 0,
+                    "status": "descriptive",
+                    "providers": ", ".join(sorted(group.provider)),
+                })
+    return pd.DataFrame(records, columns=MODEL_ASSOCIATION_COLUMNS)

@@ -56,7 +56,8 @@ def test_local_preflight_does_not_create_inputs_or_claim_live_acceptance(local_p
         "full_fold_resource_profile",
     }
     assert not (tmp_path / "data").exists()
-    assert (tmp_path / "output_JEVPFN").is_dir()
+    # Outputs land in the test's isolated output root (conftest), never in the real tree.
+    assert paths.outputs_dir().is_dir() and paths.outputs_dir().is_relative_to(tmp_path)
 
 
 def test_local_mode_cannot_bypass_compute_guard(local_preflight, monkeypatch, tmp_path):

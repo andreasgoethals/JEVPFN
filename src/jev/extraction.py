@@ -235,6 +235,7 @@ class DatasetExtractor:
         phase="feature_creation",
         policy_revision_manifest=None,
         timings=None,
+        log=None,
     ):
         if cache.dataset_id is None:
             raise ValueError("Extraction requires a dataset-bound cache")
@@ -249,7 +250,8 @@ class DatasetExtractor:
         self._stop_lock = Lock()
         self.session_id = uuid.uuid4().hex
         self.timings = timings or TimingJournal("jev", phase=phase, run_id=self.session_id)
-        self.log = paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.log"
+        # Another hosted provider passes its own log so the Jev dataset log stays Jev-only.
+        self.log = log or paths.logs_dir(phase) / "extraction" / f"{cache.dataset_id}.log"
         self.policy_sha256 = register_policy(
             cache, limits, revision_manifest=policy_revision_manifest, stage=phase
         )

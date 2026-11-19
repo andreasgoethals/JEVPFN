@@ -1,0 +1,48 @@
+# Exp 8 (RQ2-E) moderator analysis plan, fixed before any benchmark result exists.
+# Read by src.evaluation.moderator_statistics. Proposed 19 November 2026 for owner review.
+# The registry already owns the stem `analysis` (config/synthesis/analysis.yaml), so this
+# folder's plan uses the unique stem `when_text_helps`.
+schema: jevpfn.exp08_analysis.v1
+status: proposed_before_results
+proposed: 19-11-2026
+approved_by: null
+# Unit: one headroom-normalised gain per dataset × predictor × representation
+# (aggregate.dataset_gains); raw (unnormalised) gain is always reported alongside.
+outcomes: [gain, raw_gain]
+# The analysed grid: headline representations only (median over decision models per
+# decision mode; each frozen-embedding and TAR recipe), each predictor separately.
+grid: headline_representations
+# Primary moderators: four label-free dataset properties fixed before results. They are
+# reported with Spearman rho, a dataset-bootstrap interval, a permutation p-value without
+# multiplicity adjustment (prespecification is their protection) and a partial Spearman
+# rho controlling for the other three primary moderators.
+primary_moderators:
+  - name: free_text_share
+    column: free_text_share
+    meaning: share of text fields typed long_text or short_text (src.evaluation.field_types)
+  - name: median_text_length
+    column: median_text_chars
+    meaning: median characters over non-missing text cells
+  - name: unseen_text_share
+    column: unseen_text_share
+    meaning: share of text-bearing rows whose joint text occurs in no other row
+  - name: baseline_headroom
+    column: baseline_headroom
+    meaning: 1 minus the same predictor's no-text headline metric
+# Every other numeric moderator from moderators.dataset_moderators is exploratory.
+exploratory: all_other_numeric_moderators
+exploratory_correction: benjamini_hochberg_fdr_across_the_exploratory_grid
+fdr_level: 0.10
+# Two-sided permutation test of Spearman rho (moderator shuffled over datasets).
+test: spearman_permutation_two_sided
+n_permutations: 5000
+n_boot: 2000
+seed: 20261119
+min_datasets: 5
+# Random-effects pooling over datasets per predictor × representation.
+meta_analysis:
+  method: dersimonian_laird
+  effect: per_dataset_mean_normalised_gain
+  within_variance: fold_variance_over_five_divided_by_five
+  caveat: outer folds share training rows, so fold variances understate within-dataset variance
+  interval: normal_95

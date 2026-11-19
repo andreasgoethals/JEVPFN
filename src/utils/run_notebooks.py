@@ -1,15 +1,17 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only 00_data/data
+    python -m src.utils.run_notebooks --only exp04_decision_features
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
-    output_JEVPFN/figures/<folder>/<notebook>/*.pdf   written by the notebooks themselves
+    notebooks/<folder>.ipynb                         one flat notebook per folder
+    output_JEVPFN/figures/<folder>/*.pdf             written by the notebooks themselves
     output_JEVPFN/figures/Captions.md                all figure captions
     output_JEVPFN/All Results.md                     every notebook's printed summary
     output_JEVPFN/<exp folder>/All Results.md        one experiment's summaries (+ its Captions.md)
 
-Folders and notebook IDs (`<folder>/<name>`) come from config/structure.yaml.
+Folders and notebook IDs (the folder name) come from config/structure.yaml; previous IDs such
+as `exp04_decision_features/decisions` or `rq2/01_decisions` remain accepted aliases.
 
 Each notebook executes in a separate Python subprocess: matplotlib's figure registry must
 never be shared between notebooks. Lightweight coordinator threads launch those subprocesses,
@@ -91,14 +93,12 @@ class NotebookResult:
 
 
 def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    """Recursively discover folder/name identifiers in registry order; accept legacy IDs."""
-    found = tuple(
-        sorted(
-            p.relative_to(notebooks_dir()).with_suffix("").as_posix()
-            for p in notebooks_dir().rglob("*.ipynb")
-            if ".ipynb_checkpoints" not in p.parts
-        )
-    )
+    """Discover flat `notebooks/<folder>.ipynb` IDs in registry order; accept previous IDs."""
+    nested = sorted(p.relative_to(notebooks_dir()).as_posix() for p in notebooks_dir().rglob("*.ipynb")
+                    if p.parent != notebooks_dir() and ".ipynb_checkpoints" not in p.parts)
+    if nested:
+        raise ValueError(f"Notebooks must be flat (notebooks/<folder>.ipynb); found {nested}")
+    found = tuple(sorted(p.stem for p in notebooks_dir().glob("*.ipynb")))
     folders = layout().folders
     found = tuple(sorted(found, key=lambda n: (
         folders.index(n.split("/")[0]) if n.split("/")[0] in folders else len(folders), n)))

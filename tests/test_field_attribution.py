@@ -171,10 +171,79 @@ def test_frozen_embedding_wrapper_accepts_joint_vector_and_flag_permutation():
                                                    "embedding__text_001"}
 
 
+def test_conditional_permutation_stays_within_availability_strata():
+    rng = np.random.default_rng(0)
+    flags = np.array([0, 1, 0, 1, 1, 0, 0, 1, 0, 0])
+    for _ in range(20):
+        order = attribution.stratified_order(rng, flags)
+        assert sorted(order) == list(range(10))
+        np.testing.assert_array_equal(flags[order], flags)
+    # Joint blocks stratify on every flag pattern; no strata reproduces the plain draw.
+    pattern = np.column_stack([flags, flags[::-1]])
+    order = attribution.stratified_order(np.random.default_rng(1), pattern)
+    np.testing.assert_array_equal(pattern[order], pattern)
+    np.testing.assert_array_equal(
+        attribution.stratified_order(np.random.default_rng(2), np.empty((10, 0))),
+        np.random.default_rng(2).permutation(10))
+
+
+def test_strata_follow_group_kind_and_scheme():
+    frame = pd.DataFrame({missing_column(0): [0, 1], missing_column(1): [0, 0], "x": [1, 2]})
+    field = {"kind": "decision", "text_index": 1}
+    joint = {"kind": "decision", "text_index": None}
+    embedding = {"kind": "embedding", "text_index": 0}
+    cond = attribution.CONDITIONAL
+    assert attribution.strata_columns(field, frame, cond) == [missing_column(1)]
+    assert attribution.strata_columns(joint, frame, cond) == [missing_column(0), missing_column(1)]
+    assert attribution.strata_columns(embedding, frame, cond) == [missing_column(0)]
+    for kind in ("text_availability", "non_text"):
+        assert attribution.strata_columns({"kind": kind, "text_index": None}, frame, cond) == []
+    assert attribution.strata_columns(field, frame, attribution.UNCONDITIONAL) == []
+
+
+def test_conditional_attribution_ignores_missingness_signal_unconditional_does_not():
+    # The decision column only encodes availability (0 when text is missing, 1 otherwise),
+    # which the flags already carry: conditional permutation must give exactly zero.
+    n = 40
+    flag = (np.arange(n) % 4 == 0).astype(int)
+    x = pd.DataFrame({missing_column(0): flag, DECISION_FIELD.replace("001", "000"): 1.0 - flag},
+                     index=[f"csv:{i}" for i in range(n)])
+    decision = x.columns[1]
+    model = SimpleNamespace(predict=lambda f: f[decision].to_numpy())
+    groups = [{"group": "decision__liquid__per_column__text_000", "kind": "decision",
+               "text_index": 0, "columns": [decision]},
+              {"group": "text_availability", "kind": "text_availability", "text_index": None,
+               "columns": [missing_column(0)]}]
+    y = x[decision].to_numpy()
+    common = dict(predict=lambda m, f: m.predict(f), classes=[], variance=1.0, seed=5, fold=0)
+    cond = attribution.fold_attribution(model, x, y, y, groups,
+                                        settings={"repeats": 2, "max_test_rows": None}, **common)
+    plain = attribution.fold_attribution(
+        model, x, y, y, groups, settings={"repeats": 2, "max_test_rows": None,
+                                          "permutation": "unconditional"}, **common)
+    assert cond["permutation"] == "conditional_on_availability"
+    first = cond["groups"][0]
+    assert first["permutation"] == "conditional_on_availability" and first["n_strata"] == 2
+    assert first["strata_columns"] == [missing_column(0)] and first["mean_loss_increase"] == 0
+    assert plain["permutation"] == "unconditional"
+    assert plain["groups"][0]["mean_loss_increase"] > 0
+    # Availability flags themselves are permuted unconditionally in both schemes.
+    assert cond["groups"][1]["permutation"] == "unconditional"
+    with pytest.raises(ValueError, match="permutation"):
+        attribution.fold_attribution(model, x, y, y, groups, settings={
+            "repeats": 1, "max_test_rows": None, "permutation": "other"}, **common)
+
+
 def test_settings_skip_native_text_and_validate():
     on = attribution.settings_for_phase({"enabled": True, "repeats": 3, "max_test_rows": None},
                                         "experiment_2")
     assert on["enabled"] and on["skip_reason"] is None
+    assert on["permutation"] == attribution.CONDITIONAL and on["version"].endswith("v2")
+    plain = attribution.settings_for_phase({"enabled": True, "permutation": "unconditional"},
+                                           "experiment_1")
+    assert plain["permutation"] == "unconditional"
+    with pytest.raises(ValueError, match="permutation"):
+        attribution.settings_for_phase({"permutation": "within_class"}, "experiment_1")
     native = attribution.settings_for_phase({"enabled": True}, "experiment_4")
     assert not native["enabled"] and native["skip_reason"].startswith("native_text_system")
     for bad in ({"repeats": 0}, {"max_test_rows": 1}, {"enabled": "yes"}, {"extra": 1}):
@@ -246,6 +315,8 @@ def test_attribution_leaves_primary_records_unchanged_and_outside_collection(iso
     assert set(by_group.field_type) == {"non_text", "text_availability", "joint_all_text",
                                          "categorical"}
     assert by_group.folds.eq(5).all() and by_type.n_datasets.eq(1).all()
+    assert bodies[0]["permutation"] == bodies[0]["settings"]["permutation"] == "conditional_on_availability"
+    assert set(by_group.permutation) == set(by_type.permutation) == {"conditional_on_availability"}
 
 
 def test_native_text_records_skip_reason(isolated_output):

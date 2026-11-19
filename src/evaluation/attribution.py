@@ -4,7 +4,20 @@ After the final outer-training fit and the regular outer-test prediction, each f
 GROUP (one decision block per provider/mode/text field, the text-availability flags, the
 non-text columns, or one raw embedded text column) is permuted jointly across the outer-test
 rows. The fitted model predicts again; the recorded value is the mean per-row loss increase
-over the unpermuted prediction:
+over the unpermuted prediction.
+
+Permutation scheme (``permutation`` setting, recorded per fold and per group):
+
+* ``conditional_on_availability`` (default since 19 Nov 2026): each decision block and each
+  embedding group is permuted only among rows that share its text-availability flag pattern
+  (the flag of its text field; all flags for a joint block). Missing text then never swaps
+  with present text, so the group is credited for its content given availability, not for
+  re-encoding missingness that the availability flags already carry. Embedding groups keep
+  their own flag in place. The availability-flag group and the non-text group are permuted
+  unconditionally, as before. A group without any flag column falls back to unconditional.
+* ``unconditional``: the original v1 scheme, every group permuted across all rows.
+
+Losses:
 
 * classification: log loss of the observed class (``metrics.observed_log_losses``);
 * regression: squared error divided by the outer-training target variance.
@@ -28,7 +41,12 @@ import pandas as pd
 from src.evaluation.features import missing_column
 from src.utils.serialization import canonical_json, digest, scalar
 
-VERSION = "grouped-permutation-attribution-v1"
+VERSION = "grouped-permutation-attribution-v2"
+CONDITIONAL = "conditional_on_availability"
+UNCONDITIONAL = "unconditional"
+PERMUTATIONS = (CONDITIONAL, UNCONDITIONAL)
+#: Group kinds whose permutation is stratified by text availability under CONDITIONAL.
+STRATIFIED_KINDS = ("decision", "embedding")
 STRUCTURED_PHASES = ("experiment_1", "experiment_2", "experiment_3")
 NATIVE_SKIP_REASON = (
     "native_text_system: original text enters the system's own preprocessing, so no "
@@ -44,7 +62,7 @@ _SUBSET_STREAM = 0x5EB5E7
 def settings_for_phase(config, phase):
     """Resolve the protocol switch for one benchmark phase; native text is skipped by design."""
     config = dict(config or {})
-    unknown = set(config) - {"enabled", "repeats", "max_test_rows"}
+    unknown = set(config) - {"enabled", "repeats", "max_test_rows", "permutation"}
     if unknown:
         raise ValueError(f"Unknown field-attribution settings: {sorted(unknown)}")
     settings = {
@@ -52,6 +70,7 @@ def settings_for_phase(config, phase):
         "enabled": config.get("enabled", False),
         "repeats": config.get("repeats", 3),
         "max_test_rows": config.get("max_test_rows"),
+        "permutation": config.get("permutation", CONDITIONAL),
         "skip_reason": None,
     }
     validate_settings(settings)
@@ -72,6 +91,8 @@ def validate_settings(settings):
         raise ValueError("field_attribution.repeats must be a positive integer")
     if cap is not None and (type(cap) is not int or cap < 2):
         raise ValueError("field_attribution.max_test_rows must be null or an integer >= 2")
+    if settings.get("permutation", CONDITIONAL) not in PERMUTATIONS:
+        raise ValueError(f"field_attribution.permutation must be one of {PERMUTATIONS}")
     return settings
 
 
@@ -139,6 +160,39 @@ def group_rng(seed: int, fold: int, name: str) -> np.random.Generator:
     return np.random.default_rng([int(seed), int(fold), group_hash(name)])
 
 
+def strata_columns(group: dict, frame: pd.DataFrame, permutation: str) -> list[str]:
+    """Availability flags that define the group's permutation strata (empty: unconditional)."""
+    if permutation == UNCONDITIONAL or group.get("kind") not in STRATIFIED_KINDS:
+        return []
+    flags = sorted(c for c in frame.columns if str(c).startswith("text_presence__"))
+    index = group.get("text_index")
+    if index is None:  # A joint block depends on every text field's availability.
+        return flags
+    flag = missing_column(index)
+    return [flag] if flag in frame.columns else []
+
+
+def stratified_order(rng: np.random.Generator, strata) -> np.ndarray:
+    """A permutation that moves rows only within equal strata keys (rows x flags array).
+
+    Strata are visited in sorted key order, so the draw depends only on the seed and the
+    stratum membership. Without strata this equals ``rng.permutation(n)``.
+    """
+    strata = np.asarray(strata)
+    n = len(strata)
+    if strata.ndim == 1:
+        strata = strata[:, None]
+    if strata.shape[1] == 0:
+        return rng.permutation(n)
+    keys, codes = np.unique(strata, axis=0, return_inverse=True)
+    codes = np.asarray(codes).reshape(-1)
+    order = np.arange(n)
+    for code in range(len(keys)):
+        members = np.flatnonzero(codes == code)
+        order[members] = members[rng.permutation(len(members))]
+    return order
+
+
 def permute_columns(frame: pd.DataFrame, columns, order) -> pd.DataFrame:
     """Move the group's values jointly across rows; row IDs and other columns stay put."""
     result = frame.copy()
@@ -194,12 +248,17 @@ def fold_attribution(model, x, y_true, prediction, groups, *, predict, classes, 
         prediction = predict(predictor, frame)
     base = row_losses(y_true, prediction, classes, variance)
     control = row_losses(y_true, predict(predictor, frame), classes, variance) - base
+    permutation = settings.get("permutation", CONDITIONAL)
+    if permutation not in PERMUTATIONS:
+        raise ValueError(f"Unknown permutation scheme {permutation!r}")
     results = []
     for group in groups:
         rng = group_rng(seed, fold, group["group"])
+        flags = strata_columns(group, frame, permutation)
+        strata = frame[flags].to_numpy() if flags else np.empty((len(frame), 0))
         values = []
         for _ in range(settings["repeats"]):
-            order = rng.permutation(len(frame))
+            order = stratified_order(rng, strata)
             loss = row_losses(y_true, predict(predictor, permute_columns(frame, group["columns"], order)),
                               classes, variance)
             values.append(float(np.mean(loss - base)) if np.isfinite(loss - base).all() else None)
@@ -208,10 +267,14 @@ def fold_attribution(model, x, y_true, prediction, groups, *, predict, classes, 
             **{k: v for k, v in group.items() if k != "columns"},
             "n_columns": len(group["columns"]),
             "columns_sha256": digest(group["columns"]),
+            "permutation": CONDITIONAL if flags else UNCONDITIONAL,
+            "strata_columns": flags,
+            "n_strata": int(len(np.unique(strata, axis=0))) if flags else 1,
             "mean_loss_increase": float(np.mean(defined)) if len(defined) == len(values) else None,
             "repeat_loss_increases": values,
         })
     return {
+        "permutation": permutation,
         "status": "complete" if np.isfinite(base).all() else "undefined_loss",
         "reason": None if np.isfinite(base).all() else "zero_variance_training_target",
         "loss": "log_loss" if len(classes) else "squared_error_over_training_variance",
@@ -324,12 +387,14 @@ def attribution_folds(phases=STRUCTURED_PHASES):
                 continue
             family, representation = _representation(body.get("representation_recipe"),
                                                      body["feature_set"], phase)
+            # v1 bodies predate the setting and were unconditional.
+            scheme = (body.get("settings") or {}).get("permutation", UNCONDITIONAL)
             for group in body["groups"]:
                 rows.append({
                     "phase": phase, "dataset_id": body["dataset_id"],
                     "task_type": body.get("task_type"), "model_id": body["model_id"],
                     "checkpoint_id": body["checkpoint_id"], "feature_set": body["feature_set"],
-                    "family": family, "representation": representation,
+                    "family": family, "representation": representation, "permutation": scheme,
                     "outer_fold": body["outer_fold"],
                     **{k: group.get(k) for k in ("group", "kind", "provider", "mode",
                                                  "text_index", "text_field", "n_columns")},
@@ -339,8 +404,8 @@ def attribution_folds(phases=STRUCTURED_PHASES):
 
 
 _GROUP_KEYS = ["phase", "dataset_id", "task_type", "model_id", "checkpoint_id", "feature_set",
-               "family", "representation", "group", "kind", "provider", "mode", "text_index",
-               "text_field"]
+               "family", "representation", "permutation", "group", "kind", "provider", "mode",
+               "text_index", "text_field"]
 
 
 def attribution_summary(phases=STRUCTURED_PHASES, *, field_types=None, folds=None):
@@ -350,6 +415,8 @@ def attribution_summary(phases=STRUCTURED_PHASES, *, field_types=None, folds=Non
     taxonomy in ``field_types``: per-column decision and embedding groups take their text
     field's type; joint blocks, availability flags and non-text columns keep their own type.
     Each dataset first averages its groups of one type, then datasets carry equal weight.
+    The permutation scheme is a key throughout, so conditional and unconditional results
+    never mix.
     """
     counts = None
     if folds is None:
@@ -357,6 +424,8 @@ def attribution_summary(phases=STRUCTURED_PHASES, *, field_types=None, folds=Non
         _, counts = attribution_status(phases)
     if folds.empty:
         return pd.DataFrame(), pd.DataFrame(), counts
+    if "permutation" not in folds:
+        folds = folds.assign(permutation=UNCONDITIONAL)
     by_group = folds.groupby(_GROUP_KEYS, dropna=False).agg(
         mean_loss_increase=("mean_loss_increase", "mean"),
         fold_sd=("mean_loss_increase", "std"),
@@ -381,7 +450,8 @@ def attribution_summary(phases=STRUCTURED_PHASES, *, field_types=None, folds=Non
 
     by_group["field_type"] = [field_type(r) for r in by_group.itertuples()]
     complete = by_group[by_group.defined_folds.eq(by_group.folds) & by_group.folds.eq(5)]
-    keys = ["phase", "model_id", "checkpoint_id", "family", "representation", "kind", "field_type"]
+    keys = ["phase", "model_id", "checkpoint_id", "family", "representation", "permutation",
+            "kind", "field_type"]
     per_dataset = (complete.groupby([*keys, "dataset_id"], dropna=False)
                    .mean_loss_increase.mean().reset_index())
     by_type = (per_dataset.groupby(keys, dropna=False)

@@ -99,8 +99,8 @@ def test_every_experiment_has_thin_notebook_and_complete_printed_report():
     from src.utils import structure
 
     for folder in {n.folder for n in structure.registry().notebooks}:
-        notebooks = list((paths.REPO_ROOT / "notebooks" / folder).glob("*.ipynb"))
-        assert notebooks
+        notebooks = [paths.REPO_ROOT / "notebooks" / f"{folder}.ipynb"]
+        assert notebooks[0].is_file()
         for filename in notebooks:
             body = json.loads(filename.read_text(encoding="utf-8"))
             code = ["".join(c["source"]) for c in body["cells"] if c["cell_type"] == "code"]

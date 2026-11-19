@@ -13,17 +13,25 @@ class CredentialFormatError(ValueError):
 
 
 def credentials_available():
-    return "TYPESAFE_API_KEY" in os.environ or (
-        not paths.on_vsc() and LOCAL_CREDENTIAL_PATH.is_file()
-    )
+    return credential_present("TYPESAFE_API_KEY", LOCAL_CREDENTIAL_PATH)
+
+
+def credential_present(env_var, local_path):
+    """Presence only: the ignored file is checked for existence, never read."""
+    return env_var in os.environ or (not paths.on_vsc() and local_path.is_file())
 
 
 def api_key():
-    if "TYPESAFE_API_KEY" in os.environ:
-        value = os.environ["TYPESAFE_API_KEY"]
-    elif not paths.on_vsc() and LOCAL_CREDENTIAL_PATH.is_file():
+    return read_api_key("TYPESAFE_API_KEY", LOCAL_CREDENTIAL_PATH)
+
+
+def read_api_key(env_var, local_path):
+    """Provider-neutral loader: env var first, then the local ignored file (never on VSC)."""
+    if env_var in os.environ:
+        value = os.environ[env_var]
+    elif not paths.on_vsc() and local_path.is_file():
         try:
-            value = json.loads(LOCAL_CREDENTIAL_PATH.read_text(encoding="utf-8-sig"))["api_key"]
+            value = json.loads(local_path.read_text(encoding="utf-8-sig"))["api_key"]
         except (OSError, ValueError, KeyError, TypeError):
             raise CredentialFormatError(
                 "The local credential file must be a JSON object with an api_key string."

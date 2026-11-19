@@ -71,30 +71,22 @@ def test_discovery_can_be_overridden_for_a_partial_rerun(tmp_path, monkeypatch) 
     assert rn.discover(("only_this",)) == ("only_this",)
 
 
-def test_recursive_discovery_resolves_unique_stems_and_rejects_ambiguity(tmp_path, monkeypatch):
+def test_discovery_is_flat_and_rejects_nested_notebooks(tmp_path, monkeypatch):
+    """One notebook per folder lives at `notebooks/<folder>.ipynb`; a nested notebook would be
+    silently skipped by a flat glob, so it is refused instead."""
     monkeypatch.setattr(rn, "notebooks_dir", lambda: tmp_path)
-    for name in (
-        "exploration/a",
-        "feature_creation/a",
-        "experiment_0/b",
-        "exploration/.ipynb_checkpoints/a-checkpoint",
-    ):
+    for name in ("exp04_decision_features", "00_data", ".ipynb_checkpoints/00_data-checkpoint"):
         make_notebook(tmp_path / f"{name}.ipynb", ["print(1)"])
-    assert rn.discover() == ("experiment_0/b", "exploration/a", "feature_creation/a")
-    assert rn.discover(("b",)) == ("experiment_0/b",)
-    with pytest.raises(ValueError, match="Ambiguous"):
-        rn.discover(("a",))
-    assert rn.discover(("feature_creation/a",)) == ("feature_creation/a",)
+    assert rn.discover() == ("00_data", "exp04_decision_features")
+    # Previous IDs and stems resolve to the flat notebook.
+    assert rn.discover(("rq2/01_decisions",)) == ("exp04_decision_features",)
+    assert rn.discover(("exp04_decision_features/decisions",)) == ("exp04_decision_features",)
+    assert rn.discover(("decisions",)) == ("exp04_decision_features",)
     with pytest.raises(ValueError):
         rn.discover(("../outside",))
-
-
-def test_numbered_notebooks_accept_stems_or_logical_phase_aliases(tmp_path, monkeypatch):
-    monkeypatch.setattr(rn, "notebooks_dir", lambda: tmp_path)
-    name = "1. question_preparation/01_prepare_questions"
-    make_notebook(tmp_path / f"{name}.ipynb", ["print(1)"])
-    assert rn.discover(("question_preparation/01_prepare_questions",)) == (name,)
-    assert rn.discover(("01_prepare_questions",)) == (name,)
+    make_notebook(tmp_path / "exp01_outputs" / "outputs.ipynb", ["print(1)"])
+    with pytest.raises(ValueError, match="flat"):
+        rn.discover()
 
 
 def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch) -> None:

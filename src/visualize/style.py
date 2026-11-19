@@ -193,6 +193,12 @@ DECISION_SHORT = {
 EVIDENCE_MARKS = {"observed": "#2E7D4F", "failed": "#B03A2E", "unknown": "#FFFFFF",
                   "not_applicable": "#E6E9EC", "review": "#D8A23A"}
 AGREEMENT_DIVERGING = "RdBu"  # Rank agreement in [-1, 1]; 0 is white.
+# Exp 8 row-level views: benefit is centred at zero (EFFECT_CMAP); sparse cells are masked.
+DATA_MAP_MIN_ROWS = 5
+DATA_MAP_PANELS = (3, 3)  # Datasets per page (rows, columns) at full width.
+POST_TREATMENT_COLOR = "#8A8F96"  # Prediction-shift cohorts: descriptive, post-treatment.
+ARCHITECTURE_MARKERS = {"decoder_pointer_head": "o", "decoder_lm_head": "s",
+                        "bidirectional_encoder": "D", "other": "^", "undisclosed": "x"}
 COMPARISON_MATRIX_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_COVERAGE_SIZE = (WIDTH_FULL, MAX_HEIGHT)
 COMPARISON_PENDING_SIZE = (WIDTH_FULL, 3.6)

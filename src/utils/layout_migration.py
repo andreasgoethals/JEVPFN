@@ -1,4 +1,9 @@
-"""Move an existing output tree into the 18-11-2026 layout (config/structure.yaml).
+"""Move an existing output tree into the current layout (config/structure.yaml).
+
+The 18-11-2026 layout was revised on 19-11-2026: one flat notebook per folder (records in
+`figures/<folder>/`, `{logs,manifests,results}/notebooks/<folder>/`), `exp09_adaptation`
+renamed `exp10_adaptation`, and records of the four merged adaptation notebooks archived
+under `archives/layout_20261119/`. The same command migrates either previous layout.
 
 Preview by default; nothing changes without --apply --writers-stopped:
 
@@ -88,6 +93,7 @@ def plan(root: Path) -> dict:
     if _linked(root) or not root.is_dir():
         raise ValueError("Output root must be a real directory")
     moves: list[tuple[PurePosixPath, PurePosixPath]] = []
+    empty: list[PurePosixPath] = []
     unmapped: list[str] = []
     conflicts: list[str] = []
 
@@ -114,6 +120,7 @@ def plan(root: Path) -> dict:
                 and _uniform(root, relative, target)):
             if _occupied(root, target, [m[1] for m in moves]):
                 if not any(path.iterdir()):
+                    empty.append(relative)
                     return  # An empty legacy directory; removed after the moves.
                 # A partly existing destination: move the children individually.
             else:
@@ -126,7 +133,7 @@ def plan(root: Path) -> dict:
         visit(PurePosixPath(child.name))
     sources = {s for s, _ in moves}
     return {"root": str(root), "moves": moves, "unmapped": unmapped, "conflicts": conflicts,
-            "sources": sources}
+            "sources": sources, "empty": empty}
 
 
 def _inventory(root: Path, moves) -> dict[str, dict]:
@@ -165,6 +172,7 @@ def _summary(result: dict) -> dict:
         "root": result["root"],
         "moves": [{"source": s.as_posix(), "destination": d.as_posix()} for s, d in result["moves"]],
         "conflicts": result["conflicts"],
+        "empty_legacy_directories": [e.as_posix() for e in result["empty"]],
         "unmapped_files": len(result["unmapped"]),
         "unmapped_top_level": sorted({PurePosixPath(u).parts[0] for u in result["unmapped"]}),
     }
@@ -226,7 +234,7 @@ def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
     if failures:
         raise RuntimeError("Moved files failed verification; both layouts preserved for review: "
                            + ", ".join(failures[:10]))
-    removed, kept = remove_empty_legacy_directories(root, [s for s, _ in moves])
+    removed, kept = remove_empty_legacy_directories(root, [s for s, _ in moves], result["empty"])
     receipt.update(removed_empty_directories=removed, empty_directories_left=kept,
                    completed_utc=datetime.now(UTC).isoformat(), status="complete")
     write_json(receipt_path, receipt)
@@ -249,10 +257,14 @@ def _remove_empty(directory: Path) -> bool:
             return False
 
 
-def remove_empty_legacy_directories(root: Path, sources=()) -> tuple[list[str], list[str]]:
-    """Remove previous-layout directories that the moves left empty. Never removes a file."""
+def remove_empty_legacy_directories(root: Path, sources=(), empty=()) -> tuple[list[str], list[str]]:
+    """Remove previous-layout directories that the moves left empty. Never removes a file.
+
+    `empty` lists previous-layout directories the plan found already empty (e.g. a former
+    `figures/<folder>/<notebook>/` that never held a figure).
+    """
     root = Path(root)
-    candidates = set()
+    candidates = {root / e for e in empty}
     for source in sources:
         for parent in (root / source).parents:
             if parent == root or not parent.is_relative_to(root):

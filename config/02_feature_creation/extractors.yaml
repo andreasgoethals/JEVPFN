@@ -212,6 +212,64 @@ candidates:
     license: Apache-2.0
     input_price_per_million_usd: null
     reference: https://huggingface.co/sthanika-ai/Sieve-31B-v3
+# Hosted candidates outside the approved roster: no roster, registry, question or feature
+# consumer reads this block. Adding one to `candidates` needs owner selection, a
+# model_properties row and a signed native 0A review. Client: src.jev.liquid_hosted.
+hosted_candidates:
+  liquid_ultra:
+    enabled: false
+    delivery: hosted
+    provider_name: Liquid AI
+    model: d1.2-ultra  # Exact hosted id; aliases such as ':latest' are refused.
+    # Pin the newest release at campaign start, then only that release: set
+    # '<model>@<release_date>' from GET /decisions/v1/models. Null refuses every request.
+    version: null
+    version_policy: pin_newest_release_at_campaign_start_then_only_that_release
+    version_source: https://docs.liquid.ai/api/reference/decision-models/list-decision-models.md
+    endpoint: https://api.liquid.ai/decisions/v1/systemone
+    models_endpoint: https://api.liquid.ai/decisions/v1/models
+    credential_env: LIQUID_API_KEY  # Takes precedence over the ignored secrets/liquid.local.json.
+    context_tokens: 65536  # Per question incl. state; server returns 422 above it. No local tokenizer.
+    max_text_bytes_per_question: 250000
+    max_request_body_bytes: 4500000  # Documented "4.5 MB"; the decimal reading is the smaller bound.
+    max_options: 255  # API reference: Choice criteria 2-255.
+    max_score_levels: 10  # API reference: Score criteria 2-10; JEVPFN sends 9.
+    input_price_per_million_usd: 0.042
+    output_price_per_million_usd: 0
+    price_checked_on: '2026-11-19'
+    price_source: https://www.liquid.ai/pricing
+    published_rate_limits: null  # Per organisation and model, shown only in Liquid Console.
+    determinism: not_documented
+    terms: https://www.liquid.ai/terms  # Updated 30-09-2026; section 7 restricts using outputs to train or improve other AI models.
+    license: Liquid_Terms_of_Service_hosted_api
+    reference: https://docs.liquid.ai/lfm/models/d1
+    account_required: true
+    account_created: false
+    budget_authorised: false
+    live_extraction:
+      enabled: false
+      pilot_authorized: false
+      # Owner-signed reviewed_acceptance files; see src.jev.liquid_hosted for stages.
+      pilot_authorization_manifest: null
+      pilot_accepted: false
+      accepted_pilot_manifest: null
+      full_feature_creation_enabled: false
+      max_pilot_requests: 0
+      account_limits_verified: false
+      billing_bound_verified: false
+      context_policy_reviewed: false
+      price_verified: false
+      # Only after a pilot shows 429/503 rejections carry no usage; until then they stop as ambiguous.
+      overload_rejections_unbilled_verified: false
+      dataset_budget_allocations_usd: {}
+      campaign_spending_limit_usd: null
+      max_billed_input_tokens_per_attempt: null  # Verified upper bound, never a char/4 estimate.
+      requests_per_second: null
+      input_tokens_per_second: null
+      workers: 1
+      spending_policy_revision_manifest: null
+      ambiguous_response_policy: stop_and_review_never_automatically_repay
+      dispatcher: src.jev.liquid_hosted
 readiness_required:
 - explicit_owner_roster_selection
 - verified_account_access_or_checkpoint_license

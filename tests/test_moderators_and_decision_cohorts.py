@@ -32,7 +32,7 @@ def _gains(values, moderator):
 def test_spearman_with_dataset_bootstrap_and_reported_gaps():
     gains, covariates = _gains(np.arange(8.0), np.arange(8) ** 2)
     table = m.moderator_associations(gains, covariates, n_boot=200, seed=3)
-    rows = table.set_index("moderator")
+    rows = table[table.outcome.eq("gain")].set_index("moderator")
     assert rows.loc["n_rows", "spearman_rho"] == pytest.approx(1.0)
     assert rows.loc["n_rows", ["ci_low", "ci_high"]].tolist() == pytest.approx([1.0, 1.0])
     assert rows.loc["n_rows", "n_datasets"] == 8 and rows.loc["n_rows", "status"] == "descriptive"
@@ -40,10 +40,10 @@ def test_spearman_with_dataset_bootstrap_and_reported_gaps():
     assert rows.loc["baseline_headroom", "status"] == "constant_input"
     assert m.moderator_associations(gains, covariates, n_boot=200, seed=3).equals(table)
     reversed_gains, cov = _gains(np.arange(8.0)[::-1].copy(), np.arange(8))
-    assert m.moderator_associations(reversed_gains, cov, n_boot=0).set_index(
+    assert m.moderator_associations(reversed_gains, cov, n_boot=0, outcomes=("gain",)).set_index(
         "moderator").loc["n_rows", "spearman_rho"] == pytest.approx(-1.0)
     few, cov = _gains(np.arange(3.0), np.arange(3))
-    assert m.moderator_associations(few, cov, n_boot=10).set_index(
+    assert m.moderator_associations(few, cov, n_boot=10, outcomes=("gain",)).set_index(
         "moderator").loc["n_rows", "status"] == "too_few_datasets"
 
 
@@ -72,7 +72,7 @@ def test_headroom_and_provider_specific_decision_properties(tmp_path):
     covariates.attrs["decision_properties"] = properties
     for column in m.DECISION_PROPERTIES:
         covariates[column] = np.nan
-    rows = m.moderator_associations(gains, covariates, n_boot=0).set_index("moderator")
+    rows = m.moderator_associations(gains, covariates, n_boot=0, outcomes=("gain",)).set_index("moderator")
     assert rows.loc["baseline_headroom", "spearman_rho"] == pytest.approx(1.0)
     assert rows.loc["decision_mean_max_probability", "spearman_rho"] == pytest.approx(1.0)
     assert rows.loc["decision_mean_pairwise_agreement", "spearman_rho"] == pytest.approx(-1.0)

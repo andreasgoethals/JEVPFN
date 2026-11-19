@@ -1,7 +1,8 @@
-"""Saving figures. One folder per notebook, one PDF per figure, cleared before drawing.
+"""Saving figures. One folder per notebook (one notebook per experiment folder), one PDF per
+figure, cleared before drawing.
 
-    output_JEVPFN/figures/<folder>/<notebook>/01_<name>.pdf    the figure — vector, for the paper
-    output_JEVPFN/manifests/notebooks/<folder>/<notebook>/_figures.json ordered captions
+    output_JEVPFN/figures/<folder>/01_<name>.pdf               the figure — vector, for the paper
+    output_JEVPFN/manifests/notebooks/<folder>/_figures.json   ordered captions
 
 PDF ONLY. Figures use A4 dimensions from `src/visualize/style.py`; dense audits are split
 across panels rather than shrinking labels below the print-size minimum.
@@ -37,7 +38,8 @@ DPI = 300
 #: The only things ever deleted from a notebook's folder. Anything else a person put there
 #: survives: a cleaner that removes what it does not recognise eventually removes something
 #: irreplaceable.
-_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "_stderr.txt", "_report.txt", "_run.json", "_config.json", "_previous.ipynb", "Captions.md")
+#: `Captions.md` beside the PDFs belongs to the runner (rebuilt from the manifests), not here.
+_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "_stderr.txt", "_report.txt", "_run.json", "_config.json", "_previous.ipynb")
 
 MANIFEST = "_figures.json"
 

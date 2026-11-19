@@ -132,4 +132,5 @@ markers = [
     "notebook: requires the local IPython/Jupyter environment; excluded from VSC CPU contracts",
     "slow: takes more than a few seconds",
     "gpu: requires CUDA; skipped on the local dev machine",
+    "real_repository_roots: resolves, never writes, the real off-cluster output roots",
 ]

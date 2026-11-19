@@ -181,7 +181,7 @@ def phase_name(phase: str | None = None) -> str:
         if structure.legacy_phase(value) is None:
             raise ValueError(f"Incorrect phase number: {value}")
         return numbered[2]
-    owners = {e.owner_phase for e in layout().entries if e.folder == value}
+    owners = {e.owner_phase for e in layout().entries if value in {e.folder, *e.previous_folders}}
     if len(owners) == 1:
         return owners.pop()
     raise ValueError(f"Unknown research phase: {value}")
@@ -211,7 +211,7 @@ def result_relative(phase: str, *parts: str) -> Path:
 
 
 def notebook_id(notebook: str) -> str:
-    """Canonical `<folder>/<name>` of a registered notebook; other names are returned as given."""
+    """Canonical ID (the folder) of a registered notebook; other names are returned as given."""
     _validate_notebook_name(notebook)
     found = layout().notebook(notebook)
     return found.id if found else notebook
@@ -349,13 +349,20 @@ def _record_folder(notebook: str | None, phase: str | None) -> str | None:
     return phase_folder(phase).split("/")[0] if phase is not None else None
 
 
-def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
-    """All figures share one root, then the registry folder and notebook name."""
-    root = notebook_outputs_dir() / "figures"
+def _record_parts(notebook: str | None, phase: str | None) -> tuple[str, ...]:
+    """Record sub-path: `<folder>` for a registered (flat) notebook, else `<folder>/<stem>`."""
     folder = _record_folder(notebook, phase)
-    if folder is not None:
-        root = root / folder
-    return root / notebook_stem(notebook) if notebook else root
+    parts = (folder,) if folder is not None else ()
+    if notebook is None:
+        return parts
+    if phase is None and layout().notebook(notebook) is not None:
+        return parts  # One notebook per folder: its records are the folder itself.
+    return (*parts, notebook_stem(notebook))
+
+
+def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
+    """All figures share one root, then the registry folder (one notebook per folder)."""
+    return (notebook_outputs_dir() / "figures").joinpath(*_record_parts(notebook, phase))
 
 
 def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", phase: str | None = None) -> Path:
@@ -363,12 +370,7 @@ def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", 
     if kind not in {"manifests", "logs", "results"}:
         raise ValueError("Notebook artifact kind must be manifests, logs or results")
     root = notebook_outputs_dir()
-    folder = root / kind / "notebooks"
-    record = _record_folder(notebook, phase)
-    if record is not None:
-        folder = folder / record
-    if notebook is not None:
-        folder = folder / notebook_stem(notebook)
+    folder = (root / kind / "notebooks").joinpath(*_record_parts(notebook, phase))
     for entry in (folder, *folder.parents):
         if entry.is_symlink() or getattr(entry, "is_junction", lambda: False)():
             raise ValueError(f"Linked notebook output is not allowed: {entry}")
@@ -571,6 +573,7 @@ def _legacy_config_locations(stem: str, current: str) -> list[str]:
         if legacy:
             found += [f"general/{legacy}/{rest}", f"rq2/{legacy}/{rest}", f"{legacy}/{rest}"]
     found += [f"{group}/{rest}" for group in ("rq1", "rq3")]
+    found += [f"{old}/{rest}" for old, new in layout().previous_folders.items() if new == folder]
     return found
 
 
