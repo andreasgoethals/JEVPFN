@@ -1,6 +1,13 @@
 """Preflight widths; distinguish a selected recipe's limit from hardware capacity."""
 
-from src.evaluation.features import decision_feature_set, uses_embeddings
+from src.evaluation.features import (
+    ADAPTED,
+    HIDDEN_FEATURE_SETS,
+    PER_COLUMN_WITHOUT_ONE,
+    SUPERVISED_PROBE,
+    decision_feature_set,
+    uses_embeddings,
+)
 
 
 def feature_width(metadata, arm):
@@ -34,9 +41,21 @@ def feature_width(metadata, arm):
             if name.endswith("both")
             else 0
         )
+        if arm["feature_set"] == PER_COLUMN_WITHOUT_ONE:
+            groups -= 1
         providers = arm.get("providers") or ([arm["provider"]] if arm.get("provider") else [])
         width += len(providers) * groups * per_input
-    if uses_embeddings(arm["feature_set"]):
+    if arm["feature_set"] == SUPERVISED_PROBE:
+        per_input = {"binary_classification": 1, "regression": 9}.get(
+            metadata.task_type, len(metadata.classes)
+        )
+        width += per_input * (texts if arm["probe_view"] == "per_column" else 1)
+    elif arm["feature_set"] in HIDDEN_FEATURE_SETS:  # Group C1: PCA of one hidden-state group
+        width += arm["pca_components"] * (texts if arm["hidden_view"] == "per_column" else 1)
+    elif arm["feature_set"] == ADAPTED:  # Group C2: B1's joint width
+        width += {"binary_classification": 1, "regression": 9}.get(
+            metadata.task_type, len(metadata.classes))
+    elif uses_embeddings(arm["feature_set"]):
         width += arm["pca_components"] * (texts if arm["pca_scope"] == "per_column" else 1)
     return max(width, 1)
 

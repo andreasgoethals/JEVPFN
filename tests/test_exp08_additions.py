@@ -237,14 +237,15 @@ def test_field_novelty_is_stratified_by_field_type_and_post_treatment_is_labelle
     ref = pd.DataFrame(dict(row_id=[f"csv:{i}" for i in range(4)], y_true=[1.0, 2, 3, 4],
                             prediction=[0.0, 2, 3, 5], text_present=[True] * 4,
                             joint_text_seen_in_train=[False] * 4))
+    # Group B (20-11-2026): novelty and prediction-shift cohorts are no longer reported.
     rows, _ = rb.paired_cohorts(ref, ref.assign(prediction=[1.0, 2, 3, 4]), [], 2.0,
-                                [1.0, 2.0], [1.0, 2.0, 3.0, 4.0], field_novelty=novelty)
+                                [1.0, 2.0], [1.0, 2.0, 3.0, 4.0])
     axes = {r["axis"] for r in rows}
-    assert {"novelty_by_field_type:categorical", "novelty_by_field_type:short_text"} <= axes
+    assert not {a for a in axes if a.startswith(("novelty", "prediction_shift"))}
     per_axis = pd.DataFrame(rows).groupby("axis").rows.sum()
     assert per_axis.eq(4).all()  # Each axis partitions the held-out rows.
-    assert rb.axis_interpretation("prediction_shift") == "descriptive (post-treatment)"
-    assert rb.axis_interpretation("novelty").startswith("pre-treatment")
+    assert rb.POST_TREATMENT_AXES == ()
+    assert rb.axis_interpretation("length").startswith("pre-treatment")
 
 
 # ----------------------------------------------------------------------- complementarity
@@ -425,7 +426,6 @@ def test_paper_figure_map_validates_and_resolves_saved_files(tmp_path):
     for mutate, message in [
         (lambda r: r["figures"][0].update(notebook="exp99_missing"), "unknown notebook"),
         (lambda r: r["figures"][0].update(placement="front"), "placement"),
-        (lambda r: r["figures"][4].update(status="available_when_results_exist"), "reserved"),
         (lambda r: r["figures"].append(dict(r["figures"][0])), "unique"),
         (lambda r: r["figures"][0].update(figures=["Bad Name"]), "stems"),
     ]:
@@ -433,3 +433,14 @@ def test_paper_figure_map_validates_and_resolves_saved_files(tmp_path):
         mutate(broken)
         with pytest.raises(ValueError, match=message):
             paper_figures.load(broken)
+    # A reserved (planned) folder admits only planned figures. No number is reserved since
+    # Group C activated Exp 9 (20-11-2026), so a synthetic reservation is used.
+    from src.utils import structure
+
+    reg = structure.registry()
+    reserved = structure.Registry(reg.entries, reg.paper, (structure.Planned(
+        "exp12", "exp12_future", "Future", "planned_not_implemented"),))
+    broken = copy.deepcopy(raw)
+    broken["figures"][0].update(notebook="exp12_future", status="available_when_results_exist")
+    with pytest.raises(ValueError, match="reserved"):
+        paper_figures.load(broken, registry=reserved)

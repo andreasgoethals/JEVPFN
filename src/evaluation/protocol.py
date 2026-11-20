@@ -106,15 +106,20 @@ def validate_splits(dataset, specification):
         raise ValueError("Split belongs to another dataset version")
     expected = set(range(len(dataset.frame)))
     tests = []
+    # B4 (owner-approved, 20 November 2026): an explicit, recorded training-row subsample
+    # of the shared outer folds; test rows are unchanged. Never a silent cap.
+    subsample = body.get("subsample")
     for fold in body["folds"]:
         train, test = fold["train"], fold["test"]
+        covered = set(train) | set(test)
         if (
             len(train) != len(set(train))
             or len(test) != len(set(test))
             or set(train) & set(test)
-            or set(train) | set(test) != expected
+            or (covered != expected if subsample is None else not covered <= expected)
             or not train
             or not test
+            or (subsample is not None and len(train) != subsample["training_size"])
         ):
             raise ValueError("Invalid outer partition")
         tests.extend(test)
@@ -206,6 +211,10 @@ def evaluate_cv(
         "experiment_2",
         "experiment_3",
         "experiment_4",
+        "rq2",  # B3 text-column refits
+        "data_efficiency",  # B4 training-size curves
+        "representations",  # C1 Strands hidden states
+        "rq3",  # C2 Strands learning from labels
     }:
         raise ValueError("Evaluation requires an experiment phase")
     row_ids = [f"csv:{i}" for i in range(len(dataset.frame))]

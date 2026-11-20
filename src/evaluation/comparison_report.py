@@ -1,19 +1,24 @@
-"""Publish the RQ1A CPU analysis once and render its small verified tables locally."""
+"""A1 (exp01_outputs): publish the CPU analysis once as `comparison.zip`; render it locally.
+
+The Mindwell CPU job (`scripts/slurm/rq1_outputs.slurm`) reads every complete published
+feature store on GPFS PROJECT and writes one compact ZIP with the label-free comparison
+tables, the output-shape, pairwise and leave-one-out consensus tables, the joint-request
+stand-alone quality/calibration tables (labels used for scoring only) and the model profile
+(compute time from the Slurm ledger). Row-level data stay on PROJECT.
+"""
 
 import argparse
-import hashlib
-import io
 import json
 import os
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
 
+from src.evaluation import study_export
 from src.evaluation.decision_comparison import Comparison, compare_saved_features
 from src.evaluation.decision_diagnostics import inspect_cases, peer_majority_agreement
+from src.evaluation.zero_shot import direct_scores
 from src.utils import paths
 from src.utils.config import load_config, load_yaml
 from src.utils.files import atomic_replace
@@ -30,8 +35,14 @@ TABLES = (
     "vote_patterns",
     "cases",
     "peer_majority",
+    "output_shape",
+    "level_histogram",
+    "loo_consensus",
+    "quality",
+    "reliability",
+    "model_profile",
 )
-SCHEMA = "jevpfn.rq1a.report.v1"
+SCHEMA = "jevpfn.rq1a.report.v2"
 
 
 def report_config():
@@ -59,51 +70,21 @@ def report_path():
 
 def write_report(result, cfg, target, *, origin, joint_rows):
     """Atomically publish a complete report. Member hashes also bind scientific scope."""
-    target = Path(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=target.parent) as work:
-        candidate = Path(work) / target.name
-        with ZipFile(candidate, "w", compression=ZIP_DEFLATED) as out:
-            hashes = {}
-            for name in TABLES:
-                data = result.table(name).to_parquet(index=False)
-                out.writestr(f"{name}.parquet", data)
-                hashes[name] = hashlib.sha256(data).hexdigest()
-            meta = dict(
-                schema=SCHEMA,
-                config_sha256=analysis_identity(cfg),
-                origin=origin,
-                created_utc=datetime.now(UTC).isoformat(),
-                members=hashes,
-                joint_rows=joint_rows,
-            )
-            out.writestr("manifest.json", json.dumps({**meta, "receipt_sha256": digest(meta)}))
-        read_report(cfg, candidate)
-        atomic_replace(candidate, target)
+    return study_export.write_export(
+        target, {name: result.table(name) for name in TABLES}, schema=SCHEMA,
+        identity=analysis_identity(cfg), origin=origin, extra={"joint_rows": joint_rows})
 
 
 def read_report(cfg, target=None, *, allow_previous_roster=False):
+    """Verified tables, or an explicit waiting state (absent or superseded-schema ZIP)."""
     target = report_path() if target is None else Path(target)
     result = Comparison()
-    if not target.exists():
+    frames, meta = study_export.read_export(target, schema=SCHEMA, tables=TABLES)
+    if meta["status"] != "verified_export":
         result.frames["inventory"] = [pd.DataFrame(columns=["provider", "status"])]
-        return result, {"status": "awaiting_cpu_report"}
-    with ZipFile(target) as archive:
-        meta = json.loads(archive.read("manifest.json"))
-        receipt = meta.pop("receipt_sha256")
-        names = ["manifest.json", *(f"{table}.parquet" for table in TABLES)]
-        if (
-            meta.get("schema") != SCHEMA
-            or digest(meta) != receipt
-            or set(meta["members"]) != set(TABLES)
-            or sorted(archive.namelist()) != sorted(names)
-        ):
-            raise ValueError("Comparison report configuration, receipt or member list differs")
-        for name in TABLES:
-            data = archive.read(f"{name}.parquet")
-            if hashlib.sha256(data).hexdigest() != meta["members"][name]:
-                raise ValueError(f"Comparison report checksum differs for {name}")
-            result.frames[name] = [pd.read_parquet(io.BytesIO(data))]
+        return result, {**meta, "status": "awaiting_cpu_report" if meta["status"] == study_export.AWAITING
+                        else meta["status"]}
+    result.frames.update({name: [frame] for name, frame in frames.items()})
     status = "verified_snapshot"
     pending = []
     if meta.get("config_sha256") != analysis_identity(cfg):
@@ -120,20 +101,24 @@ def read_report(cfg, target=None, *, allow_previous_roster=False):
             raise ValueError("Comparison report configuration differs")
         pending = [p for p in configured if p not in previous]
         status = "verified_previous_roster"
-    return result, {**meta, "status": status, "unassessed_additions": pending, "receipt_sha256": receipt}
+    return result, {**meta, "status": status, "unassessed_additions": pending}
+
+
+def model_profile(cfg):
+    """Model properties plus successful GPU-hours per 1,000 distinct requests (compute only)."""
+    from src.evaluation import model_properties
+
+    def read(path):
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    ledger = read(paths.outputs_dir() / cfg["comparison"]["compute_ledger"])
+    audit = read(paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json")
+    compute = model_properties.compute_per_thousand(ledger, audit, cfg["comparison"]["providers"])
+    return model_properties.profile_table(compute)
 
 
 def build():
-    if (
-        not paths.on_vsc()
-        or os.environ.get("SLURM_CLUSTER_NAME") != "mindwell"
-        or not os.environ.get("SLURM_JOB_ID")
-        or not paths.native_gpfs_project(paths.durable_project_override())
-        or paths.staging_root() != paths.durable_project_override()
-    ):
-        raise RuntimeError(
-            "Build the RQ1A comparison on a Mindwell CPU allocation reading native GPFS PROJECT"
-        )
+    study_export.require_mindwell_cpu("A1 outputs")
     cfg = report_config()
     target = report_path()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -143,6 +128,10 @@ def build():
             raise ValueError("At least two complete published providers are required for RQ1A")
         inspect_cases(result)
         result.frames["peer_majority"] = [peer_majority_agreement(result)]
+        quality, reliability = direct_scores(cfg=cfg)
+        result.frames["quality"] = [quality]
+        result.frames["reliability"] = [reliability]
+        result.frames["model_profile"] = [model_profile(cfg)]
         rows = result.table("row_diagnostics")
         with tempfile.TemporaryDirectory(dir=target.parent) as work:
             candidate = Path(work) / "joint_rows.parquet"
@@ -154,7 +143,7 @@ def build():
             result,
             cfg,
             target,
-            origin=f"mindwell:{os.environ['SLURM_JOB_ID']}",
+            origin=study_export.job_origin(),
             joint_rows={"name": name, "rows": len(rows), "sha256": checksum},
         )
         print(f"{target}  SHA256 {file_sha256(target)}", flush=True)
@@ -164,3 +153,53 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
     build()
+
+
+# ---- Notebook views of the verified export (compact tables only; nothing is recomputed) ----
+
+def dataset_mode_table(table, metrics):
+    """Per model × dataset × request mode: distinct inputs, text fields with equal weight."""
+    if table.empty:
+        return pd.DataFrame(columns=["task", "dataset", "representation", "provider", *metrics])
+    present = [m for m in metrics if m in table]
+    frame = table[table.weighting.eq("unique_inputs")]
+    return (frame.groupby(["task", "dataset", "representation", "provider"], sort=False)[present]
+            .mean().reset_index())
+
+
+def equal_dataset_table(table, metrics):
+    """Per task, mode and model: equal dataset weight over `dataset_mode_table` rows."""
+    frame = dataset_mode_table(table, metrics)
+    if frame.empty:
+        return frame
+    present = [m for m in metrics if m in frame]
+    out = frame.groupby(["task", "representation", "provider"], sort=False)[present].mean()
+    out["datasets"] = frame.groupby(["task", "representation", "provider"], sort=False).size()
+    return out.reset_index()
+
+
+def pairwise_table(pairs):
+    """Per task and mode, every model pair with equal dataset weight."""
+    from src.evaluation.decision_comparison import dataset_balanced
+
+    if pairs.empty or "top_agreement" not in pairs:
+        return pd.DataFrame()
+    frame = pairs[pairs.weighting.eq("unique_inputs")]
+    tables = [dataset_balanced(rows, ["model_a", "model_b"], ["top_agreement", "total_variation", "earth_movers"])
+              .assign(task=task, representation=mode)
+              for (task, mode), rows in frame.groupby(["task", "representation"], sort=False)]
+    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame()
+
+
+OUTPUT_SHAPE_METRICS = ["mean_top_probability", "confident_share", "mean_normalized_entropy",
+                        "mean_level_std", "expected_level_mean", "expected_level_median",
+                        "expected_level_q1", "expected_level_q3"]
+CONSENSUS_METRICS = ["top_agreement", "distance", "expected_level_difference", "coverage"]
+
+
+def describe_receipt(receipt):
+    """The notebook's one-line export identity, or its explicit waiting state."""
+    if receipt["status"] == "awaiting_cpu_report":
+        return study_export.describe({"status": study_export.AWAITING,
+                                      "path": receipt.get("path", str(report_path()))})
+    return study_export.describe(receipt)

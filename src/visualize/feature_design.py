@@ -17,7 +17,8 @@ def predictor_width_figure(plan, summary):
     rows = plan[plan.model.eq("catboost")]
     decision = rows[rows.phase.eq("experiment_1")]
     decision = decision[decision.provider.isna() | decision.provider.eq("jev")]
-    embedding = rows[rows.phase.eq("experiment_2") & rows.encoder.eq("e5_small_v2")]
+    embedding = rows[rows.phase.eq("experiment_2") & rows.encoder.eq("e5_small_v2")
+                     & rows.feature_set.eq("non_text_plus_frozen_e5")]
     width = {key: frame.set_index("dataset_id").predictor_columns
              for key, frame in decision.groupby("feature_set")}
     joint = embedding[embedding.pca_scope.eq("joint")].set_index("dataset_id").predictor_columns

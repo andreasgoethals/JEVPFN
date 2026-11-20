@@ -34,16 +34,15 @@ figures:
   placement: undecided
   status: available_when_results_exist
 - id: exp09_representations_panel
-  title: Decision-model representations (label-free decision vectors)
+  title: Inside the decision model (Strands hidden states, Group C1)
   notebook: exp09_representations
-  figures: []
+  figures: [c1_gains_*, c1_vector_vs_probabilities, c1_position_path, c1_middle_vs_last]
   placement: undecided
-  status: planned
-  note: Exp 9 is reserved in config/structure.yaml (planned_not_implemented); no notebook exists.
+  status: available_when_results_exist
 - id: tab_rq3_adaptation
-  title: Supervised Strands adaptation (RQ3)
+  title: Learning from labels with Strands (Group C2)
   notebook: exp10_adaptation
   kind: table
-  figures: []
+  figures: [c2_gains, c2_cells, c2_context_*]
   placement: undecided
-  status: planned
+  status: available_when_results_exist

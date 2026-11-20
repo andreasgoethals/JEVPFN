@@ -54,10 +54,29 @@ EMBEDDING_FEATURE_SETS = MAIN_FEATURE_SETS[4:]
 NATIVE_FEATURE_SETS = (
     "original_features",
 )
+#: Group B additions (approved 20 November 2026).
+#: B2a: one decision model's "both" block plus frozen E5-small per-column PCA32.
+DECISION_PLUS_EMBEDDING = "non_text_plus_both_plus_frozen_e5"
+#: B2b: label-trained L2-logistic classifier on frozen embeddings (cross-fitted).
+SUPERVISED_PROBE = "non_text_plus_supervised_probe"
+#: B3: the per-column decision arm refitted without one text column's decision block.
+PER_COLUMN_WITHOUT_ONE = "non_text_plus_per_column_without_one_text"
+GROUP_B_FEATURE_SETS = (DECISION_PLUS_EMBEDDING, SUPERVISED_PROBE, PER_COLUMN_WITHOUT_ONE)
+#: Group C additions (approved 20 November 2026), Strands only.
+#: C1a: one Strands hidden-state position/layer, PCA fitted on outer-training rows only.
+HIDDEN = "non_text_plus_hidden"
+#: C1b: the <answer>-last vector together with Strands' own probabilities of the same view.
+PER_COLUMN_PLUS_HIDDEN = "non_text_plus_per_column_plus_hidden"
+JOINT_PLUS_HIDDEN = "non_text_plus_joint_plus_hidden"
+#: C2: cross-fitted, label-trained Strands probabilities for the joint question.
+ADAPTED = "non_text_plus_adapted_joint"
+HIDDEN_FEATURE_SETS = (HIDDEN, PER_COLUMN_PLUS_HIDDEN, JOINT_PLUS_HIDDEN)
+GROUP_C_FEATURE_SETS = (*HIDDEN_FEATURE_SETS, ADAPTED)
 
 
 def uses_embeddings(name):
-    return name in MAIN_FEATURE_SETS[4:] or name == "non_text_plus_tar"
+    return name in (*MAIN_FEATURE_SETS[4:], "non_text_plus_tar", DECISION_PLUS_EMBEDDING,
+                    SUPERVISED_PROBE)
 
 
 def decision_feature_set(name):
@@ -65,7 +84,27 @@ def decision_feature_set(name):
     return (
         dict(zip(EMBEDDING_FEATURE_SETS, DECISION_FEATURE_SETS))
         | dict(zip(NATIVE_FEATURE_SETS, DECISION_FEATURE_SETS))
+        | {
+            DECISION_PLUS_EMBEDDING: "non_text_plus_both",
+            SUPERVISED_PROBE: "non_text",
+            PER_COLUMN_WITHOUT_ONE: "non_text_plus_per_column",
+            HIDDEN: "non_text",
+            PER_COLUMN_PLUS_HIDDEN: "non_text_plus_per_column",
+            JOINT_PLUS_HIDDEN: "non_text_plus_joint",
+            ADAPTED: "non_text",
+        }
     ).get(name, name)
+
+
+def without_text_column_block(features, text_index):
+    """Drop every per-column decision column of one text field; keep its availability flag."""
+    marker = f"__per_column__text_only__text_{int(text_index):03d}__"
+    dropped = [c for c in features.columns if marker in str(c)]
+    if not dropped:
+        raise ValueError("No per-column decision block exists for this text column")
+    result = features.drop(columns=dropped)
+    result.attrs = dict(features.attrs)
+    return result
 
 
 def combine_representations(base, additions):

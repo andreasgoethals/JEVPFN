@@ -21,7 +21,17 @@ PHASE_CONFIGS = {
     "experiment_2": "experiment_2/embeddings",
     "experiment_3": "experiment_3/tar",
     "experiment_4": "experiment_4/native_text",
+    "rq2": "rq2/text_column_refits",  # B3 text-column refits
+    "data_efficiency": "data_efficiency/data_efficiency",  # B4 training-size curves
+    "representations": "representations/representations",  # C1 Strands hidden states
+    "rq3": "rq3/adaptation",  # C2 Strands learning from labels
 }
+#: 0B full-fold profiles cover the full-size pipelines. B3 refits are narrower copies of the
+#: per-column decision arms and B4 arms train on at most 16,384 sampled rows, so both are
+#: covered by the Experiment 1-3 profiles of the same predictor and pipeline. Group C arms are
+#: copies of profiled pipelines too: C1 is per-group PCA of precomputed vectors (as frozen
+#: embeddings) and C2 adds a B1-width joint probability block.
+PROFILED_PHASES = ("experiment_1", "experiment_2", "experiment_3", "experiment_4")
 
 
 def decision_selector(config, provider):
@@ -71,7 +81,7 @@ def profile_plan(arms=None):
     encoders = load_yaml("feature_creation/embedding_models")["models"]
     groups = {}
     for arm in benchmark_plan() if arms is None else arms:
-        if arm["width_status"] != "unsupported_width":
+        if arm["width_status"] != "unsupported_width" and arm["phase"] in PROFILED_PHASES:
             key = (arm["phase"], arm["model"], arm.get("pca_scope"), arm.get("pca_components"))
             groups.setdefault(key, []).append(arm)
 
@@ -461,6 +471,12 @@ def verify_inputs(evidence, dataset, features, arm, runtime, *, specification):
     if specification["split_id"] != qualified["split_id"]:
         raise ValueError("Split differs from the qualified 0B partition")
     ids, checksums = expected_artifacts((data, decisions, embeddings), arm)
+    from src.evaluation.features import GROUP_C_FEATURE_SETS
+
+    if arm["feature_set"] in GROUP_C_FEATURE_SETS:  # verified C1 store / C2 fold bundles
+        from src.evaluation.group_c import expected_artifacts as group_c_artifacts
+
+        ids = [*ids, *group_c_artifacts(arm, dataset, specification)]
     if (
         sorted(features.attrs["feature_artifact_ids"]) != sorted(ids)
         or features.attrs["decision_artifact_checksums"] != checksums
@@ -469,19 +485,22 @@ def verify_inputs(evidence, dataset, features, arm, runtime, *, specification):
 
 
 def expected_artifacts(evidence, arm):
+    from src.evaluation.features import decision_feature_set
+
     _, decisions, embeddings = evidence
     dataset_id = arm["dataset_id"]
+    ids, checksums = [], {}
     if arm.get("provider"):
+        # Group B: decision + frozen uses "both"; a text-column refit uses "per_column".
+        view = decision_feature_set(arm["feature_set"])
         item = decisions[dataset_id, arm["provider"]]
-        ids = [
-            v for k, v in item["artifact_ids"].items() if arm["feature_set"].endswith(("both", k))
-        ]
-        return ids, {i: item["artifact_checksums"][i] for i in ids}
-    if arm["phase"] == "experiment_3":
+        ids = [v for k, v in item["artifact_ids"].items() if view.endswith(("both", k))]
+        checksums = {i: item["artifact_checksums"][i] for i in ids}
+    if arm["feature_set"] == "non_text_plus_tar":
         return embeddings[dataset_id, arm["encoder"]]["artifact_ids"], {}
     if arm.get("encoder"):
-        return [embeddings[dataset_id, arm["encoder"]]["artifact_id"]], {}
-    return [], {}
+        ids = [*ids, embeddings[dataset_id, arm["encoder"]]["artifact_id"]]
+    return ids, checksums
 
 
 def main():

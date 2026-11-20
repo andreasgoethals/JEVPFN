@@ -15,7 +15,7 @@ case "$JEVPFN_RUNTIME_PROFILE" in
 esac
 case "$JEVPFN_BUILD_PROVIDER" in
     cloudflare|intern|liquid|liquid_lfm3|strands|perplexity|h2o|sii|kev|decision3|nimble|glide|mammoth|drex_max|knowline|sieve) JEVPFN_BUILD_DECISION=1 ;;
-    tabstar|e5_tar|catboost|linear) JEVPFN_BUILD_DECISION=0 ;;
+    tabstar|e5_tar|catboost|linear|lightgbm) JEVPFN_BUILD_DECISION=0 ;;
     tabpfn_3_5|tabicl_v2|limix_2|kumo_tabular|contexttab|ag_mm)
         JEVPFN_BUILD_DECISION=0
         [[ "$JEVPFN_BUILD_MODE" == wrap ]] || { echo 'Predictors: wrap a separately reviewed environment; no guessed dependency installation.' >&2; exit 2; } ;;
@@ -116,7 +116,7 @@ from pathlib import Path
 work,repo,provider,root,index,profile=sys.argv[1:]
 q=shlex.quote
 Path(work,'environment.yaml').write_text('channels: [conda-forge]\ndependencies: [python=3.12, pip]\n',encoding='utf-8')
-extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','liquid_lfm3':'liquid-lfm3','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open','glide':'glide','mammoth':'mammoth','drex_max':'drex-max','knowline':'arena-decisions','sieve':'arena-decisions','tabstar':'tabstar','e5_tar':'tar','catboost':'baselines','linear':'baselines'}[provider]
+extra={'cloudflare':'clef','intern':'intern','liquid':'liquid','liquid_lfm3':'liquid-lfm3','strands':'strands','perplexity':'token-audit','h2o':'decision-open','sii':'decision-open','kev':'decision-open','decision3':'decision-open','nimble':'decision-open','glide':'glide','mammoth':'mammoth','drex_max':'drex-max','knowline':'arena-decisions','sieve':'arena-decisions','tabstar':'tabstar','e5_tar':'tar','catboost':'baselines','linear':'baselines','lightgbm':'baselines'}[provider]
 prefix_check='import os,sys; from pathlib import Path; expected=Path(os.environ["env_root"]).resolve(); actual=Path(sys.prefix).resolve(); print(f"Image interpreter: {actual}; expected: {expected}"); assert actual==expected, "Conda escaped the container installation root"; assert sys.version_info[:2]==(3,12), "Expected Python 3.12"'
 lines=['set -euo pipefail','export PYTHONNOUSERSITE=1',f'python -I -c {q(prefix_check)}', f'cd {q(repo)}',
        f'export JEVPFN_STAGING_ROOT={q(root)}', f'export VSC_DATA={q(str(Path(repo).parent))}',
@@ -128,7 +128,7 @@ if provider=='perplexity':
 elif provider in {'glide', 'mammoth', 'drex_max', 'knowline', 'sieve'}:
     lines+=[f'python -m pip install torch==2.14.0 torchvision==0.29.0 --index-url {q(index)}',
             f'python -m pip install -e {q(f".[dev,{extra}]")}']
-elif provider in {'tabstar', 'liquid_lfm3', 'e5_tar', 'catboost', 'linear'}:
+elif provider in {'tabstar', 'liquid_lfm3', 'e5_tar', 'catboost', 'linear', 'lightgbm'}:
     lines+=[f'python -m pip install torch==2.12.1 torchvision==0.27.1 --index-url {q(index)}',
             f'python -m pip install -e {q(f".[dev,{extra}]")}']
 else:
@@ -138,7 +138,7 @@ lines+=['python -m pip check',
         "python -c 'import torch; from src.cluster.runtime_profiles import validate_build; validate_build(dict(torch_cuda=torch.version.cuda))'"]
 if provider=='e5_tar':
     lines += ["python -c 'from src.evaluation.tar import upstream; upstream(); from multabench.encoders.e5.e5_finetune import finetune_e5; print(\"TAR upstream imports passed\")'"]
-elif provider not in {'tabstar', 'catboost', 'linear'}:
+elif provider not in {'tabstar', 'catboost', 'linear', 'lightgbm'}:
     lines += [f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
 else:
     lines += [f"python -c 'from src.utils.config import load_yaml; from src.evaluation.models import verify_runtime; verify_runtime(load_yaml(\"experiment_1/models\")[\"models\"][\"{provider}\"][\"runtime\"])'"]

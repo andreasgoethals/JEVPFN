@@ -202,6 +202,8 @@ def research_group(phase: str) -> str:
     phase = phase_name(phase)
     if phase in {"rq1", "rq2", "rq3"}:
         return phase
+    if phase in {"data_efficiency", "representations"}:  # B4 (exp11) and C1 (exp09): RQ2 studies
+        return "rq2"
     return "rq2" if phase.startswith("experiment_") and phase != "experiment_0" or phase in {"synthesis", "regression_readout"} else "general"
 
 
@@ -301,7 +303,7 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected in {"exploration", "feature_creation"}:
         return notebook_cache_dir(selected, "results", *parts)
-    if selected in {"rq1", "rq2"} and on_vsc():
+    if selected in {"rq1", "rq2", "rq3", "representations"} and on_vsc():
         durable = durable_project_override()
         if durable is None:
             raise ValueError("Research study results require an allocated durable PROJECT root")
@@ -317,6 +319,22 @@ def tar_results_dir(*parts: str) -> Path:
             raise ValueError("TAR requires an allocated native GPFS PROJECT root")
         return _under(root, OUTPUT_DIR_NAME, str(result_relative("experiment_3", *parts)), *parts)
     return results_dir(*parts, phase="experiment_3")
+
+
+def group_c_dir(phase: str, *parts: str) -> Path:
+    """Group C stores (C1 Strands hidden states, C2 adapted probabilities) on native GPFS PROJECT.
+
+    Large immutable vectors and fold bundles are shared from PROJECT exactly like TAR bundles;
+    there is no DATA fallback on VSC.
+    """
+    if phase_name(phase) not in {"representations", "rq3"}:
+        raise ValueError("Group C stores belong to the representations or rq3 phase")
+    if on_vsc():
+        root = durable_project_override()
+        if root is None or not root.as_posix().startswith("/gpfs") or "/project/" not in root.as_posix():
+            raise ValueError("Group C stores require an allocated native GPFS PROJECT root")
+        return _under(root, OUTPUT_DIR_NAME, str(result_relative(phase, *parts)), *parts)
+    return results_dir(*parts, phase=phase)
 
 
 def notebook_outputs_dir() -> Path:

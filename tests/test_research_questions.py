@@ -32,9 +32,10 @@ def test_removed_readout_is_absent_from_benchmark_and_qualification():
     from src.evaluation.campaign import benchmark_plan
     from src.evaluation.qualification import PHASE_CONFIGS
     plan = benchmark_plan()
-    assert len(plan) == 6534
+    assert len(plan) == 81240 + 2142  # Group B grid (B1-B5) + Group C (C1, C2), 20-11-2026
     assert {a["phase"] for a in plan} == set(PHASE_CONFIGS) == {
-        "experiment_1", "experiment_2", "experiment_3", "experiment_4"}
+        "experiment_1", "experiment_2", "experiment_3", "experiment_4", "rq2", "data_efficiency",
+        "representations", "rq3"}
     assert all(a["phase"] != "regression_readout" for a in profile_plan())
     widths = regression_width_table().set_index("dataset_id")
     row = widths.loc["REG_TEXT_ROTTEN_TOMATOES"]
@@ -100,14 +101,14 @@ def test_cohort_cutpoints_ignore_test_distribution():
 
 
 def test_adaptation_shares_fields_and_predictors_but_never_outer_folds():
+    # Group C2 (20-11-2026): dataset x outer fold x cross-fit part x trained cell.
     plan = adaptation_plan()
-    assert len(plan) == 135 and sum(a["pilot"] for a in plan) == 6
-    assert len({(a['dataset_id'], a['fold'], a['variant']) for a in plan}) == 135
-    assert {a['representation'] for a in plan} == {'per_column'}
-    assert all(a['shared_across_text_columns'] for a in plan)
+    assert len(plan) == 18 * 5 * 3 * 3
+    assert len({(a['dataset_id'], a['fold'], a['part'], a['cell']) for a in plan}) == 810
     predictions = adaptation_prediction_plan()
-    assert len(predictions) == 1350
-    assert len({a['predictor'] for a in predictions}) == 6
+    # Shares the benchmark's predictor roster: seven since LightGBM joined (20-11-2026).
+    assert len(predictions) == 18 * 3 * 7
+    assert len({a['model'] for a in predictions}) == 7
     assert all(a['binary_threshold'] == 0.5 for a in predictions)
     assert not any(a["execution_enabled"] for a in plan)
     assert not any(a["execution_enabled"] for a in predictions)
@@ -162,7 +163,9 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
 def test_summary_discovery_follows_research_order():
     from src.utils.run_notebooks import discover
 
-    names = discover()
+    # Exp 11 (Group B, B4; RQ2) was numbered after Exp 10 (RQ3) on 20-11-2026.
+    names = [n for n in discover() if n != "exp11_data_efficiency"]
+    assert paths.research_group(paths.notebook_phase("exp11_data_efficiency")) == "rq2"
     groups = ["general" if n.startswith("general/") else paths.research_group(paths.notebook_phase(n)) for n in names]
     order = {"general": 0, "rq1": 1, "rq2": 2, "rq3": 3}
     assert [order[g] for g in groups] == sorted(order[g] for g in groups)

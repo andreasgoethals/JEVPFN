@@ -1,12 +1,13 @@
 """Write bounded, bundled Slurm array plans; never submit jobs or enable experiments.
 
 One array task runs every supported arm of one dataset for one predictor and phase
-(each arm: five folds, resumed by the evaluation store). Inputs are loaded once per
+(each arm: five folds, resumed by the evaluation store). Group B phases (experiment_1-4,
+rq2 text-column refits, data_efficiency training-size curves) use the same bundling. Inputs are loaded once per
 process; every arm and fit is evaluated exactly as a single-arm task would evaluate
 it. A task may run several worker processes concurrently on one B200 or on disjoint
 CPU cores; each worker keeps the reviewed thread count, so settings identities and
 resume are unchanged. Concurrent GPU workers are recorded in each fold's resources.
-CPU-only predictors (CatBoost, linear/logistic regression) request no GPU.
+CPU-only predictors (CatBoost, LightGBM, linear/logistic regression) request no GPU.
 Smaller datasets are ordered first. One profile per manifest prevents speculative
 duplicate submissions on several clusters.
 """
@@ -24,7 +25,7 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
-CPU_ONLY_MODELS = ("catboost", "linear")
+CPU_ONLY_MODELS = ("catboost", "linear", "lightgbm")
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
                     "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS")
 
@@ -88,8 +89,11 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
             "dataset_id": dataset_id,
             "arms": indices,
             "workers": count,
-            "resources": sizing.resources(profile_summary, gpu=gpu, threads=threads,
-                                          workers_per_task=count, arm_rows=[rows] * len(indices)),
+            # B4 arms train on an explicit sample: size them by it (estimates use 0.8 x rows).
+            "resources": sizing.resources(
+                profile_summary, gpu=gpu, threads=threads, workers_per_task=count,
+                arm_rows=[arms[i]["training_size"] / 0.8 if arms[i].get("training_size") else rows
+                          for i in indices]),
             "size": [rows, width],
         })
     # Small and cheap first: failures surface before the expensive tasks start.

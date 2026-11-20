@@ -182,6 +182,71 @@ def js_divergence(p: np.ndarray, q: np.ndarray) -> np.ndarray:
 
 
 TIED = -99  # An exact top-probability tie is no decision, never a vote for class order.
+LEVELS = np.arange(-4, 5)
+#: Averaged (consensus) vectors can differ from an exact tie only by float roundoff.
+TIE_TOLERANCE = 1e-12
+
+
+def top_answers(p: np.ndarray) -> np.ndarray:
+    """Most probable option per row (all tasks, regression: modal level); a tie is TIED."""
+    top = p.max(axis=-1, keepdims=True)
+    tied = np.isclose(p, top, atol=TIE_TOLERANCE, rtol=0).sum(axis=-1) > 1
+    return np.where(tied, TIED, p.argmax(axis=-1))
+
+
+def earth_movers(p: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """Earth mover's distance over ordered, unit-spaced levels: sum of |CDF_p - CDF_q|.
+
+    For the nine regression levels −4…+4 it is in [0, 8] level units.
+    """
+    return np.abs(np.cumsum(p - q, axis=-1)[..., :-1]).sum(axis=-1)
+
+
+def consensus_distance(p: np.ndarray, c: np.ndarray, task: str) -> dict[str, np.ndarray]:
+    """Row-wise distance to a consensus distribution, chosen per task."""
+    if task == "binary_classification":
+        return {"distance": np.abs(p[..., 1] - c[..., 1])}
+    if task == "multiclass_classification":
+        return {"distance": np.abs(p - c).sum(axis=-1) / 2}
+    return {"distance": earth_movers(p, c),
+            "expected_level_difference": np.abs((p - c) @ LEVELS)}
+
+
+def leave_one_out_consensus(ps: np.ndarray, present: np.ndarray, task: str, minimum_others: int):
+    """Per model and row: equal-weight mean distribution of all OTHER available models.
+
+    ``ps`` is (models, rows, options) with NaN where a model has no request; ``present``
+    is (models, rows). Returns ``(consensus, eligible)``: rows with fewer than
+    ``minimum_others`` other models are not eligible and their consensus is NaN.
+    Consensus is not truth; correlated model families can dominate it.
+    """
+    if minimum_others < 1:
+        raise ValueError("A consensus needs at least one other model")
+    filled = np.where(present[..., None], ps, 0.0)
+    total, counts = filled.sum(axis=0), present.sum(axis=0)
+    others = counts[None, :] - present
+    eligible = present & (others >= minimum_others)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        consensus = (total[None] - filled) / others[..., None]
+    consensus[~eligible] = np.nan
+    return consensus, eligible
+
+
+def output_shape(p: np.ndarray, task: str, threshold: float) -> dict:
+    """Concentration of one model's distributions over the given rows."""
+    top = p.max(axis=1)
+    shape = {"mean_top_probability": float(top.mean()),
+             "confident_share": float((top > threshold).mean()),
+             "mean_normalized_entropy": float(entropy(p).mean())}
+    if task == "regression":
+        expected = p @ LEVELS
+        spread = np.sqrt(np.maximum(p @ LEVELS ** 2 - expected ** 2, 0))
+        quantiles = np.quantile(expected, [0, 0.05, 0.25, 0.5, 0.75, 0.95, 1])
+        shape.update(mean_level_std=float(spread.mean()), expected_level_mean=float(expected.mean()),
+                     expected_level_std=float(expected.std()),
+                     **{f"expected_level_{k}": float(v) for k, v in
+                        zip(("min", "p05", "q1", "median", "q3", "p95", "max"), quantiles)})
+    return shape
 
 
 def _choices(p: np.ndarray, task: str, neutral: float) -> np.ndarray:
@@ -215,6 +280,36 @@ def _weighting_indices(mask, hashes, weightings):
     unique = rows[np.unique(hashes[rows], return_index=True)[1]] if len(rows) else rows
     for weighting in weightings:
         yield weighting, rows if weighting == "rows" else unique, len(rows), len(unique)
+
+
+def add_loo_consensus(result, base, names, ps, present, hashes, tops, task, cfg):
+    """Agreement with the leave-one-out consensus, per model; coverage is always reported."""
+    minimum = cfg["consensus_minimum_other_models"]
+    consensus, eligible = leave_one_out_consensus(ps, present, task, minimum)
+    others = present.sum(axis=0)[None, :] - present
+    for i, name in enumerate(names):
+        for weighting, idx, n, u in _weighting_indices(present[i], hashes, cfg["weightings"]):
+            if not len(idx):
+                continue
+            usable = idx[eligible[i, idx]]
+            record = {**base, "provider": name, "weighting": weighting, "n": len(idx),
+                      "source_rows": n, "unique_inputs": u, "models": len(names),
+                      "minimum_other_models": minimum, "eligible": len(usable),
+                      "coverage": len(usable) / len(idx),
+                      "mean_other_models": float(others[i, idx].mean())}
+            if len(usable):
+                own, shared = tops[i, usable], top_answers(consensus[i, usable])
+                decided = (own != TIED) & (shared != TIED)
+                distances = consensus_distance(ps[i, usable], consensus[i, usable], task)
+                record.update(
+                    decided=int(decided.sum()), tied_either=int((~decided).sum()),
+                    top_agreement=float((own[decided] == shared[decided]).mean())
+                    if decided.any() else np.nan,
+                    distance=float(distances["distance"].mean()),
+                    expected_level_difference=float(distances["expected_level_difference"].mean())
+                    if "expected_level_difference" in distances else np.nan,
+                )
+            result.add("loo_consensus", record)
 
 
 def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result: Comparison):
@@ -262,6 +357,7 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
     neutral = cfg["regression_neutral_band"]
     tolerance = cfg["regression_agreement_tolerance"]
     choices = np.stack([_choices(p, reference.task, neutral) for p in ps])
+    tops = np.stack([top_answers(p) for p in ps])
     scalars = np.stack([_scalar(p, reference.task) for p in ps])
     for i, g in enumerate(aligned):
         result.add(
@@ -277,6 +373,20 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
         for weighting, idx, n, u in _weighting_indices(present[i], hashes, cfg["weightings"]):
             if not len(idx):
                 continue
+            result.add("output_shape", {
+                **base, "provider": g.provider, "weighting": weighting, "n": len(idx),
+                "source_rows": n, "unique_inputs": u,
+                **output_shape(ps[i, idx], reference.task, cfg["confident_threshold"]),
+            })
+            if reference.task == "regression" and weighting == "unique_inputs":
+                width = cfg["expected_level_bin_width"]
+                edges = np.linspace(-4, 4, int(round(8 / width)) + 1)
+                counts, _ = np.histogram(np.clip(scalars[i, idx], -4, 4), bins=edges)
+                for lower, upper, count in zip(edges[:-1], edges[1:], counts):
+                    result.add("level_histogram", {
+                        **base, "provider": g.provider, "weighting": weighting, "lower": float(lower),
+                        "upper": float(upper), "count": int(count), "fraction": count / len(idx),
+                        "n": len(idx)})
             for variable, values in {
                 "main_scalar": scalars[i, idx],
                 "entropy": entropy(ps[i, idx]),
@@ -346,6 +456,17 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                 "spearman": _correlation(scalars[i, idx], scalars[j, idx], rank=True),
                 **matching_correlations(correlation_cache[weighting], i, j),
             }
+            # Top answer for every task (regression: modal level); either tie abstains.
+            ta, tb = tops[i, idx], tops[j, idx]
+            top_decided = (ta != TIED) & (tb != TIED)
+            record.update(
+                top_agree_count=int((ta[top_decided] == tb[top_decided]).sum()),
+                top_tied_either_count=int((~top_decided).sum()),
+                top_agreement=float((ta[top_decided] == tb[top_decided]).mean())
+                if top_decided.any() else np.nan,
+                earth_movers=float(earth_movers(p, q).mean())
+                if reference.task == "regression" else np.nan,
+            )
             if reference.task == "regression":
                 record.update(
                     within_tolerance_count=int((delta <= tolerance).sum()),
@@ -368,6 +489,7 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                         "y": scalars[j, k],
                     },
                 )
+    add_loo_consensus(result, base, names, ps, present, hashes, tops, reference.task, cfg)
     roster_complete = set(names) == set(cfg["providers"])
     if len(names) < 2 or (cfg["require_complete_roster_for_consensus"] and not roster_complete):
         return
@@ -462,6 +584,9 @@ def compare_saved_features(cfg: dict, *, progress=print, workers=1) -> Compariso
         or options["regression_neutral_band"] < 0
         or options["scatter_rows_per_group"] < 0
         or options["disagreement_examples_per_group"] < 0
+        or not 0.5 <= options["confident_threshold"] < 1
+        or options["consensus_minimum_other_models"] < 1
+        or not (8 / options["expected_level_bin_width"]).is_integer()
     ):
         raise ValueError("Invalid comparison configuration")
     result = Comparison()

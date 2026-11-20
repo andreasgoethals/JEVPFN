@@ -127,3 +127,46 @@ def display_table(raw: dict | None = None) -> pd.DataFrame:
             "verified fields": f"{sum(c['verified'] for c in row.values())}/{len(FIELDS)}",
         })
     return pd.DataFrame(rows)
+
+
+#: Compute time only (Slurm accounting); token or API prices never enter the profile.
+COMPUTE_STAGE = "decision_feature_creation"
+
+
+def compute_per_thousand(ledger: dict | None, token_audit: dict | None, providers) -> pd.DataFrame:
+    """Successful decision-feature GPU-hours per 1,000 distinct decision requests, per provider.
+
+    ``ledger`` is `src.cluster.compute_ledger` output; ``token_audit`` the 0A token audit, whose
+    ``unique_inputs`` is the provider's number of distinct requests. A provider without a
+    successful GPU job or without an audited request count stays missing, never estimated.
+    """
+    hours = {}
+    for row in (ledger or {}).get("summary", []):
+        if row.get("stage") == COMPUTE_STAGE and row.get("decision_model") and row.get("successful_jobs"):
+            hours[row["decision_model"]] = row["successful_gpu_hours"]
+    requests = {r["provider"]: r["unique_inputs"] for r in (token_audit or {}).get("self_hosted", [])}
+    rows = []
+    for provider in providers:
+        h, n = hours.get(provider), requests.get(provider)
+        status = ("no compute ledger" if ledger is None else "no successful GPU job in the ledger"
+                  if h is None else "no audited request count" if not n else "measured")
+        rows.append({"provider": provider, "successful_gpu_hours": h, "distinct_requests": n,
+                     "gpu_hours_per_1000_requests": h / n * 1000 if status == "measured" else None,
+                     "compute_status": status})
+    frame = pd.DataFrame(rows)
+    for column in ("successful_gpu_hours", "distinct_requests", "gpu_hours_per_1000_requests"):
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return frame
+
+
+def profile_table(compute: pd.DataFrame | None = None, raw: dict | None = None) -> pd.DataFrame:
+    """A1 model profile: size, readout, architecture family and compute per 1,000 requests."""
+    raw = load() if raw is None else raw
+    properties = table(raw, verified_only=True)
+    frame = properties[["provider", "display_name", "parameters_billion", "readout_type",
+                        "architecture_family"]].copy()
+    if compute is None or compute.empty:
+        frame["gpu_hours_per_1000_requests"] = float("nan")
+        frame["compute_status"] = "waiting for export"
+        return frame
+    return frame.merge(compute, on="provider", how="left")

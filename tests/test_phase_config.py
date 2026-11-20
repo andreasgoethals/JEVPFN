@@ -84,6 +84,7 @@ def test_shared_experiment_proposals_preserve_validation_boundary_and_catalog():
         "tabicl_v2",
         "limix_2",
         "kumo_tabular",
+        "lightgbm",
     }
     assert "tabm" not in models and "tabfm" not in models
 

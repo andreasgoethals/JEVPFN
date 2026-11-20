@@ -48,38 +48,20 @@ def regression_width_table():
 
 
 def adaptation_plan():
-    """One shared per-field learner per dataset/fold/method; no training dispatch."""
-    cfg = load_yaml("rq3/adaptation")
-    main = load_yaml("experiment_1/main")
-    semantics = load_yaml("dataset_semantics")["datasets"]
-    return [
-        dict(
-            dataset_id=e["id"],
-            fold=fold,
-            provider=cfg["provider"],
-            variant=variant,
-            representation=cfg["representation"],
-            shared_across_text_columns=True,
-            pilot=e["id"] in cfg["pilot_datasets"] and fold in cfg["pilot_folds"],
-            execution_enabled=False,
-        )
-        for e in selected_entries(load_catalog(), main)
-        if semantics[e["id"]]["task_type"] in cfg["tasks"]
-        for fold in range(cfg["outer_folds"])
-        for variant in cfg["training_variants"]
-    ]
+    """Group C2 (approved 20 November 2026): every cross-fitted Strands training fit
+    (dataset x outer fold x part x trained cell); zero-shot reuses B1. No dispatch."""
+    from src.evaluation.strands_adaptation import training_plan
+
+    return training_plan()
 
 
 def adaptation_prediction_plan():
-    """All six predictors reuse each fold's probabilities; these are not encoder fits."""
-    cfg = load_yaml("rq3/adaptation")
-    predictors = load_yaml("experiment_1/main")["candidate_models"]
-    folds = sorted({(r["dataset_id"], r["fold"]) for r in adaptation_plan()})
-    return [dict(dataset_id=dataset, fold=fold, variant=variant, predictor=predictor,
-                 representation=cfg["representation"], binary_threshold=0.5,
-                 execution_enabled=False)
-            for dataset, fold in folds for variant in cfg["variants"]
-            for predictor in predictors]
+    """C2 predictor configurations: every trained cell x dataset x predictor (five outer fits
+    each, fixed 0.5 binary threshold); they reuse each fold's cross-fitted probabilities."""
+    from src.evaluation.campaign import benchmark_plan
+
+    return [dict(arm, binary_threshold=0.5, execution_enabled=False)
+            for arm in benchmark_plan() if arm["phase"] == "rq3"]
 
 
 def random_probe_requests(request_keys, *, dataset_id, limit=500, seed=42, study="wording"):

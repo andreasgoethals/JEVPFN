@@ -26,7 +26,14 @@ from src.evaluation.checkpoint_paths import (
 from src.utils import paths
 from src.utils.serialization import canonical_json, digest, scalar
 
-MAIN_MODELS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear")
+MAIN_MODELS = (
+    "catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear", "lightgbm",
+)
+#: Predictors that receive categorical columns as pandas `category` dtype (training-fold
+#: vocabulary; unseen and missing values are NaN), as their publishers document.
+CATEGORY_DTYPE_MODELS = ("tabpfn_3_5", "tabicl_v2", "lightgbm")
+#: Predictors that receive categories as typed-JSON strings (missing = the string "null").
+STRING_CATEGORY_MODELS = ("linear", "catboost")
 TEXT_MODELS = ("tabstar", "contexttab", "ag_mm")
 
 
@@ -66,7 +73,12 @@ class FoldInput:
         }
         return self
 
-    def transform(self, x, *, strings=False):
+    def transform(self, x, *, strings=False, categories=False):
+        """Numeric columns as float (datetime -> seconds, +/-inf -> NaN); categorical columns as
+        float codes (default), typed-JSON strings (`strings`) or pandas `category` dtype whose
+        categories are the training vocabulary (`categories`). Unseen values become missing."""
+        if strings and categories:
+            raise ValueError("Choose one categorical representation")
         if list(x.columns) != self.columns_:
             raise ValueError("Predictor input column order/schema changed")
         out = pd.DataFrame(index=x.index)
@@ -81,6 +93,12 @@ class FoldInput:
             elif strings:
                 # Typed JSON preserves the distinction between literal strings and missingness.
                 out[c] = x[c].map(lambda v: canonical_json(scalar(v)))
+            elif categories:
+                vocabulary = list(self.vocabulary_[c])
+                values = x[c].map(lambda v: None if pd.isna(v) else canonical_json(scalar(v)))
+                out[c] = pd.Categorical(
+                    values.where(values.isin(vocabulary)), categories=vocabulary
+                )
             else:
                 out[c] = (
                     x[c]
@@ -216,6 +234,11 @@ def _backend(model_id, task, settings, encoder, n_train):
     if model_id == "tabpfn_3_5":
         cls = getattr(importlib.import_module("tabpfn"), "TabPFN" + suffix)
         version = importlib.import_module("tabpfn.constants").ModelVersion.V3_5
+        # Publisher docs: declare categorical positions; `category` dtype also counts as declared.
+        params.setdefault(
+            "categorical_features_indices",
+            [encoder.columns_.index(c) for c in encoder.categorical_],
+        )
         return cls.create_default_for_version(
             version,
             model_path=_checkpoint(settings, task),
@@ -263,6 +286,8 @@ def _backend(model_id, task, settings, encoder, n_train):
         )
     if model_id == "kumo_tabular":
         return KumoBackend(task, settings, encoder.categorical_)
+    if model_id == "lightgbm":
+        return LightGBMBackend(task, settings, params)
     if model_id == "tabstar":
         if settings.get("repositories"):
             from src.evaluation.tabstar_assets import verified_settings
@@ -311,6 +336,39 @@ def _backend(model_id, task, settings, encoder, n_train):
 
         return AutoMMBackend(task, settings, encoder)
     raise ValueError(f"Unknown predictor: {model_id}")
+
+
+class LightGBMBackend:
+    """LightGBM (CPU) with library defaults; native NaN and pandas-`category` handling.
+
+    LightGBM rejects feature names with JSON special characters, so columns are renamed
+    positionally (order and dtypes unchanged). `verbose=-1` only silences logging.
+    """
+
+    def __init__(self, task, settings, params):
+        lightgbm = importlib.import_module("lightgbm")
+        cls = lightgbm.LGBMRegressor if task == "regression" else lightgbm.LGBMClassifier
+        self.model = cls(
+            random_state=settings["seed"], n_jobs=settings["threads"], verbose=-1, **params
+        )
+
+    @staticmethod
+    def _frame(x):
+        frame = x.copy()
+        frame.columns = [f"f{i:05d}" for i in range(frame.shape[1])]
+        return frame
+
+    def fit(self, x, y):
+        self.model.fit(self._frame(x), np.asarray(y))
+        if hasattr(self.model, "classes_"):
+            self.classes_ = self.model.classes_
+        return self
+
+    def predict(self, x):
+        return self.model.predict(self._frame(x))
+
+    def predict_proba(self, x):
+        return self.model.predict_proba(self._frame(x))
 
 
 class KumoBackend:
@@ -443,7 +501,11 @@ class PredictorAdapter:
             if list(x.columns) != self.encoder_.columns_:
                 raise ValueError("Original feature schema changed")
             return x.copy()
-        return self.encoder_.transform(x, strings=self.model_id in {"linear", "catboost"})
+        return self.encoder_.transform(
+            x,
+            strings=self.model_id in STRING_CATEGORY_MODELS,
+            categories=self.model_id in CATEGORY_DTYPE_MODELS,
+        )
 
     def _limix(self, x):
         return np.asarray(

@@ -50,11 +50,12 @@ One registry, [`config/structure.yaml`](config/structure.yaml), names every fold
 | `exp01_outputs` … `exp03_geometry` | Decision outputs, robustness, geometry | `rq1`, routed by study |
 | `exp04_decision_features` … `exp07_native_text` | Decision features, frozen embeddings, TAR, native text | `experiment_1` … `experiment_4` |
 | `exp08_when_text_helps` | When decision features help | `rq2` |
-| `exp10_adaptation` | Supervised Strands adaptation (Exp 10) | `rq3` |
+| `exp09_representations` | Inside the decision model: Strands hidden states (Group C1) | `representations` |
+| `exp10_adaptation` | Learning from labels with Strands (Group C2, Exp 10) | `rq3` |
+| `exp11_data_efficiency` | Amount of labelled data (Group B, B4) | `data_efficiency` |
 | `synthesis` | Cross-experiment synthesis and paper figures | `synthesis` |
 
-Exp 9 is reserved for decision-model representations (label-free decision vectors); it is
-planned, not implemented, and has no folder yet. Each folder has at most one notebook,
+Exp 9 (reserved on 19 November) was activated by Group C on 20 November 2026. Each folder has at most one notebook,
 `notebooks/<folder>.ipynb`.
 
 Internal phase IDs stay the keys of hashes, recipes, receipts and manifests; previous config
@@ -138,8 +139,9 @@ Only extractors with both feature blocks on all 18 datasets enter the comparison
 | Preparation and qualification | [Data](notebooks/00_data.ipynb), [Features](notebooks/02_feature_creation.ipynb), [0B validation](notebooks/03_exp0b.ipynb) |
 | Exp 1–3 (RQ1) | [Outputs](notebooks/exp01_outputs.ipynb), [Robustness](notebooks/exp02_robustness.ipynb), [Geometry](notebooks/exp03_geometry.ipynb) |
 | Exp 4–8 (RQ2) | [Decisions](notebooks/exp04_decision_features.ipynb), [Embeddings](notebooks/exp05_frozen_embeddings.ipynb), [TAR](notebooks/exp06_tar.ipynb), [Native text](notebooks/exp07_native_text.ipynb), [When decision features help](notebooks/exp08_when_text_helps.ipynb) |
-| Exp 9 | Decision-model representations: planned, not implemented |
-| Exp 10 (RQ3) | [Adaptation](notebooks/exp10_adaptation.ipynb): calibration, decision head, LoRA and full adaptation in one notebook |
+| Exp 9 (Group C1) | [Inside the decision model](notebooks/exp09_representations.ipynb): Strands hidden states |
+| Exp 10 (RQ3, Group C2) | [Learning from labels](notebooks/exp10_adaptation.ipynb): head-only, LoRA only, LoRA + head |
+| Exp 11 (Group B, B4) | [Amount of labelled data](notebooks/exp11_data_efficiency.ipynb) |
 
 Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 texts per dataset/field.
 The RQ3 notebook currently shows plans and pending gates, not trained-model results.

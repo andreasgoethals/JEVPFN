@@ -229,8 +229,12 @@ def agreement_bands(values):
     return np.where(np.isfinite(values), labels, "missing")
 
 
-#: Cohorts defined by the augmented model's own predictions: descriptive (post-treatment).
-POST_TREATMENT_AXES = ("prediction_shift",)
+#: Group B (20 November 2026) removed the novelty (seen/unseen text, also per field type) and
+#: prediction-shift cohorts. Every remaining axis is label-free and pre-treatment: availability
+#: and text length (empty versus long), baseline uncertainty, decision confidence and
+#: cross-model agreement versus disagreement. `prediction_shift_bands`/`field_novelty` remain
+#: only to read historical exports.
+POST_TREATMENT_AXES = ()
 POST_TREATMENT_LABEL = "descriptive (post-treatment)"
 NOVELTY_BY_TYPE = "novelty_by_field_type"
 
@@ -243,7 +247,7 @@ def axis_interpretation(axis):
 
 
 def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_lengths, *,
-                   decision=None, field_novelty=None):
+                   decision=None):
     for col in ("row_id", "y_true", "text_present", "joint_text_seen_in_train"):
         if not reference[col].equals(augmented[col]):
             raise ValueError("Unmatched held-out rows, labels or overlap indicators")
@@ -264,26 +268,17 @@ def paired_cohorts(reference, augmented, classes, variance, train_lengths, test_
         all=np.repeat("all", len(left)),
         availability=np.where(present, "present", "absent"),
         length=length_codes,
-        novelty=np.where(
-            present, np.where(reference.joint_text_seen_in_train, "seen", "unseen"), "missing"
-        ),
     )
     if uncertainty is not None:
         cohorts["baseline_entropy"] = np.searchsorted(
             [0.25, 0.5, 0.75], uncertainty, side="right"
         ).astype(str)
-    cohorts["prediction_shift"] = prediction_shift_bands(reference, augmented, classes, variance)
     if decision is not None:
         for name in ("confidence", "agreement"):
             if len(decision[name]) != len(reference):
                 raise ValueError("Decision cohort inputs are misaligned with held-out rows")
         cohorts["decision_confidence"] = confidence_bands(decision["confidence"])
         cohorts["decision_agreement"] = agreement_bands(decision["agreement"])
-    # Seen/unseen within each field type: one axis per type, each a partition of the rows.
-    for kind, memberships in sorted((field_novelty or {}).items()):
-        if len(memberships) != len(reference):
-            raise ValueError("Field novelty is misaligned with held-out rows")
-        cohorts[f"{NOVELTY_BY_TYPE}:{kind}"] = np.asarray(memberships)
     rows = []
     for axis, memberships in cohorts.items():
         memberships = np.asarray(memberships)
@@ -448,11 +443,10 @@ def run(dataset_id, *, decision_loader=load_decision_block):
 
     Decision inputs come from the canonical per-dataset feature store (VSC CPU) or the
     portable notebook copy (local). Absent artifacts put rows in the "missing" cohort.
-    Seen/unseen text is also reported within each field type (``novelty_by_field_type:*``).
     """
     pairing = Pairing(dataset_id, decision_loader=decision_loader)
     ds, spec, inputs, lengths = pairing.ds, pairing.spec, pairing.inputs, pairing.lengths
-    decision_rows, novelty = {}, {}
+    decision_rows = {}
     output = []
     for item in pairing.folds():
         r, fold, train, test = item["recipe"], item["fold"], item["train"], item["test"]
@@ -466,11 +460,9 @@ def run(dataset_id, *, decision_loader=load_decision_block):
                 )
             confidence, agreement = decision_rows[provider, modes]
             decision = {"confidence": confidence[test], "agreement": agreement[test]}
-        if fold not in novelty:
-            novelty[fold] = field_novelty(ds, train, test)
         rows, edges = paired_cohorts(
             item["reference"], item["table"], item["classes"], item["variance"],
-            lengths[train], lengths[test], decision=decision, field_novelty=novelty[fold],
+            lengths[train], lengths[test], decision=decision,
         )
         output.append(
             dict(

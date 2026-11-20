@@ -44,7 +44,7 @@ def test_linear_covers_logistic_regression_on_cpu():
 
     runtime = load_yaml("experiment_1/models")["models"]["linear"]["runtime"]
     assert runtime["device"] == "cpu"
-    assert set(benchmark_jobs.CPU_ONLY_MODELS) == {"catboost", "linear"}
+    assert set(benchmark_jobs.CPU_ONLY_MODELS) == {"catboost", "linear", "lightgbm"}
 
 
 def test_unmeasured_gpu_work_is_never_shared():

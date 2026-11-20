@@ -41,3 +41,23 @@ requires: [reviewed_three_semantically_equivalent_questions_per_dataset,
   exact_frozen_original_identity, option_alignment, native_field_order_reaches_model,
   isolated_attempt_namespace, complete_same_sample_coverage, explicit_jev_budget]
 qualifying_datasets: [BIN_TEXT_FAKE_JOB_POSTING, MUL_TEXT_WINE_REVIEW, REG_TEXT_MERCARI_MARKETPLACE]
+# Averaging over presentations (owner-approved 20 November 2026). Uses only responses
+# already collected above: no additional model calls, no lexical rewordings.
+averaging:
+  additional_model_calls: false
+  wording:
+    averaged_pairs: [[original, paraphrase_1], [paraphrase_2, paraphrase_3]]
+    single_reference: mean_distance_between_single_versions_across_the_two_pairs
+    distances: [total_variation, earth_movers_distance_for_regression_levels]
+  standalone_quality:
+    requests: sampled_joint_requests
+    comparisons:
+      wording: [original, mean_of_original_and_three_paraphrases]
+      option_order: [original, mean_of_original_and_reversed_realigned]
+      field_order: [original, mean_of_original_and_reversed]
+    labels: scoring_only
+    metrics: [roc_auc_or_macro_ovr_auc, log_loss, brier, expected_calibration_error,
+      spearman_expected_level_for_regression]
+  calibration_bins: 10
+export: results/robustness/robustness.zip
+lexical_rewordings: false

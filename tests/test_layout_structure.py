@@ -14,7 +14,8 @@ from src.utils.serialization import file_sha256
 FOLDERS = ("00_data", "01_exp0a", "02_feature_creation", "03_exp0b", "exp01_outputs",
            "exp02_robustness", "exp03_geometry", "exp04_decision_features",
            "exp05_frozen_embeddings", "exp06_tar", "exp07_native_text",
-           "exp08_when_text_helps", "exp10_adaptation", "synthesis")
+           "exp08_when_text_helps", "exp09_representations", "exp10_adaptation",
+           "exp11_data_efficiency", "synthesis")
 
 
 def test_registry_order_folders_and_paper_mapping_default_undecided():
@@ -37,6 +38,7 @@ def test_internal_phase_identities_are_unchanged_and_homed_once():
         "experiment_3": "exp06_tar", "experiment_4": "exp07_native_text", "synthesis": "synthesis",
         "rq1": "exp01_outputs", "rq2": "exp08_when_text_helps", "rq3": "exp10_adaptation",
         "regression_readout": "exp04_decision_features/regression_readout",
+        "data_efficiency": "exp11_data_efficiency", "representations": "exp09_representations",
     }
     # Previous numbered folders and new folder names remain accepted phase aliases.
     assert paths.phase_name("3. experiment_0") == "experiment_0"
@@ -111,15 +113,17 @@ def test_config_tree_and_notebooks_follow_registry():
     assert len(structure.registry().entry("exp10").notebooks) == 1
 
 
-def test_planned_experiment_nine_is_reserved_without_a_folder():
+def test_experiment_nine_was_activated_by_group_c():
     reg = structure.registry()
-    planned = {p.id: p for p in reg.planned}
-    assert planned["exp09"].folder == "exp09_representations"
-    assert planned["exp09"].status == "planned_not_implemented"
-    assert "exp09_representations" not in reg.folders
-    for root in (paths.REPO_ROOT / "config", paths.notebooks_dir()):
-        assert not list(root.glob("exp09*"))
+    assert reg.planned == ()  # Exp 9 reserved 19-11-2026, activated 20-11-2026 (Group C, C1)
+    entry = reg.entry("exp09")
+    assert entry.folder == "exp09_representations" and entry.phases == ("representations",)
+    assert paths.phase_folder("representations") == "exp09_representations"
+    assert paths.notebook_phase("exp09_representations") == "representations"
+    assert paths.config_path("representations/representations").is_file()
+    # The previous Exp 10 folder name stays an alias of exp10, not of the new Exp 9.
     assert reg.previous_folders == {"exp09_adaptation": "exp10_adaptation"}
+    assert paths.phase_name("exp09_adaptation") == "rq3"
 
 
 def test_notebook_ids_aliases_and_figure_folders():

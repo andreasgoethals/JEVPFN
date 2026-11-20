@@ -1,8 +1,8 @@
-"""Exp 4 appendix candidate: decision models scored directly on outer-test rows (reference only).
+"""A1 stand-alone quality and calibration figures (joint requests; reference only).
 
-One dot per decision model and dataset; a bar marks the median over models. Saved Exp 4
-outer-test references (best no-text predictor, best structured arm) are drawn when they
-exist. Every figure states that decision models are not tabular predictors.
+One dot per decision model and dataset; a bar marks the median over models. Reliability
+diagrams show every model's top-label calibration per classification dataset. Every figure
+states that decision models are not tabular predictors.
 """
 
 from __future__ import annotations
@@ -22,8 +22,6 @@ from src.visualize import layout, style
 from src.visualize.study import _ordered_datasets
 
 DOT_COLOR = "#7A8794"
-NO_TEXT_COLOR = "#B35806"
-STRUCTURED_COLOR = "#1B7837"
 LOG_LOSS_TICKS = (0.1, 0.2, 0.5, 1, 2, 5)
 
 
@@ -37,73 +35,51 @@ def _dataset_dots(ax, datasets, frame, metric):
         ax.plot([values.median()] * 2, [i - 0.32, i + 0.32], color=style.MEDIAN_COLOR, lw=1.6, zorder=3)
 
 
-def _legend_handles(references_shown):
-    handles = [
-        Line2D([], [], ls="none", marker="o", ms=3.5, color=DOT_COLOR, label="One decision model"),
-        Line2D([], [], color=style.MEDIAN_COLOR, lw=1.6, label="Median over models"),
-    ]
-    if references_shown:
-        handles += [
-            Line2D([], [], ls="none", marker="s", ms=4.5, mfc="none", mec=NO_TEXT_COLOR,
-                   label="Best no-text predictor (Exp 4)"),
-            Line2D([], [], ls="none", marker="D", ms=4.5, mfc="none", mec=STRUCTURED_COLOR,
-                   label="Best Exp 4 arm"),
-        ]
-    return handles
+def _legend_handles():
+    return [Line2D([], [], ls="none", marker="o", ms=3.5, color=DOT_COLOR, label="One decision model"),
+            Line2D([], [], color=style.MEDIAN_COLOR, lw=1.6, label="Median over models")]
 
 
-def classification_figure(scores, references=None):
-    """ROC-AUC / macro OvR AUC and log loss per classification dataset; yields (fig, name, caption)."""
+def classification_figure(scores):
+    """AUC, log loss and expected calibration error per classification dataset."""
     frame = scores[scores.status.eq("descriptive") & scores.task_type.ne("regression")]
     if frame.empty:
         return
     datasets, tasks, names = _ordered_datasets(frame.dataset_id.unique())
-    labels = [names[d] for d in datasets]
-    fig, (left, right) = plt.subplots(1, 2, figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.45 + 0.26 * len(datasets))),
-                                      sharey=True, gridspec_kw={"width_ratios": [1.15, 1]})
+    fig, axes = plt.subplots(1, 3, figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.5 + 0.26 * len(datasets))),
+                             sharey=True)
     auc = frame[frame.metric.isin(CLASSIFICATION_METRICS.values())].assign(metric="auc")
-    _dataset_dots(left, datasets, auc, "auc")
-    _dataset_dots(right, datasets, frame, "log_loss")
-    shown = references is not None and not references.empty
-    if shown:
-        for i, dataset in enumerate(datasets):
-            ref = references[references.dataset_id.eq(dataset)]
-            if ref.empty:
-                continue
-            left.scatter(ref.no_text_best, [i], marker="s", s=22, facecolors="none",
-                         edgecolors=NO_TEXT_COLOR, zorder=4)
-            left.scatter(ref.best_structured, [i], marker="D", s=22, facecolors="none",
-                         edgecolors=STRUCTURED_COLOR, zorder=4)
-    left.axvline(0.5, color=style.WINDOW_COLOR, lw=0.8, ls=":", zorder=1)
-    left.set_xlabel("ROC-AUC (binary) / macro OvR ROC-AUC")
-    right.set_xlabel("Log loss (lower is better; log axis)")
-    right.set_xscale("log")
-    right.xaxis.set_major_locator(FixedLocator(LOG_LOSS_TICKS))
-    right.xaxis.set_major_formatter(FormatStrFormatter("%g"))
-    right.xaxis.set_minor_formatter(NullFormatter())
-    layout.dataset_axis(left, labels, tasks)
-    right.tick_params(axis="y", length=0)
-    layout.task_rules(right, tasks)
-    for ax in (left, right):
+    _dataset_dots(axes[0], datasets, auc, "auc")
+    _dataset_dots(axes[1], datasets, frame, "log_loss")
+    _dataset_dots(axes[2], datasets, frame, "ece")
+    axes[0].axvline(0.5, color=style.WINDOW_COLOR, lw=0.8, ls=":", zorder=1)
+    axes[0].set_title("a  ROC-AUC / macro OvR AUC", loc="left", fontsize=8.5)
+    axes[1].set_title("b  Log loss (log axis)", loc="left", fontsize=8.5)
+    axes[2].set_title("c  Calibration error (ECE)", loc="left", fontsize=8.5)
+    axes[1].set_xscale("log")
+    axes[1].xaxis.set_major_locator(FixedLocator(LOG_LOSS_TICKS))
+    axes[1].xaxis.set_major_formatter(FormatStrFormatter("%g"))
+    axes[1].xaxis.set_minor_formatter(NullFormatter())
+    axes[2].set_xlim(0, None)
+    layout.dataset_axis(axes[0], [names[d] for d in datasets], tasks, fontsize=7.5)
+    for ax in axes:
         layout.light_grid(ax)
+        layout.task_rules(ax, tasks)
+    for ax in axes[1:]:
+        ax.tick_params(axis="y", length=0)
     fig.suptitle(REFERENCE_LABEL, fontsize=9, style="italic")
-    fig.legend(handles=_legend_handles(shown), loc="outside lower center", ncol=4 if shown else 2,
-               frameon=False, fontsize=7.5)
-    caption = (
-        "Classification datasets (rows, grouped by task). Each grey dot is one decision model's "
-        "stored joint-request class probabilities scored directly, without fitting, on the outer-test "
-        "rows of the shared five-fold splits (mean over folds); the dark bar is the median over models. "
-        "Left: ROC-AUC for binary and macro one-vs-rest ROC-AUC for multiclass tasks (dotted line: 0.5). "
-        "Right: log loss on a logarithmic axis. Rows without text receive the uniform distribution. "
-        + ("Open markers show the best saved Exp 4 no-text predictor and best Exp 4 arm on the same rows, "
-           "both selected after the fact for description only."
-           if shown else "Exp 4 predictor references are pending (no completed outer-test results).")
+    fig.legend(handles=_legend_handles(), loc="outside lower center", ncol=2, frameon=False, fontsize=7.5)
+    yield fig, "standalone_quality_classification", (
+        "Classification datasets (rows, grouped by task). Each grey dot is one decision model's stored joint-request "
+        "class probabilities scored directly against the target, without fitting or recalibration, on every row that "
+        "has a joint request (rows without text are not scored); the dark bar is the median over models. (a) ROC-AUC "
+        "for binary and macro one-vs-rest ROC-AUC for multiclass tasks (dotted line: 0.5). (b) Log loss on a "
+        "logarithmic axis. (c) Expected calibration error of the top-label confidence over ten equal-width bins."
     )
-    yield fig, "direct_decision_scores_classification", caption
 
 
 def regression_figure(scores):
-    """Spearman rank correlation of the expected evidence score with the target, per dataset."""
+    """Spearman correlation of the expected evidence level with the target, per dataset."""
     frame = scores[scores.status.eq("descriptive") & scores.metric.eq(REGRESSION_METRIC)]
     if frame.empty:
         return
@@ -112,24 +88,58 @@ def regression_figure(scores):
     _dataset_dots(ax, datasets, frame, REGRESSION_METRIC)
     ax.axvline(0, color=style.WINDOW_COLOR, lw=0.8, ls=":", zorder=1)
     ax.set_xlim(-0.5, 1)
-    ax.set_xlabel(f"{METRIC_LABELS[REGRESSION_METRIC]}: expected evidence score vs target")
+    ax.set_xlabel(f"{METRIC_LABELS[REGRESSION_METRIC]}: expected evidence level vs target")
     layout.dataset_axis(ax, [names[d] for d in datasets], tasks)
     layout.light_grid(ax)
     fig.suptitle(f"{REFERENCE_LABEL}; rank correlation only, not R²", fontsize=9, style="italic")
-    fig.legend(handles=_legend_handles(False), loc="outside lower center", ncol=2, frameon=False,
-               fontsize=7.5)
-    caption = (
-        "Regression datasets (rows). Each grey dot is the Spearman rank correlation, on the outer-test "
-        "rows of the shared five-fold splits (mean over folds), between one decision model's expected "
-        "evidence score (nine ordered levels −4 to 4 weighted by their stored joint-request probabilities) "
-        "and the target; the dark bar is the median over models (dotted line: no rank association; "
-        "axis from −0.5). "
-        "Nothing is fitted; the score has no target scale, so this describes ranking only and is not "
-        "comparable with the benchmark's R²."
+    fig.legend(handles=_legend_handles(), loc="outside lower center", ncol=2, frameon=False, fontsize=7.5)
+    yield fig, "standalone_quality_regression", (
+        "Regression datasets (rows). Each grey dot is the Spearman rank correlation, over every row with a joint "
+        "request, between one decision model's expected evidence level (nine ordered levels −4 to +4 weighted by "
+        "their stored probabilities) and the target; the dark bar is the median over models (dotted line: no rank "
+        "association; axis from −0.5). Nothing is fitted; the level has no target scale, so this describes ranking "
+        "only and is not comparable with the benchmark's R²."
     )
-    yield fig, "direct_decision_scores_regression", caption
 
 
-def direct_score_figures(scores, references=None):
-    yield from classification_figure(scores, references)
+def reliability_figure(reliability):
+    """Top-label reliability diagrams: one panel per classification dataset, one line per model."""
+    if reliability.empty:
+        return
+    datasets, tasks, names = _ordered_datasets(reliability.dataset_id.unique())
+    columns = 3
+    rows = int(np.ceil(len(datasets) / columns))
+    fig, axes = plt.subplots(rows, columns, figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 0.4 + 1.55 * rows)),
+                             sharex=True, sharey=True, squeeze=False)
+    for ax, dataset, task in zip(axes.flat, datasets, tasks):
+        frame = reliability[reliability.dataset_id.eq(dataset) & reliability["count"].gt(0)]
+        ax.plot([0, 1], [0, 1], color=style.WINDOW_COLOR, lw=0.8, ls=":")
+        for provider, curve in frame.groupby("provider"):
+            curve = curve.sort_values("bin")
+            ax.plot(curve.mean_confidence, curve.accuracy, lw=0.8, marker="o", ms=1.6,
+                    color=style.DECISION_COLORS.get(provider, DOT_COLOR), alpha=0.7)
+        ax.set_title(names[dataset], loc="left", fontsize=7.5, color=style.TASK_COLORS[task])
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_aspect("equal")
+        ax.tick_params(labelsize=7)
+        layout.light_grid(ax, axis="both")
+    for ax in axes.flat[len(datasets):]:
+        ax.set_visible(False)
+    fig.supxlabel("Mean top-label confidence in bin", fontsize=8)
+    fig.supylabel("Share correct", fontsize=8)
+    fig.suptitle(REFERENCE_LABEL, fontsize=9, style="italic")
+    yield fig, "standalone_reliability", (
+        "Reliability diagrams of the decision models' stored joint-request probabilities, one panel per classification "
+        "dataset and one line per model (model colours as in the other figures). Rows with a joint request are grouped "
+        "into ten equal-width bins of the top-label confidence; each point shows a non-empty bin's mean confidence "
+        "and the share of rows whose most probable class is the target (exact ties share credit). Points below the "
+        "dotted diagonal are over-confident. No recalibration is applied."
+    )
+
+
+def direct_score_figures(scores, reliability=None):
+    yield from classification_figure(scores)
     yield from regression_figure(scores)
+    if reliability is not None:
+        yield from reliability_figure(reliability)

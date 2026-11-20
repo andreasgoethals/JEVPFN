@@ -137,9 +137,10 @@ EVIDENCE_COLORS = {
     "not_applicable": "white",
 }
 METHOD_COLORS = ("#5A6E8C", "#987448", "#4F8075")
-MAIN_PREDICTORS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear")
+MAIN_PREDICTORS = ("catboost", "tabpfn_3_5", "tabicl_v2", "limix_2", "kumo_tabular", "linear",
+                   "lightgbm")
 PREDICTOR_LABELS = {"catboost": "CatBoost", "tabpfn_3_5": "TabPFN-3.5", "tabicl_v2": "TabICL v2",
-                    "limix_2": "LimiX-2", "kumo_tabular": "Kumo", "linear": "Linear/logistic",
+                    "limix_2": "LimiX-2", "kumo_tabular": "Kumo", "linear": "Linear/logistic", "lightgbm": "LightGBM",
                     "tabstar": "TabSTAR v1.1", "contexttab": "ConTextTab", "ag_mm": "AG-MM"}
 NATIVE_COLORS = {"tabstar": "#473B78", "contexttab": "#26736C", "ag_mm": "#9B6034"}
 NATIVE_MARKERS = {"tabstar": "o", "contexttab": "s", "ag_mm": "^"}

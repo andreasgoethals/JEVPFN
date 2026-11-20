@@ -16,10 +16,17 @@ from datetime import UTC, datetime
 from src.data.loaders import load_catalog, load_dataset
 from src.data.selection import selected_entries
 from src.evaluation.features import (
+    ADAPTED,
     DECISION_FEATURE_SETS,
+    DECISION_PLUS_EMBEDDING,
     EMBEDDING_FEATURE_SETS,
+    GROUP_B_FEATURE_SETS,
+    GROUP_C_FEATURE_SETS,
+    HIDDEN_FEATURE_SETS,
     MAIN_FEATURE_SETS,
     NATIVE_FEATURE_SETS,
+    PER_COLUMN_WITHOUT_ONE,
+    SUPERVISED_PROBE,
     add_embeddings,
     assemble_feature_set,
     combine_representations,
@@ -27,6 +34,7 @@ from src.evaluation.features import (
     load_feature_selection,
     original_features,
     uses_embeddings,
+    without_text_column_block,
 )
 from src.evaluation.models import (
     MAIN_MODELS,
@@ -40,6 +48,18 @@ from src.utils.config import load_yaml
 from src.utils.events import append_event
 from src.utils.provenance import code_identity
 from src.utils.serialization import digest, write_json
+
+#: Group B (approved 20 November 2026): B1 experiment_1, B2 experiment_2 (frozen; decision +
+#: frozen) and experiment_3 (TAR; supervised probe), B3 rq2 (text-column refits),
+#: B4 data_efficiency (training-size curves), B5 experiment_4 (native text).
+GROUP_B_PHASES = {
+    "experiment_1": "B1", "experiment_2": "B2", "experiment_3": "B2", "rq2": "B3",
+    "data_efficiency": "B4", "experiment_4": "B5",
+}
+#: Group C (approved 20 November 2026, Strands only): C1 representations (exp09), C2 rq3 (exp10).
+GROUP_C_PHASES = {"representations": "C1", "rq3": "C2"}
+PROBE_VIEWS = ("per_column", "joint")
+B2_DECISION_EMBEDDING = {"encoder": "e5_small_v2", "pca_scope": "per_column", "pca_components": 32}
 
 
 def benchmark_plan(main=None, text=None):
@@ -70,6 +90,8 @@ def benchmark_plan(main=None, text=None):
     rows = []
     from src.evaluation.design import pca_grid
 
+    grid = pca_grid()  # read once: the reviewed per-column PCA32 / joint PCA64 recipes
+
     def add(entry, model, feature_set, phase, **extra):
         rows.append(
             dict(
@@ -92,23 +114,49 @@ def benchmark_plan(main=None, text=None):
 
     for entry in selected:
         arms(entry, MAIN_MODELS, DECISION_FEATURE_SETS, "experiment_1")
-        # Explicit view distinguishes the new regression protocol from historical
-        # records whose implicit "main" view selected the mean.
-        if semantics[entry["id"]]["task_type"] == "regression":
-            for arm in rows:
-                if arm["dataset_id"] == entry["id"] and arm.get("provider"):
-                    arm["view"] = "probabilities"
         for encoder in embedding["encoders"]:
-            for scope, components in pca_grid():
+            for scope, components in grid:
                 for model in MAIN_MODELS:
                     extra = dict(encoder=encoder, pca_scope=scope, pca_components=components)
                     add(entry, model, EMBEDDING_FEATURE_SETS[0], "experiment_2", **extra)
-        for scope, components in pca_grid():
+        for scope, components in grid:
             for model in MAIN_MODELS:
                 add(entry, model, "non_text_plus_tar", "experiment_3",
                     encoder="e5_small_v2_tar", pca_scope=scope, pca_components=components)
         for model in TEXT_MODELS:
             add(entry, model, NATIVE_FEATURE_SETS[0], "experiment_4")
+        # B2a: each decision model's "both" block with frozen E5-small per-column PCA32.
+        for model in MAIN_MODELS:
+            for provider in main["candidate_extractors"]:
+                add(entry, model, DECISION_PLUS_EMBEDDING, "experiment_2", **B2_DECISION_EMBEDDING)
+                rows[-1]["provider"] = provider
+        # B2b: label-trained classifier on each frozen encoder, per text column and joint.
+        for encoder in embedding["encoders"]:
+            for view in PROBE_VIEWS:
+                for model in MAIN_MODELS:
+                    add(entry, model, SUPERVISED_PROBE, "experiment_3", encoder=encoder,
+                        probe_view=view)
+        # B3: per-column decision arm refitted without one text column's block.
+        if entry["paper_summary"]["text_columns"] >= 2:
+            for column in range(entry["paper_summary"]["text_columns"]):
+                for model in MAIN_MODELS:
+                    for provider in main["candidate_extractors"]:
+                        add(entry, model, PER_COLUMN_WITHOUT_ONE, "rq2",
+                            dropped_text_column=column)
+                        rows[-1]["provider"] = provider
+    # B4: training-size curves (explicit, recorded subsamples; see data_efficiency).
+    from src.evaluation.data_efficiency import data_efficiency_arms
+
+    rows.extend(data_efficiency_arms(selected, MAIN_MODELS, main["candidate_extractors"]))
+    # Group C: C1a hidden states (12), C1b hidden + probabilities (2), C2 adapted cells (3).
+    from src.evaluation.group_c import arms as group_c_arms
+
+    rows.extend(group_c_arms(selected, MAIN_MODELS))
+    for arm in rows:
+        # Explicit view distinguishes the nine-probability regression protocol from historical
+        # records whose implicit "main" view selected the mean.
+        if arm.get("provider") and semantics[arm["dataset_id"]]["task_type"] == "regression":
+            arm["view"] = "probabilities"
     from types import SimpleNamespace
 
     from src.evaluation.widths import width_status
@@ -181,6 +229,10 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "experiment_2": "embeddings",
         "experiment_3": "tar",
         "experiment_4": "native_text",
+        "rq2": "text_column_refits",
+        "data_efficiency": "data_efficiency",
+        "representations": "representations",
+        "rq3": "adaptation",
     }
     cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
     enabled = (
@@ -200,7 +252,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             lambda: benchmark_evidence(acceptance, arm),
             copy_result=False,
         )
-    if arm not in _cached(("plan", arm["phase"]), benchmark_plan, copy_result=False):
+    planned = _cached(("plan_keys",), lambda: {digest(a) for a in benchmark_plan()},
+                      copy_result=False)
+    if digest(arm) not in planned:
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     _retain_representation(arm.get("provider"), arm.get("encoder"))
     catalog = load_yaml("experiment_1/models")
@@ -228,6 +282,11 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             "src/evaluation/pca_cache.py",
             "src/evaluation/prepare_pca.py",
             "src/evaluation/tar.py",
+            "src/evaluation/label_probe.py",
+            "src/evaluation/data_efficiency.py",
+            "src/evaluation/group_c.py",
+            "src/evaluation/strands_adaptation.py",
+            "src/jev/strands_hidden.py",
         ]
     )
     entry = next(e for e in load_catalog()["datasets"] if e["id"] == arm["dataset_id"])
@@ -279,9 +338,26 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         else assemble_feature_set(dataset, [], "non_text")
     )
     features = combine_representations(base, additions) if additions else base
+    if arm["feature_set"] == PER_COLUMN_WITHOUT_ONE:
+        features = without_text_column_block(features, arm["dropped_text_column"])
+    hidden_arm = arm["feature_set"] in HIDDEN_FEATURE_SETS
+    adapted_arm = arm["feature_set"] == ADAPTED
+    if hidden_arm:
+        from src.evaluation import group_c
+        from src.jev.strands_hidden import vector_frame
+
+        with _representation_storage():
+            vectors = _cached(
+                ("hidden", entry["id"], arm["hidden_view"], arm["hidden_position"], arm["hidden_layer"]),
+                lambda: vector_frame(dataset, view=arm["hidden_view"], position=arm["hidden_position"],
+                                     layer=arm["hidden_layer"]),
+            )
+        features = group_c.add_hidden(features, vectors)
     selector = selectors.get(arm["provider"]) if arm["provider"] else selectors or None
     embedding_cfg = None
-    tar_arm = arm["phase"] == "experiment_3"
+    tar_arm = arm["feature_set"] == "non_text_plus_tar"
+    probe_arm = arm["feature_set"] == SUPERVISED_PROBE
+    subsampled = arm["phase"] == "data_efficiency"
     if uses_embeddings(arm["feature_set"]) and not tar_arm:
         from src.data.text_embeddings import encoder_config, load
 
@@ -291,8 +367,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
                 ("embeddings", arm["encoder"], entry["id"], digest(embedding_cfg)),
                 lambda: load(dataset, embedding_cfg),
             )
-        embedding_cfg["pca_components_per_column"] = arm["pca_components"]
-        embedding_cfg["pca_scope"] = arm["pca_scope"]
+        embedding_cfg["pca_components_per_column"] = arm.get("pca_components")
+        embedding_cfg["pca_scope"] = arm.get("pca_scope")
         embedding_artifacts = embeddings.attrs["feature_artifact_ids"]
         if arm["model"] not in embedding_cfg["models"]:
             raise ValueError("Predictor is not enabled for the embedding feature configurations")
@@ -301,16 +377,37 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
     features.attrs["decision_artifact_checksums"] = checksums
     settings["execution_runtime"] = _cached(("runtime",), execution_runtime)
-    specification = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
+    specification = parent_specification = shared_splits(dataset, seed=cfg["random_seed"], folds=5)
+    if subsampled:
+        from src.evaluation.data_efficiency import subsample_specification
+
+        classification = dataset.metadata.task_type != "regression"
+        specification = subsample_specification(
+            parent_specification,
+            dataset.frame[dataset.metadata.target].to_numpy() if classification else None,
+            arm["training_size"], arm["draw"], seed=cfg["sampling_seed"],
+            classes=list(dataset.metadata.classes) if classification else None,
+        )
+        if any(specification["subsample"]["missing_classes_by_fold"]):
+            raise ValueError("A training subsample lacks a class; classes are never dropped")
     if tar_arm:
         from src.evaluation.tar import read_bundle
         bundles = [_cached(("tar", entry["id"], digest(specification["split_id"]), i),
                            lambda i=i: read_bundle(dataset, specification, i)) for i in range(5)]
         features.attrs["feature_artifact_ids"] = [b["artifact_id"] for b in bundles]
+    if adapted_arm:
+        from src.evaluation.strands_adaptation import read_bundle as read_adapted
+
+        with _representation_storage():
+            adapted = [_cached(("adapted", entry["id"], arm["adaptation_cell"], i),
+                               lambda i=i: read_adapted(dataset, specification, i, arm["adaptation_cell"]))
+                       for i in range(5)]
+        features.attrs["feature_artifact_ids"] = [
+            *features.attrs.get("feature_artifact_ids", []), *(b["artifact_id"] for b in adapted)]
     if not profile:
         verify_inputs(
             qualified, dataset, features, arm, settings["execution_runtime"],
-            specification=specification,
+            specification=parent_specification,
         )
     factory = estimator_factory(arm["model"], dataset.metadata, settings, allow_model_runs=True)
     representation = {
@@ -323,13 +420,43 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         "view": arm.get("view", "main"),
         "embedding": embedding_cfg,
     }
-    if embedding_cfg:
+    if arm["feature_set"] == PER_COLUMN_WITHOUT_ONE:
+        representation["dropped_text_column"] = arm["dropped_text_column"]
+    if subsampled:
+        representation["subsample"] = {
+            k: specification["subsample"][k]
+            for k in ("parent_split_id", "training_size", "draw", "method")
+        }
+    if probe_arm:
+        from src.evaluation import label_probe
+
+        base_factory = factory
+        with _representation_storage():
+            probe_cache = None if subsampled else label_probe.cache_path(entry["id"], arm["encoder"])
+        representation["probe"] = {
+            "version": label_probe.VERSION, "view": arm["probe_view"], "encoder_id": arm["encoder"],
+            "c_grid": list(label_probe.C_GRID), "inner_folds": label_probe.INNER_FOLDS,
+            "crossfit_folds": label_probe.CROSSFIT_FOLDS,
+            "regression_bins": label_probe.REGRESSION_BINS,
+            "fitted_on": "sampled_training_rows_inline" if subsampled else "cpu_prepared_outer_training",
+        }
+        representation["embedding"] = {"encoder_id": arm["encoder"], "probe_view": arm["probe_view"]}
+
+        def factory():
+            return label_probe.ProbeControl(
+                base_factory(), features.attrs["embedding_groups"], view=arm["probe_view"],
+                task_type=dataset.metadata.task_type, classes=list(dataset.metadata.classes),
+                seed=cfg["random_seed"], prepared_cache=probe_cache,
+                embedding_artifacts=embedding_artifacts,
+            )
+    elif embedding_cfg:
         from src.evaluation.embedding_control import EmbeddingControl
         from src.evaluation.pca_cache import cache_path
 
         base_factory = factory
         with _representation_storage():
-            prepared_cache = cache_path(entry["id"], arm["encoder"])
+            # B4 samples are new training partitions: PCA is fitted inline on the sampled rows.
+            prepared_cache = None if subsampled else cache_path(entry["id"], arm["encoder"])
 
         def factory():
             return EmbeddingControl(
@@ -342,6 +469,31 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
                 embedding_artifacts=embedding_artifacts,
             )
 
+    if hidden_arm:
+        base_factory = factory
+
+        def factory():
+            return group_c.hidden_control(base_factory(), features.attrs["embedding_groups"], arm,
+                                          cfg["random_seed"])
+
+        representation["hidden"] = {
+            "provider": "strands", "view": arm["hidden_view"], "position": arm["hidden_position"],
+            "layer": arm["hidden_layer"], "pca_scope": arm["pca_scope"],
+            "pca_components": arm["pca_components"], "fitted_on": "outer_training_rows_inline",
+            "artifact_ids": vectors.attrs["feature_artifact_ids"],
+        }
+    if adapted_arm:
+        from src.evaluation.strands_adaptation import AdaptedControl
+
+        base_factory = factory
+
+        def factory():
+            return AdaptedControl(base_factory(), dataset, specification, adapted, arm["adaptation_cell"])
+
+        representation["adaptation"] = {
+            "provider": "strands", "question": "joint", "cell": arm["adaptation_cell"],
+            "crossfit_parts": 3, "artifact_ids": [b["artifact_id"] for b in adapted],
+        }
     if tar_arm:
         from src.evaluation.tar import TarControl
         base_factory = factory
@@ -359,13 +511,9 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         synchronize = torch.cuda.synchronize
     phase = "experiment_0" if profile else arm["phase"]
-    from src.evaluation.attribution import settings_for_phase
-
-    # Structured phases permute feature groups after the final fit; native text is skipped
-    # and that reason is recorded per fold. 0B profiles include the attribution cost.
-    field_attribution = settings_for_phase(
-        load_yaml("experiment_1/protocol")["evaluation"]["field_attribution"], arm["phase"]
-    )
+    # Group B (20 November 2026) replaced permutation attribution by B3 text-column refits:
+    # no shuffled re-predictions are made (protocol field_attribution.enabled is false).
+    fixed_threshold = tar_arm or probe_arm or subsampled or adapted_arm
     log = paths.logs_dir(phase) / "benchmark.log"
     append_event(log, "arm_started", **arm)
     try:
@@ -379,14 +527,13 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             feature_set=arm["feature_set"],
             allow_model_runs=True,
             inner_folds=3,
-            binary_threshold_policy="fixed_0_5" if tar_arm else "inner_oof_f1",
+            binary_threshold_policy="fixed_0_5" if fixed_threshold else "inner_oof_f1",
             phase=phase,
             synchronize=synchronize,
             device=settings["device"],
             estimator_settings=settings,
             representation_recipe=representation,
             fold_numbers=[0] if profile else None,
-            field_attribution=field_attribution,
         )
     except Exception as exc:
         # Do not record raw text/row values from third-party exception messages.
@@ -411,15 +558,24 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
-    parser.add_argument("--phase", choices=("experiment_1", "experiment_2", "experiment_3", "experiment_4"))
+    parser.add_argument("--phase", choices=(*GROUP_B_PHASES, *GROUP_C_PHASES))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
     parser.add_argument("--pca-scope", choices=("per_column", "joint"))
     parser.add_argument("--model", choices=MAIN_MODELS + TEXT_MODELS)
     parser.add_argument(
         "--feature-set",
-        choices=MAIN_FEATURE_SETS + NATIVE_FEATURE_SETS + ("non_text_plus_tar",),
+        choices=MAIN_FEATURE_SETS + NATIVE_FEATURE_SETS + ("non_text_plus_tar",) + GROUP_B_FEATURE_SETS
+        + GROUP_C_FEATURE_SETS,
     )
+    parser.add_argument("--hidden-view", choices=("per_column", "joint"))
+    parser.add_argument("--hidden-position", choices=("state_end", "question_end", "answer"))
+    parser.add_argument("--hidden-layer", type=int, choices=(12, 24))
+    parser.add_argument("--adaptation-cell", choices=("head_only", "lora_only", "lora_head"))
+    parser.add_argument("--probe-view", choices=PROBE_VIEWS)
+    parser.add_argument("--dropped-text-column", type=int)
+    parser.add_argument("--training-size", type=int)
+    parser.add_argument("--draw", type=int)
     parser.add_argument("--provider", choices=tuple(load_yaml("extractors")["candidates"]))
     parser.add_argument("--execute", action="store_true")
     parser.add_argument(
@@ -443,6 +599,14 @@ def main():
                 "model": args.model,
                 "feature_set": args.feature_set,
                 "provider": args.provider,
+                "probe_view": args.probe_view,
+                "dropped_text_column": args.dropped_text_column,
+                "training_size": args.training_size,
+                "draw": args.draw,
+                "hidden_view": args.hidden_view,
+                "hidden_position": args.hidden_position,
+                "hidden_layer": args.hidden_layer,
+                "adaptation_cell": args.adaptation_cell,
             }.items()
         )
     ]
@@ -457,11 +621,18 @@ def main():
                     "execution_enabled": False,
                     "datasets": 18,
                     "main_models": MAIN_MODELS,
+                    "group_b_study_by_phase": GROUP_B_PHASES,
+                    "group_c_study_by_phase": GROUP_C_PHASES,
                     "feature_sets_by_experiment": {
                         "experiment_1": DECISION_FEATURE_SETS,
-                        "experiment_2": EMBEDDING_FEATURE_SETS,
-                        "experiment_3": ("non_text_plus_tar",),
+                        "experiment_2": EMBEDDING_FEATURE_SETS + (DECISION_PLUS_EMBEDDING,),
+                        "experiment_3": ("non_text_plus_tar", SUPERVISED_PROBE),
                         "experiment_4": NATIVE_FEATURE_SETS,
+                        "rq2": (PER_COLUMN_WITHOUT_ONE,),
+                        "data_efficiency": ("non_text", "non_text_plus_both",
+                                            "non_text_plus_frozen_e5", SUPERVISED_PROBE),
+                        "representations": HIDDEN_FEATURE_SETS,
+                        "rq3": (ADAPTED,),
                     },
                     "configurations_by_experiment": {
                         phase: sum(a["phase"] == phase for a in selected)
@@ -469,8 +640,10 @@ def main():
                     },
                     "original_text_models": TEXT_MODELS,
                     "outer_folds": 5,
-                    "inner_binary_threshold_folds_by_phase": {"experiment_1": 3, "experiment_2": 3,
-                                                               "experiment_3": 0, "experiment_4": 3},
+                    "inner_binary_threshold_folds_by_phase": {
+                        "experiment_1": 3, "experiment_2": 3, "experiment_3": 0,
+                        "experiment_4": 3, "rq2": 3, "data_efficiency": 0,
+                        "representations": 3, "rq3": 0},
                     "selected_arm_count": len(selected),
                     "unsupported_width_arms": sum(
                         a["width_status"] == "unsupported_width" for a in selected
@@ -478,6 +651,7 @@ def main():
                     "outer_fits": 5 * len(selected),
                     "non_text_includes_categorical": True,
                     "training_row_cap": None,
+                    "explicit_training_subsamples": "data_efficiency only (B4 design)",
                     "selected_arms": selected
                     if len(selected) <= 30
                     else "Filter with --dataset/--model/--feature-set/--provider to inspect",

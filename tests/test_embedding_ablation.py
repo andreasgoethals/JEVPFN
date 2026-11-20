@@ -7,8 +7,9 @@ from src.utils.config import load_yaml
 
 
 def test_all_encoders_dimensions_and_providers_are_prespecified():
-    main = [a for a in benchmark_plan() if a["phase"] == "experiment_2"]
-    assert len(main) == 18 * 6 * 3 * 2
+    main = [a for a in benchmark_plan()
+            if a["phase"] == "experiment_2" and a["feature_set"] == "non_text_plus_frozen_e5"]
+    assert len(main) == 18 * 7 * 3 * 2
     assert {a["model"] for a in main} == set(MAIN_MODELS)
     assert {(a["pca_scope"], a["pca_components"]) for a in main} == {
         ("per_column", 32), ("joint", 64),

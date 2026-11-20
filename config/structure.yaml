@@ -1,6 +1,9 @@
 # Physical and human-facing layout of config/, notebooks/ and output_JEVPFN/.
 # Numbering approved by the owner on 18 November 2026; revised 19 November 2026 (one flat
-# notebook per folder; supervised adaptation renumbered Exp 10, Exp 9 reserved).
+# notebook per folder; supervised adaptation renumbered Exp 10, Exp 9 reserved) and
+# 20 November 2026 (Group B adds exp11_data_efficiency, internal phase data_efficiency;
+# Group C activates the reserved Exp 9 as exp09_representations, internal phase
+# representations, and replaces the Exp 10 adaptation design).
 #
 # Folder names only. Internal phase IDs (exploration, question_preparation,
 # feature_creation, experiment_0..4, synthesis, rq1..rq3, regression_readout) remain the
@@ -98,17 +101,29 @@ entries:
   title: When decision features help
   phases: [rq2]
   notebook: {phase: rq2, legacy: [rq2/05_when_text_helps, exp08_when_text_helps/when_text_helps]}
-  configs: [when_text_helps]
+  configs: [when_text_helps, text_column_refits]
+- id: exp09
+  folder: exp09_representations
+  title: Inside the decision model (Strands hidden states, label-free)
+  phases: [representations]
+  notebook: {phase: representations}
+  configs: [representations]
 - id: exp10
   folder: exp10_adaptation
   previous_folders: [exp09_adaptation]
-  title: Supervised Strands adaptation
+  title: Learning from labels (Strands head-only, LoRA, LoRA + head)
   phases: [rq3]
   notebook:
     phase: rq3
     merged: [exp09_adaptation/01_calibration, exp09_adaptation/02_head, exp09_adaptation/03_lora,
              exp09_adaptation/04_full, rq3/01_calibration, rq3/02_head, rq3/03_lora, rq3/04_full]
   configs: [adaptation]
+- id: exp11
+  folder: exp11_data_efficiency
+  title: Amount of labelled data (training-size curves)
+  phases: [data_efficiency]
+  notebook: {phase: data_efficiency}
+  configs: [data_efficiency]
 - id: synthesis
   folder: synthesis
   title: Cross-experiment synthesis and paper figures
@@ -116,11 +131,9 @@ entries:
   configs: [analysis, paper_figures]
 
 # Reserved experiment numbers: documented, never given a folder until implemented.
-planned:
-- id: exp09
-  folder: exp09_representations
-  title: Decision-model representations (label-free decision vectors)
-  status: planned_not_implemented
+# Exp 9 (exp09_representations) was reserved on 19 November 2026 and activated by Group C on
+# 20 November 2026; no number is reserved now.
+planned: []
 
 # Paper placement: main | appendix | undecided. Decided later, never by folder name.
 paper:
@@ -136,5 +149,7 @@ paper:
   exp06: {placement: undecided}
   exp07: {placement: undecided}
   exp08: {placement: undecided}
+  exp09: {placement: undecided}
   exp10: {placement: undecided}
+  exp11: {placement: undecided}
   synthesis: {placement: undecided}

@@ -131,7 +131,8 @@ def test_real_profile_plan_covers_inner_oof_for_each_applicable_recipe():
     def needs_inner_oof(arm):
         return arm["dataset_id"].startswith("BIN_") and arm["phase"] != "experiment_3"
 
-    arms = benchmark_plan()
+    # B3 refits and B4 samples are covered by the profiles of the full-size pipelines.
+    arms = [a for a in benchmark_plan() if a["phase"] in q.PROFILED_PHASES]
     expected = {group(a) for a in arms if needs_inner_oof(a) and a["width_status"] != "unsupported_width"}
     actual = {group(a) for a in q.profile_plan(arms) if needs_inner_oof(a)}
     assert actual == expected
@@ -141,7 +142,8 @@ def test_full_fold_profiles_cover_every_task_and_largest_class_vocabulary():
     from src.evaluation.campaign import benchmark_plan
 
     semantics = q.load_yaml("dataset_semantics")["datasets"]
-    arms = [a for a in benchmark_plan() if a["width_status"] != "unsupported_width"]
+    arms = [a for a in benchmark_plan()
+            if a["width_status"] != "unsupported_width" and a["phase"] in q.PROFILED_PHASES]
 
     def group(a):
         return a["phase"], a["model"], a.get("pca_scope"), a.get("pca_components")

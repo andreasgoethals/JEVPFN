@@ -33,3 +33,28 @@ meta_analysis:
   within_variance: fold_variance_over_five_divided_by_five
   caveat: outer folds share training rows, so fold variances understate within-dataset variance
   interval: normal_95
+
+# ---------------------------------------------------------------------------------------
+# Group B, B3 "when and for whom" (approved grid 20 November 2026), fixed before results.
+# Datasets: label-free properties (moderators.dataset_covariates: text length, empty share,
+# repetition/uniqueness, number of text columns, rows) plus decision redundancy (how well the
+# non-text columns predict each model's joint decision output; group_b.decision_redundancy,
+# label-free). Every property x predictor x representation is reported with Spearman rho and
+# one BH adjustment across all of them (primary_moderators stays empty). Decision models:
+# Group A diagnostics vs usefulness, exploratory (n = 17). Text columns: refits without one
+# column (text_column_refits.yaml). Rows: row_benefit cohorts (availability/length, baseline
+# uncertainty, decision confidence, cross-model agreement); novelty and prediction-shift
+# cohorts, permutation importance, SHAP and top-10% turnover analyses are not part of B3.
+group_b:
+  tie_tolerance: 0.001  # |raw gain| <= this counts as a tie (headline-metric units)
+  bootstrap: {n_boot: 2000, seed: 20261120, unit: dataset}
+predict_in_advance:
+  # Leave-one-dataset-out: a ridge rule on two prespecified label-free properties predicts
+  # each held-out dataset's gain; use decision features when the prediction exceeds 0.
+  rule: ridge_on_standardized_properties
+  properties: [log10_median_text_chars, decision_redundancy_r2]
+  alpha: 1.0
+  outcome_representation: decision/both/median  # median over all 17 models, per predictor
+  use_threshold: 0.0
+  n_shuffles: 2000  # null: gains shuffled across datasets, whole LODO rule refitted
+  report: [spearman_rho, use_accuracy, regret_vs_always_and_never, shuffle_p]

@@ -11,7 +11,8 @@ candidate_models:
 - limix_2
 - kumo_tabular
 - linear
-roster_note: six_predictors_four_arms_baseline_shared_across_extractors
+- lightgbm
+roster_note: seven_predictors_library_defaults_baseline_shared_across_extractors
 feature_artifacts: []
 candidate_combinations:
 - non_text

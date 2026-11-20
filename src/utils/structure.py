@@ -46,6 +46,8 @@ PHASES = (
     "rq2",
     "rq3",
     "regression_readout",
+    "data_efficiency",
+    "representations",  # Group C, C1 (exp09_representations, 20-11-2026)
 )
 
 #: The previous physical folder of each numbered phase (frozen history, not configuration).

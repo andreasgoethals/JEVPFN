@@ -131,10 +131,14 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
         estimator_factory("tabpfn_3_5", dataset.metadata, {})
 
 
-def test_plan_four_families_six_engines_three_original_text_baselines():
-    plan = benchmark_plan()
+def test_plan_four_families_seven_engines_three_original_text_baselines():
+    plan = [a for a in benchmark_plan()
+            if a["phase"] in ("experiment_1", "experiment_2", "experiment_3", "experiment_4")
+            and a["feature_set"] in ("non_text", "non_text_plus_joint", "non_text_plus_per_column",
+                                     "non_text_plus_both", "non_text_plus_frozen_e5",
+                                     "non_text_plus_tar", "original_features")]
     assert len({a["dataset_id"] for a in plan}) == 18
-    assert len(plan) == 6534
+    assert len(plan) == 18 * 7 * (52 + 6 + 2) + 54
     for model in MAIN_MODELS:
         row = [a for a in plan if a["dataset_id"] == plan[0]["dataset_id"] and a["model"] == model]
         assert len([a for a in row if a["provider"] is None]) == 9

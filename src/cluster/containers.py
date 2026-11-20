@@ -31,6 +31,7 @@ PREDICTORS = (
     "limix_2",
     "kumo_tabular",
     "linear",
+    "lightgbm",
     "tabstar",
     "contexttab",
     "ag_mm",

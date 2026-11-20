@@ -64,12 +64,16 @@ def test_cpu_publication_binds_large_rows_to_report(tmp_path, monkeypatch):
     monkeypatch.setattr(reports, "report_path", lambda: target)
     monkeypatch.setattr(reports, "compare_saved_features", lambda cfg, workers: result)
     monkeypatch.setattr(reports, "peer_majority_agreement", lambda _: pd.DataFrame())
+    monkeypatch.setattr(reports, "direct_scores", lambda cfg: (pd.DataFrame({"metric": ["roc_auc"]}), pd.DataFrame()))
+    monkeypatch.setattr(reports, "model_profile", lambda cfg: pd.DataFrame({"provider": ["nimble"]}))
     reports.build()
     data, receipt = reports.read_report(cfg)
     assert data.table("pairs").agreement.tolist() == [1.0]
     rows = receipt["joint_rows"]
     assert rows["rows"] == 1 and file_sha256(root / rows["name"]) == rows["sha256"]
     assert receipt["origin"] == "mindwell:123"
+    assert data.table("quality").metric.tolist() == ["roc_auc"]
+    assert data.table("model_profile").provider.tolist() == ["nimble"]
 
 def test_historical_roster_requires_exact_original_settings(tmp_path):
     from copy import deepcopy

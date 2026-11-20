@@ -13,13 +13,21 @@ from src.evaluation.widths import pca_width_table
 def test_primary_grid_and_widths():
     plan = benchmark_plan()
     assert Counter(a["phase"] for a in plan) == {
-        "experiment_1": 5616,
-        "experiment_2": 648,
-        "experiment_3": 216,
+        "experiment_1": 6552,
+        "experiment_2": 2898,
+        "experiment_3": 1008,
         "experiment_4": 54,
+        "rq2": 9282,
+        "data_efficiency": 61446,
+        "representations": 1764,  # C1: (12 + 2) arms x 7 predictors x 18 datasets
+        "rq3": 378,  # C2: 3 trained cells x 7 predictors x 18 datasets
     }
-    assert all(a["provider"] is None for a in plan if a["phase"] != "experiment_1")
-    assert all(a["width_status"] == "within_known_width_limit" for a in plan)
+    assert all(a["provider"] is None for a in plan
+               if a["phase"] in ("experiment_3", "experiment_4")
+               or a["feature_set"] == "non_text_plus_frozen_e5")
+    unsupported = [a for a in plan if a["width_status"] != "within_known_width_limit"]
+    assert {(a["model"], a["dataset_id"]) for a in unsupported} == {
+        ("kumo_tabular", "REG_TEXT_ROTTEN_TOMATOES")}  # incl. C1b per-column + hidden (548 columns)
     table = pca_width_table()
     assert table.per_column_32.max() == 431
     assert table.joint_64.max() == 108

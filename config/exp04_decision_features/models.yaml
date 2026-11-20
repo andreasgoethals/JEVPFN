@@ -4,7 +4,7 @@ common_tasks:
 - binary_classification
 - multiclass_classification
 - regression
-roster_status: owner_selected_six_numeric_predictors_three_original_text_models
+roster_status: owner_selected_seven_numeric_predictors_three_original_text_models
 text_comparison_rule: distinguish_text_encoders_from_categorical_string_encoding
 excluded_frameworks: []
 excluded_models:
@@ -25,6 +25,7 @@ models:
     main_arm_text_configuration: 'inference_config={"TRANSFORM_TEXT": false}'
     optional_text_configuration_reference: 'inference_config={"TRANSFORM_TEXT": true}; pandas_string_dtype'
     hosted_3_5_plus: separate_service_not_the_local_checkpoint
+    categorical: pandas_category_dtype_training_vocabulary_plus_categorical_features_indices
     runtime:
       packages:
         tabpfn: 9.0.0
@@ -54,6 +55,27 @@ models:
     runtime:
       packages:
         catboost: 1.2.10
+      seed: 20260929
+      device: cpu
+      threads: 8  # capped to the actual Slurm CPU allocation
+      parameters: {}
+      checkpoints: {}
+  lightgbm:
+    name: LightGBM
+    priority: selected_decision_and_embedding_experiments
+    package: lightgbm==4.7.0
+    extra: baselines
+    device_proposal: cpu
+    estimators: LGBMClassifier_and_LGBMRegressor
+    regularization: library_defaults_no_search
+    categorical: pandas_category_dtype_training_vocabulary_native_categorical_splits
+    missing: native_nan
+    feature_names: positional_because_lightgbm_rejects_json_special_characters
+    source: https://lightgbm.readthedocs.io/en/stable/Advanced-Topics.html#categorical-feature-support
+    raw_text: requires_explicit_numeric_features
+    runtime:
+      packages:
+        lightgbm: 4.7.0
       seed: 20260929
       device: cpu
       threads: 8  # capped to the actual Slurm CPU allocation
@@ -90,6 +112,7 @@ models:
     source: https://github.com/soda-inria/tabicl
     raw_text: no_semantic_encoder_use_external_embeddings
     many_classes: support_many_classes_true_wrapper
+    categorical: pandas_category_dtype_training_vocabulary_internal_ordinal_encoding_missing_own_category
     runtime:
       packages:
         tabicl: 2.2.0

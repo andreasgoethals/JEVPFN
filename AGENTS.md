@@ -118,8 +118,8 @@ never wipe shared scratch. Historical retention exceptions are documented in the
 Reusable Python belongs in `src/`. Since 18 November 2026, `config/structure.yaml` is the one
 layout registry: `config/`, `notebooks/` and `output_JEVPFN/` (`<folder>/{logs,manifests,results}/`)
 use its folders `00_data`, `01_exp0a`, `02_feature_creation`, `03_exp0b`, `exp01_outputs` …
-`exp08_when_text_helps`, `exp10_adaptation` and `synthesis` (Exp 9, decision-model
-representations, is reserved and has no folder). Keep at most one flat notebook per folder,
+`exp08_when_text_helps`, `exp09_representations` (C1), `exp10_adaptation` (C2),
+`exp11_data_efficiency` (B4) and `synthesis`. Keep at most one flat notebook per folder,
 `notebooks/<folder>.ipynb`; add folders only through the registry, and record paper placement under its
 `paper:` mapping, never in folder names. Internal phase IDs (`experiment_0`…`4`, `rq1`…`rq3`, …)
 remain hash/recipe/receipt keys and config aliases; never rename them. Move existing output trees only
