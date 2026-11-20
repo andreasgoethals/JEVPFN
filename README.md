@@ -73,6 +73,14 @@ py -3.12 -m venv --prompt JEVPFN .venv
 .\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
 ```
 
+Then pin every shared package to the exact version in the VSC CPU image, so a local pass
+does not fail on the cluster because of the environment. Rerun it after any other install;
+`tests/test_environment_parity.py` fails with the differing packages when the venv drifts.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install @(.\.venv\Scripts\python.exe -c "from src.utils.config import load_yaml; [print(f'{k}=={v}') for k,v in load_yaml('experiment_0/control_runtime')['packages'].items()]")
+```
+
 Prepare the pinned data and questions, audit the inputs, and run the notebooks.
 
 ```powershell
@@ -103,8 +111,9 @@ order. New controlled probes and Strands training require their own targeted pil
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
 | `output_JEVPFN/<folder>/{logs,manifests}/` | Operational validation evidence and logs |
 | `output_JEVPFN/<folder>/results/` | PCA, TAR, study and resumable benchmark records |
-| `output_JEVPFN/figures/<folder>/` | Paper figures of that folder's notebook, with combined captions in `figures/Captions.md` |
-| `output_JEVPFN/manifests/notebooks/<folder>/` | Figure registries and notebook execution receipts |
+| `output_JEVPFN/figures/<notebook>/` | Paper figures of each notebook and their `_figures.json`, with all captions in `figures/CAPTIONS.md` |
+| `output_JEVPFN/<folder>/{logs,manifests,results}/notebook/` | Notebook logs, execution receipts and reports |
+| `archive/` | Git-ignored previous-layout records, beside `output_JEVPFN/` |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
 containers and results. Native scratch holds temporary working stores. Transfer results with the [verified export/import tool](src/cluster/transfer.py).
@@ -112,9 +121,10 @@ containers and results. Native scratch holds temporary working stores. Transfer 
 ### Notebooks
 
 Notebooks run locally and write paper-width PDFs and printed reports. The runner supports
-`--only NAME` and `--summaries-only`. Figures and captions are under
-`output_JEVPFN/figures/`, and the aggregate report is `output_JEVPFN/All Results.md`.
-Each experiment folder also receives its own `All Results.md` and `figures/<folder>/Captions.md`.
+`--only NAME` and `--summaries-only`. Figures are under
+`output_JEVPFN/figures/<notebook>/`; the one report is `output_JEVPFN/All_Results.md` and the
+captions are `output_JEVPFN/figures/CAPTIONS.md`. Run them with the project venv
+(`.venv\Scripts\python.exe`).
 Result figures appear as complete saved evidence becomes available.
 
 The RQ1 Outputs notebook examines row-level vote splits, matching-class

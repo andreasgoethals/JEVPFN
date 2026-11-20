@@ -104,27 +104,41 @@ def test_failed_gpfs_stage_output_cleaned_without_touching_assets(output, monkey
 
 def test_partial_figure_cleanup_invalidates_combined_reports(output):
     root = paths.outputs_dir()
-    for name in ("figures/0. exploration/nb/01_plot.pdf", "figures/Captions.md", "All Results.md"):
+    report = root / "exp04_decision_features/results/notebook/_report.txt"
+    for name in ("figures/exp04_decision_features/01_plot.pdf", "figures/CAPTIONS.md",
+                 "All_Results.md", report.relative_to(root).as_posix()):
         file = root / name
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text("old")
-    cleanup.run(tier="data", phases=["exploration"], kinds=["figures"], apply=True, writers_stopped=True)
-    assert not (root / "All Results.md").exists()
-    assert not (root / "figures/Captions.md").exists()
+    cleanup.run(tier="data", phases=["experiment_1"], kinds=["figures"], apply=True, writers_stopped=True)
+    for name in ("All_Results.md", "figures/CAPTIONS.md"):
+        assert not (root / name).exists(), name
+    assert not report.exists()
 
 
 def test_partial_pdf_cleanup_preserves_only_surviving_captions(output):
     import json
     root = paths.outputs_dir()
-    figure_dir = root / "figures/0. exploration/nb"
+    figure_dir = root / "figures/00_data/nb"
     figure_dir.mkdir(parents=True)
     for stem in ("01_old", "02_keep"):
         (figure_dir / f"{stem}.pdf").write_text("pdf")
-    manifest = root / "manifests/notebooks/0. exploration/nb/_figures.json"
-    manifest.parent.mkdir(parents=True)
+    manifest = figure_dir / "_figures.json"
     manifest.write_text(json.dumps([{"stem": "01_old"}, {"stem": "02_keep"}]))
     preview = cleanup.run(tier="data", pattern="*/01_old.pdf")
     assert preview["caption_manifests_updated"] == [str(manifest)]
     cleanup.run(tier="data", pattern="*/01_old.pdf", apply=True, writers_stopped=True)
     assert json.loads(manifest.read_text()) == [{"stem": "02_keep"}]
     assert (figure_dir / "02_keep.pdf").exists()
+
+
+def test_figure_records_pair_figures_with_notebook_reports(tmp_path):
+    root = tmp_path / "output_JEVPFN"
+    assert cleanup.figure_records(root, root / "figures/exp01_outputs/01_a.pdf") == (
+        root / "figures/exp01_outputs/_figures.json",
+        root / "exp01_outputs/results/notebook/_report.txt")
+    assert cleanup.figure_records(root, root / "figures/00_data/nb/01_a.pdf") == (
+        root / "figures/00_data/nb/_figures.json",
+        root / "00_data/results/notebook/nb/_report.txt")
+    assert cleanup.figure_records(root, root / "figures/unknown_group/01_a.pdf") is None
+    assert cleanup.figure_records(root, root / "01_exp0a/results/a.pdf") is None

@@ -3,8 +3,16 @@
 Internal phase IDs stay the keys of every hash, recipe, receipt and manifest. This module
 only decides WHERE a phase's config, notebooks and outputs live, and how previous layouts
 (numbered `general/rq1/rq2/rq3`; then `<folder>/<name>` notebooks and `exp09_adaptation`
-before 19-11-2026) translate into the current one. `paths` builds every
-path from it; `layout_migration` moves existing trees with the same translation, so code and
+before 19-11-2026; then `{logs,manifests,results}/notebooks/<folder>/` records, a short-lived
+`<folder>/figures/` with per-folder reports, and `output_JEVPFN/archives/`) translate into the
+current one:
+
+    figures/<group>/          one folder per notebook (`figure_group`): PDFs and `_figures.json`
+    figures/CAPTIONS.md       every caption;  All_Results.md   every notebook's report
+    <folder>/{logs,manifests,results}/[notebook/]   everything else, per experiment folder
+    ../archive/               previous-layout records, beside (not inside) the output root
+
+`paths` builds every path from it; `layout_migration` moves existing trees with the same translation, so code and
 data always agree after a migration.
 
 Import-light on purpose: `paths` imports this module, so it must not import `paths`.
@@ -55,15 +63,52 @@ LEGACY_PHASE_FOLDERS = {
 #: Phases whose scientific results lived under `rq2/<legacy folder>/` before 18-11-2026.
 LEGACY_RQ2_RESULT_PHASES = ("experiment_1", "experiment_2", "experiment_3", "experiment_4", "synthesis")
 LEGACY_GROUPS = ("general", "rq1", "rq2", "rq3")
+#: Previous-layout records live in `archive/`, a sibling of the output root (git-ignored at
+#: the repository root; on VSC beside the migrated DATA or PROJECT output root, so moving there
+#: is a same-filesystem rename). Paths below are relative to the output root.
+ARCHIVE_DIR_NAME = "archive"
+ARCHIVE_ROOT = PurePosixPath("..", ARCHIVE_DIR_NAME)
+#: The archive's former location inside the output root (until 19-11-2026).
+PREVIOUS_ARCHIVES = "archives"
 #: Notebook records of retired notebook IDs move here, preserving their relative path.
-ARCHIVE = PurePosixPath("archives", "layout_20261118")
+ARCHIVE = ARCHIVE_ROOT / "layout_20261118"
 #: Records of notebooks merged into one flat notebook on 19-11-2026 (cannot share a folder).
-MERGED_ARCHIVE = PurePosixPath("archives", "layout_20261119")
+MERGED_ARCHIVE = ARCHIVE_ROOT / "layout_20261119"
+#: Retired per-folder report copies (`<folder>/All_Results.md`, `[figures/]<folder>/CAPTIONS.md`).
+REPORTS_ARCHIVE = ARCHIVE_ROOT / "folder_reports_20261119"
 SCHEMA = "jevpfn.structure.v2"
 NOTEBOOK_RECORD_KINDS = ("logs", "manifests", "results")
+#: Sub-folder of `<folder>/{logs,manifests,results}/` holding the folder notebook's records,
+#: apart from the experiment's own manifests/logs/results.
+NOTEBOOK_RECORDS = "notebook"
+#: The one top-level figures folder: `figures/<group>/` per notebook, plus CAPTIONS.md.
+FIGURES = "figures"
+#: Notebook records kept beside the PDFs in `figures/<group>/`.
+FIGURE_RECORDS = ("_figures.json", "_stdout.txt", "_failure.txt")
+#: The two generated project documents: `All_Results.md` and `figures/CAPTIONS.md`.
+ALL_RESULTS = "All_Results.md"
+CAPTIONS = "CAPTIONS.md"
+#: Report names of earlier layouts, including retired per-folder copies.
+REPORT_NAMES = frozenset({ALL_RESULTS, CAPTIONS, "All Results.md", "all_results.md", "Captions.md"})
 PLACEMENTS = ("main", "appendix", "undecided")
-#: Generated per-folder documents (run_notebooks); they stay in the folder that wrote them.
-FOLDER_REPORTS = {("All Results.md",), ("manifests", "reports.json")}
+#: Generated per-folder index (run_notebooks); it stays in the experiment folder that wrote it.
+FOLDER_REPORTS = {("manifests", "reports.json")}
+
+
+def figure_group(folder: str) -> str:
+    """THE figure grouping: `figures/<group>/` of the notebook in registry folder `folder`.
+
+    Today one group per notebook, named after it (notebook ID == folder). Change the grouping
+    here only; `paths.figures_dir` and the layout migration (`translate_output`) both use it.
+    """
+    return folder
+
+
+def figure_folder(group: str, reg: Registry | None = None) -> str | None:
+    """The registry folder whose notebook draws into `figures/<group>/` (inverse of the above)."""
+    reg = reg or registry()
+    found = [folder for folder in reg.folders if figure_group(folder) == group]
+    return found[0] if len(found) == 1 else None
 
 
 @dataclass(frozen=True)
@@ -325,7 +370,7 @@ def _notebook_record(parts, reg: Registry) -> tuple[str, ...] | None:
         head, rest = parts[:2], parts[2:]
     else:
         return None
-    if not rest or (head == ("figures",) and rest == ("Captions.md",)):
+    if not rest:
         return parts
     group = rest[0]
     if len(rest) == 1:
@@ -341,11 +386,38 @@ def _notebook_record(parts, reg: Registry) -> tuple[str, ...] | None:
     if group in reg.previous_folders:
         return (*head, reg.previous_folders[group], *rest[1:])
     known_group = group in LEGACY_GROUPS or legacy_phase(group) is not None
-    if head == ("figures",) and rest[1:] == ("Captions.md",):
-        phase = legacy_phase(group)
-        # Experiment reports follow their phase's `All Results.md` route (0B -> 03_exp0b).
-        return ("figures", reg.folder_for(phase, ("All Results.md",)), "Captions.md") if phase else parts
     return (*ARCHIVE.parts, *parts) if known_group else None  # Records of a retired notebook.
+
+
+def _folder_record(parts, reg: Registry) -> tuple[str, ...]:
+    """Kind-first notebook record -> current location.
+
+    `figures/<folder>/[<stem>/]x` -> `figures/<group>/[<stem>/]x`;
+    `{logs,manifests,results}/notebooks/<folder>/[<stem>/]x` -> `<folder>/<kind>/notebook/...`,
+    except `_figures.json`/`_stdout.txt`/`_failure.txt`, which sit beside the PDFs.
+    Archived and unknown-folder records are returned unchanged.
+    """
+    if parts[:1] == (FIGURES,):
+        rest = parts[1:]
+        if not rest or rest[0] not in reg.folders:
+            return parts
+        return (FIGURES, figure_group(rest[0]), *rest[1:])
+    if len(parts) >= 3 and parts[0] in NOTEBOOK_RECORD_KINDS and parts[1] == "notebooks":
+        folder, rest = parts[2], parts[3:]
+        if folder not in reg.folders:
+            return parts
+        if rest and rest[-1] in FIGURE_RECORDS:
+            return (FIGURES, figure_group(folder), *rest)
+        return (folder, parts[0], NOTEBOOK_RECORDS, *rest)
+    return parts
+
+
+def _folder_report(parts, reg: Registry) -> bool:
+    """A retired per-folder report copy, e.g. `exp02_robustness/All_Results.md`,
+    `figures/exp02_robustness/Captions.md` or `3. experiment_0/All Results.md`."""
+    if len(parts) < 2 or parts[-1] not in REPORT_NAMES:
+        return False
+    return parts[0] == FIGURES or logical_output(parts, reg) is not None
 
 
 def translate_output(relative, reg: Registry | None = None) -> PurePosixPath | None:
@@ -353,23 +425,41 @@ def translate_output(relative, reg: Registry | None = None) -> PurePosixPath | N
 
     Accepts previous-layout and current-layout paths, so a path recorded before or after the
     migration (including a relative `..` reference across a routed folder) resolves the same.
+    Archived records translate to `../archive/...`, outside the output root.
     """
     reg = reg or registry()
     parts = PurePosixPath(*Path(relative).parts).parts if str(relative) not in {"", "."} else ()
     if not parts:
         return None
-    if parts in {("All Results.md",), (".reports.lock",)}:
+    if parts[0] == PREVIOUS_ARCHIVES:  # `output_JEVPFN/archives/<x>` -> `archive/<x>`.
+        return PurePosixPath(*ARCHIVE_ROOT.parts, *parts[1:]) if len(parts) > 1 else None
+    if parts in {(ALL_RESULTS,), (".reports.lock",), (FIGURES, CAPTIONS)}:
         return PurePosixPath(*parts)
+    if parts in {("All Results.md",), ("all_results.md",)}:
+        return PurePosixPath(ALL_RESULTS)
+    if parts in {(CAPTIONS,), ("Captions.md",), (FIGURES, "Captions.md")}:
+        return PurePosixPath(FIGURES, CAPTIONS)
+    if _folder_report(parts, reg):
+        return PurePosixPath(*REPORTS_ARCHIVE.parts, *parts)
     record = _notebook_record(parts, reg)
-    if record is not None or parts[0] in {"figures", *NOTEBOOK_RECORD_KINDS}:
-        return PurePosixPath(*record) if record is not None else None
+    if record is not None or parts[0] in {FIGURES, *NOTEBOOK_RECORD_KINDS}:
+        return PurePosixPath(*_folder_record(record, reg)) if record is not None else None
     logical = logical_output(parts, reg)
     if logical is None:
         return None
     phase, sub = logical
-    if parts[0] in reg.folders and sub in FOLDER_REPORTS:
-        return PurePosixPath(*parts)  # Each current folder owns its generated report.
+    folder = reg.previous_folders.get(parts[0], parts[0])
+    if parts[1:2] == (FIGURES,) and folder in reg.folders:
+        # `<folder>/figures/...` (briefly used on 19-11-2026) -> `figures/<group>/...`.
+        return PurePosixPath(FIGURES, figure_group(folder), *parts[2:])
+    if parts[0] in reg.folders and (sub in FOLDER_REPORTS or _own_notebook_record(parts, sub)):
+        return PurePosixPath(*parts)  # Each current folder owns its index and notebook records.
     return PurePosixPath(reg.folder_for(phase, sub), *sub)
+
+
+def _own_notebook_record(parts, sub) -> bool:
+    """`<folder>/<kind>/notebook/...` (possibly in a nested phase)."""
+    return len(sub) >= 2 and sub[0] in NOTEBOOK_RECORD_KINDS and sub[1] == NOTEBOOK_RECORDS
 
 
 def recorded_output_path(value, output_dir_name: str = "output_JEVPFN") -> Path:
@@ -387,7 +477,8 @@ def recorded_output_path(value, output_dir_name: str = "output_JEVPFN") -> Path:
     moved = translate_output(PurePosixPath(*parts[index + 1:])) if parts[index + 1:] else None
     if moved is None:
         return path
-    candidate = Path(*parts[: index + 1], *moved.parts)
+    # Archived records resolve to `archive/` beside the output root (`..` is normalised).
+    candidate = Path(os.path.normpath(Path(*parts[: index + 1], *moved.parts)))
     return candidate if candidate.exists() else path
 
 

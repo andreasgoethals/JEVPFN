@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 
 from src.utils.paths import large_outputs_dir, notebook_outputs_dir, outputs_dir, phase_folder
+from src.utils.structure import FIGURES, NOTEBOOK_RECORDS, REPORT_NAMES
 
 KEEP = frozenset({".gitkeep", ".gitignore"})
 
@@ -47,16 +48,20 @@ def candidates(root: Path):
             if name in KEEP or path.is_symlink() or not path.resolve().is_relative_to(root):
                 continue
             relative = path.relative_to(root)
+            parts = relative.parts
             if (
                 (
-                    relative.parts[0] == "figures"
+                    # `figures/<notebook>/`: `_figures.json` is pruned with its PDFs, not deleted.
+                    parts[0] == FIGURES
                     and (
-                        path.suffix.lower() in {".pdf", ".png", ".svg", ".json", ".npz", ".csv"}
-                        or name in {"Captions.md", "_report.txt", "_stdout.txt"}
+                        path.suffix.lower() in {".pdf", ".png", ".svg", ".npz", ".csv"}
+                        or name in {"CAPTIONS.md", "Captions.md", "_report.txt", "_stdout.txt",
+                                    "_failure.txt"}
                     )
                 )
-                or relative.as_posix() in {"All Results.md", "all_results.md", "Captions.md"}
-                or (relative.parts[:2] == ("results", "notebooks") and name == "_report.txt")
+                or (len(parts) <= 2 and name in REPORT_NAMES)
+                or (parts[:2] == ("results", "notebooks") and name == "_report.txt")
+                or (parts[1:3] == ("results", NOTEBOOK_RECORDS) and name == "_report.txt")
                 or (
                     relative.parts[:2] in {("1. question_preparation", "questions"),
                                            (phase_folder("question_preparation"), "questions")}

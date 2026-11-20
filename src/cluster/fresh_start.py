@@ -12,7 +12,6 @@ import json
 import os
 import shutil
 import stat
-import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -129,11 +128,7 @@ def delete_directory(root):
                     raise
                 time.sleep(min(0.1 * 2**attempt, 1.0))
 
-    if sys.version_info >= (3, 12):
-        shutil.rmtree(root, onexc=on_error)
-    else:
-        # Preserve the template's Python 3.11 support without 3.12 deprecation warnings.
-        shutil.rmtree(root, onerror=lambda fn, name, info: on_error(fn, name, info[1]))
+    shutil.rmtree(root, onexc=on_error)
 
 
 def run(*, apply=False, writers_stopped=False, local=False, delete=False, include_archives=False):

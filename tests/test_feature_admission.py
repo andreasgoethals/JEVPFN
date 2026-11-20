@@ -14,6 +14,8 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
+pytestmark = pytest.mark.usefixtures("historical_workspace_limits")
+
 
 def grid():
     steps = []

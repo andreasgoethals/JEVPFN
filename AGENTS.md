@@ -116,7 +116,7 @@ Preserve resumable failures, referenced images and other projects. Check byte/fi
 never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
 Reusable Python belongs in `src/`. Since 18 November 2026, `config/structure.yaml` is the one
-layout registry: `config/`, `notebooks/` and `output_JEVPFN/` (results and `figures/<folder>/`)
+layout registry: `config/`, `notebooks/` and `output_JEVPFN/` (`<folder>/{logs,manifests,results}/`)
 use its folders `00_data`, `01_exp0a`, `02_feature_creation`, `03_exp0b`, `exp01_outputs` …
 `exp08_when_text_helps`, `exp10_adaptation` and `synthesis` (Exp 9, decision-model
 representations, is reserved and has no folder). Keep at most one flat notebook per folder,
@@ -135,8 +135,10 @@ PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.
 - `src/visualize/style.py` owns colors/sizes. Use `FigureSaver`, PDF and inline display;
   inspect figures at final A4 widths and split dense views into readable panels.
   Captions describe the figure without repeating the title.
-- Save figures to `output_JEVPFN/figures/<folder>/`, captions to
-  `figures/Captions.md`, and reports to `output_JEVPFN/All Results.md`.
+- Save figures to the one `output_JEVPFN/figures/<notebook>/` (grouping: `structure.figure_group`),
+  captions to `figures/CAPTIONS.md`, the report to `output_JEVPFN/All_Results.md` and other
+  notebook records to `<folder>/<kind>/notebook/`; no per-folder copies. Previous-layout
+  records go to the git-ignored `archive/` beside the output root (`paths.archive_dir`).
 - Run `python -m pytest -q` before finishing. If notebooks or `src/visualize/` change,
   also run `python -m src.utils.run_notebooks` and inspect every affected figure.
   Check lint and relevant shell syntax. Separate local checks from real VSC acceptance.

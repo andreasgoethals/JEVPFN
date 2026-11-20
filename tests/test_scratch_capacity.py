@@ -19,6 +19,8 @@ from src.utils.config import load_yaml
 
 roots = roots_fixture
 
+pytestmark = pytest.mark.usefixtures("historical_workspace_limits")
+
 
 def copied_assets(durable, work):
     marker(durable, work)

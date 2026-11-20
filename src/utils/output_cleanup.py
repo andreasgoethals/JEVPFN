@@ -21,11 +21,13 @@ from pathlib import Path
 
 from src.cluster.fresh_start import output_roots, validate_deletion_tree
 from src.cluster.maintenance import reject_links, require_idle_vsc
-from src.utils import paths
+from src.utils import paths, structure
 from src.utils.locking import file_lock
 from src.utils.serialization import write_json
 
 KINDS = ("logs", "manifests", "results", "figures", "reports", "transfers")
+#: Generated aggregate documents: current names and previous names.
+REPORT_NAMES = structure.REPORT_NAMES
 
 
 def selected_roots(tier="auto"):
@@ -59,7 +61,7 @@ def selected_roots(tier="auto"):
 def classify(relative):
     parts = relative.parts
     name = relative.name
-    if name in {"All Results.md", "all_results.md", "Captions.md"}:
+    if name in REPORT_NAMES:
         return "reports"
     if parts[0] in KINDS:
         return parts[0]
@@ -121,9 +123,9 @@ def plan(*, tier="auto", phases=(), kinds=(), pattern="*", older_than_days=None,
     for entry in list(files):
         file = Path(entry["path"])
         for label, root in targets:
-            if file.suffix == ".pdf" and file.is_relative_to(root / "figures"):
-                notebook = file.parent.relative_to(root / "figures")
-                report_file = root / "results" / "notebooks" / notebook / "_report.txt"
+            record = figure_records(root, file) if file.suffix == ".pdf" else None
+            if record is not None:
+                report_file = record[1]
                 if report_file.is_file() and str(report_file) not in known:
                     files.append({"tier": label, "path": str(report_file), "bytes": report_file.stat().st_size,
                                   "reason": "invalidate notebook report describing removed figures"})
@@ -135,10 +137,29 @@ def plan(*, tier="auto", phases=(), kinds=(), pattern="*", older_than_days=None,
         known = {f["path"] for f in files}
         for label, root in targets:
             for file in root.rglob("*.md") if root.exists() else ():
-                if file.name in {"All Results.md", "all_results.md", "Captions.md"} and str(file) not in known:
+                if file.name in REPORT_NAMES and str(file) not in known:
                     files.append({"tier": label, "path": str(file), "bytes": file.stat().st_size,
                                   "reason": "invalidate aggregate after partial cleanup"})
     return roots, targets, files
+
+
+def figure_records(root, pdf):
+    """(`_figures.json`, `_report.txt`) of the notebook that drew `pdf`, or None.
+
+    `figures/<group>/[<stem>/]x.pdf`: the manifest sits beside the PDFs and the notebook's
+    report in `<folder>/results/notebook/[<stem>/]` (`structure.figure_folder`).
+    """
+    root, pdf = Path(root), Path(pdf)
+    if not pdf.is_relative_to(root):
+        return None
+    parts = pdf.parent.relative_to(root).parts
+    if parts[:1] != (structure.FIGURES,) or len(parts) < 2:
+        return None
+    folder = structure.figure_folder(parts[1])
+    if folder is None:
+        return None
+    report = (root / folder / "results" / structure.NOTEBOOK_RECORDS).joinpath(*parts[2:])
+    return pdf.parent / "_figures.json", report / "_report.txt"
 
 
 def figure_manifest_updates(targets, files):
@@ -147,10 +168,10 @@ def figure_manifest_updates(targets, files):
     updates = {}
     for _, root in targets:
         for pdf in deleted:
-            if not pdf.is_relative_to(root / "figures") or pdf.suffix != ".pdf":
+            record = figure_records(root, pdf) if pdf.suffix == ".pdf" else None
+            if record is None:
                 continue
-            notebook = pdf.parent.relative_to(root / "figures")
-            manifest = root / "manifests" / "notebooks" / notebook / "_figures.json"
+            manifest = record[0]
             if manifest in deleted or not manifest.exists():
                 continue
             entries = updates.get(manifest)

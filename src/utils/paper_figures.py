@@ -70,10 +70,10 @@ def resolve(raw: dict | None = None, *, figures_root: Path | None = None) -> pd.
     if figures_root is None:
         from src.utils import paths
 
-        figures_root = paths.notebook_outputs_dir() / "figures"
+        figures_root = paths.figures_dir()
     rows = []
     for item in plan["figures"]:
-        saved = saved_stems(Path(figures_root) / item["notebook"])
+        saved = saved_stems(Path(figures_root) / structure.figure_group(item["notebook"]))
         found = sorted({s for s in saved for pattern in item.get("figures") or []
                         if fnmatch(s, pattern)})
         rows.append({

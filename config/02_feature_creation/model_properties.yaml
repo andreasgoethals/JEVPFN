@@ -268,7 +268,7 @@ providers:
     readout_type: {value: null, verified: false, source: null}
     hidden_size: {value: null, verified: false, source: null}
     num_layers: {value: null, verified: false, source: null}
-    context_tokens: {value: 16384, verified: true, source: 'config/02_feature_creation/extractors.yaml'}
+    context_tokens: {value: 32768, verified: true, source: 'config/02_feature_creation/extractors.yaml'}
     license: {value: 'Apache-2.0', verified: true, source: 'config/02_feature_creation/extractors.yaml'}
     training: {value: null, verified: false, source: null}
     source_url: {value: 'https://huggingface.co/PelaAI/KnowLine-31B-Gen1', verified: true, source: 'config/02_feature_creation/extractors.yaml'}
@@ -284,7 +284,7 @@ providers:
     readout_type: {value: null, verified: false, source: null}
     hidden_size: {value: null, verified: false, source: null}
     num_layers: {value: null, verified: false, source: null}
-    context_tokens: {value: 16384, verified: true, source: 'config/02_feature_creation/extractors.yaml'}
+    context_tokens: {value: 32768, verified: true, source: 'config/02_feature_creation/extractors.yaml'}
     license: {value: 'Apache-2.0', verified: true, source: 'config/02_feature_creation/extractors.yaml'}
     training: {value: null, verified: false, source: null}
     source_url: {value: 'https://huggingface.co/sthanika-ai/Sieve-31B-v3', verified: true, source: 'config/02_feature_creation/extractors.yaml'}

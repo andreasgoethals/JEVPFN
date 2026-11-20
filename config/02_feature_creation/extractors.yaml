@@ -195,7 +195,7 @@ candidates:
     model: PelaAI/KnowLine-31B-Gen1
     revision: a45b64060e1d6928e7e20bdffd2c482e4ebf7de6
     delivery: self_hosted
-    context_tokens: 16384
+    context_tokens: 32768
     max_options: 255
     input_modalities: [text]
     license: Apache-2.0
@@ -206,7 +206,7 @@ candidates:
     model: sthanika-ai/Sieve-31B-v3
     revision: ed0a046788205f0457918af8dbae3c6e8c3ee9f5
     delivery: self_hosted
-    context_tokens: 16384
+    context_tokens: 32768
     max_options: 255
     input_modalities: [text]
     license: Apache-2.0

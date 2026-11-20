@@ -13,6 +13,10 @@
 # combined into this notebook (aliases whose records are archived, since several cannot
 # share one record folder). `previous_folders` are earlier names of the same folder.
 # `planned` reserves an experiment number without creating any folder.
+# Output: each folder holds its own {logs,manifests,results}/ and its notebook's records in
+# `<kind>/notebook/`. Figures share ONE folder, output_JEVPFN/figures/<notebook>/ (PDFs,
+# _figures.json; grouping in src.utils.structure.figure_group) with figures/CAPTIONS.md, and
+# output_JEVPFN/All_Results.md is the one report. Previous-layout records go to archive/.
 # Paper placement is decided separately under `paper:` and never encoded in a folder.
 schema: jevpfn.structure.v2
 approved: 18-11-2026
@@ -41,8 +45,7 @@ entries:
   folder: 03_exp0b
   title: Experiment 0B, qualification after feature creation
   routes:
-    experiment_0: [manifests/after_extraction, logs/after_extraction, manifests/reports.json,
-                   All Results.md]
+    experiment_0: [manifests/after_extraction, logs/after_extraction, manifests/reports.json]
   notebook: {phase: experiment_0, legacy: [general/03_validation, 03_exp0b/validation]}
 - id: exp01
   folder: exp01_outputs

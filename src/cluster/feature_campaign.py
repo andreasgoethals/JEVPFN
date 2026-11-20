@@ -145,7 +145,7 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
             receipt=str(receipt),
             decision_datasets=sum(s.get("pool") in selected for s in steps),
             encoders=sum(s["name"].startswith("embeddings_") for s in steps),
-            max_resident_workspaces=2,
+            max_resident_workspaces=load_yaml("experiment_0/scheduling")["max_resident_workspaces"],
             decision_gpu_jobs_per_runtime=2,
             steps=steps,
         )

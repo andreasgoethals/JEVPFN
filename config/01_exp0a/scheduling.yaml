@@ -5,8 +5,10 @@
 max_active_jobs: 64
 token_audit_shards: 10
 # Staging-to-release slots include queued GPU consumers, not just active transfers.
-max_resident_workspaces: 2
-scratch_working_set_gib: 200
+# Owner decision 20-11-2026: 8 resident workspaces within a 400 GiB working budget (was 2/200).
+# The byte budget and headroom still gate every new workspace; CreditPFN shares this scratch.
+max_resident_workspaces: 8
+scratch_working_set_gib: 400
 scratch_allocation_gib: 500
 scratch_headroom_gib: 20
 test_pool_limits:

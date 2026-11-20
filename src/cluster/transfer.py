@@ -257,6 +257,8 @@ def import_bundle(bundle: Path) -> dict:
                         relative.parts[0] != "output_JEVPFN"
                         or len(relative.parts) < 3
                         or relative.parts[1] in {"transfers", "figures"}
+                        # Notebook figures are local only (also the briefly used `<folder>/figures/`).
+                        or relative.parts[2:3] == ("figures",)
                     ):
                         raise ValueError("Invalid output destination")
                 else:

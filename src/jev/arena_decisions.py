@@ -6,7 +6,7 @@ import sys
 import urllib.request
 from types import SimpleNamespace
 
-from src.jev.frontier_decisions import COMMON, LIMIT, package
+from src.jev.frontier_decisions import COMMON, package
 from src.jev.provider import semantic_question
 from src.jev.registry import source_module
 from src.jev.requests import require_nonempty_text
@@ -19,6 +19,11 @@ MODELS = {
     "knowline": ("PelaAI/KnowLine-31B-Gen1", "a45b64060e1d6928e7e20bdffd2c482e4ebf7de6"),
     "sieve": ("sthanika-ai/Sieve-31B-v3", "ed0a046788205f0457918af8dbae3c6e8c3ee9f5"),
 }
+#: Request ceiling (tokens). Both checkpoints are Gemma 4 31B fine-tunes (262,144 positions);
+#: Sieve declares no limit (trained on prompts up to 16,384, served public requests up to
+#: ~54,000) and KnowLine serves through SGLang without one. 16,384 left two Fake Job Postings
+#: rows (up to 21,049 tokens) unanswerable; inputs are never truncated (owner, 19-11-2026).
+LIMIT = 32768
 SIEVE_SOURCE = "1e64657c930f91db7119b5638774c0f11a77e441"
 SIEVE_FILES = ("_kit.py", "api.py", "calibration.py", "letters/format.py", "letters/layout.py",
                "letters/attention.py", "letters/model.py", "letters/engine.py")

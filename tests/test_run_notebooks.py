@@ -1,6 +1,6 @@
 # Retained from the template and adapted to phase folders and automatic concurrency.
 # These pin the documented contracts — notebooks discovered alphabetically, and
-# `All Results.md` sorted alphabetically with each block verbatim.
+# `All_Results.md` sorted alphabetically with each block verbatim.
 """`src/utils/run_notebooks.py` — the runner and the two summary documents.
 
 The end-to-end test executes a real one-cell notebook in a subprocess. It is marked `slow`
@@ -90,9 +90,9 @@ def test_discovery_is_flat_and_rejects_nested_notebooks(tmp_path, monkeypatch):
 
 
 def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch) -> None:
-    """ONE Captions.md for the project, built from each notebook's manifest — so it can be
+    """ONE CAPTIONS.md for the project, built from each notebook's manifest — so it can be
     regenerated after an interactive run without executing anything."""
-    from src.utils.paths import notebook_artifacts
+    from src.utils.paths import figures_dir
 
     for name, entries in {
         "b_second": [{"index": 1, "stem": "01_x", "name": "x", "caption": "Caption X."}],
@@ -101,7 +101,7 @@ def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch
             {"index": 2, "stem": "02_q", "name": "q", "caption": "Caption Q."},
         ],
     }.items():
-        folder = notebook_artifacts(name)
+        folder = figures_dir(name)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "_figures.json").write_text(json.dumps(entries), encoding="utf-8")
 
@@ -114,9 +114,9 @@ def test_captions_are_grouped_per_notebook_in_order(isolated_output, monkeypatch
 
 def test_a_missing_caption_is_flagged_not_skipped(isolated_output) -> None:
     """A gap should be visible in the document that is supposed to contain it."""
-    from src.utils.paths import notebook_artifacts
+    from src.utils.paths import figures_dir
 
-    folder = notebook_artifacts("nb")
+    folder = figures_dir("nb")
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "_figures.json").write_text(
         json.dumps([{"index": 1, "stem": "01_x", "name": "x", "caption": ""}]), encoding="utf-8"

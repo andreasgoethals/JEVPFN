@@ -134,17 +134,22 @@ def test_notebook_ids_aliases_and_figure_folders():
     assert paths.figures_dir("exp10_adaptation").parts[-2:] == ("figures", "exp10_adaptation")
     assert paths.figures_dir("exp09_adaptation/02_head") == paths.figures_dir("exp10_adaptation")
     assert paths.notebook_artifacts("03_exp0b", kind="logs").parts[-3:] == (
-        "logs", "notebooks", "03_exp0b")
-    assert paths.captions_path("experiment_1").parts[-3:] == (
-        "figures", "exp04_decision_features", "Captions.md")
-    assert paths.all_results_path("03_exp0b").parts[-2:] == ("03_exp0b", "All Results.md")
+        "03_exp0b", "logs", "notebook")
+    assert paths.captions_path().parts[-2:] == ("figures", "CAPTIONS.md")
+    assert paths.all_results_path().parts[-2:] == ("output_JEVPFN", "All_Results.md")
+    # The figure grouping lives in one function; today one group per notebook folder.
+    assert all(structure.figure_group(f) == f for f in FOLDERS)
+    assert all(structure.figure_folder(structure.figure_group(f)) == f for f in FOLDERS)
+
+
+_REPORTS = "../archive/folder_reports_20261119"
 
 
 @pytest.mark.parametrize("old, new", [
     ("3. experiment_0/manifests/before_extraction/a.json", "01_exp0a/manifests/before_extraction/a.json"),
     ("3. experiment_0/manifests/after_extraction/p.json", "03_exp0b/manifests/after_extraction/p.json"),
     ("3. experiment_0/results/token_audit/x.sqlite3", "01_exp0a/results/token_audit/x.sqlite3"),
-    ("3. experiment_0/All Results.md", "03_exp0b/All Results.md"),
+    ("3. experiment_0/All Results.md", f"{_REPORTS}/3. experiment_0/All Results.md"),
     ("1. question_preparation/logs/a.log", "00_data/logs/a.log"),
     ("2. feature_creation/manifests/f.json", "02_feature_creation/manifests/f.json"),
     ("4. experiment_1/manifests/reports.json", "exp04_decision_features/manifests/reports.json"),
@@ -159,39 +164,65 @@ def test_notebook_ids_aliases_and_figure_folders():
     ("rq1/logs/x.log", "exp01_outputs/logs/x.log"),
     ("rq3/results/a", "exp10_adaptation/results/a"),
     ("figures/rq2/01_decisions/a.pdf", "figures/exp04_decision_features/a.pdf"),
-    ("figures/4. experiment_1/Captions.md", "figures/exp04_decision_features/Captions.md"),
-    ("logs/notebooks/general/01_data/stdout.log", "logs/notebooks/00_data/stdout.log"),
+    ("figures/4. experiment_1/Captions.md", f"{_REPORTS}/figures/4. experiment_1/Captions.md"),
+    ("logs/notebooks/general/01_data/stdout.log", "00_data/logs/notebook/stdout.log"),
     # 19-11-2026: flat notebook records, Exp 9 -> Exp 10, merged adaptation notebooks archived.
     ("figures/exp04_decision_features/decisions/a.pdf", "figures/exp04_decision_features/a.pdf"),
     ("manifests/notebooks/exp01_outputs/outputs/_figures.json",
-     "manifests/notebooks/exp01_outputs/_figures.json"),
+     "figures/exp01_outputs/_figures.json"),
     ("results/notebooks/exp01_outputs/outputs/tables/pairs.csv",
-     "results/notebooks/exp01_outputs/tables/pairs.csv"),
-    ("exp09_adaptation/All Results.md", "exp10_adaptation/All Results.md"),
+     "exp01_outputs/results/notebook/tables/pairs.csv"),
+    ("exp09_adaptation/All Results.md", f"{_REPORTS}/exp09_adaptation/All Results.md"),
     ("exp09_adaptation/manifests/reports.json", "exp10_adaptation/manifests/reports.json"),
-    ("figures/exp09_adaptation/Captions.md", "figures/exp10_adaptation/Captions.md"),
+    ("exp09_adaptation/figures/01_a.pdf", "figures/exp10_adaptation/01_a.pdf"),
+    ("figures/exp09_adaptation/Captions.md", f"{_REPORTS}/figures/exp09_adaptation/Captions.md"),
     ("figures/exp09_adaptation/02_head/a.pdf",
-     "archives/layout_20261119/figures/exp09_adaptation/02_head/a.pdf"),
+     "../archive/layout_20261119/figures/exp09_adaptation/02_head/a.pdf"),
     ("logs/notebooks/exp09_adaptation/01_calibration/stdout.log",
-     "archives/layout_20261119/logs/notebooks/exp09_adaptation/01_calibration/stdout.log"),
-    ("figures/rq1/rq1_behavior/a.pdf", "archives/layout_20261118/figures/rq1/rq1_behavior/a.pdf"),
+     "../archive/layout_20261119/logs/notebooks/exp09_adaptation/01_calibration/stdout.log"),
+    ("figures/rq1/rq1_behavior/a.pdf", "../archive/layout_20261118/figures/rq1/rq1_behavior/a.pdf"),
+    # The archive moved out of the output root (19-11-2026): output_JEVPFN/archives -> archive/.
+    ("archives/layout_20261118/figures/x.pdf", "../archive/layout_20261118/figures/x.pdf"),
+    ("archives/rq_layout_20261116", "../archive/rq_layout_20261116"),
     # Current paths are fixed points; a current path in a routed folder re-routes correctly.
     ("01_exp0a/manifests/a.json", "01_exp0a/manifests/a.json"),
-    ("exp02_robustness/All Results.md", "exp02_robustness/All Results.md"),
+    ("figures/exp02_robustness/01_a.pdf", "figures/exp02_robustness/01_a.pdf"),
+    ("figures/03_exp0b/_figures.json", "figures/03_exp0b/_figures.json"),
+    ("figures/00_data/check/01_a.pdf", "figures/00_data/check/01_a.pdf"),
+    ("03_exp0b/logs/notebook/stdout.log", "03_exp0b/logs/notebook/stdout.log"),
+    ("exp03_geometry/results/notebook/_report.txt", "exp03_geometry/results/notebook/_report.txt"),
+    ("exp04_decision_features/regression_readout/figures/a.pdf",
+     "exp04_decision_features/regression_readout/figures/a.pdf"),
     ("exp03_geometry/manifests/reports.json", "exp03_geometry/manifests/reports.json"),
+    ("03_exp0b/manifests/reports.json", "03_exp0b/manifests/reports.json"),
     ("03_exp0b/manifests/before_extraction/a.json", "01_exp0a/manifests/before_extraction/a.json"),
+    ("figures/CAPTIONS.md", "figures/CAPTIONS.md"),
+    ("All_Results.md", "All_Results.md"),
+    # The rejected experiment-folder-first figures and per-folder reports (19-11-2026).
+    ("exp02_robustness/figures/01_a.pdf", "figures/exp02_robustness/01_a.pdf"),
+    ("03_exp0b/figures/_figures.json", "figures/03_exp0b/_figures.json"),
+    ("00_data/figures/check/01_a.pdf", "figures/00_data/check/01_a.pdf"),
+    ("CAPTIONS.md", "figures/CAPTIONS.md"),
+    ("exp02_robustness/All_Results.md", f"{_REPORTS}/exp02_robustness/All_Results.md"),
+    ("exp02_robustness/CAPTIONS.md", f"{_REPORTS}/exp02_robustness/CAPTIONS.md"),
+    # Kind-first notebook records (until 19-11-2026).
     ("figures/exp04_decision_features/a.pdf", "figures/exp04_decision_features/a.pdf"),
-    ("figures/exp10_adaptation/Captions.md", "figures/exp10_adaptation/Captions.md"),
-    ("figures/Captions.md", "figures/Captions.md"),
-    ("All Results.md", "All Results.md"),
+    ("figures/exp10_adaptation/Captions.md", f"{_REPORTS}/figures/exp10_adaptation/Captions.md"),
+    ("figures/Captions.md", "figures/CAPTIONS.md"),
+    ("All Results.md", "All_Results.md"),
+    ("exp02_robustness/All Results.md", f"{_REPORTS}/exp02_robustness/All Results.md"),
+    ("manifests/notebooks/03_exp0b/_figures.json", "figures/03_exp0b/_figures.json"),
+    ("manifests/notebooks/03_exp0b/_run.json", "03_exp0b/manifests/notebook/_run.json"),
+    ("results/notebooks/exp01_outputs/_report.txt", "exp01_outputs/results/notebook/_report.txt"),
+    ("logs/notebooks/exp02_robustness/stderr.log", "exp02_robustness/logs/notebook/stderr.log"),
 ])
 def test_output_translation(old, new):
     assert structure.translate_output(PurePosixPath(old)) == PurePosixPath(new)
-    if not new.startswith("archives/"):  # Archived records are outside the layout.
+    if not new.startswith("../"):  # Archived records are outside the output root.
         assert structure.translate_output(PurePosixPath(new)) == PurePosixPath(new)
 
 
-@pytest.mark.parametrize("unmapped", ["transfers/a.zip", "workspaces/w/x", "archives/a/b",
+@pytest.mark.parametrize("unmapped", ["transfers/a.zip", "workspaces/w/x", "archives",
                                       "results/notebook_visual_review/x.png", "manifests/a.json"])
 def test_paths_outside_the_layout_are_left_alone(unmapped):
     assert structure.translate_output(PurePosixPath(unmapped)) is None
@@ -223,6 +254,7 @@ def _legacy_tree(tmp_path):
         "figures/exp03_geometry/Captions.md": b"# geometry",
         "transfers/bundle.zip": b"bundle",
         "All Results.md": b"# all",
+        "archives/rq_layout_20261116/x.txt": b"archived",
     }
     for relative, content in files.items():
         _write(root, relative, content)
@@ -245,14 +277,16 @@ def test_migration_previews_by_default_then_moves_with_verified_receipt(tmp_path
 
     receipt = layout_migration.migrate(root, writers_stopped=True)
     assert receipt["verified"] and receipt["deleted_files"] == 0
-    # transfers/, All Results.md and a current folder's Captions.md stay put.
-    assert receipt["file_count"] == len(before) - 3
-    after = {p.relative_to(root).as_posix(): file_sha256(p) for p in root.rglob("*")
+    assert receipt["archive"] == str(tmp_path / "archive")
+    # Only transfers/ stays put; archived records leave the output root for archive/.
+    assert receipt["file_count"] == len(before) - 1
+    after = {p.relative_to(tmp_path).as_posix(): file_sha256(p) for p in tmp_path.rglob("*")
              if p.is_file() and not p.name.startswith("layout_migration_")}
     expected = {}
     for old, digest in before.items():
-        new = structure.translate_output(PurePosixPath(old))
-        expected[(new or PurePosixPath(old)).as_posix()] = digest
+        new = structure.translate_output(PurePosixPath(old)) or PurePosixPath(old)
+        moved = layout_migration.destination_path(root, new)
+        expected[moved.relative_to(tmp_path).as_posix()] = digest
     assert after == expected
     for old, item in receipt["files"].items():
         assert item["sha256"] == before[old]
@@ -260,13 +294,22 @@ def test_migration_previews_by_default_then_moves_with_verified_receipt(tmp_path
     assert (root / "exp04_decision_features/results/cv_folds/a.json").is_file()
     assert (root / "exp04_decision_features/manifests/reports.json").is_file()
     assert (root / "exp03_geometry/results/geometry/D.json").is_file()
-    assert (root / "archives/layout_20261118/figures/general/01_data_exploration/old.pdf").is_file()
+    archive = tmp_path / "archive"
+    assert (archive / "layout_20261118/figures/general/01_data_exploration/old.pdf").is_file()
     assert (root / "figures/exp04_decision_features/a.pdf").is_file()
-    assert (root / "exp10_adaptation/All Results.md").read_bytes() == b"# rq3"
-    assert (root / "archives/layout_20261119/figures/exp09_adaptation/01_calibration/c.pdf").is_file()
+    reports = archive / "folder_reports_20261119"
+    assert (reports / "exp09_adaptation/All Results.md").read_bytes() == b"# rq3"
+    assert (reports / "figures/exp09_adaptation/Captions.md").read_bytes() == b"# captions"
+    assert (reports / "figures/exp03_geometry/Captions.md").read_bytes() == b"# geometry"
+    assert (reports / "4. experiment_1/All Results.md").read_bytes() == b"# r"
+    assert (root / "All_Results.md").read_bytes() == b"# all"
+    assert (archive / "layout_20261119/figures/exp09_adaptation/01_calibration/c.pdf").is_file()
+    assert (archive / "rq_layout_20261116/x.txt").read_bytes() == b"archived"
     for legacy in ("3. experiment_0", "4. experiment_1", "rq1", "rq2", "figures/general", "figures/rq2",
-                   "exp09_adaptation", "figures/exp09_adaptation", "figures/exp03_geometry/geometry"):
+                   "figures/exp09_adaptation", "figures/exp03_geometry", "exp09_adaptation",
+                   "archives", "All Results.md"):
         assert not (root / legacy).exists(), legacy
+    assert not list(root.glob("*/All_Results.md")) and not list(root.glob("*/CAPTIONS.md"))
     saved = json.loads(next((root / "manifests").glob("layout_migration_*.json")).read_text())
     assert saved["files"]["rq1/results/outputs/comparison.zip"]["destination"] == (
         "exp01_outputs/results/outputs/comparison.zip")
@@ -303,6 +346,11 @@ def test_recorded_legacy_paths_resolve_after_migration(tmp_path):
                              / "../before_extraction/accepted.json")
     assert structure.recorded_output_path(relative_across_route).read_bytes() == b"accept"
     assert structure.recorded_output_path(tmp_path / "elsewhere.json") == tmp_path / "elsewhere.json"
+    # Archived records resolve into archive/ beside the output root.
+    archived = root / "archives/rq_layout_20261116/x.txt"
+    assert structure.recorded_output_path(archived) == tmp_path / "archive/rq_layout_20261116/x.txt"
+    report = root / "4. experiment_1/All Results.md"
+    assert structure.recorded_output_path(report).read_bytes() == b"# r"
 
 
 def test_reviewed_acceptance_reads_evidence_recorded_before_migration(tmp_path):

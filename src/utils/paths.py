@@ -162,7 +162,7 @@ _RETIRED_NOTEBOOK_STEMS = {
 }
 
 
-#: Folders without their own per-experiment report (project-wide documents only).
+#: Folders without a per-experiment report index (`<folder>/manifests/reports.json`).
 PREPARATION_FOLDERS = ("00_data", "02_feature_creation")
 
 
@@ -349,28 +349,18 @@ def _record_folder(notebook: str | None, phase: str | None) -> str | None:
     return phase_folder(phase).split("/")[0] if phase is not None else None
 
 
-def _record_parts(notebook: str | None, phase: str | None) -> tuple[str, ...]:
-    """Record sub-path: `<folder>` for a registered (flat) notebook, else `<folder>/<stem>`."""
+def _record_parts(notebook: str | None, phase: str | None) -> tuple[str, tuple[str, ...]]:
+    """(experiment folder, sub-path): `()` for a registered (flat) notebook, else `(<stem>,)`."""
     folder = _record_folder(notebook, phase)
-    parts = (folder,) if folder is not None else ()
-    if notebook is None:
-        return parts
-    if phase is None and layout().notebook(notebook) is not None:
-        return parts  # One notebook per folder: its records are the folder itself.
-    return (*parts, notebook_stem(notebook))
+    if folder is None:
+        raise ValueError("Notebook records need a notebook or a phase (experiment folder first)")
+    if notebook is None or (phase is None and layout().notebook(notebook) is not None):
+        return folder, ()  # One notebook per folder: its records are the folder's own.
+    return folder, (notebook_stem(notebook),)
 
 
-def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
-    """All figures share one root, then the registry folder (one notebook per folder)."""
-    return (notebook_outputs_dir() / "figures").joinpath(*_record_parts(notebook, phase))
-
-
-def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", phase: str | None = None) -> Path:
-    """Local notebook records, separated from the PDF-only figure folders."""
-    if kind not in {"manifests", "logs", "results"}:
-        raise ValueError("Notebook artifact kind must be manifests, logs or results")
+def _unlinked(folder: Path) -> Path:
     root = notebook_outputs_dir()
-    folder = (root / kind / "notebooks").joinpath(*_record_parts(notebook, phase))
     for entry in (folder, *folder.parents):
         if entry.is_symlink() or getattr(entry, "is_junction", lambda: False)():
             raise ValueError(f"Linked notebook output is not allowed: {entry}")
@@ -379,13 +369,34 @@ def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", 
     return folder
 
 
+def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
+    """The ONE figures folder, or `figures/<group>/` of a notebook: its PDFs and `_figures.json`.
+
+    The group comes from `structure.figure_group` (today: the notebook ID == its folder).
+    """
+    root = notebook_outputs_dir() / structure.FIGURES
+    if notebook is None and phase is None:
+        return root
+    folder, sub = _record_parts(notebook, phase)
+    # FigureSaver refuses linked folders before clearing or writing (`_safe_folder`).
+    return (root / structure.figure_group(folder)).joinpath(*sub)
+
+
+def notebook_artifacts(notebook: str | None = None, *, kind: str = "manifests", phase: str | None = None) -> Path:
+    """`<folder>/<kind>/notebook/`: local notebook records, apart from the experiment's own."""
+    if kind not in structure.NOTEBOOK_RECORD_KINDS:
+        raise ValueError("Notebook artifact kind must be manifests, logs or results")
+    folder, sub = _record_parts(notebook, phase)
+    return _unlinked((notebook_outputs_dir() / folder / kind / structure.NOTEBOOK_RECORDS).joinpath(*sub))
+
+
 def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
     root = notebook_artifacts(notebook, kind="results", phase=phase)
     return root / "_report.txt" if notebook else root
 
 
 def report_folder(selection: str | None) -> str | None:
-    """The experiment folder (0A/0B, exp01...) owning a per-experiment report; None otherwise.
+    """The experiment folder (0A/0B, exp01...) with a report index; None otherwise.
 
     Preparation folders (data, feature creation) only appear in the project-wide documents.
     """
@@ -395,22 +406,37 @@ def report_folder(selection: str | None) -> str | None:
     return None if folder in PREPARATION_FOLDERS else folder
 
 
-def captions_path(phase: str | None = None) -> Path:
-    """Project captions, or one experiment folder's captions (folder name or phase)."""
-    folder = report_folder(phase)
-    root = figures_dir()
-    return (root / folder if folder else root) / "Captions.md"
+def report_index_path(selection: str) -> Path | None:
+    """`<folder>/manifests/reports.json`: an experiment folder's pointers into the project
+    documents (no per-folder report copies); None for preparation folders."""
+    folder = report_folder(selection)
+    return notebook_outputs_dir() / folder / "manifests" / "reports.json" if folder else None
 
 
-def all_results_path(phase: str | None = None) -> Path:
-    """Project report, or one experiment folder's report (folder name or phase)."""
-    folder = report_folder(phase)
-    root = notebook_outputs_dir()
-    return (root / folder if folder else root) / "All Results.md"
+def captions_path() -> Path:
+    """The one captions file: `figures/CAPTIONS.md`."""
+    return figures_dir() / structure.CAPTIONS
+
+
+def all_results_path() -> Path:
+    """The one results report: `All_Results.md` at the output root."""
+    return notebook_outputs_dir() / structure.ALL_RESULTS
+
+
+def archive_dir(output_root: Path | None = None) -> Path:
+    """`archive/`: previous-layout records, beside (never inside) an output root.
+
+    Locally and on VSC DATA this is the checkout's git-ignored `archive/`; migrating the
+    PROJECT output root archives beside it on PROJECT, so a move is never a cross-tier copy.
+    """
+    root = Path(output_root) if output_root is not None else notebook_outputs_dir()
+    return root.parent / structure.ARCHIVE_DIR_NAME
 
 
 def recorded_output_path(value) -> Path:
-    """A path recorded before the 18-11-2026 layout migration, located in the current layout."""
+    """A path recorded in a previous layout (18/19-11-2026 migrations), located in the current one.
+
+    Archived records resolve into `archive_dir()` beside the recorded output root."""
     return structure.recorded_output_path(value, OUTPUT_DIR_NAME)
 
 

@@ -10,9 +10,10 @@ readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Andreas Goethals", email = "andreas.goethals@kuleuven.be" }]
 
-# Verified CPU runtimes use Python 3.12; widen support only after cross-platform checks.
+# Every verified runtime is CPython 3.12 (local Windows venv 3.12.10, the last Windows
+# binary release; VSC control image 3.12.15). Widen only after cross-platform checks.
 # Record interpreter and package identities separately (Windows/Linux builds differ).
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 
 dependencies = [
     "numpy>=1.26,<3.0",
@@ -28,8 +29,8 @@ dependencies = [
 # The template's health checks and the kernel used by thin notebook clients.
 # Model/API packages remain optional so data inspection stays lightweight.
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.6",
+    "pytest>=9.1",
+    "ruff>=0.17",
     "scikit-learn==1.9.1",   # Synthetic predictor contracts and prediction metrics.
     "packaging>=24",          # Validate dependency specifications in the test suite.
 ]
@@ -43,12 +44,13 @@ notebooks = [
 jev = ["typesafe-sdk==0.7.2"]  # Guarded local transport; live execution is disabled by default.
 models = ["tabpfn==9.0.0", "torch==2.12.1"]  # Install the reviewed CUDA 13.0 wheel first for B200.
 evaluation = ["scikit-learn==1.9.1", "scipy>=1.13"]  # Metrics and paired dataset inference.
-# Shared scientific/tooling versions from the sealed CPU control lock.
-# This extra uses Python 3.12. The full transitive lock lives under config.
+# Shared scientific/tooling versions from the sealed CPU control lock. The full transitive
+# lock is config/01_exp0a/control_runtime.yaml; tests/test_environment_parity.py keeps
+# these pins and the local venv equal to it.
 control = [
     "numpy==2.5.4", "pandas==2.3.3", "PyYAML==6.0.3", "matplotlib==3.11.2",
     "tqdm==4.70.1", "pyarrow==25.0.1", "psutil==7.2.2", "scipy==1.18.1",
-    "scikit-learn==1.9.1", "pytest==9.1.1", "ruff==0.17.0",
+    "scikit-learn==1.9.1", "pytest==9.1.1", "ruff==0.17.0", "packaging==26.3",
 ]
 staging = ["huggingface-hub>=1.5,<2"]  # Explicit, separately authorized checkpoint staging.
 embeddings = ["transformers==5.17.0", "torch==2.12.1", "scikit-learn==1.9.1"]
@@ -56,7 +58,8 @@ tar = ["transformers==5.17.0", "torch==2.12.1", "peft==0.21.0", "accelerate==1.1
 token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  # CPU rendering, including publisher chat templates; no weights.
 # Selected benchmark engines; actual VSC compatibility is tested in Experiment 0B.
 # Each native-text engine uses a separate pinned runtime.
-baselines = ["scikit-learn==1.9.1", "catboost==1.2.10"]
+# LightGBM 4.7.0 has cp312 Windows and manylinux wheels and resolves against the control pins.
+baselines = ["scikit-learn==1.9.1", "catboost==1.2.10", "lightgbm==4.7.0"]
 tabicl = ["tabicl==2.2.0", "torch==2.12.1"]
 ag-mm = ["autogluon.multimodal==1.6.1"]  # Separate runtime: Transformers <5.15; never combine with token-audit/embeddings.
 tabstar = ["tabstar==1.2.2", "transformers==4.57.6", "torch==2.12.1"]
@@ -96,7 +99,7 @@ exclude = ["tfm-library*", "vsc-library*", "dm-library*", "notebooks*", "data*",
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 extend-exclude = [
     # Read-only submodule. Never lint, never format, never touch.
     "tfm-library", "vsc-library", "dm-library",

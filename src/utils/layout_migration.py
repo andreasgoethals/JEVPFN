@@ -1,9 +1,16 @@
 """Move an existing output tree into the current layout (config/structure.yaml).
 
-The 18-11-2026 layout was revised on 19-11-2026: one flat notebook per folder (records in
-`figures/<folder>/`, `{logs,manifests,results}/notebooks/<folder>/`), `exp09_adaptation`
+The 18-11-2026 layout was revised on 19-11-2026: one flat notebook per folder, `exp09_adaptation`
 renamed `exp10_adaptation`, and records of the four merged adaptation notebooks archived
-under `archives/layout_20261119/`. The same command migrates either previous layout.
+under `archives/layout_20261119/`. The final 19-11-2026 layout keeps ONE figures folder,
+`figures/<notebook>/` (PDFs with `_figures.json`, also from the briefly used `<folder>/figures/`
+or `manifests/notebooks/<folder>/`), the one `figures/CAPTIONS.md` (from `[figures/]Captions.md`
+or a root `CAPTIONS.md`) and the one `All_Results.md`; other notebook records move to
+`<folder>/{logs,manifests,results}/notebook/`. Retired per-folder report copies
+(`<folder>/All_Results.md`, `[figures/]<folder>/CAPTIONS.md`) and `output_JEVPFN/archives/*` move
+to `archive/` BESIDE the output root (`paths.archive_dir`: the git-ignored repository `archive/`
+locally and on DATA; beside the PROJECT output root for that tier, so every move stays a
+same-filesystem rename). The same command migrates any previous layout.
 
 Preview by default; nothing changes without --apply --writers-stopped:
 
@@ -14,11 +21,11 @@ Preview by default; nothing changes without --apply --writers-stopped:
     python -m src.utils.layout_migration --root <.../output_JEVPFN>
 
 The plan uses the same translation as `paths`, so code and data agree afterwards. Directories
-are renamed within the one output root (never copied); nothing is deleted except source
-directories that the moves left empty. Before moving, every file is inventoried (count, size,
+are renamed within the one output root or into its sibling `archive/` (never copied); nothing
+is deleted except source directories that the moves left empty. Before moving, every file is inventoried (count, size,
 SHA-256); after moving, the same files are verified at their destinations. A destination that
 already exists, a link, a live SQLite sidecar or a locked database refuses the whole plan.
-Paths outside the layout (transfers, workspaces, archives, ...) stay where they are. The
+Paths outside the layout (transfers, workspaces, ...) stay where they are. The
 receipt `<root>/manifests/layout_migration_<UTC>.json` maps every moved file old -> new.
 Internal phase IDs, recipes, receipts and hashes are untouched.
 """
@@ -79,8 +86,19 @@ def _uniform(root: Path, relative: PurePosixPath, target: PurePosixPath) -> bool
     return True
 
 
+def destination_path(root: Path, target: PurePosixPath) -> Path:
+    """Physical destination: inside the output root, or inside `archive/` beside it."""
+    root = Path(root)
+    destination = Path(os.path.normpath(root / target))
+    archive = paths.archive_dir(root)
+    if not (destination.is_relative_to(root) or destination.is_relative_to(archive)):
+        raise ValueError(f"Destination outside the output root and its archive: {target}")
+    return destination
+
+
 def _occupied(root: Path, target: PurePosixPath, planned: list[PurePosixPath]) -> bool:
-    if (root / target).exists() or _linked(root / target):
+    destination = destination_path(root, target)
+    if destination.exists() or _linked(destination):
         return True
     return any(target == p or target in p.parents or p in target.parents for p in planned)
 
@@ -92,6 +110,9 @@ def plan(root: Path) -> dict:
         raise ValueError("Select an exact output_JEVPFN folder")
     if _linked(root) or not root.is_dir():
         raise ValueError("Output root must be a real directory")
+    archive = paths.archive_dir(root)
+    if _linked(archive) or (archive.exists() and not archive.is_dir()):
+        raise ValueError(f"Archive must be a real directory: {archive}")
     moves: list[tuple[PurePosixPath, PurePosixPath]] = []
     empty: list[PurePosixPath] = []
     unmapped: list[str] = []
@@ -132,8 +153,8 @@ def plan(root: Path) -> dict:
     for child in sorted(root.iterdir(), key=lambda p: p.name):
         visit(PurePosixPath(child.name))
     sources = {s for s, _ in moves}
-    return {"root": str(root), "moves": moves, "unmapped": unmapped, "conflicts": conflicts,
-            "sources": sources, "empty": empty}
+    return {"root": str(root), "archive": str(archive), "moves": moves, "unmapped": unmapped,
+            "conflicts": conflicts, "sources": sources, "empty": empty}
 
 
 def _inventory(root: Path, moves) -> dict[str, dict]:
@@ -170,6 +191,7 @@ def _git_head() -> str | None:
 def _summary(result: dict) -> dict:
     return {
         "root": result["root"],
+        "archive": result["archive"],
         "moves": [{"source": s.as_posix(), "destination": d.as_posix()} for s, d in result["moves"]],
         "conflicts": result["conflicts"],
         "empty_legacy_directories": [e.as_posix() for e in result["empty"]],
@@ -199,6 +221,7 @@ def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
         "status": "moving",
         "created_utc": started.isoformat(),
         "root": str(root),
+        "archive": result["archive"],
         "registry": str(structure.REGISTRY),
         "registry_sha256": file_sha256(structure.REGISTRY),
         "git_head": _git_head(),
@@ -214,7 +237,7 @@ def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
     write_json(receipt_path, receipt)
     moved = []
     for source, target in moves:
-        destination = root / target
+        destination = destination_path(root, target)
         if destination.exists() or _linked(destination):
             raise ValueError(f"Destination appeared during migration: {target}")
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -224,7 +247,7 @@ def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
     write_json(receipt_path, receipt)
     failures = []
     for old, item in inventory.items():
-        file = root / item["destination"]
+        file = destination_path(root, PurePosixPath(item["destination"]))
         if (not file.is_file() or file.stat().st_size != item["bytes"]
                 or file_sha256(file) != item["sha256"]):
             failures.append(old)
@@ -302,8 +325,8 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root or tier_root(args.tier)
     if args.apply:
         receipt = migrate(root, writers_stopped=args.writers_stopped)
-        report = {k: receipt[k] for k in ("root", "file_count", "bytes", "verified", "moves",
-                                           "removed_empty_directories")}
+        report = {k: receipt[k] for k in ("root", "archive", "file_count", "bytes", "verified",
+                                           "moves", "removed_empty_directories")}
     else:
         report = _summary(plan(root))
     print(json.dumps(report, indent=2))

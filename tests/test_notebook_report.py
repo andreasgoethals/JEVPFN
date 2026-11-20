@@ -44,12 +44,10 @@ def test_rebuild_keeps_other_summaries_without_non_experiment_output_folders(iso
     rebuilt = run_notebooks.write_all_results(names).read_text(encoding="utf-8")
     assert "Complete exploration detail" in rebuilt
     assert "Updated feature detail" in rebuilt and "Complete feature detail" not in rebuilt
-    assert "Complete exploration detail" in paths.all_results_path("exploration").read_text(
-        encoding="utf-8"
-    )
-    assert "Updated feature detail" in paths.all_results_path("feature_creation").read_text(
-        encoding="utf-8"
-    )
+    assert rebuilt == paths.all_results_path().read_text(encoding="utf-8")
+    # No per-folder report copies, and preparation folders get no report index.
+    assert not list(paths.notebook_outputs_dir().glob("*/All_Results.md"))
+    assert not list(paths.notebook_outputs_dir().glob("*/manifests/reports.json"))
 
 
 def test_transient_windows_report_sharing_error_is_retried(tmp_path, monkeypatch):

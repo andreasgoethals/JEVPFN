@@ -5,10 +5,11 @@
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
     notebooks/<folder>.ipynb                         one flat notebook per folder
-    output_JEVPFN/figures/<folder>/*.pdf             written by the notebooks themselves
-    output_JEVPFN/figures/Captions.md                all figure captions
-    output_JEVPFN/All Results.md                     every notebook's printed summary
-    output_JEVPFN/<exp folder>/All Results.md        one experiment's summaries (+ its Captions.md)
+    output_JEVPFN/figures/<notebook>/*.pdf           written by the notebooks (+ _figures.json)
+    output_JEVPFN/figures/CAPTIONS.md                all figure captions
+    output_JEVPFN/All_Results.md                     every notebook's printed summary
+    output_JEVPFN/<folder>/{logs,manifests,results}/notebook/   run logs, _run.json, _report.txt
+    output_JEVPFN/<exp folder>/manifests/reports.json   pointers into the two documents
 
 Folders and notebook IDs (the folder name) come from config/structure.yaml; previous IDs such
 as `exp04_decision_features/decisions` or `rq2/01_decisions` remain accepted aliases.
@@ -55,6 +56,7 @@ from src.utils.paths import (
     notebook_stem,
     notebooks_dir,
     report_folder,
+    report_index_path,
     reports_dir,
 )
 from src.utils.serialization import write_json
@@ -224,7 +226,7 @@ def run_one(
 
 
 def _experiment_folders(notebooks: tuple[str, ...]) -> set[str]:
-    """Experiment folders (0A/0B, exp01...) with notebooks; each gets its own report and captions."""
+    """Experiment folders (0A/0B, exp01...) with notebooks; each gets a report index."""
     return {notebook_folder(name) for name in notebooks
             if notebook_folder(name) in layout().folders and report_folder(notebook_folder(name))}
 
@@ -236,8 +238,8 @@ def _captured_text(name: str) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
-def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> Path:
-    """ONE Captions.md for the project, grouped per notebook, in notebook order.
+def write_captions(notebooks: tuple[str, ...]) -> Path:
+    """ONE CAPTIONS.md for the project, grouped per notebook, in notebook order.
 
     Built from each `_figures.json`, so it regenerates from disk after an interactive run. A
     figure with no caption gets a loud placeholder rather than being skipped — a gap should be
@@ -270,18 +272,13 @@ def write_captions(notebooks: tuple[str, ...], *, phase: str | None = None) -> P
             lines.append("")
             lines.append(e["caption"] or "> MISSING CAPTION. Add one at the `save()` call.")
             lines.append("")
-    path = captions_path(phase)
+    path = captions_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_text(path, "\n".join(lines))
-    if phase is None:
-        for group in sorted(_experiment_folders(notebooks)):
-            write_captions(
-                tuple(name for name in notebooks if notebook_folder(name) == group), phase=group
-            )
     return path
 
 
-def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -> Path:
+def write_all_results(notebooks: tuple[str, ...]) -> Path:
     """Every notebook's printed summary, concatenated. The shape is fixed:
 
     one block per notebook, **sorted alphabetically by notebook name**; each block is that
@@ -303,24 +300,22 @@ def write_all_results(notebooks: tuple[str, ...], *, phase: str | None = None) -
     for name in names:
         text = _captured_text(name).strip()
         lines += ["---", "", f"## {name}", "", "```", text or "(no output captured)", "```", ""]
-    path = all_results_path(phase)
+    path = all_results_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_text(path, "\n".join(lines))
-    if phase is not None:
+    for group in sorted(_experiment_folders(notebooks)):
+        members = tuple(name for name in names if notebook_folder(name) == group)
+        # No per-folder report copies: each experiment folder (e.g. 03_exp0b) indexes the
+        # project documents and its notebook's own complete `_report.txt` and figures.
         write_json(
-            notebook_outputs_dir() / report_folder(phase) / "manifests" / "reports.json",
+            report_index_path(group),
             {
-                "full_phase_report": str(path),
-                "full_project_report": str(all_results_path()),
-                "captions": str(captions_path(phase)),
-                "notebooks": {name: str(reports_dir(name)) for name in names},
+                "full_project_report": str(path),
+                "captions": str(captions_path()),
+                "figures": {name: str(figures_dir(name)) for name in members},
+                "notebooks": {name: str(reports_dir(name)) for name in members},
             },
         )
-    if phase is None:
-        for group in sorted(_experiment_folders(notebooks)):
-            write_all_results(
-                tuple(name for name in notebooks if notebook_folder(name) == group), phase=group
-            )
     return path
 
 

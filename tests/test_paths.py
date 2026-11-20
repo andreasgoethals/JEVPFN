@@ -50,8 +50,8 @@ def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> Non
     )
     # Figures and complete reports can be large; only compact records belong on DATA.
     assert paths.logs_dir("experiment_1").is_relative_to(tmp_path / "data")
-    assert paths.figures_dir().is_relative_to(paths.REPO_ROOT)
-    assert paths.reports_dir().is_relative_to(paths.REPO_ROOT)
+    assert paths.figures_dir("exp04_decision_features").is_relative_to(paths.REPO_ROOT)
+    assert paths.reports_dir("exp04_decision_features").is_relative_to(paths.REPO_ROOT)
     assert paths.all_results_path().is_relative_to(paths.REPO_ROOT)
     assert paths.captions_path().is_relative_to(paths.REPO_ROOT)
     assert paths.manifests_dir("experiment_1").is_relative_to(tmp_path / "data")
@@ -79,16 +79,21 @@ def test_staging_override_works_off_cluster(tmp_path, monkeypatch) -> None:
 
 
 def test_figures_dir_is_per_notebook() -> None:
-    root = paths.figures_dir()
-    assert root == paths.outputs_dir() / "figures"
-    assert paths.figures_dir("some_notebook") == root / "00_data" / "some_notebook"
-    assert paths.captions_path() == paths.figures_dir() / "Captions.md"
-    assert paths.all_results_path() == paths.outputs_dir() / "All Results.md"
-    assert paths.figures_dir(phase="experiment_1") == root / "exp04_decision_features"
+    root = paths.outputs_dir()
+    figures = paths.figures_dir()
+    assert figures == root / "figures"  # ONE figures folder, one sub-folder per notebook.
+    assert paths.figures_dir("00_data") == figures / "00_data"
+    assert paths.figures_dir("some_notebook") == figures / "00_data" / "some_notebook"
+    assert paths.captions_path() == figures / "CAPTIONS.md"
+    assert paths.all_results_path() == root / "All_Results.md"
+    assert paths.archive_dir() == root.parent / "archive"
+    assert paths.figures_dir(phase="experiment_1") == figures / "exp04_decision_features"
     assert (
         paths.figures_dir("experiment_1_models")
-        == root / "exp04_decision_features" / "experiment_1_models"
+        == figures / "exp04_decision_features" / "experiment_1_models"
     )
+    assert paths.notebook_artifacts("exp04_decision_features", kind="logs") == (
+        root / "exp04_decision_features" / "logs" / "notebook")
 
 
 def test_phase_notebook_ids_keep_output_layout_and_cannot_escape():
@@ -195,8 +200,10 @@ def test_phases_separate_large_results_and_small_logs(isolated_output):
         "02_feature_creation",
         "03_feature_creation",
     )
-    assert paths.reports_dir("01_data_exploration").parts[-3:] == (
+    assert paths.reports_dir("01_data_exploration").parts[-5:] == (
         "00_data",
+        "results",
+        "notebook",
         "01_data_exploration",
         "_report.txt",
     )
@@ -256,8 +263,13 @@ def test_windows_extended_alias_preserves_storage_boundaries(isolated_output):
 def test_non_experiment_outputs_never_create_output_phase_folders(isolated_output):
     assert paths.results_dir(phase="exploration").is_relative_to(paths.notebook_cache_dir())
     assert paths.results_dir(phase="feature_creation").is_relative_to(paths.notebook_cache_dir())
-    assert paths.all_results_path("exploration") == paths.all_results_path()
-    assert paths.captions_path("feature_creation") == paths.captions_path()
+    # Preparation folders get no report index; experiment folders index the one report.
+    assert paths.report_index_path("exploration") is None
+    assert paths.report_index_path("feature_creation") is None
+    assert paths.report_index_path("experiment_0") == (
+        paths.notebook_outputs_dir() / "01_exp0a" / "manifests" / "reports.json")
+    assert paths.report_index_path("03_exp0b") == (
+        paths.notebook_outputs_dir() / "03_exp0b" / "manifests" / "reports.json")
     assert (
         paths.logs_dir("feature_creation") == paths.outputs_dir() / "02_feature_creation" / "logs"
     )

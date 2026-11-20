@@ -115,8 +115,8 @@ def decision_properties(tables: Path | None = None):
     if tables is None:
         from src.utils import paths
 
-        root = paths.notebook_outputs_dir() / "results" / "notebooks"
-        found = sorted(root.glob("**/tables/distributions.csv")) if root.is_dir() else []
+        root = paths.notebook_outputs_dir()  # <folder>/results/notebook/[<stem>/]tables/
+        found = sorted(root.glob("*/results/notebook/**/tables/distributions.csv")) if root.is_dir() else []
         if len(found) != 1:
             reason = "no RQ1A comparison tables" if not found else "several RQ1A table folders"
             return pd.DataFrame(columns=columns), f"pending: {reason}"

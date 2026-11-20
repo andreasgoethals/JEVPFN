@@ -1,8 +1,8 @@
-"""Saving figures. One folder per notebook (one notebook per experiment folder), one PDF per
+"""Saving figures. One folder per notebook under the one `figures/` folder, one PDF per
 figure, cleared before drawing.
 
-    output_JEVPFN/figures/<folder>/01_<name>.pdf               the figure — vector, for the paper
-    output_JEVPFN/manifests/notebooks/<folder>/_figures.json   ordered captions
+    output_JEVPFN/figures/<notebook>/01_<name>.pdf   the figure — vector, for the paper
+    output_JEVPFN/figures/<notebook>/_figures.json   ordered captions (-> figures/CAPTIONS.md)
 
 PDF ONLY. Figures use A4 dimensions from `src/visualize/style.py`; dense audits are split
 across panels rather than shrinking labels below the print-size minimum.
@@ -17,7 +17,7 @@ THE FOLDER IS CLEARED ON CONSTRUCTION, before anything is drawn, and only ever t
 own: a stale PDF beside a fresh one is how a paper ends up with a figure that no longer matches
 the code that made it.
 
-THE NUMBERED PREFIX makes alphabetical order equal drawing order, so `Captions.md` is rebuildable
+THE NUMBERED PREFIX makes alphabetical order equal drawing order, so `CAPTIONS.md` is rebuildable
 from disk without re-executing anything.
 """
 
@@ -29,7 +29,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from src.utils.notebook_report import atomic_text, record_figure
-from src.utils.paths import figures_dir, notebook_artifacts
+from src.utils.paths import figures_dir, notebook_outputs_dir
 
 #: Vector already, but heatmaps and scatter clouds inside a PDF rasterise, so it still needs a
 #: print DPI.
@@ -38,14 +38,14 @@ DPI = 300
 #: The only things ever deleted from a notebook's folder. Anything else a person put there
 #: survives: a cleaner that removes what it does not recognise eventually removes something
 #: irreplaceable.
-#: `Captions.md` beside the PDFs belongs to the runner (rebuilt from the manifests), not here.
-_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "_stderr.txt", "_report.txt", "_run.json", "_config.json", "_previous.ipynb")
+#: `CAPTIONS.md` belongs to the runner (rebuilt from the manifests), not here.
+_OWNED = ("*.pdf", "_figures.json", "_stdout.txt", "_failure.txt")
 
 MANIFEST = "_figures.json"
 
 
 def manifest_path(notebook: str) -> Path:
-    return notebook_artifacts(notebook) / MANIFEST
+    return figures_dir(notebook) / MANIFEST
 
 
 def read_manifest(notebook: str) -> list[dict]:
@@ -76,10 +76,6 @@ def clear(notebook: str) -> int:
             if path.is_file():
                 path.unlink()
                 removed += 1
-    manifest = manifest_path(notebook)
-    if manifest.exists():
-        manifest.unlink()
-        removed += 1
     return removed
 
 
@@ -146,7 +142,7 @@ class FigureSaver:
         return path
 
     def summary(self) -> str:
-        """What was saved, for the notebook's final `print` — so `All Results.md` says what the run
+        """What was saved, for the notebook's final `print` — so `All_Results.md` says what the run
         drew, not only what it computed."""
         if not self.entries:
             return f"{self.notebook}: no figures saved."
@@ -154,7 +150,7 @@ class FigureSaver:
         for e in self.entries:
             lines.append(f"  {e['index']:02d}  {e['name']}\n      {e['caption']}")
             if not e["caption"]:
-                lines.append("      NO CAPTION — add one; Captions.md will flag it.")
+                lines.append("      NO CAPTION — add one; CAPTIONS.md will flag it.")
         return "\n".join(lines)
 
 
@@ -167,7 +163,7 @@ def _slug(name: str) -> str:
 def _safe_folder(notebook: str) -> Path:
     """Refuse linked output/figure/phase/notebook folders before clearing or writing."""
     folder = figures_dir(notebook)
-    root = figures_dir().parent
+    root = notebook_outputs_dir()
     if not folder.is_relative_to(root):
         raise ValueError("Figure folder must remain inside notebook output")
     for part in (folder, *folder.parents):

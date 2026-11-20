@@ -35,7 +35,7 @@ def test_a_pdf_and_only_a_pdf_is_written(isolated_output, fig) -> None:
 
 def test_filenames_are_numbered_in_drawing_order(isolated_output, fig) -> None:
     """Alphabetical order of the files is the order the notebook drew them, which is what
-    makes Captions.md rebuildable from disk without re-executing anything."""
+    makes CAPTIONS.md rebuildable from disk without re-executing anything."""
     save = figures.FigureSaver("nb")
     save(fig, "alpha", caption="c")
     save(fig, "beta", caption="c")
@@ -144,7 +144,7 @@ def test_clear_returns_how_many_files_went(isolated_output, fig) -> None:
     save = figures.FigureSaver("nb")
     save(fig, "a", caption="c")
     save(fig, "b", caption="c")
-    assert figures.clear("nb") == 3  # 2 PDFs + separate manifest
+    assert figures.clear("nb") == 3  # 2 PDFs + the `_figures.json` beside them
     assert figures.clear("never_existed") == 0
 
 

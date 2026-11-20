@@ -145,7 +145,40 @@ def _tree_state() -> dict[str, tuple[int, int]]:
     return state
 
 
+def _local_interpreter_problems() -> list[str]:
+    """Where the running interpreter violates pyproject's `requires-python`/`dependencies`.
+
+    Local only (VSC images are checked by their own runtime contracts). A global Python with
+    e.g. pandas 3 silently changes missing-text dtypes (None -> NaN) and fails dozens of
+    unrelated synthetic contracts; one clear message names the project venv instead.
+    """
+    import importlib.metadata
+    import platform
+    import tomllib
+
+    from packaging.requirements import Requirement
+    from packaging.specifiers import SpecifierSet
+
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    problems = []
+    if platform.python_version() not in SpecifierSet(project["requires-python"]):
+        problems.append(f"Python {platform.python_version()} (requires {project['requires-python']})")
+    for dependency in project["dependencies"]:
+        requirement = Requirement(dependency)
+        try:
+            version = importlib.metadata.version(requirement.name)
+        except importlib.metadata.PackageNotFoundError:
+            continue  # A missing package fails loudly at import time.
+        if version not in requirement.specifier:
+            problems.append(f"{requirement.name} {version} (requires {requirement.specifier})")
+    return problems
+
+
 def pytest_sessionstart(session):
+    if not os.environ.get("VSC_DATA") and (problems := _local_interpreter_problems()):
+        raise pytest.UsageError(
+            f"{sys.executable} does not satisfy pyproject.toml: {'; '.join(problems)}. "
+            "Run the suite with the project venv: .venv\\Scripts\\python.exe -m pytest -q")
     session.config._jevpfn_tree_state = _tree_state()
 
 
@@ -175,3 +208,24 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     else:
         terminalreporter.write_line(
             f"Write guard: no file under {', '.join(t + '/' for t in GUARDED_TREES)} was created, modified or deleted.")
+
+
+@pytest.fixture
+def historical_workspace_limits(monkeypatch, request):
+    """Admission scenarios written for the 2-workspace / 200 GiB guard (raised to 8 / 400 on
+    20-11-2026). They test the guard logic at those fixed limits, not today's config values."""
+    import sys
+
+    import src.utils.config as config
+
+    original = config.load_yaml
+
+    def load(name, *args, **kwargs):
+        value = original(name, *args, **kwargs)
+        if name == "experiment_0/scheduling":
+            value = {**value, "max_resident_workspaces": 2, "scratch_working_set_gib": 200}
+        return value
+
+    for module in list(sys.modules.values()):
+        if getattr(module, "__name__", "").startswith(("src.", "test_")) and getattr(module, "load_yaml", None) is original:
+            monkeypatch.setattr(module, "load_yaml", load)

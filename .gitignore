@@ -9,6 +9,8 @@
 # Generated reports, figures, predictions, caches and downloaded transfer bundles.
 /output_JEVPFN/
 /archived_output_JEVPFN/
+# Previous-layout records moved out of output_JEVPFN/ (src.utils.paths.archive_dir).
+/archive/
 /tmp/
 /.maintenance.lock
 /output/
