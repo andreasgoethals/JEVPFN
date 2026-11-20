@@ -41,7 +41,12 @@ def test_staging_redirects_download_caches_and_detects_changed_weights(
     checkpoints.stage("liquid")
     folder, identity = checkpoints.verify_checkpoint("liquid")
     assert len(calls) == 1 and len(identity) == 64
+    # Re-staging a verified checkpoint is a no-op: no second download that could add files.
+    checkpoints.stage("liquid")
+    assert len(calls) == 1
     (folder / "model.safetensors").write_bytes(b"changed")
+    with pytest.raises(ValueError, match="immutable identity"):
+        checkpoints.stage("liquid")
     with pytest.raises(ValueError, match="immutable identity"):
         checkpoints.verify_checkpoint("liquid")
 

@@ -74,6 +74,13 @@ def stage(provider):
     stage_tokenizers([provider])
     candidate = load_yaml("extractors")["candidates"][provider]
     folder = paths.require_project_output(checkpoint_path(provider))
+    if (folder / "_JEVPFN_CHECKPOINT.json").exists():
+        # Idempotent re-staging: a checkpoint that still verifies against its manifest is
+        # kept as is. Re-downloading the full repository would add files the verified
+        # manifest never contained (e.g. README images, 20-11-2026) and break verification.
+        verify_checkpoint(provider)
+        print(f"Checkpoint already staged and verified: {folder}", flush=True)
+        return
     cache = paths.checkpoints_dir("huggingface", "hub")
     snapshot_download(
         candidate["model"], revision=PINS[provider], local_dir=folder, cache_dir=cache

@@ -28,7 +28,7 @@ import json
 import sqlite3
 from contextlib import closing
 from itertools import product
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 import pandas as pd
@@ -248,7 +248,7 @@ def historical_tables(evidence=None) -> dict[str, pd.DataFrame]:
         evidence = prompt_evidence()
     changes, _, sources = evidence
     changes = changes.drop(columns=["source"], errors="ignore").reset_index(drop=True)
-    sources = pd.DataFrame([{**item, "path": Path(item["path"]).name,
+    sources = pd.DataFrame([{**item, "path": PureWindowsPath(item["path"]).name,  # handles / and \ on every OS
                              "input_sets": json.dumps(item.get("input_sets", []))}
                             for item in sources],
                            columns=["path", "sha256", "created_utc", "status", "scope", "input_sets"])
