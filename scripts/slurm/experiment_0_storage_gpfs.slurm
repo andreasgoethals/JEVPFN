@@ -1,5 +1,6 @@
 #!/bin/bash -l
 # Validate the actual native B200 filesystem on two CPU nodes, without loading CUDA.
+# One hour: the exit publication of a staged store can take ~15 min (job 11839489, 21-11-2026).
 #SBATCH --job-name=jevpfn-exp0-storage-gpfs
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=mindwell
@@ -8,7 +9,7 @@
 #SBATCH --ntasks=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00:05:00
+#SBATCH --time=01:00:00
 #SBATCH --output="output_JEVPFN/01_exp0a/logs/%x_%j.log"
 #SBATCH --error="output_JEVPFN/01_exp0a/logs/%x_%j.log"
 set -euo pipefail

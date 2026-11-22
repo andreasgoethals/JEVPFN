@@ -655,7 +655,7 @@ def test_native_gpfs_storage_probe_uses_two_cpu_nodes_and_publication_wrapper():
         "--nodes=2",
         "--ntasks-per-node=1",
 
-        "--time=00:05:00",
+        "--time=01:00:00",
         "source scripts/activate_conda.sh",
         "export SLURM_EXPORT_ENV=ALL",
         "src.cluster.scratch_stage run",

@@ -179,6 +179,12 @@ def pytest_sessionstart(session):
         raise pytest.UsageError(
             f"{sys.executable} does not satisfy pyproject.toml: {'; '.join(problems)}. "
             "Run the suite with the project venv: .venv\\Scripts\\python.exe -m pytest -q")
+    if os.environ.get("VSC_DATA"):
+        # On VSC the real output tree is shared with concurrent production jobs (token
+        # shards, setup receipts, controller logs), so a before/after snapshot cannot tell
+        # their writes from a test's. Tests stay redirected by the autouse fixture; the
+        # snapshot guard is the local safety net only (CPU preflight 11839220, 21-11-2026).
+        return
     session.config._jevpfn_tree_state = _tree_state()
 
 
