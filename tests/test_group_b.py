@@ -366,7 +366,8 @@ def test_text_column_importance_pairs_folds():
         for rep, value in (("decision/per_column/jev", 0.8), ("without_text/jev/0", 0.7),
                            ("without_text/jev/1", 0.79)):
             rows.append(dict(dataset_id="d", task_type="binary_classification", model_id="linear",
-                             checkpoint_id="c", outer_fold=fold, representation=rep, value=value))
+                             checkpoint_id="c", split_id="s", outer_fold=fold, representation=rep,
+                             value=value))
     out = group_b.text_column_importance(pd.DataFrame(rows))
     assert out.set_index("text_column").importance.round(3).to_dict() == {0: 0.1, 1: 0.01}
 
@@ -393,7 +394,7 @@ def test_paired_gains_summary_and_median_over_models():
     one = gains[(gains.dataset_id == "d2") & (gains.model_id == "linear")].set_index("representation")
     assert one.loc["decision/both/m1", "raw_gain"] == pytest.approx(0.04)
     assert one.loc["decision/both/m1", "headroom_share"] == pytest.approx(0.04 / 0.28)
-    medians = group_b.median_over_decision_models(gains)
+    medians = group_b.median_over_decision_models(gains, roster=["m1", "m2"])
     assert set(medians.representation) == {"decision/both/median"}
     summary = group_b.summarize(gains)
     row = summary[(summary.model_id == "linear") & (summary.representation == "decision/both/m2")].iloc[0]
@@ -457,7 +458,7 @@ def test_group_b_figures_render_at_a4_width():
 
     gains = group_b.dataset_gains(group_b.fold_gains(_folds()))
     summary = pd.concat([group_b.summarize(gains),
-                         group_b.summarize(group_b.median_over_decision_models(gains))])
+                         group_b.summarize(group_b.median_over_decision_models(gains, roster=["m1", "m2"]))])
     produced = [
         *figures.gain_forest(summary, ["decision/both/median", "frozen/e5_small_v2/per_column32"],
                              name="a", what="Test"),
@@ -555,7 +556,7 @@ def test_headline_accepts_categorical_export_fold_tables():
     assert len(gains) == 4 * 2 * 2 and gains.raw_gain.notna().all()
     summary = group_b.summarize(gains)
     assert len(summary) == 2 * 2
-    medians = group_b.median_over_decision_models(gains)
+    medians = group_b.median_over_decision_models(gains, roster=["m1", "m2"])
     assert len(medians) == 4 * 2 and medians.raw_gain.round(3).eq(0.015).all()
 
 

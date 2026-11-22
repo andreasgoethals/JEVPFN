@@ -45,8 +45,9 @@ STUDIES = {
 }
 COMMON_TABLES = ("coverage", "folds", "dataset_gains", "summary")
 EXTRA_TABLES = {
-    "B1": ("median_gains", "median_summary"),
-    "B2": ("median_gains", "contrasts", "complementarity_pairs", "complementarity_summary"),
+    "B1": ("median_gains", "median_summary", "median_roster_gaps"),
+    "B2": ("median_gains", "median_roster_gaps", "contrasts", "complementarity_pairs",
+           "complementarity_summary"),
     "B3": ("properties", "redundancy", "associations", "model_diagnostics", "model_usefulness",
            "model_relations", "column_importance", "row_cohorts", "lodo_predictions", "lodo"),
     "B4": ("size_gains", "pooled_raw", "pooled_share", "slopes"),
@@ -103,8 +104,18 @@ def recipe_fields(recipe: dict) -> dict:
     }
 
 
+def arm_recipe_id(recipe: dict) -> str:
+    """Identity of one arm's full recipe (feature artifacts, protocol, settings) across folds."""
+    return digest({k: v for k, v in recipe.items() if k != "outer_fold"})
+
+
 def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
-    """Long table of complete outer-test fold metrics (scalar metrics; cohort scores excluded)."""
+    """Long table of complete outer-test fold metrics (scalar metrics; cohort scores excluded).
+
+    An arm is complete only when ONE full recipe (``recipe_id``: every recipe field except the
+    fold, including feature-artifact identities) has all five folds; folds of different recipes
+    never combine, and two complete recipes of one arm are refused as ambiguous.
+    """
     from src.evaluation.records import completed_fold
     from src.evaluation.store import all_recipes
 
@@ -118,7 +129,7 @@ def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
                 record = json.loads(path.read_text(encoding="utf-8"))
                 if record["metadata"]["prediction_role"] != "outer_test":
                     continue
-                base = {"phase": phase, **recipe_fields(recipe)}
+                base = {"phase": phase, **recipe_fields(recipe), "recipe_id": arm_recipe_id(recipe)}
                 values = dict(record["scores"]["metrics"])
                 values["columns.representation"] = record["metadata"].get("representation_feature_count")
                 values["seconds.fit"] = record["timing"]["stages"].get("fit", {}).get("wall_seconds")
@@ -127,16 +138,21 @@ def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
                         continue
                     if value is None or isinstance(value, (int, float)):
                         rows.append({**base, "metric": name, "value": value})
-    frame = pd.DataFrame(rows, columns=[*RECIPE_COLUMNS, "metric", "value"])
+    frame = pd.DataFrame(rows, columns=[*RECIPE_COLUMNS, "recipe_id", "metric", "value"])
     if frame.empty:
         return frame
+    by_recipe = frame.groupby(["phase", "recipe_id", "metric"], dropna=False).outer_fold
+    frame = frame[by_recipe.transform("nunique").eq(5) & by_recipe.transform("size").eq(5)].copy()
     keys = [c for c in RECIPE_COLUMNS if c != "outer_fold"]
-    complete = frame.groupby(keys, dropna=False).outer_fold.transform("nunique").eq(5)
+    recipes = frame.groupby([*keys, "metric"], dropna=False).recipe_id.nunique()
+    if recipes.gt(1).any():
+        raise ValueError("One arm has several complete recipes; select one before exporting: "
+                         f"{list(recipes[recipes.gt(1)].index[:3])}")
     for column in ("phase", "dataset_id", "task_type", "model_id", "feature_set", "provider",
                    "encoder", "pca_scope", "probe_view", "metric", "view", "checkpoint_id", "split_id",
-                   "hidden_view", "hidden_position", "adaptation_cell"):
+                   "hidden_view", "hidden_position", "adaptation_cell", "recipe_id"):
         frame[column] = frame[column].astype("category")
-    return frame[complete].reset_index(drop=True)
+    return frame.reset_index(drop=True)
 
 
 def coverage(folds, phases) -> pd.DataFrame:
@@ -160,10 +176,22 @@ def _gains(head, extra_keys=()):
     return paired, gains
 
 
-def contrasts(gains: pd.DataFrame) -> pd.DataFrame:
+CONTRAST_COLUMNS = ["dataset_id", "task_type", "model_id", "representation", "family", "raw_gain",
+                    "decision_both_median", "difference"]
+
+
+def decision_roster() -> list[str]:
+    """The configured decision models every median must contain (never inferred from results)."""
+    return list(load_yaml("experiment_1/main")["candidate_extractors"])
+
+
+def contrasts(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
     """B2 descriptive contrasts per dataset and predictor: the median decision model's "both"
-    gain minus each frozen, decision+frozen, TAR and probe arm (positive = decision ahead)."""
-    medians = group_b.median_over_decision_models(gains)
+    gain minus each frozen, decision+frozen, TAR and probe arm (positive = decision ahead).
+    Without complete decision medians the table is empty (waiting state)."""
+    medians = group_b.median_over_decision_models(gains, roster=roster)
+    if medians.empty:
+        return pd.DataFrame(columns=CONTRAST_COLUMNS)
     reference = medians[medians.representation.eq("decision/both/median")][
         ["dataset_id", "model_id", "raw_gain"]].rename(columns={"raw_gain": "decision_both_median"})
     others = gains[gains.family.isin(["frozen", "tar", "probe"])]
@@ -171,8 +199,7 @@ def contrasts(gains: pd.DataFrame) -> pd.DataFrame:
     others = pd.concat([others, combined], ignore_index=True)
     out = others.merge(reference, on=["dataset_id", "model_id"], how="inner")
     out["difference"] = out.decision_both_median - out.raw_gain
-    return out[["dataset_id", "task_type", "model_id", "representation", "family", "raw_gain",
-                "decision_both_median", "difference"]]
+    return out[CONTRAST_COLUMNS]
 
 
 def _group_a_frames():
@@ -239,24 +266,34 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
         from src.evaluation import data_efficiency
 
         sizes = data_efficiency.size_gains(head.dropna(subset=["training_size"]))
+        # Two fixed cohorts (main: all datasets at the main sizes; extended: the configured
+        # datasets at all sizes), so no curve changes its dataset membership along the x-axis.
+        curves = (data_efficiency.cohort_gains(sizes, data_efficiency.config()["curves"])
+                  if not sizes.empty else sizes)
         tables.update(dataset_gains=gains, summary=group_b.summarize(
-            sizes, keys=("model_id", "representation", "training_size")) if not sizes.empty else sizes,
-            size_gains=sizes, pooled_raw=data_efficiency.pooled_curve(sizes),
-            pooled_share=data_efficiency.pooled_curve(sizes, outcome="headroom_share"),
+            curves, keys=("curve", "model_id", "representation", "training_size"))
+            if not curves.empty else curves,
+            size_gains=sizes, pooled_raw=data_efficiency.pooled_curve(curves),
+            pooled_share=data_efficiency.pooled_curve(curves, outcome="headroom_share"),
             slopes=data_efficiency.gain_slopes(sizes))
         return tables
     paired, gains = _gains(head)
     if study == "B3":
         gains = gains[gains.family.eq("decision")]
     tables.update(dataset_gains=gains, summary=group_b.summarize(gains))
-    medians = group_b.median_over_decision_models(gains) if not gains.empty else pd.DataFrame()
+    roster = decision_roster()
+    medians = (group_b.median_over_decision_models(gains, roster=roster) if not gains.empty
+               else pd.DataFrame())
+    gaps = group_b.roster_gaps(gains, roster=roster) if not gains.empty else pd.DataFrame()
     if study == "B1":
-        tables.update(median_gains=medians, median_summary=group_b.summarize(medians))
+        tables.update(median_gains=medians, median_summary=group_b.summarize(medians),
+                      median_roster_gaps=gaps)
     elif study == "B2":
         from src.evaluation import complementarity
 
         pairs, _ = complementarity.summaries()
-        tables.update(median_gains=medians, contrasts=contrasts(gains) if not gains.empty else gains,
+        tables.update(median_gains=medians, median_roster_gaps=gaps,
+                      contrasts=contrasts(gains, roster=roster) if not gains.empty else gains,
                       complementarity_pairs=pairs,
                       complementarity_summary=complementarity.complementarity_summary(pairs)
                       if not pairs.empty else pd.DataFrame())
@@ -310,7 +347,7 @@ def _parquet_safe(frame: pd.DataFrame) -> pd.DataFrame:
 def read(study, target=None):
     """Verified tables and receipt, or an explicit waiting state (absent/superseded ZIP)."""
     return study_export.read_export(target or export_path(study), schema=SCHEMA,
-                                    tables=tables_for(study))
+                                    tables=tables_for(study), identity=analysis_identity(study))
 
 
 def build(study):

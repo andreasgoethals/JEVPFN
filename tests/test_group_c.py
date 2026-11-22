@@ -206,20 +206,23 @@ def test_no_row_is_scored_by_a_model_that_saw_it_and_test_rows_average_three_fit
         fit_rows, held = sa.fit_partition(train, parts, k)
         assert not set(fit_rows) & set(held) and set(fit_rows) | set(held) == set(train)
         values = np.full((n, 2), np.nan)
-        values[held] = [k, 1 - k]
+        values[held] = [k / 2, 1 - k / 2]
         values[test] = [0.1 * (k + 1), 1 - 0.1 * (k + 1)]
         values[test[-1]] = np.nan  # empty joint text: no request, stays missing
         probabilities.append(values)
         seen.append(fit_rows)
-    out = sa.assemble_fold(n, train, test, parts, probabilities, seen)
+    nonempty = np.ones(n, dtype=bool)
+    nonempty[test[-1]] = False
+    out = sa.assemble_fold(n, train, test, parts, probabilities, seen, nonempty=nonempty)
     for row in train:
-        assert out[row, 0] == parts[row]  # scored by the fit that held out its part
+        assert out[row, 0] == parts[row] / 2  # scored by the fit that held out its part
     assert np.allclose(out[test[:-1], 0], 0.2) and np.isnan(out[test[-1]]).all()
     leaked = [np.concatenate([s, train[parts == 0][:1]]) for s in seen]
     with pytest.raises(ValueError, match="saw a row"):
-        sa.assemble_fold(n, train, test, parts, probabilities, leaked)
+        sa.assemble_fold(n, train, test, parts, probabilities, leaked, nonempty=nonempty)
     with pytest.raises(ValueError, match="saw a row"):
-        sa.assemble_fold(n, train, test, parts, probabilities, [np.append(s, test[0]) for s in seen])
+        sa.assemble_fold(n, train, test, parts, probabilities, [np.append(s, test[0]) for s in seen],
+                         nonempty=nonempty)
 
 
 def test_nine_equal_frequency_bins_map_lowest_first_to_strands_levels():

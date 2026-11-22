@@ -182,10 +182,15 @@ def contrast_gains(head: pd.DataFrame, contrasts) -> pd.DataFrame:
             raise ValueError(f"Several fold records of one arm for contrast {spec}")
         paired = a.merge(b, on=keys, suffixes=("_a", "_b"))
         paired["difference"] = paired.value_a - paired.value_b
+        identity = paired.groupby(["dataset_id", "model_id"])[["split_id", "checkpoint_id"]].nunique()
+        if identity.gt(1).any(axis=None):
+            raise ValueError(f"Contrast {spec} pairs folds of several splits or checkpoints")
         grouped = paired.groupby(["dataset_id", "task_type", "model_id"], as_index=False).agg(
             a=("value_a", "mean"), b=("value_b", "mean"), raw_gain=("difference", "mean"),
-            folds=("outer_fold", "nunique"))
-        grouped = grouped[grouped.folds.eq(5)]
+            folds=("outer_fold", "nunique"),
+            finite=("difference", lambda v: int(np.isfinite(v.to_numpy(float)).sum())))
+        # Five finite paired differences, or the dataset is left out (undefined fold).
+        grouped = grouped[grouped.folds.eq(5) & grouped.finite.eq(5)].drop(columns="finite")
         name = "/".join(str(spec[k]) for k in ("comparison", "view", "layer", "position", "context")
                         if spec.get(k) is not None)
         grouped["representation"] = name
@@ -289,7 +294,8 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
 
 def read(study, target=None):
     """Verified tables and receipt, or an explicit waiting state (absent/superseded ZIP)."""
-    return study_export.read_export(target or export_path(study), schema=SCHEMA, tables=TABLES[study])
+    return study_export.read_export(target or export_path(study), schema=SCHEMA, tables=TABLES[study],
+                                    identity=analysis_identity(study))
 
 
 def build(study):

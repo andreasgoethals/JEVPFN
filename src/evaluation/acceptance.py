@@ -11,6 +11,11 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest
 
+GROUP_B_C_CONFIGS = ("rq2/text_column_refits", "data_efficiency/data_efficiency",
+                     "representations/representations", "rq3/adaptation")
+EXECUTION_FIELDS = frozenset({"enabled", "prepare_enabled", "training_enabled",
+                              "experiment_0_acceptance", "status"})
+
 
 def evaluation_identity():
     main = load_yaml("experiment_1/main")
@@ -63,6 +68,12 @@ def evaluation_identity():
         "tar": {k: v for k, v in load_yaml("experiment_3/tar").items()
                 if k not in {"enabled", "prepare_enabled", "experiment_0_acceptance"}},
         "native_models": load_yaml("experiment_4/native_text")["candidate_models"],
+        # Group B3/B4 and Group C scientific settings (e.g. C2 regression bins); execution
+        # switches and status labels stay outside, as for the other phases.
+        "group_b_c": {
+            name: {k: v for k, v in load_yaml(name).items() if k not in EXECUTION_FIELDS}
+            for name in GROUP_B_C_CONFIGS
+        },
         "encoder_definitions": {
             name: {key: value for key, value in cfg.items() if key != "enabled"}
             for name, cfg in load_yaml("feature_creation/embedding_models")["models"].items()

@@ -188,29 +188,53 @@ def size_gains(headline):
                             "training_size"], as_index=False).agg(
         raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
         baseline=("baseline", "mean"), draws=("draw", "nunique"),
-        draw_variance=("raw_gain", "var"))
+        draw_variance=("raw_gain", "var"), headroom_share_draw_variance=("headroom_share", "var"))
     out["log2_size"] = np.log2(out.training_size)
     return out
 
 
-def pooled_curve(gains, *, outcome="raw_gain"):
-    """Random-effects (DerSimonian-Laird) combination over datasets per predictor, arm, size.
+#: Across-draw variance column in the units of each pooled outcome.
+DRAW_VARIANCE = {"raw_gain": "draw_variance", "headroom_share": "headroom_share_draw_variance"}
 
-    Within-dataset variance: variance over draws / draws where several draws exist; with one
-    draw, the between-dataset spread alone is reported (fixed zero within variance is not
-    assumed) and the status says so.
+
+def cohort_gains(gains, curves):
+    """`size_gains` rows tagged with their fixed curve cohort (column ``curve``).
+
+    main: every dataset at the main sizes; extended: only the configured extended datasets, at
+    all their sizes (their small-size rows therefore appear in both curves). A curve thus keeps
+    one dataset membership along its whole x-axis.
+    """
+    parts = []
+    for name in ("main", "extended"):
+        spec = curves[name]
+        rows = gains[gains.training_size.isin(spec["sizes"])]
+        if isinstance(spec.get("datasets"), list):
+            rows = rows[rows.dataset_id.isin(spec["datasets"])]
+        parts.append(rows.assign(curve=name))
+    return pd.concat(parts, ignore_index=True)
+
+
+def pooled_curve(gains, *, outcome="raw_gain"):
+    """Random-effects (DerSimonian-Laird) combination over datasets per predictor, arm, size
+    (and fixed curve cohort when ``gains`` carries ``curve``; see `cohort_gains`).
+
+    Within-dataset variance: the outcome's own variance over draws / draws where several draws
+    exist; with one draw, the between-dataset spread alone is reported (fixed zero within
+    variance is not assumed) and the status says so.
     """
     from src.evaluation.moderator_statistics import dersimonian_laird
 
     rows = []
     if gains.empty:
         return pd.DataFrame()
-    for (model, representation, size), group in gains.groupby(
-            ["model_id", "representation", "training_size"], sort=True):
+    cohort = ["curve"] if "curve" in gains else []
+    for key, group in gains.groupby([*cohort, "model_id", "representation", "training_size"], sort=True):
+        *curve, model, representation, size = key
         values = group[outcome].to_numpy(float)
-        variances = (group.draw_variance / group.draws).to_numpy(float)
-        row = dict(model_id=model, representation=representation, training_size=size,
-                   log2_size=math.log2(size), datasets=len(group), mean=float(np.mean(values)))
+        variances = (group[DRAW_VARIANCE[outcome]] / group.draws).to_numpy(float)
+        row = dict(zip(cohort, curve)) | dict(
+            model_id=model, representation=representation, training_size=size,
+            log2_size=math.log2(size), datasets=len(group), mean=float(np.mean(values)))
         if np.isfinite(variances).all() and (variances > 0).all():
             result = dersimonian_laird(values, variances)
             row.update(pooled=result["pooled"], ci_low=result["ci_low"], ci_high=result["ci_high"],

@@ -25,6 +25,7 @@ def configuration(monkeypatch):
         "experiment_0/research_questions",
         "datasets",
         "dataset_semantics",
+        *acceptance.GROUP_B_C_CONFIGS,
     ]
     configs = {name: copy.deepcopy(original(name)) for name in names}
     monkeypatch.setattr(acceptance, "load_yaml", lambda name: configs[name])

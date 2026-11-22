@@ -104,33 +104,67 @@ def dataset_gains(paired: pd.DataFrame, extra_keys=()) -> pd.DataFrame:
     if paired.empty:
         return pd.DataFrame()
     keys = ["dataset_id", "task_type", "model_id", "representation", *extra_keys]
+    identity = [c for c in ("split_id", "checkpoint_id") if c in paired]
+    mixed = paired.groupby(keys, dropna=False)[identity].nunique(dropna=False).gt(1).any(axis=1)
+    if mixed.any():
+        raise ValueError("A dataset gain must pair five folds of one split and checkpoint: "
+                         f"{list(mixed[mixed].index[:3])}")
     out = paired.groupby(keys, as_index=False, dropna=False).agg(
         augmented=("value", "mean"), baseline=("baseline", "mean"),
         raw_gain=("raw_gain", "mean"), fold_variance=("raw_gain", "var"),
-        folds=("outer_fold", "nunique"))
-    out = out[out.folds.eq(5)].copy()
+        folds=("outer_fold", "nunique"), pairs=("outer_fold", "size"),
+        finite=("raw_gain", lambda v: int(np.isfinite(v.to_numpy(float)).sum())))
+    if out.pairs.gt(out.folds).any():
+        raise ValueError("Several fold records of one arm entered one dataset gain")
+    # Exactly five finite paired differences; an undefined fold leaves the dataset incomplete.
+    out = out[out.folds.eq(5) & out.finite.eq(5)].drop(columns=["pairs", "finite"]).copy()
     out["headroom"] = 1 - out.baseline
     out["headroom_share"] = out.raw_gain / np.maximum(out.headroom, HEADROOM_FLOOR)
     out["family"] = out.representation.map(family)
     return out.reset_index(drop=True)
 
 
-def median_over_decision_models(gains: pd.DataFrame) -> pd.DataFrame:
-    """Per dataset, predictor and decision mode: median over ALL decision models (never a
-    selected winner); rows lacking any model of the roster on that dataset are dropped."""
+def _decision_modes(gains: pd.DataFrame) -> pd.DataFrame:
     data = gains[gains.family.isin(["decision", "decision+frozen"])].copy()
     if data.empty:
+        return data
+    parts = data.representation.str.split("/")
+    data["mode"], data["provider"] = parts.str[:2].str.join("/"), parts.str[2]
+    return data
+
+
+def median_over_decision_models(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
+    """Per dataset, predictor and decision mode: median over ALL decision models of the
+    configured roster (never a selected winner, never inferred from the results present);
+    rows lacking any roster model on that dataset are dropped (see `roster_gaps`)."""
+    data = _decision_modes(gains)
+    roster = sorted(set(roster))
+    if data.empty or not roster:
         return pd.DataFrame()
-    data["mode"] = data.representation.str.split("/").str[:2].str.join("/")
-    required = data.groupby(["model_id", "mode"]).representation.nunique().rename("required")
+    data = data[data.provider.isin(roster)]
     out = data.groupby(["dataset_id", "task_type", "model_id", "mode"], as_index=False).agg(
         raw_gain=("raw_gain", "median"), headroom_share=("headroom_share", "median"),
-        baseline=("baseline", "first"), decision_models=("representation", "nunique"))
-    out = out.join(required, on=["model_id", "mode"])
-    out = out[out.decision_models.eq(out.required)].drop(columns="required")
+        baseline=("baseline", "first"), decision_models=("provider", "nunique"))
+    out = out[out.decision_models.eq(len(roster))].copy()
     out["representation"] = out["mode"] + "/median"
     out["family"] = out.representation.map(family)
-    return out.drop(columns="mode")
+    return out.drop(columns="mode").reset_index(drop=True)
+
+
+def roster_gaps(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
+    """Dataset x predictor x decision mode cells whose median lacks configured models, by name."""
+    data = _decision_modes(gains)
+    columns = ["dataset_id", "task_type", "model_id", "mode", "decision_models",
+               "missing_decision_models"]
+    if data.empty:
+        return pd.DataFrame(columns=columns)
+    rows = []
+    for key, group in data.groupby(["dataset_id", "task_type", "model_id", "mode"], sort=True):
+        missing = sorted(set(roster) - set(group.provider))
+        if missing:
+            rows += [dict(zip(columns[:4], key), decision_models=int(group.provider.nunique()),
+                          missing_decision_models=name) for name in missing]
+    return pd.DataFrame(rows, columns=columns)
 
 
 def _bootstrap_mean(values, rng, n_boot):
@@ -175,13 +209,18 @@ def text_column_importance(head: pd.DataFrame) -> pd.DataFrame:
     full["provider"] = full.representation.str.split("/").str[2]
     refit["provider"] = refit.representation.str.split("/").str[1]
     refit["text_column"] = refit.representation.str.split("/").str[2].astype(int)
-    keys = ["dataset_id", "task_type", "model_id", "checkpoint_id", "outer_fold", "provider"]
+    keys = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id", "outer_fold",
+            "provider"]
+    if full.duplicated(keys).any() or refit.duplicated([*keys, "text_column"]).any():
+        raise ValueError("Several fold records of one arm entered the text-column importance")
     paired = refit.merge(full[keys + ["value"]].rename(columns={"value": "full"}), on=keys)
     paired["importance"] = paired.full - paired.value
     out = paired.groupby(["dataset_id", "task_type", "model_id", "provider", "text_column"],
-                         as_index=False).agg(importance=("importance", "mean"),
-                                             folds=("outer_fold", "nunique"))
-    return out[out.folds.eq(5)].reset_index(drop=True)
+                         as_index=False).agg(
+        importance=("importance", "mean"), folds=("outer_fold", "nunique"),
+        finite=("importance", lambda v: int(np.isfinite(v.to_numpy(float)).sum())))
+    # Five finite fold-paired differences of the same split, or no importance.
+    return out[out.folds.eq(5) & out.finite.eq(5)].drop(columns="finite").reset_index(drop=True)
 
 
 # ------------------------------------------------------------- B3: associations, models
@@ -333,7 +372,7 @@ def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000
                   realised_gain=realised, always_gain=float(actual.mean()), never_gain=0.0,
                   oracle_gain=oracle, regret=oracle - realised,
                   regret_always=oracle - float(actual.mean()), regret_never=oracle,
-                  status="estimated")
+                  status="estimated" if np.isfinite(rho) else "rank_correlation_undefined")
     if outcome is not None and properties is not None and n_shuffles:
         rng = np.random.default_rng(seed)
         null_rho, null_acc = [], []
@@ -344,10 +383,12 @@ def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000
                 r, a, _ = score(table)
                 null_rho.append(r)
                 null_acc.append(a)
-        null_rho, null_acc = np.asarray(null_rho), np.asarray(null_acc)
-        result.update(shuffle_p_rho=float((1 + np.sum(null_rho >= rho)) / (1 + len(null_rho))),
+        null_rho, null_acc = np.asarray(null_rho, float), np.asarray(null_acc, float)
+        valid = null_rho[np.isfinite(null_rho)]  # undefined null correlations are not exceedances
+        result.update(shuffle_p_rho=float((1 + np.sum(valid >= rho)) / (1 + len(valid)))
+                      if np.isfinite(rho) and len(valid) else np.nan,
                       shuffle_p_accuracy=float((1 + np.sum(null_acc >= accuracy)) / (1 + len(null_acc))),
-                      shuffles=len(null_rho))
+                      shuffles=len(null_rho), valid_rho_shuffles=len(valid))
     return result
 
 

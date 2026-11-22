@@ -666,8 +666,11 @@ def stage(runtime, *, datasets=None):
             # Completed fold records and their predictions are resume inputs too.
             # A fresh native workspace must see durable attempts before fitting;
             # otherwise it would refit them and conflict when publishing back.
+            # B3 text-column refits (rq2), B4 (data_efficiency), C1 (representations) and
+            # C2 (rq3) write their own fold stores and must be restored too (22-11-2026).
             evaluation_phases = ("experiment_0", "experiment_1", "experiment_2", "experiment_3",
-                                 "experiment_4", "synthesis", "regression_readout")
+                                 "experiment_4", "synthesis", "regression_readout", "rq2",
+                                 "data_efficiency", "representations", "rq3")
             for folder in sorted(
                 durable / "output_JEVPFN" / paths.result_relative(p, "evaluation") / "evaluation"
                 for p in evaluation_phases

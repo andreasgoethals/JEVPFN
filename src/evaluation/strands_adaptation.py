@@ -149,12 +149,14 @@ def option_order(kind: str, n_options: int, rng: random.Random, reverse_probabil
 
 
 def assemble_fold(n_rows: int, train_rows, test_rows, assignment, fit_probabilities,
-                  fit_training_rows) -> np.ndarray:
+                  fit_training_rows, *, nonempty) -> np.ndarray:
     """Training rows: the fit that held out their part. Test rows: mean of all fits.
 
     ``fit_probabilities[k]`` is an ``n_rows x K`` array (NaN where fit k produced no score);
     ``fit_training_rows[k]`` the rows fit k trained or validated on. Refuses any training row
-    scored by a fit that saw it, and any test row a fit trained on.
+    scored by a fit that saw it, and any test row a fit trained on. ``nonempty`` is the
+    independent per-row mask of rows with joint text (from the request plan, not the scores):
+    those rows of the fold need finite probabilities summing to one; every other row stays NaN.
     """
     parts = len(fit_probabilities)
     width = fit_probabilities[0].shape[1]
@@ -172,6 +174,18 @@ def assemble_fold(n_rows: int, train_rows, test_rows, assignment, fit_probabilit
         raise ValueError("Test rows must be scored by every fit or by none (empty text)")
     with np.errstate(invalid="ignore"):
         out[test_rows] = stacked.mean(axis=0)
+    nonempty = np.asarray(nonempty, dtype=bool)
+    if nonempty.shape != (n_rows,):
+        raise ValueError("The non-empty text mask must cover every dataset row")
+    fold_rows = np.zeros(n_rows, dtype=bool)
+    fold_rows[np.concatenate([train_rows, test_rows]).astype(int)] = True
+    expected, absent = out[fold_rows & nonempty], out[~(fold_rows & nonempty)]
+    if not np.isfinite(expected).all():
+        raise ValueError("Every fold row with joint text needs finite adapted probabilities")
+    if not np.allclose(expected.sum(axis=1), 1.0, atol=1e-4) or (expected < -1e-9).any():
+        raise ValueError("Adapted probabilities must be normalised")
+    if not np.isnan(absent).all():
+        raise ValueError("Rows without joint text (or outside the fold) must stay missing")
     return out
 
 
@@ -226,6 +240,40 @@ def fold_recipe(dataset, split, fold: int, cell: str) -> dict:
         "early_stopping": cfg["early_stopping"], "recipe": cfg["recipe"],
         "regression_bins": cfg["regression_bins"], "code_sha256": file_sha256(Path(__file__)),
     }
+
+
+def sealed_bundle(folder: Path, recipe: dict) -> dict | None:
+    """The published result of a complete, verified bundle with this exact recipe, or None."""
+    target = Path(folder) / "manifest.json"
+    if not target.exists():
+        return None
+    body = json.loads(target.read_text(encoding="utf-8"))
+    if body.get("recipe") != recipe or body.get("status") != "complete":
+        return None
+    if body["artifact_id"] != digest({k: v for k, v in body.items() if k != "artifact_id"}):
+        raise ValueError("Adapted bundle manifest checksum differs")
+    for name, checksum in body["files"].items():
+        file = (Path(folder) / name).resolve()
+        if not file.is_relative_to(Path(folder).resolve()) or file_sha256(file) != checksum:
+            raise ValueError("Adapted bundle file missing or changed")
+    return {"dataset_id": recipe.get("dataset_id"), "fold": recipe.get("fold"),
+            "cell": recipe.get("cell"), "artifact_id": body["artifact_id"]}
+
+
+def seal_bundle(folder: Path, recipe: dict, names, reports) -> dict:
+    """Publish the fold manifest once; a repeated call verifies and returns the sealed result,
+    so identical predictions never receive a new artifact identity."""
+    sealed = sealed_bundle(folder, recipe)
+    if sealed is not None:
+        return sealed
+    body = {"schema": SCHEMA, "status": "complete", "recipe": recipe,
+            "files": {name: file_sha256(Path(folder) / name) for name in names},
+            "fits": [{k: r[k] for k in ("part", "best_validation_loss", "seconds", "peak_gpu_bytes", "history")}
+                     for r in reports], "created_utc": datetime.now(UTC).isoformat()}
+    body["artifact_id"] = digest(body)
+    write_json(Path(folder) / "manifest.json", body)
+    return {"dataset_id": recipe.get("dataset_id"), "fold": recipe.get("fold"),
+            "cell": recipe.get("cell"), "artifact_id": body["artifact_id"]}
 
 
 def read_bundle(dataset, split, fold: int, cell: str) -> dict:
@@ -601,6 +649,9 @@ def run_fold(dataset_id: str, fold: int, cell: str, *, execute=False) -> dict:
     folder = bundle_dir(dataset_id, fold, cell)
     folder.mkdir(parents=True, exist_ok=True)
     recipe = fold_recipe(dataset, split, fold, cell)
+    sealed = sealed_bundle(folder, recipe)
+    if sealed is not None:  # rerun of a completed fold: verify and return, never re-identify
+        return sealed
     fits = []
     for part in range(cfg["crossfit"]["parts"]):
         target = folder / f"fit_{part}.npy"
@@ -622,17 +673,13 @@ def run_fold(dataset_id: str, fold: int, cell: str, *, execute=False) -> dict:
     train_rows = np.asarray(split["folds"][fold]["train"])
     assignment = crossfit_parts(train_rows, dataset_id=dataset_id, split_id=split["split_id"], fold=fold,
                                 seed=cfg["crossfit"]["seed"])
+    _, joint = _joint_inputs(dataset_id)
     values = assemble_fold(len(dataset.frame), train_rows, split["folds"][fold]["test"], assignment,
-                           probabilities, [r["optimizer_rows"] + r["validation_rows"] for r in reports])
+                           probabilities, [r["optimizer_rows"] + r["validation_rows"] for r in reports],
+                           nonempty=joint >= 0)
     np.save(folder / "probabilities.npy", values, allow_pickle=False)
     names = ["probabilities.npy", *(f.name for f in fits), *(f"fit_{k}.json" for k in range(len(fits)))]
-    body = {"schema": SCHEMA, "status": "complete", "recipe": recipe,
-            "files": {name: file_sha256(folder / name) for name in names},
-            "fits": [{k: r[k] for k in ("part", "best_validation_loss", "seconds", "peak_gpu_bytes", "history")}
-                     for r in reports], "created_utc": datetime.now(UTC).isoformat()}
-    body["artifact_id"] = digest(body)
-    write_json(folder / "manifest.json", body)
-    return {"dataset_id": dataset_id, "fold": fold, "cell": cell, "artifact_id": body["artifact_id"]}
+    return seal_bundle(folder, recipe, names, reports)
 
 
 def pilot(*, execute=False, dataset_id=None, cell=None) -> dict:

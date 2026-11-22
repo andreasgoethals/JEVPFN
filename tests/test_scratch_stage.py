@@ -797,3 +797,14 @@ def test_scoped_workspace_rejects_unstaged_dataset_before_child(roots, monkeypat
     monkeypatch.setenv('JEVPFN_PUBLISH_DATASET', 'finished')
     with pytest.raises(ValueError, match='outside the staged'):
         stage.run('intern', ['never-start-this'])
+
+
+def test_new_benchmark_phases_are_restored_into_fresh_workspaces():
+    """B3 refits, B4, C1 and C2 fold stores are resume inputs like the original arms."""
+    import inspect
+
+    from src.cluster import scratch_stage
+
+    source = inspect.getsource(scratch_stage.stage)
+    for phase in ("rq2", "data_efficiency", "representations", "rq3"):
+        assert f'"{phase}"' in source
