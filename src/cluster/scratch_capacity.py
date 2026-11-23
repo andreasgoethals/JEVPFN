@@ -61,7 +61,9 @@ def tree_bytes(root):
 def capacity_lease(work):
     parent = reject_links(work.parent.parent)
     parent.mkdir(parents=True, exist_ok=True)
-    with file_lock(parent / ".capacity.lock", timeout=600):
+    # Staging and release hold this lease for their whole copy/publication; a second
+    # transfer (e.g. a campaign release beside a stage) must queue, not fail after 10 min.
+    with file_lock(parent / ".capacity.lock", timeout=4 * 3600):
         yield
 
 

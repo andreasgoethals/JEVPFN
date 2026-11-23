@@ -17,7 +17,7 @@ test_pool_limits:
   gpu: 12
   download: 2
   build: 2
-  transfer: 3  # Bulk copy/release jobs at once (was 1; 23-11-2026). Shared dataset locks still serialize per store.
+  transfer: 1  # Staging and release hold the global scratch capacity lock throughout; 3 at once failed (11857458/76/88, 23-11-2026).
 account: lp_verbekelab
 default_gpu_profile: mindwell_b200
 routes: {}
