@@ -21,6 +21,7 @@ proposal:
   headline_estimand: headroom_normalised_gain_over_same_predictor_non_text
   headline_metric: {binary: roc_auc, multiclass: roc_auc_ovr_macro, regression: r2}
   aggregation: equal_dataset_weight_all_18_datasets
+  summaries: [mean, median]  # owner 23-11-2026: median next to the mean, both with dataset-bootstrap CIs
   uncertainty: percentile_bootstrap_over_datasets
   primary_contrasts:
   - decision_features_vs_non_text

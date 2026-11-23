@@ -401,6 +401,10 @@ def test_paired_gains_summary_and_median_over_models():
     assert row.wins == 6 and row.losses == 0 and row.raw_ci_low == pytest.approx(0.01)
     row = summary[(summary.model_id == "linear") & (summary.representation == "decision/both/m1")].iloc[0]
     assert row.ties == 1 and row.wins == 5  # d0 has zero gain
+    # The median sits next to the mean, with its own dataset-bootstrap interval.
+    share = gains[(gains.model_id == "linear") & (gains.representation == "decision/both/m1")].headroom_share
+    assert row.median_headroom_share == pytest.approx(share.median())
+    assert row.median_share_ci_low <= row.median_headroom_share <= row.median_share_ci_high
 
 
 def test_lodo_rule_excludes_the_held_out_dataset_and_scores_policies():

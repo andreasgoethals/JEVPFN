@@ -372,4 +372,7 @@ def test_planned_design_reads_the_configuration_only():
     assert sum(t == "regression" for t in real.datasets.values()) == 9
     assert set(real.plan.phase) >= {"experiment_1", "experiment_2", "experiment_3", "experiment_4",
                                     "representations", "rq3", "data_efficiency"}
-    assert real.a2_datasets["field_order"] is None
+    # Field order is declared from the catalog before results: two or more text columns.
+    assert len(real.a2_datasets["field_order"]) == 16
+    assert not {"BIN_TEXT_JIGSAW_TOXICITY", "MUL_TEXT_PRODUCT_SENTIMENT"} & set(real.a2_datasets["field_order"])
+    assert len(real.a2_datasets["option_order"]) == 6

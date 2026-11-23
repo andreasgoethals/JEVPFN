@@ -73,7 +73,12 @@ def planned_design() -> Design:
 
     main = load_yaml("experiment_1/main")
     semantics = load_yaml("dataset_semantics")["datasets"]
-    datasets = {e["id"]: semantics[e["id"]]["task_type"] for e in selected_entries(load_catalog(), main)}
+    entries = selected_entries(load_catalog(), main)
+    datasets = {e["id"]: semantics[e["id"]]["task_type"] for e in entries}
+    # A2 field order (behavior.yaml B3_field_order) needs joint requests with at least two
+    # named text fields; the catalog's text-column count fixes the eligible datasets before
+    # results (16 of 18: Jigsaw Toxicity and Product Sentiment have one text column).
+    multi_field = [e["id"] for e in entries if e["paper_summary"]["text_columns"] >= 2]
     plan = pd.DataFrame(benchmark_plan())
     plan["model_id"] = plan["model"]
     plan["representation"] = [group_b.representation(r) for r in plan.to_dict("records")]
@@ -81,7 +86,7 @@ def planned_design() -> Design:
     multiclass = [d for d, t in datasets.items() if t == "multiclass_classification"]
     return Design(datasets=datasets, roster=tuple(main["candidate_extractors"]), plan=plan,
                   lodo_input_sets=tuple(rule["input_sets"]), lodo_threshold=float(rule["use_threshold"]),
-                  a2_datasets={"wording": list(datasets), "option_order": multiclass, "field_order": None})
+                  a2_datasets={"wording": list(datasets), "option_order": multiclass, "field_order": multi_field})
 
 
 # ------------------------------------------------------------------ scores from fold tables

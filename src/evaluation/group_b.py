@@ -172,18 +172,18 @@ def roster_gaps(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
-def _bootstrap_mean(values, rng, n_boot):
+def _bootstrap_mean(values, rng, n_boot, statistic=np.mean):
     values = np.asarray(values, float)
     if len(values) < 2:
         return np.nan, np.nan
     draws = rng.integers(0, len(values), (n_boot, len(values)))
-    means = values[draws].mean(axis=1)
+    means = statistic(values[draws], axis=1)
     return float(np.quantile(means, 0.025)), float(np.quantile(means, 0.975))
 
 
 def summarize(gains: pd.DataFrame, *, keys=("model_id", "representation"), n_boot=N_BOOT,
               seed=SEED, tie=TIE_TOLERANCE) -> pd.DataFrame:
-    """Equal-dataset means with dataset-bootstrap 95% intervals, and win/tie/loss counts."""
+    """Equal-dataset means and medians with dataset-bootstrap 95% intervals, and win/tie/loss counts."""
     if gains.empty:
         return pd.DataFrame()
     rng = np.random.default_rng(seed)
@@ -192,10 +192,15 @@ def summarize(gains: pd.DataFrame, *, keys=("model_id", "representation"), n_boo
         raw, share = group.raw_gain.to_numpy(float), group.headroom_share.to_numpy(float)
         low, high = _bootstrap_mean(raw, rng, n_boot)
         share_low, share_high = _bootstrap_mean(share, rng, n_boot)
+        # The median sits next to the mean: a near-perfect baseline makes the headroom share
+        # very large on one dataset, which moves the mean but not the median.
+        median_low, median_high = _bootstrap_mean(share, rng, n_boot, np.median)
         rows.append(dict(zip(keys, key if isinstance(key, tuple) else (key,))) | dict(
             datasets=len(group), mean_raw_gain=float(raw.mean()), raw_ci_low=low, raw_ci_high=high,
             mean_headroom_share=float(share.mean()), share_ci_low=share_low,
-            share_ci_high=share_high, wins=int((raw > tie).sum()),
+            share_ci_high=share_high, median_headroom_share=float(np.median(share)),
+            median_share_ci_low=median_low, median_share_ci_high=median_high,
+            median_raw_gain=float(np.median(raw)), wins=int((raw > tie).sum()),
             ties=int((np.abs(raw) <= tie).sum()), losses=int((raw < -tie).sum()),
             family=family(group.representation.iloc[0]) if "representation" in group else None))
     return pd.DataFrame(rows)
