@@ -198,9 +198,13 @@ def confirmatory_tests(datasets, plan):
 #   mean-rank post-hoc tests depend on which other learners are in the pool
 #   (Benavoli, Corani & Mangili 2016), so confirmatory pairwise claims use the paired
 #   two-sided Wilcoxon (1945) signed-rank test on per-dataset differences instead.
-# - Families of pairwise p-values: Holm (1979) step-down; Finner for comparisons with
-#   one control and Shaffer's static procedure for all pairwise comparisons
-#   (Garcia & Herrera 2008; Garcia et al. 2010) as reported sensitivity analyses.
+# - Families of pairwise p-values: Holm (1979) step-down (confirmatory, any dependence);
+#   Finner for comparisons with one control (Garcia et al. 2010) as a sensitivity analysis;
+#   Shaffer's static procedure (Garcia & Herrera 2008) only on the mean-rank z-tests,
+#   whose "equal mean rank" nulls are transitive as its logical restrictions require.
+# - The differences must be commensurable across datasets (Demsar 2006): use a
+#   dimensionless score shared by all 18 datasets (normalised gain, proper-score skill),
+#   because a task-specific metric (AUC, R^2) covers only 9 of them.
 # - Bayesian signed-rank test with a region of practical equivalence (Benavoli et al.
 #   2014, 2017) reports P(worse), P(equivalent), P(better) next to every p-value.
 # ---------------------------------------------------------------------------
@@ -234,6 +238,13 @@ def friedman(matrix):
     ranks = pd.DataFrame(values).rank(axis=1, ascending=False, method="average").to_numpy()
     mean_ranks = ranks.mean(axis=0)
     chi_square = 12 * n / (k * (k + 1)) * (np.sum(mean_ranks**2) - k * (k + 1) ** 2 / 4)
+    # Tied scores within a dataset shrink the rank variance; divide by the usual tie
+    # correction 1 - sum(t^3 - t) / (n k (k^2 - 1)) (as scipy.stats.friedmanchisquare).
+    ties = sum(float(np.sum(c**3 - c)) for c in (np.unique(row, return_counts=True)[1] for row in values))
+    correction = 1 - ties / (n * k * (k * k - 1))
+    if correction <= 0:
+        raise ValueError("Every learner ties on every dataset; Friedman is undefined")
+    chi_square /= correction
     denominator = n * (k - 1) - chi_square
     iman_davenport = (n - 1) * chi_square / denominator if denominator > 0 else np.inf
     df1, df2 = k - 1, (k - 1) * (n - 1)
@@ -345,8 +356,9 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
     """Full multi-learner report on per-dataset scores (columns dataset_id, learner, score).
 
     Returns the omnibus test and one row per pairwise comparison (with `control`, only
-    the comparisons against it). Wilcoxon + Holm is the confirmatory family; Finner or
-    Shaffer, mean-rank z-tests and the Bayesian signed-rank test are reported alongside.
+    the comparisons against it). Wilcoxon + Holm is the confirmatory family; Finner (vs a
+    control), mean-rank z-tests (Shaffer-adjusted for all pairs) and the Bayesian
+    signed-rank test are reported alongside.
     """
     from itertools import combinations
 
@@ -385,10 +397,138 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
             "bayes_p_better": bayes["p_better"],
         })
     table = pd.DataFrame(rows)
-    table["p_holm"] = holm(table.p_wilcoxon)
+    table["p_holm"] = holm(table.p_wilcoxon)  # Valid under any dependence: confirmatory.
     if control is not None:
+        # Finner assumes independent tests; comparisons sharing a control are only
+        # positively dependent in practice, so this column is a sensitivity analysis.
         table["p_finner"] = finner(table.p_wilcoxon)
     else:
-        table["p_shaffer"] = shaffer(table.p_wilcoxon, k)
+        # Shaffer's logical restrictions need transitive nulls ("equal mean ranks"), as
+        # in Garcia & Herrera (2008). Wilcoxon nulls ("differences symmetric around 0")
+        # are not transitive, so Shaffer applies to the descriptive mean-rank z-tests only.
+        table["p_mean_rank_shaffer"] = shaffer(table.p_mean_rank_z, k)
     table["rope"] = rope
     return omnibus, table
+
+
+# ---------------------------------------------------------------------------
+# Pooled contrasts over both task types (framework proposal, inactive until approved).
+#
+# A pooled contrast compares two learners of one framework application on ONE dimensionless
+# score shared by all 18 datasets (9 classification + 9 regression), so its signed-rank test
+# has N = 18: the headroom-normalised gain (B/C families) or the proper-score skill (A2).
+# Per-dataset values come from `learner_scores` (configuration-declared cells with statuses).
+# The family is the whole declared plan: Holm runs over every contrast in plan["contrasts"],
+# pooled and per-task alike, so adding pooled contrasts never shrinks or splits the family.
+# ---------------------------------------------------------------------------
+
+#: Pooled contrast type -> the score it tests (`learner_scores` score types).
+POOLED_CONTRASTS = {
+    "pooled_normalised_gain": "headroom_normalised_gain",
+    "pooled_proper_score_skill": "proper_score_skill",
+}
+POOLED_KEYS = ("type", "application", "group", "learner", "versus", "datasets", "direction")
+POOLED_SCORE_COLUMNS = ("application", "score_type", "group", "dataset_id", "learner", "score", "status")
+
+
+def _require_approved_plan(plan):
+    if (
+        plan.get("approved_before_results") is not True
+        or not plan.get("contrasts")
+        or not plan.get("reviewed_by")
+    ):
+        raise ValueError("An explicit analysis plan approved before results is required")
+    if (plan.get("framework") or {}).get("status") != "approved":
+        raise ValueError("Pooled contrasts require framework.status == 'approved'")
+
+
+def _pooled_values(pooled, contrast):
+    """Oriented per-dataset values learner - versus, refusing anything incomplete."""
+    expected = list(contrast["datasets"])
+    if len(set(expected)) != len(expected) or len(expected) < 2:
+        raise ValueError("A pooled contrast needs at least two distinct planned datasets")
+    chosen = pooled[
+        pooled.application.eq(contrast["application"])
+        & pooled.group.eq(contrast["group"])
+        & pooled.learner.isin([contrast["learner"], contrast["versus"]])
+    ]
+    if not chosen.score_type.eq(POOLED_CONTRASTS[contrast["type"]]).all():
+        raise ValueError("The pooled scores are not the contrast's declared score type")
+    if chosen.duplicated(["dataset_id", "learner"]).any():
+        raise ValueError("Several scores for one dataset and learner; select one campaign")
+    table = chosen.pivot(index="dataset_id", columns="learner", values="score")
+    status = chosen.pivot(index="dataset_id", columns="learner", values="status")
+    learners = [contrast["learner"], contrast["versus"]]
+    if (
+        set(table.index) != set(expected)
+        or not set(learners) <= set(table.columns)
+        or table[learners].isna().any(axis=None)
+        or not status[learners].eq("ok").all(axis=None)
+    ):
+        raise ValueError(
+            "Every planned dataset requires one complete, defined score for both learners; "
+            "inference stops"
+        )
+    values = (table[contrast["learner"]] - table[contrast["versus"]]).reindex(expected).to_numpy(float)
+    if not np.isfinite(values).all():
+        raise ValueError("Nonfinite dataset difference")
+    return values * contrast["direction"]
+
+
+def pooled_confirmatory_tests(pooled, plan, *, datasets=None):
+    """The declared confirmatory family with pooled contrasts; Holm over all of it.
+
+    `plan` is the whole analysis plan (`config/synthesis/analysis.yaml`). Contrasts with a
+    ``type`` in `POOLED_CONTRASTS` declare ``application``, ``group``, ``learner``, ``versus``,
+    ``datasets`` and ``direction`` and read `pooled` (columns `POOLED_SCORE_COLUMNS`, from
+    `learner_scores.pooled_scores`); every other contrast runs through `confirmatory_tests` on
+    `datasets` (`dataset_differences` output) with the same safeguards. Refused unless the plan
+    was approved before results AND ``framework.status == "approved"``.
+    """
+    _require_approved_plan(plan)
+    rope = (plan.get("framework") or {}).get("rope") or {}
+    pooled_specs = [c for c in plan["contrasts"] if "type" in c]
+    standard = [c for c in plan["contrasts"] if "type" not in c]
+    results, identities = [], set()
+    for contrast in pooled_specs:
+        if set(contrast) != set(POOLED_KEYS) or contrast["type"] not in POOLED_CONTRASTS:
+            raise ValueError(f"A pooled contrast declares exactly {POOLED_KEYS} with a known type")
+        if contrast["direction"] not in {-1, 1} or contrast["learner"] == contrast["versus"]:
+            raise ValueError("Specify two different learners and a direction of +1 or -1")
+        identity = tuple(contrast[k] for k in POOLED_KEYS if k != "datasets")
+        if identity in identities:
+            raise ValueError("Duplicate planned statistical contrast")
+        identities.add(identity)
+        differences = _pooled_values(pooled, contrast)
+        score = POOLED_CONTRASTS[contrast["type"]]
+        row = {k: contrast[k] for k in POOLED_KEYS if k != "datasets"} | {
+            "contrast_type": contrast["type"],
+            "score": score,
+            "datasets": len(differences),
+            "median_oriented_delta": float(np.median(differences)),
+            "p_raw": wilcoxon_p(differences),
+            **exact_resolution(differences),
+            "wilcoxon_method": "auto",
+            "zero_method": "wilcox",
+        }
+        if rope.get(score) is not None:
+            bayes = bayesian_signed_rank(differences, float(rope[score]))
+            row |= {f"bayes_{k}": bayes[k] for k in ("p_worse", "p_equivalent", "p_better", "rope")}
+        results.append(row)
+    if standard:
+        if datasets is None:
+            raise ValueError("Per-task contrasts are planned; pass their dataset differences")
+        found = confirmatory_tests(datasets, {**plan, "contrasts": standard})
+        for record in found.drop(columns=["p_holm", "holm_rank", "holm_step_threshold_at_0_05",
+                                          "holm_family_size"]).to_dict("records"):
+            results.append(record | {"contrast_type": "per_task"})
+    adjusted = holm([r["p_raw"] for r in results])
+    order = np.argsort([r["p_raw"] for r in results], kind="stable")
+    for rank, index in enumerate(order):
+        results[index] |= {
+            "p_holm": float(adjusted[index]),
+            "holm_rank": rank + 1,
+            "holm_step_threshold_at_0_05": 0.05 / (len(results) - rank),
+            "holm_family_size": len(plan["contrasts"]),
+        }
+    return pd.DataFrame(results)

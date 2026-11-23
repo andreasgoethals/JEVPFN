@@ -28,6 +28,17 @@ def test_friedman_matches_scipy_without_ties_and_iman_davenport_formula():
     assert min(result["mean_ranks"].values()) == result["mean_ranks"][4]  # best gets rank ~1
 
 
+def test_friedman_applies_the_tie_correction_like_scipy():
+    rng = np.random.default_rng(2)
+    matrix = np.round(rng.normal(size=(18, 4)), 1)  # Rounding creates within-dataset ties.
+    matrix[0] = [0.5, 0.5, 0.5, 0.1]
+    assert any(len(set(row)) < 4 for row in matrix)
+    result = inference.friedman(matrix)
+    assert result["friedman_chi2"] == pytest.approx(friedmanchisquare(*matrix.T).statistic)
+    with pytest.raises(ValueError, match="undefined"):
+        inference.friedman(np.ones((5, 3)))
+
+
 def test_demsar_worked_example_ranks_statistics_and_critical_difference():
     # Demsar (2006), Section 3.2.2: N=14, k=4, mean ranks 3.143, 2.000, 2.893, 1.964.
     ranks = np.array([3.143, 2.000, 2.893, 1.964])
@@ -72,7 +83,10 @@ def test_compare_learners_control_and_all_pairs_and_orientation():
     strong = versus.set_index("learner").loc["L1"]
     assert strong.wins == 18 and strong.p_holm < 0.01 and strong.bayes_p_better > 0.9
     _, pairs = inference.compare_learners(scores(matrix), higher_is_better=True, rope=0.01)
-    assert len(pairs) == 3 and "p_shaffer" in pairs
+    assert len(pairs) == 3 and "p_mean_rank_shaffer" in pairs and "p_shaffer" not in pairs
+    # Shaffer adjusts the transitive mean-rank z-tests, never the Wilcoxon p-values.
+    assert pairs.p_mean_rank_shaffer.tolist() == pytest.approx(
+        inference.shaffer(pairs.p_mean_rank_z, 3).tolist())
     # Lower-is-better metrics (log loss) are oriented so that positive still means better.
     _, loss = inference.compare_learners(
         scores(-matrix), higher_is_better=False, control="L0", rope=0.01)

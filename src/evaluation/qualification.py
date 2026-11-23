@@ -292,6 +292,18 @@ def feature_evidence(report):
     data = _complete(
         report.get("datasets", []), ("dataset_id",), {(d,) for d in datasets}, "dataset"
     )
+    tasks = {"binary_classification", "multiclass_classification", "regression"}
+    for row in data.values():
+        # Absent identities would otherwise compare equal (None == None) to absent profile fields.
+        if (
+            any(not isinstance(row.get(k), str) or not row[k]
+                for k in ("data_identity", "split_id"))
+            or row.get("task_type") not in tasks
+            or row.get("outer_folds") != 5
+            or type(row.get("rows")) is not int
+            or row["rows"] < 5
+        ):
+            raise ValueError("0B requires the verified identity, task, rows and five-fold split of each dataset")
     decisions = _complete(
         report.get("decision_artifacts", []),
         ("dataset_id", "provider"),
@@ -418,6 +430,14 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
         raise ValueError("0B requires passing real predictor contracts for all nine models")
     for model, report in predictors.items():
         cases = {(f["task_type"], f["classes"], f["feature_case"]) for f in report["fixtures"]}
+        # Five outer test records, plus five inner-OOF records for the binary threshold.
+        if any(
+            not isinstance(f.get("records"), list)
+            or len(set(f["records"])) != len(f["records"])
+            or len(f["records"]) < (10 if f["task_type"] == "binary_classification" else 5)
+            for f in report["fixtures"]
+        ):
+            raise ValueError(f"0B predictor fixtures for {model} lack their saved fold records")
         if (
             len(cases) != len(report["fixtures"])
             or cases != required_fixture_cases(model)
@@ -453,6 +473,20 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
         ):
             raise ValueError(
                 f"0B lacks a current full-fold profile for {planned['model']}/{planned['phase']}"
+            )
+        # A full-fold profile scores the whole first outer fold: its test rows are one fifth of
+        # the dataset (balanced folds differ by at most one row) and its inner OOF rows are the
+        # complete outer training partition. A subsample is a silent row cap, not a profile.
+        sizes = {item["role"]: item["rows"] for item in report["roles"]}
+        total = dataset["rows"]
+        if (
+            report.get("training_rows") != total - sizes["outer_test"]
+            or not total // 5 <= sizes["outer_test"] <= -(-total // 5)
+            or sizes.get("inner_oof_binary_threshold", total - sizes["outer_test"])
+            != total - sizes["outer_test"]
+        ):
+            raise ValueError(
+                f"0B full-fold profile rows differ from the complete first fold for {planned['model']}"
             )
         if verify_publication:
             verify_published_profile(report)

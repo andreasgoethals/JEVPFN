@@ -211,6 +211,23 @@ AGREEMENT_CMAP = "Blues"
 DISTANCE_CMAP = "YlOrRd"
 
 
+# Critical-difference diagrams (src/visualize/critical_difference.py): mean-rank axis, the
+# descriptive Nemenyi CD bar, and the confirmatory Holm-adjusted Wilcoxon annotations.
+CD_INK = MEDIAN_COLOR  # Axis, learner leader lines and labels.
+CD_BAR_COLOR = "#59636F"  # Nemenyi critical difference (descriptive).
+CD_GROUP_COLOR = "#2166AC"  # Bars joining learners without a Holm-significant difference.
+CD_SIGNIFICANT_COLOR = "#B2182B"  # Holm-significant versus the control learner.
+CD_FONT = 7.5
+CD_NOTE_FONT = 7
+CD_ROW_STEP = 0.17  # Inches between learner label rows.
+CD_GROUP_STEP = 0.075  # Inches between stacked no-difference bars.
+
+
+def cd_diagram_size(rows: int, groups: int = 0, *, title: bool = False) -> tuple[float, float]:
+    """Full A4 width; height grows with the label rows per side and no-difference bars."""
+    return WIDTH_FULL, min(MAX_HEIGHT, 1.15 + 0.22 * title + CD_ROW_STEP * rows + CD_GROUP_STEP * groups)
+
+
 def comparison_size(rows: int, *, rotated_labels: bool = False) -> tuple[float, float]:
     """Keep sparse last pages compact without changing final-print label sizes."""
     margin = 1.95 if rotated_labels else 1.35

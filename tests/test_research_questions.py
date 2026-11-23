@@ -163,8 +163,9 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
 def test_summary_discovery_follows_research_order():
     from src.utils.run_notebooks import discover
 
-    # Exp 11 (Group B, B4; RQ2) was numbered after Exp 10 (RQ3) on 20-11-2026.
-    names = [n for n in discover() if n != "exp11_data_efficiency"]
+    # Exp 11 (Group B, B4; RQ2) was numbered after Exp 10 (RQ3) on 20-11-2026; the
+    # cross-experiment synthesis notebook (23-11-2026) follows every experiment.
+    names = [n for n in discover() if n not in {"exp11_data_efficiency", "synthesis"}]
     assert paths.research_group(paths.notebook_phase("exp11_data_efficiency")) == "rq2"
     groups = ["general" if n.startswith("general/") else paths.research_group(paths.notebook_phase(n)) for n in names]
     order = {"general": 0, "rq1": 1, "rq2": 2, "rq3": 3}

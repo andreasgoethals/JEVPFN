@@ -79,7 +79,8 @@ def analysis_identity(study) -> str:
         "data_efficiency/data_efficiency")}
     return digest({"schema": SCHEMA, "study": study, "configs": configs,
                    "analysis": code_identity(["src/evaluation/group_b.py",
-                                              "src/evaluation/data_efficiency.py"])})
+                                              "src/evaluation/data_efficiency.py",
+                                              "src/evaluation/benchmark_export.py"])})
 
 
 def recipe_fields(recipe: dict) -> dict:

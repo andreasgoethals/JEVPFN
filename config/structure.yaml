@@ -128,6 +128,8 @@ entries:
   folder: synthesis
   title: Cross-experiment synthesis and paper figures
   phases: [synthesis]
+  # 23-11-2026: one flat notebook (statistical framework state, gated until approval).
+  notebook: {phase: synthesis}
   configs: [analysis, paper_figures]
 
 # Reserved experiment numbers: documented, never given a folder until implemented.

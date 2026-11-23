@@ -11,8 +11,11 @@ undefined_or_incomplete: stop_inferential_analysis_and_report_missing_results
 native_text_baselines: descriptive_original_text_system_references
 pretraining_overlap: unknown_unless_documented_evidence_establishes_otherwise
 # Proposal of 18 November 2026; inactive until the owner approves it and it is moved
-# into `contrasts` (the confirmatory runner reads only `contrasts`). Pooled normalised-
-# gain contrasts need a new contrast type in src/evaluation/inference.py after approval.
+# into `contrasts` (the confirmatory runner reads only `contrasts`). Pooled contrasts over
+# all 18 datasets use `type: pooled_normalised_gain` or `pooled_proper_score_skill` with
+# application, group, learner, versus, datasets and direction; they run only through
+# `inference.pooled_confirmatory_tests` (Holm over every declared contrast), on scores from
+# `src/evaluation/learner_scores.py`, and only once `framework.status` is approved.
 proposal:
   status: awaiting_owner_approval
   headline_estimand: headroom_normalised_gain_over_same_predictor_non_text
@@ -32,22 +35,30 @@ proposal:
 # (`compare_learners`, `confirmatory_tests`). Sources: Demsar 2006; Garcia & Herrera 2008;
 # Garcia et al. 2010; Iman & Davenport 1980; Holm 1979; Wilcoxon 1945; Friedman 1937;
 # Nemenyi 1963; Benavoli et al. 2014, 2017; Gneiting & Raftery 2007.
-# Always all 18 datasets as the units; folds only form each dataset's mean.
+# Always all 18 datasets as the units; folds only form each dataset's mean. Only 9 are
+# classification and 9 regression, so a test over all 18 needs one dimensionless score
+# shared by both tasks (Demsar 2006: differences must be commensurable). Task-specific
+# metrics (AUC, R^2, log loss, RPS) have N = 9 and are descriptive: with N = 9 the
+# smallest exact two-sided Wilcoxon p is 2/2^9 = 0.0039, which Holm over 13+ contrasts
+# can never bring below 0.05.
 # Proposal: inactive until approved together with the contrasts above.
 framework:
   status: awaiting_owner_approval
   unit: per_dataset_mean_of_five_outer_folds_all_18_datasets
-  omnibus_several_learners: friedman_with_iman_davenport_f
+  confirmatory_scores: {B: headroom_normalised_gain, A2: proper_score_skill}  # both tasks, N = 18
+  omnibus_several_learners: friedman_with_iman_davenport_f_tie_corrected
   ranks_and_cd_diagram: descriptive_nemenyi_critical_difference
   confirmatory_pairwise: two_sided_wilcoxon_signed_rank_on_dataset_differences
-  family_correction: holm
-  sensitivity_corrections: {versus_control: finner, all_pairwise: shaffer_static}
+  family_correction: holm_across_all_confirmatory_contrasts  # one family, as `correction` above
+  omnibus_gate: none  # Holm controls the family itself; a Friedman gate is not required
+  sensitivity_corrections: {versus_control: finner_on_wilcoxon, all_pairwise: shaffer_static_on_mean_rank_z_only}
   bayesian: {test: bayesian_signed_rank_dirichlet_process, prior_strength: 0.5, decision: largest_posterior_region}
-  rope: {roc_auc: 0.01, roc_auc_ovr_macro: 0.01, r2: 0.01, headroom_normalised_gain: 0.01, log_loss: 0.01, ranked_probability_score: 0.005}
+  rope: {headroom_normalised_gain: 0.01, proper_score_skill: 0.01, roc_auc: 0.01, roc_auc_ovr_macro: 0.01, r2: 0.01, log_loss: 0.01}  # log_loss: A1, descriptive
   mean_rank_post_hoc: reported_not_confirmatory  # depends on the learner pool (Benavoli et al. 2016)
+  population: the_18_benchmark_datasets_not_a_random_sample_of_all_tabular_text_tasks
   application:
     A1_outputs: {comparison: 17_decision_models, procedure: friedman_ranks_cd_diagram, metric: log_loss_joint_requests, inference: descriptive}
-    A2_stability: {comparison: averaged_presentations_vs_canonical_per_model, procedure: wilcoxon_holm_over_17_models_plus_bayesian, metrics: [log_loss, roc_auc], inference: confirmatory_if_approved}
+    A2_stability: {comparison: averaged_presentations_vs_canonical_per_model, procedure: wilcoxon_holm_over_17_models_plus_bayesian, metric: proper_score_skill, descriptive_metrics: [log_loss, ranked_probability_score, brier, roc_auc], inference: confirmatory_if_approved}
     A3_geometry: {inference: descriptive_only}
     B1_decision_features: {comparison: decision_modes_vs_non_text_control_per_predictor, procedure: wilcoxon_holm_plus_bayesian, ranking: friedman_cd_over_arms, inference: confirmatory_if_approved}
     B2_representations: {comparison: decision_vs_frozen_embeddings_tar_label_classifier, procedure: wilcoxon_holm_plus_bayesian, inference: confirmatory_if_approved}
@@ -55,4 +66,4 @@ framework:
     B4_data_efficiency: {comparison: arms_vs_baseline_per_size, procedure: wilcoxon_finner_vs_control, inference: exploratory}
     B5_native_text_systems: {comparison: native_text_systems, procedure: friedman_cd_diagram, inference: descriptive}
     C1_strands_states: {comparison: 14_arms_vs_non_text_control, procedure: friedman_then_wilcoxon_finner_vs_control, inference: exploratory}
-    C2_strands_adaptation: {comparison: 2x2_zero_shot_head_lora_both, procedure: friedman_then_all_pairwise_wilcoxon_shaffer, inference: exploratory}
+    C2_strands_adaptation: {comparison: 2x2_zero_shot_head_lora_both, procedure: friedman_then_all_pairwise_wilcoxon_holm, inference: exploratory}

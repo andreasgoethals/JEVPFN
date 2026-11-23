@@ -458,7 +458,10 @@ def pilot_redundancy(non_text: pd.DataFrame, decision: np.ndarray, *, dataset_id
     result = decision_redundancy(non_text.iloc[rows].reset_index(drop=True),
                                  np.asarray(decision, float)[rows], splits, task_type=task_type,
                                  alpha=alpha)
-    return {"pilot_rows": len(rows), **{f"pilot_{k}": v for k, v in result.items()}}
+    # `rows` of the result counts the pilot rows that have a decision output; keep it apart
+    # from the pilot size so a sparse-text dataset shows how many rows were scored.
+    scored = {("pilot_scored_rows" if k == "rows" else f"pilot_{k}"): v for k, v in result.items()}
+    return {"pilot_rows": len(rows), **scored}
 
 
 

@@ -489,6 +489,28 @@ def test_averaging_contrasts_label_the_jensen_gap_guaranteed_and_the_original_co
     assert auc.improvement == pytest.approx(auc.average - auc.reference)
 
 
+def test_pooled_proper_score_skill_puts_classification_and_regression_on_one_scale():
+    from src.evaluation import study_reports
+
+    def rows(dataset, metric, original, average, mean_single):
+        return [{"dataset": dataset, "provider": "kev", "factor": "wording", "metric": metric,
+                 "presentation": p, "value": v}
+                for p, v in (("original", original), ("average", average), ("mean_single", mean_single))]
+
+    table = pd.DataFrame(rows("C1", "log_loss", 0.50, 0.40, 0.45) + rows("C1", "roc_auc", 0.7, 0.71, 0.7)
+                         + rows("R1", "ranked_probability_score", 0.10, 0.11, 0.12)
+                         + rows("Z1", "log_loss", 0.0, 0.0, 0.0))
+    summary = study_reports.averaging_quality_summary(table).set_index(["contrast", "metric"])
+    skill = summary.loc[("average_vs_original", study_reports.POOLED_SKILL)]
+    # (0.5-0.4)/0.5 = 0.2 and (0.10-0.11)/0.10 = -0.1; a zero loss is undefined, not zero.
+    assert skill.datasets == 2 and skill.improvement == pytest.approx(0.05)
+    assert skill.datasets_improved == 1 and skill.role == "primary_pooled"
+    assert bool(summary.loc[("average_vs_mean_single", study_reports.POOLED_SKILL)].guaranteed)
+    both = pd.concat([table, pd.DataFrame(rows("C1", "ranked_probability_score", 1, 1, 1))])
+    with pytest.raises(ValueError, match="one primary proper score"):
+        study_reports.averaging_quality_summary(both)
+
+
 def test_regression_averaging_quality_reports_ranked_probability_score():
     levels = np.eye(9)
     trials = {n: {v: _measured(levels[min(8, n // 5 + k)]) for v, k in zip(robustness_export.WORDINGS, (0, 1, 0, 1))}

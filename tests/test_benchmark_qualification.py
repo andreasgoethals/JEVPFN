@@ -47,6 +47,8 @@ def reports(monkeypatch):
                 "data_identity": "raw",
                 "text_columns": 1,
                 "split_id": "split",
+                "rows": 10,
+                "outer_folds": 5,
             }
         ],
         "decision_artifacts": [
@@ -82,6 +84,7 @@ def reports(monkeypatch):
                     "classes": n,
                     "feature_case": case,
                     "resume_without_refitting": True,
+                    "records": [f"store#{m}_{task}_{n}_{case}_{i}" for i in range(10)],
                 }
                 for task, n, case in sorted(required_fixture_cases(m))
             ],
@@ -97,6 +100,7 @@ def reports(monkeypatch):
         "feature_artifact_ids": ["joint", "columns"],
         "decision_artifact_checksums": {"joint": "j", "columns": "c"},
         "predictor_columns": 4,
+        "training_rows": 8,
         "roles": [{"role": "outer_test", "rows": 2, "record_id": "test", "prediction_sha256": "sha"}],
     }
     return arm, [preflight, *predictors, profile]

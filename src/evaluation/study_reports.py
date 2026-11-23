@@ -61,6 +61,35 @@ def wording_averaging_summary(table):
     return out[columns]
 
 
+#: Pooled across task types: log loss (classification) or RPS (regression) as a relative skill.
+POOLED_SKILL = "proper_score_skill"
+POOLED_SKILL_ROLE = {POOLED_SKILL: {"role": "primary_pooled", "lower_is_better": False, "convex": True}}
+_TASK_PRIMARY = ("log_loss", "ranked_probability_score")
+
+
+def _pooled_skill(part):
+    """Skill 1 - S_average / S_reference of each dataset's own primary proper score.
+
+    The nine classification datasets use log loss and the nine regression datasets the
+    ranked probability score, so one dimensionless, commensurable value per dataset lets a
+    signed-rank test use all 18 datasets (raw losses differ in scale between tasks). A ratio
+    of proper scores is generally not itself proper (Gneiting & Raftery 2007); it only
+    rescales a paired difference of two fixed forecasts, and its sign equals the raw
+    difference's sign. A zero reference loss leaves the skill undefined (NaN), never zero.
+    """
+    primary = part[part.metric.isin(_TASK_PRIMARY)]
+    keys = ["dataset", "provider", "factor"]
+    if primary.duplicated(keys).any():
+        raise ValueError("A dataset has both log loss and RPS; one primary proper score per task")
+    pooled = primary[keys].copy()
+    reference = primary["reference"].astype(float)
+    pooled["metric"] = POOLED_SKILL
+    pooled["reference"], pooled["average"] = 0.0, (reference - primary["average"]) / reference.where(
+        reference > 0)
+    pooled["difference"] = pooled["improvement"] = pooled["average"]
+    return pooled
+
+
 def averaging_quality_summary(table):
     """Per contrast: averaged minus reference presentation per dataset, then equal dataset weight.
 
@@ -85,6 +114,7 @@ def averaging_quality_summary(table):
         part["difference"] = part["average"] - part["reference"]
         lower = part.metric.map(lambda m: METRIC_ROLES.get(m, {}).get("lower_is_better", True))
         part["improvement"] = np.where(lower, -part["difference"], part["difference"])
+        part = pd.concat([part, _pooled_skill(part)], ignore_index=True)
         part = part.dropna(subset=["improvement"])
         summary = (part.groupby(["provider", "factor", "metric"])
                    .agg(datasets=("dataset", "nunique"), reference=("reference", "mean"),
@@ -93,8 +123,9 @@ def averaging_quality_summary(table):
                         datasets_improved=("improvement", lambda v: int((v > 0).sum())))
                    .reset_index())
         summary["contrast"] = contrast
-        summary["role"] = summary.metric.map(lambda m: METRIC_ROLES.get(m, {}).get("role", "descriptive"))
+        summary["role"] = summary.metric.map(lambda m: (METRIC_ROLES | POOLED_SKILL_ROLE).get(m, {}).get(
+            "role", "descriptive"))
         summary["guaranteed"] = (contrast == "average_vs_mean_single") & summary.metric.map(
-            lambda m: METRIC_ROLES.get(m, {}).get("convex", False))
+            lambda m: (METRIC_ROLES | POOLED_SKILL_ROLE).get(m, {}).get("convex", False))
         out.append(summary)
     return pd.concat(out, ignore_index=True)[columns] if out else pd.DataFrame(columns=columns)

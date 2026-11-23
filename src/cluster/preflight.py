@@ -232,10 +232,30 @@ def runtime_parity():
     }
 
 
-def validate_decision_group(values, missing, width):
-    """Observed text has a valid probability block; absent text has only missing values."""
+def decision_probability_labels(task_type, classes):
+    """Ordered probability columns of one text group: the class vocabulary order, or the
+    nine signed evidence levels lowest first. Ordinal scores (RPS) rely on this order."""
+    if task_type == "binary_classification":
+        return ["p_positive"]
+    if task_type == "multiclass_classification":
+        return [f"p_c{i:03d}" for i in range(len(classes))]
+    if task_type == "regression":
+        return [f"p_{i}" for i in range(9)]
+    raise ValueError("Unknown task")
+
+
+def validate_decision_group(values, missing, width, labels=None):
+    """Observed text has a valid probability block; absent text has only missing values.
+
+    With `labels`, the group's probability columns must also be exactly these, in order.
+    """
     import numpy as np
 
+    if labels is not None and (
+        len(labels) != width
+        or [str(c).rsplit("__", 1)[-1] for c in values.columns] != list(labels)
+    ):
+        raise ValueError("Decision probability columns differ from the ordered class/level schema")
     if values.loc[missing].notna().any().any():
         raise ValueError("Missing text has nonmissing decision features")
     array = values.loc[~missing].to_numpy(dtype=float)
@@ -294,10 +314,9 @@ def decision_feature_checks(cfg):
                         seen = refs.status.reindex(base.index).eq("missing_text")
                         if not seen.equals(expected_missing):
                             raise ValueError("Decision request availability differs from raw text")
-                        width = (len(meta.classes) if meta.task_type == "multiclass_classification"
-                                 else 9 if meta.task_type == "regression" else 1)
+                        labels = decision_probability_labels(meta.task_type, meta.classes)
                         group_values = values.loc[:, [f"__{group}__" in column for column in values]]
-                        validate_decision_group(group_values, expected_missing, width)
+                        validate_decision_group(group_values, expected_missing, len(labels), labels)
                     ids[mode] = manifest["artifact_id"]
                     checksums[ids[mode]] = digest(manifest["sha256"])
                 item.update(

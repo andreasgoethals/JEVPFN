@@ -461,6 +461,12 @@ def test_pilot_rows_are_fixed_label_free_and_independent_of_content():
     shuffled = group_b.pilot_redundancy(non_text.sample(frac=1, random_state=0).reset_index(drop=True),
                                         decision, dataset_id="d", task_type="binary_classification", size=200, seed=7)
     assert shuffled["pilot_rows"] == 200 and shuffled["pilot_r2"] < 0.5
+    # Sparse text: the pilot size stays 200 and the scored count is reported separately.
+    sparse = decision.copy()
+    sparse[::2] = np.nan
+    partial = group_b.pilot_redundancy(non_text, sparse, dataset_id="d", task_type="binary_classification",
+                                       size=200, seed=7)
+    assert partial["pilot_rows"] == 200 and 0 < partial["pilot_scored_rows"] < 200
 
 
 def test_redundancy_is_label_free_and_detects_predictable_outputs():

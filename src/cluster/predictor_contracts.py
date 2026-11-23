@@ -247,7 +247,9 @@ def run(model, *, execute=False):
             def forbidden_factory():
                 raise AssertionError("Completed predictor fold was fitted again")
 
-            assert evaluate_cv(dataset, features, forbidden_factory, **args) == records
+            # An explicit check, not `assert`: `python -O` must not skip the resume contract.
+            if not records or evaluate_cv(dataset, features, forbidden_factory, **args) != records:
+                raise RuntimeError("Completed predictor folds were not reused exactly on resume")
             report["fixtures"].append(
                 {
                     "task_type": dataset.metadata.task_type,
