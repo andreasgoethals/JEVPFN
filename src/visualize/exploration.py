@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 from src.visualize import layout, style
 
@@ -141,10 +142,12 @@ def overview_figures(table, characters_per_token=4.0):
     fig.legend(handles=layout.task_handles(), loc="outside lower center", ncols=3, fontsize=7,
                frameon=False)
     yield fig, "dataset_overview", (
-        "The 20 core MulTaBench text datasets, grouped by task. Empty cells are null, nonfinite "
+        "The 20 core MulTaBench text datasets, grouped by task; the 18 retained datasets are 3 binary, "
+        "6 multiclass and 9 regression tasks. Empty cells are null, nonfinite "
         "or whitespace-only. Tokens per text cell exclude empty cells and use "
         f"ceil(characters/{characters_per_token:g}). Distinct texts count exact duplicates within "
-        "a column. Unique requests and reused slots combine per-column and joint inputs. Each "
+        "a column. Unique requests (per decision model) and reused slots combine per-column and joint "
+        "inputs. Each "
         "column is shaded on its own min–max scale over the 18 retained datasets (log scale for "
         "counts and tokens). "
         "Grey rows (Spotify, Zomato) are audited but excluded from extraction and benchmarks."
@@ -202,7 +205,7 @@ def reuse_figure(summary, long_datasets):
     is_removed = order.dataset_id.isin(removed).to_numpy()
     y = np.arange(len(order))
     fig, axes = plt.subplots(1, 3, figsize=(style.WIDTH_FULL, 4.5), sharey=True,
-                             gridspec_kw={"width_ratios": [1.45, 0.8, 1]})
+                             gridspec_kw={"width_ratios": [1.3, 1, 0.9]})
     ink = np.where(is_removed, style.REMOVED_COLOR, style.MEDIAN_COLOR)
     ax = axes[0]
     ax.hlines(y, order.joint_tokens_p01, order.joint_tokens_p99, color=ink, linewidth=0.8)
@@ -214,17 +217,21 @@ def reuse_figure(summary, long_datasets):
     ax.scatter(order.joint_tokens_max, y, marker="D", s=9, color=style.P95_COLOR, zorder=3)
     ax.set_xscale("log")
     ax.set_xlabel("Text tokens per row, all fields\n(box p25–p75, line p01–p99)")
-    axes[1].scatter(order.total_text_tokens / 1e6, y, s=12, color=ink, zorder=3)
-    axes[1].hlines(y, 1e-3, order.total_text_tokens / 1e6, color=style.GRID_COLOR, linewidth=0.8)
-    axes[1].set_xscale("log")
-    axes[1].set_xlim(0.03, order.total_text_tokens.max() / 1e6 * 3)
-    axes[1].set_xticks([0.1, 1, 10, 100], ["0.1", "1", "10", "100"])
-    axes[1].set_xlabel("Dataset text volume\n(million tokens, log)")
+    per_column = order.per_column_unique_inputs.to_numpy(dtype=float)
+    joint_extra = (order.combined_unique_inputs - order.per_column_unique_inputs).to_numpy(dtype=float)
+    kept = ~is_removed
+    axes[1].barh(y[kept], per_column[kept], height=0.62, color=style.MODE_COLORS["per_column"])
+    axes[1].barh(y[kept], joint_extra[kept], left=per_column[kept], height=0.62,
+                 color=style.MODE_COLORS["joint"])
+    axes[1].barh(y[~kept], (per_column + joint_extra)[~kept], height=0.62, color=style.MISSING_COLOR)
+    axes[1].xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value / 1000:g}k"))
+    axes[1].set_xlabel("Unique requests per decision\nmodel after exact reuse")
     ax = axes[2]
     for mode, column in (("per_column", "per_column_reuse_savings_pct"),
                          ("joint", "joint_reuse_savings_pct")):
         ax.scatter(order[column], y, s=14, color=style.MODE_COLORS[mode], zorder=3,
-                   label={"per_column": "Per-column request", "joint": "Joint request"}[mode])
+                   label={"per_column": "Per-column request",
+                          "joint": "Joint request (not already per-column)"}[mode])
     ax.hlines(y, order.joint_reuse_savings_pct, order.per_column_reuse_savings_pct,
               color=style.GRID_COLOR, linewidth=1.2)
     ax.set_xlim(-3, 103)
@@ -240,8 +247,10 @@ def reuse_figure(summary, long_datasets):
                         removed=set(order.dataset[is_removed]), fontsize=7, separators=False)
     return fig, "text_volume_and_reuse", (
         "Left: distribution of the combined text length of each row (all named fields, empty "
-        "fields omitted; tokens approximated as ceil(characters/4)). Middle: total text volume "
-        "of the dataset before reuse. Right: share of nonempty request slots that repeat an "
-        "earlier identical request and therefore need no new inference, separately for "
-        "per-column and joint inputs. Grey rows are the two excluded datasets."
+        "fields omitted; tokens approximated as ceil(characters/4)). Middle: distinct requests one "
+        "decision model must answer after exact reuse, per-column requests plus joint requests that "
+        "do not equal a single-field request; every decision model receives the same requests. "
+        "Right: share of nonempty request slots that repeat an earlier identical request and "
+        "therefore need no new inference, separately for per-column and joint inputs. Grey rows are "
+        "the two excluded datasets (audited, never extracted)."
     )

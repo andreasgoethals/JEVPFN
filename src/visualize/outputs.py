@@ -1,7 +1,8 @@
-"""A1 (exp01_outputs) figures at final A4 width: output shape, pairwise agreement, consensus.
+"""A1 (exp01_outputs) figures at final A4 width: model profile strip, output shape, pairwise agreement.
 
 Every view uses distinct inputs (``unique_inputs`` weighting). Per-column text fields are
-averaged within a dataset first, so each dataset counts once per request mode.
+averaged within a dataset first, so each dataset counts once per request mode. The former
+consensus heatmap is folded into the profile strip (panel c), 23 November 2026.
 """
 
 from __future__ import annotations
@@ -130,7 +131,7 @@ def pairwise_figures(pairs, mode="joint"):
         rows = frame[frame.task.eq(task)]
         distance = "earth_movers" if task == "regression" else "total_variation"
         means = dataset_balanced(rows, ["model_a", "model_b"], ["top_agreement", distance])
-        names = _models([*rows.model_a, *rows.model_b])
+        names = clustered_order(means, _models([*rows.model_a, *rows.model_b]))
         lower = pd.DataFrame(np.nan, index=names, columns=names)
         upper = lower.copy()
         for row in means.itertuples():
@@ -147,7 +148,9 @@ def pairwise_figures(pairs, mode="joint"):
             values = matrix.to_numpy(float)
             for i, j in zip(*np.isfinite(values).nonzero()):
                 value = values[i, j] * (100 if matrix is lower else 1)
-                ax.text(j, i, fmt.format(value), ha="center", va="center", fontsize=5.5,
+                shown = fmt.format(value)
+                shown = shown[1:] if shown.startswith("0.") else shown
+                ax.text(j, i, shown, ha="center", va="center", fontsize=6.5,
                         color=_ink(image, values[i, j]))
         for k in range(len(names)):
             ax.add_patch(plt.Rectangle((k - .5, k - .5), 1, 1, color=style.FAINT_COLOR, linewidth=0))
@@ -174,42 +177,138 @@ def pairwise_figures(pairs, mode="joint"):
             "(regression: the modal level); an exact tie for the top answer in either model abstains. Upper triangle: "
             + ("mean earth mover's distance between the two nine-level distributions, in level units (0–8)."
                if task == "regression" else "mean total variation distance between the probability vectors (0–1).")
-            + " Similar answers do not imply accuracy."
+            + " Models are ordered by average-linkage hierarchical clustering of 1 − top-answer agreement "
+            "(optimal leaf order), so similar models sit next to each other. Similar answers do not imply accuracy."
         )
 
 
-def consensus_figure(loo, mode="joint"):
-    """How often does each model give the answer of the other models' mean distribution?"""
-    if loo.empty or "top_agreement" not in loo:
+def clustered_order(means: pd.DataFrame, names: list[str]) -> list[str]:
+    """Average-linkage clustering of 1 - top-answer agreement (optimal leaf order)."""
+    from scipy.cluster.hierarchy import leaves_list, linkage, optimal_leaf_ordering
+    from scipy.spatial.distance import squareform
+
+    if len(names) < 3:
+        return names
+    distance = pd.DataFrame(np.nan, index=names, columns=names)
+    for row in means.itertuples():
+        if row.model_a in distance.index and row.model_b in distance.index:
+            distance.loc[row.model_a, row.model_b] = distance.loc[row.model_b, row.model_a] = 1 - row.top_agreement
+    values = distance.to_numpy(float)
+    np.fill_diagonal(values, 0)
+    if not np.isfinite(values).all():
+        fill = np.nanmax(values) if np.isfinite(values).any() else 1.0
+        values = np.where(np.isfinite(values), values, fill)
+    condensed = squareform(values, checks=False)
+    tree = optimal_leaf_ordering(linkage(condensed, method="average"), condensed)
+    return [names[i] for i in leaves_list(tree)]
+
+
+#: A1 profile strip panels: (metric, letter, x label, fixed x-limits, dotted reference line).
+PROFILE_PANELS = (
+    ("mean_top_probability", "a", "Top probability", (0, 1), None),
+    ("mean_normalized_entropy", "b", "Normalized entropy", (0, 1), None),
+    ("consensus_agreement", "c", "Same top answer\nas consensus", (0, 1), None),
+    ("classification_auc", "d", "ROC-AUC\n(classification)", None, 0.5),
+    ("regression_spearman", "e", "Spearman ρ\n(regression)", None, 0.0),
+)
+FAMILY_LABELS = {"decoder_pointer_head": "Decoder, pointer head", "decoder_lm_head": "Decoder, LM-head labels",
+                 "bidirectional_encoder": "Bidirectional backbone", "other": "Other backbone",
+                 "undisclosed": "Hosted, undisclosed", "not stated": "Not stated"}
+
+
+NOT_STATED_MARKER = "$?$"
+
+
+def family_marker(family):
+    """Architecture marker; a family no local source states is marked with a question mark."""
+    return style.ARCHITECTURE_MARKERS.get(family, NOT_STATED_MARKER)
+
+
+def _hollow(marker):
+    return marker not in ("x", NOT_STATED_MARKER)
+
+
+def family_handles(families, **kwargs):
+    return [Line2D([], [], ls="none", marker=family_marker(f), ms=4, color=style.PREDICTOR_INK,
+                   mfc="none" if _hollow(family_marker(f)) else style.PREDICTOR_INK,
+                   label=FAMILY_LABELS.get(f, f), **kwargs) for f in dict.fromkeys(families)]
+
+
+def model_profile_strip(values: pd.DataFrame, properties: pd.DataFrame, *, order=None):
+    """A1 summary: one row per decision model, five panels of per-dataset values (joint requests).
+
+    ``values`` is `group_a.a1_dataset_values`; ``properties`` `model_properties.profile_table`.
+    """
+    from src.evaluation import group_a
+
+    if values.empty:
         return
-    frame = per_dataset(loo, mode, ["top_agreement"])
-    names = _models(frame.provider)
-    order, tasks = _dataset_order(frame)
-    matrix = frame.pivot(index="dataset", columns="provider", values="top_agreement").reindex(index=order, columns=names)
-    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.3 + .2 * len(order))))
-    values = matrix.to_numpy(float)
-    image = ax.imshow(values, cmap=style.AGREEMENT_CMAP, vmin=0, vmax=1, aspect="auto")
-    for i, j in zip(*np.isfinite(values).nonzero()):
-        ax.text(j, i, f"{100 * values[i, j]:.0f}", ha="center", va="center", fontsize=6.5,
-                color=_ink(image, values[i, j]))
-    layout.dataset_axis(ax, order, tasks, separators=False, fontsize=7.5)
-    for position in range(1, len(tasks)):
-        if tasks[position] != tasks[position - 1]:
-            ax.axhline(position - .5, color="white", linewidth=2.5)
-    ax.set_xticks(range(len(names)), [short(n) for n in names], rotation=40, ha="left", rotation_mode="anchor",
-                  fontsize=7)
-    ax.xaxis.tick_top()
-    for tick, name in zip(ax.get_xticklabels(), names):
-        tick.set_color(style.DECISION_COLORS.get(name, style.TEXT_COLOR))
-    ax.tick_params(length=0)
-    for spine in ax.spines.values():
+    providers = order or group_a.model_order(values.provider.unique(), properties)
+    families = [group_a.family_of(p, properties) for p in providers]
+    sizes = (properties.set_index("provider").parameters_billion if not properties.empty
+             else pd.Series(dtype=float))
+    counts = {m: values[values.metric.eq(m)].dataset_id.nunique() for m, *_ in PROFILE_PANELS}
+    height = min(style.MAX_HEIGHT, 1.55 + 0.18 * len(providers))
+    fig, axes = plt.subplots(1, 6, sharey=True, figsize=(style.WIDTH_FULL, height),
+                             gridspec_kw={"width_ratios": [0.36, 1, 1, 1, 1, 1]})
+    key = axes[0]
+    for i, (provider, family) in enumerate(zip(providers, families)):
+        marker = family_marker(family)
+        key.plot(0.2, i, ls="none", marker=marker, ms=4, color=style.PREDICTOR_INK,
+                 mfc="none" if _hollow(marker) else style.PREDICTOR_INK, mew=0.9)
+        size = pd.to_numeric(sizes.get(provider), errors="coerce")
+        key.text(0.5, i, f"{size:.0f}B" if pd.notna(size) else "–", ha="left", va="center", fontsize=7,
+                 color=style.QUANTITY_COLOR)
+    key.set_xlim(0, 1.3)
+    key.set_xticks([])
+    key.set_yticks(range(len(providers)), [short(p) for p in providers], fontsize=7.5)
+    for tick, provider in zip(key.get_yticklabels(), providers):
+        tick.set_color(style.DECISION_COLORS.get(provider, style.TEXT_COLOR))
+    key.set_ylim(len(providers) - 0.5, -0.5)
+    for spine in key.spines.values():
         spine.set_visible(False)
-    fig.colorbar(image, ax=ax, shrink=.6, ticks=[0, .25, .5, .75, 1], format=PercentFormatter(1)).set_label(
-        "Same top answer as the consensus", fontsize=7.5)
-    yield fig, f"consensus_agreement_{mode}", (
-        f"Agreement of each decision model with the leave-one-out consensus on {MODE_LABELS[mode]}: for every distinct "
-        "input, the consensus is the equal-weight mean probability distribution of all other models that received it "
-        "(at least two). Cells give the percentage of inputs on which the model's most probable answer equals the "
-        "consensus's (regression: modal level); a tie on either side abstains. Consensus is not truth, and related "
-        "model families (for example three Qwen3.8-27B derivatives) can dominate it."
+    key.tick_params(axis="y", length=0)
+    rules = [i for i in range(1, len(families)) if families[i] != families[i - 1]]
+    for position in rules:
+        key.axhline(position - 0.5, color=style.GRID_COLOR, lw=0.8, zorder=0)
+    for ax, (metric, letter, xlabel, limits, reference) in zip(axes[1:], PROFILE_PANELS):
+        frame = values[values.metric.eq(metric)]
+        for i, provider in enumerate(providers):
+            v = frame.loc[frame.provider.eq(provider), "value"].dropna().to_numpy(float)
+            if not len(v):
+                continue
+            jitter = np.linspace(-0.22, 0.22, len(v)) if len(v) > 1 else np.zeros(1)
+            ax.scatter(v, i + jitter, s=5, color=DOT_COLOR, alpha=0.6, linewidths=0, zorder=2)
+            ax.plot([np.median(v)] * 2, [i - 0.36, i + 0.36], color=style.MEDIAN_COLOR, lw=1.6, zorder=3)
+        if limits:
+            ax.set_xlim(*limits)
+        elif not frame.empty:
+            low = np.nanmin(frame.value.to_numpy(float))
+            ax.set_xlim(min(reference - 0.1, np.floor(low * 10) / 10), 1)
+        if reference is not None:
+            ax.axvline(reference, color=style.WINDOW_COLOR, lw=0.7, ls=":", zorder=1)
+        ax.set_title(f"{letter}  N = {counts[metric]}", loc="left", fontsize=7.5)
+        ax.set_xlabel(xlabel, fontsize=7.5)
+        ax.tick_params(axis="x", labelsize=7)
+        ax.tick_params(axis="y", length=0)
+        layout.light_grid(ax)
+        for position in rules:
+            ax.axhline(position - 0.5, color=style.GRID_COLOR, lw=0.8, zorder=0)
+    handles = family_handles(families)
+    handles += [Line2D([], [], ls="none", marker="o", ms=3, color=DOT_COLOR, label="One dataset"),
+                Line2D([], [], color=style.MEDIAN_COLOR, lw=1.6, label="Median over datasets")]
+    fig.legend(handles=handles, loc="outside lower center", ncol=4, frameon=False, fontsize=7,
+               columnspacing=1.0, handletextpad=0.3)
+    yield fig, "model_profile_strip", (
+        f"Profile of {len(providers)} decision models on joint requests (rows, grouped by architecture family as "
+        "marked in the first column, with the verified parameter count; – = not stated). Each grey dot is one "
+        "dataset and the dark bar the median over datasets; N is the number of datasets per panel. (a) mean "
+        "probability of the most probable answer and (b) Shannon entropy divided by the log of the number of "
+        "options, over each dataset's distinct inputs (regression: nine ordered evidence levels). (c) share of "
+        "distinct inputs whose most probable answer equals that of the leave-one-out consensus (equal-weight mean "
+        "distribution of all other models; ties abstain). (d) stand-alone ROC-AUC (binary) or macro one-vs-rest "
+        "ROC-AUC (multiclass) of the stored joint-request probabilities on the classification datasets (dotted "
+        "line 0.5). (e) Spearman correlation between the expected evidence level and the target on the regression "
+        "datasets (dotted line 0; rank only, log loss is undefined there). Nothing is fitted or recalibrated, and "
+        "classification and regression quality are not pooled."
     )

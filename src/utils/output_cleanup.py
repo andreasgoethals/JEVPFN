@@ -65,14 +65,16 @@ def classify(relative):
         return "reports"
     if parts[0] in KINDS:
         return parts[0]
-    return parts[1] if len(parts) > 1 and parts[1] in KINDS else "other"
+    # `<folder>/<kind>/...` or, for a letter group, `<group>/<folder>/<kind>/...`.
+    offset = 2 if parts[0] in structure.GROUPS else 1
+    return parts[offset] if len(parts) > offset and parts[offset] in KINDS else "other"
 
 
 def phase_of(relative):
     from src.utils import structure
 
     # Current registry folders (phase trees and figure/notebook-record folders), including
-    # routed sub-trees (03_exp0b -> experiment_0).
+    # routed sub-trees (03_exp0b -> experiment_0) and letter groups (B/exp04_... -> experiment_1).
     for start in range(len(relative.parts) - 1):
         owned = structure.registry().owner_of(relative.parts[start:-1])
         if owned:
@@ -146,19 +148,19 @@ def plan(*, tier="auto", phases=(), kinds=(), pattern="*", older_than_days=None,
 def figure_records(root, pdf):
     """(`_figures.json`, `_report.txt`) of the notebook that drew `pdf`, or None.
 
-    `figures/<group>/[<stem>/]x.pdf`: the manifest sits beside the PDFs and the notebook's
-    report in `<folder>/results/notebook/[<stem>/]` (`structure.figure_folder`).
+    `figures/<notebook group>/<name>/[<stem>/]x.pdf`: the manifest sits beside the PDFs and the
+    notebook's report in `<folder path>/results/notebook/[<stem>/]` (`structure.figure_folder`).
     """
     root, pdf = Path(root), Path(pdf)
     if not pdf.is_relative_to(root):
         return None
     parts = pdf.parent.relative_to(root).parts
-    if parts[:1] != (structure.FIGURES,) or len(parts) < 2:
+    if parts[:1] != (structure.FIGURES,) or len(parts) < 3:
         return None
-    folder = structure.figure_folder(parts[1])
+    folder = structure.figure_folder(f"{parts[1]}/{parts[2]}")
     if folder is None:
         return None
-    report = (root / folder / "results" / structure.NOTEBOOK_RECORDS).joinpath(*parts[2:])
+    report = (root / folder / "results" / structure.NOTEBOOK_RECORDS).joinpath(*parts[3:])
     return pdf.parent / "_figures.json", report / "_report.txt"
 
 

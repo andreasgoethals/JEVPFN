@@ -322,8 +322,10 @@ def test_group_c_arm_counts():
     assert all(a["provider"] == "strands" and a["view"] == "probabilities" for a in one
                if a["feature_set"] != "non_text_plus_hidden" and a["phase"] == "representations")
     assert {a["adaptation_cell"] for a in one if a["phase"] == "rq3"} == set(sa.CELLS)
-    assert [(a["model"], a["dataset_id"], a["feature_set"]) for a in plan if a["width_status"] == "unsupported_width"] == [
-        ("kumo_tabular", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_per_column_plus_hidden")]
+    assert not [a for a in plan if a["width_status"] == "unsupported_width"]
+    assert [(a["model"], a["dataset_id"], a["feature_set"], a["kumo_max_columns_override"])
+            for a in plan if a.get("kumo_max_columns_override")] == [
+        ("kumo_tabular", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_per_column_plus_hidden", 548)]
     fits = sa.training_plan()
     assert len(fits) == 810 and sum(f["cell"] != "head_only" for f in fits) == 540
     assert not any(f["execution_enabled"] for f in fits)
@@ -356,8 +358,8 @@ def test_exports_wait_when_absent(tmp_path):
     frames, receipt = group_c.read("C1", tmp_path / "missing.zip")
     assert frames == {} and receipt["status"] == "awaiting_export"
     assert group_c.export_path("C2").parts[-3:] == ("results", "group_c", "c2_adaptation.zip")
-    assert "exp10_adaptation" in group_c.export_path("C2").parts
-    assert "exp09_representations" in group_c.export_path("C1").parts
+    assert group_c.export_path("C2").parts[-5:-3] == ("C", "exp11_adaptation")
+    assert group_c.export_path("C1").parts[-5:-3] == ("C", "exp10_representations")
 
 
 def test_group_c_slurm_scripts_use_b200_without_a100_and_lf():
@@ -366,5 +368,5 @@ def test_group_c_slurm_scripts_use_b200_without_a100_and_lf():
         assert b"\r" not in text and b"--partition=gpu_b200" in text and b"a100" not in text.lower()
     export = Path(paths.REPO_ROOT / "scripts/slurm/group_c_export.slurm").read_bytes()
     assert b"batch_graniterapids" in export and b"\r" not in export
-    # C2's log belongs to exp10_adaptation: the documented submission overrides the C1 default.
-    assert b"--output=output_JEVPFN/exp10_adaptation/logs/" in export
+    # C2's log belongs to C/exp11_adaptation: the documented submission overrides the C1 default.
+    assert b"--output=output_JEVPFN/C/exp11_adaptation/logs/" in export

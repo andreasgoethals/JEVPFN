@@ -1,5 +1,13 @@
 """Move an existing output tree into the current layout (config/structure.yaml).
 
+Layout v3 (23-11-2026): research folders move into letter groups (`exp04_decision_features/`
+-> `B/exp04_decision_features/`), Group B4/C are renumbered (`exp11_data_efficiency/` ->
+`B/exp09_data_efficiency/`, `exp09_representations/` -> `C/exp10_representations/`,
+`exp10_adaptation/` -> `C/exp11_adaptation/`), `synthesis/` -> `05_synthesis/`, and figure
+folders move to `figures/<notebook group>/<name>/` (`figures/00_data/` ->
+`figures/general/1_data_and_questions/`, `figures/exp04_decision_features/` ->
+`figures/B/exp04_decision_features/`).
+
 The 18-11-2026 layout was revised on 19-11-2026: one flat notebook per folder, `exp09_adaptation`
 renamed `exp10_adaptation`, and records of the four merged adaptation notebooks archived
 under `archives/layout_20261119/`. The final 19-11-2026 layout keeps ONE figures folder,
@@ -124,6 +132,12 @@ def plan(root: Path) -> dict:
             conflicts.append(f"link: {relative}")
             return
         target = structure.translate_output(relative)
+        if (relative.parts[0] == structure.FIGURES and path.is_dir() and target is not None
+                and target != relative and not any(path.iterdir())):
+            # An empty previous figure-record folder (e.g. `figures/exp03_geometry/geometry/`)
+            # would otherwise claim its notebook's whole new figure folder; removed afterwards.
+            empty.append(relative)
+            return
         if path.is_file():
             if target is None:
                 unmapped.append(relative.as_posix())
@@ -287,6 +301,7 @@ def remove_empty_legacy_directories(root: Path, sources=(), empty=()) -> tuple[l
     `figures/<folder>/<notebook>/` that never held a figure).
     """
     root = Path(root)
+    reg = structure.registry()
     candidates = {root / e for e in empty}
     for source in sources:
         for parent in (root / source).parents:
@@ -296,7 +311,11 @@ def remove_empty_legacy_directories(root: Path, sources=(), empty=()) -> tuple[l
     for directory in root.rglob("*"):
         if directory.is_dir() and not _linked(directory):
             relative = PurePosixPath(directory.relative_to(root).as_posix())
-            legacy = (relative.parts[0] in {"rq1", "rq2", "rq3", "regression_readout"}
+            # Flat folders of 18-23-11-2026; figure folders were `figures/<folder>/` then.
+            flat = set(reg.flat_paths)
+            legacy = (relative.parts[0] in {"rq1", "rq2", "rq3", "regression_readout", *flat}
+                      or (relative.parts[0] == structure.FIGURES and len(relative.parts) >= 2
+                          and relative.parts[1] in flat | {e.folder for e in reg.entries})
                       or structure.legacy_phase(relative.parts[0]) is not None
                       or (len(relative.parts) >= 2 and (relative.parts[1] in structure.LEGACY_GROUPS
                                                          or structure.legacy_phase(relative.parts[1])))

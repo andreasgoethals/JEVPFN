@@ -23,7 +23,7 @@ def _metadata(entry):
 
 
 def regression_width_table():
-    """Catalog widths, plus conservative Kumo expansion; actual fits still check width."""
+    """Catalog widths, plus conservative Kumo expansion; fits widen Kumo past 500 columns."""
     cfg = load_yaml("experiment_1/main")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []

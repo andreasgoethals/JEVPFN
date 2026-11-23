@@ -1,7 +1,7 @@
 #!/bin/bash -l
 # Group C, C1: Strands hidden states (3 positions x layers 12/24, float16) for ONE dataset.
 # Exactly the frozen feature-creation requests; resumable; publishes manifest.json when complete.
-# Requires representations.extraction.enabled: true in config/exp09_representations.
+# Requires representations.extraction.enabled: true in config/C/representations.yaml.
 #SBATCH --job-name=jevpfn-c1-hidden
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=mindwell
@@ -11,8 +11,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --output="output_JEVPFN/exp09_representations/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/exp09_representations/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/C/exp10_representations/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/C/exp10_representations/logs/%x_%j.log"
 set -euo pipefail
 source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=representations

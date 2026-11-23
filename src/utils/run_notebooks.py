@@ -1,18 +1,19 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only exp04_decision_features
+    python -m src.utils.run_notebooks --only B/exp04_decision_features
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
-    notebooks/<folder>.ipynb                         one flat notebook per folder
-    output_JEVPFN/figures/<notebook>/*.pdf           written by the notebooks (+ _figures.json)
+    notebooks/<group>/<name>.ipynb                   group: general, A, B, C (paper/ reserved)
+    output_JEVPFN/figures/<group>/<name>/*.pdf       written by the notebooks (+ _figures.json)
     output_JEVPFN/figures/CAPTIONS.md                all figure captions
     output_JEVPFN/All_Results.md                     every notebook's printed summary
-    output_JEVPFN/<folder>/{logs,manifests,results}/notebook/   run logs, _run.json, _report.txt
-    output_JEVPFN/<exp folder>/manifests/reports.json   pointers into the two documents
+    output_JEVPFN/[<group>/]<folder>/{logs,manifests,results}/notebook/   _run.json, _report.txt, logs
+    output_JEVPFN/[<group>/]<exp folder>/manifests/reports.json   pointers into the two documents
 
-Folders and notebook IDs (the folder name) come from config/structure.yaml; previous IDs such
-as `exp04_decision_features/decisions` or `rq2/01_decisions` remain accepted aliases.
+Folders and notebook IDs (`<group>/<name>`) come from config/structure.yaml; previous IDs such
+as `exp04_decision_features`, `exp04_decision_features/decisions` or `rq2/01_decisions` remain
+accepted aliases.
 
 Each notebook executes in a separate Python subprocess: matplotlib's figure registry must
 never be shared between notebooks. Lightweight coordinator threads launch those subprocesses,
@@ -24,8 +25,9 @@ outputs are saved back into its .ipynb, with cell progress printed during execut
 THE RUNNER DOES NOT SAVE FIGURES; each notebook does, through `FigureSaver`, so an interactive
 *Run All* produces exactly the same PDFs. The runner adds parallelism and the two documents.
 
-NOTEBOOKS ARE DISCOVERED, NOT LISTED, alphabetically — which is also the order in both summary
-documents. A hard-coded list silently stops covering a notebook someone added.
+NOTEBOOKS ARE DISCOVERED, NOT LISTED, then ordered as the registry lists them (CAPTIONS.md
+follows that order; All_Results.md is alphabetical). A notebook the registry does not declare,
+or one outside `notebooks/<group>/`, is refused rather than silently skipped.
 """
 
 from __future__ import annotations
@@ -95,15 +97,28 @@ class NotebookResult:
 
 
 def discover(names: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    """Discover flat `notebooks/<folder>.ipynb` IDs in registry order; accept previous IDs."""
-    nested = sorted(p.relative_to(notebooks_dir()).as_posix() for p in notebooks_dir().rglob("*.ipynb")
-                    if p.parent != notebooks_dir() and ".ipynb_checkpoints" not in p.parts)
-    if nested:
-        raise ValueError(f"Notebooks must be flat (notebooks/<folder>.ipynb); found {nested}")
-    found = tuple(sorted(p.stem for p in notebooks_dir().glob("*.ipynb")))
-    folders = layout().folders
-    found = tuple(sorted(found, key=lambda n: (
-        folders.index(n.split("/")[0]) if n.split("/")[0] in folders else len(folders), n)))
+    """Discover `notebooks/<group>/<name>.ipynb` IDs in registry order; accept previous IDs.
+
+    Groups are the registry's `notebook_groups`; a notebook outside them, nested deeper or not
+    declared in config/structure.yaml is refused.
+    """
+    root = notebooks_dir()
+    groups = layout().notebook_groups
+    ids = [n.id for n in layout().notebooks]
+    found, stray = [], []
+    for p in root.rglob("*.ipynb"):
+        relative = p.relative_to(root)
+        if ".ipynb_checkpoints" in relative.parts:
+            continue
+        notebook = relative.with_suffix("").as_posix()
+        if len(relative.parts) != 2 or relative.parts[0] not in groups or notebook not in ids:
+            stray.append(relative.as_posix())
+        else:
+            found.append(notebook)
+    if stray:
+        raise ValueError("Notebooks must be registered in config/structure.yaml as "
+                         f"notebooks/<group>/<name>.ipynb ({', '.join(groups)}); found {sorted(stray)}")
+    found = tuple(sorted(found, key=ids.index))
     if not names:
         return found
     selected = []
@@ -305,7 +320,7 @@ def write_all_results(notebooks: tuple[str, ...]) -> Path:
     atomic_text(path, "\n".join(lines))
     for group in sorted(_experiment_folders(notebooks)):
         members = tuple(name for name in names if notebook_folder(name) == group)
-        # No per-folder report copies: each experiment folder (e.g. 03_exp0b) indexes the
+        # No per-folder report copies: each experiment folder (e.g. B/exp04_...) indexes the
         # project documents and its notebook's own complete `_report.txt` and figures.
         write_json(
             report_index_path(group),

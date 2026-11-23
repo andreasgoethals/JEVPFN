@@ -24,6 +24,7 @@ rq2:
 - shared_baseline_and_splits
 - training_defined_subgroups
 - full_fold_profiles_for_each_task_and_largest_class_vocabulary
+- kumo_max_columns_override_b200_profile
 rq2_regression_features:
 - nine_probability_order
 - primary_probability_view_identity

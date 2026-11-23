@@ -8,8 +8,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32000M
 #SBATCH --time=02:00:00
-#SBATCH --output="output_JEVPFN/exp02_robustness/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/exp02_robustness/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/A/exp02_robustness/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/A/exp02_robustness/logs/%x_%j.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh

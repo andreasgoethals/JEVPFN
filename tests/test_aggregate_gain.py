@@ -1,12 +1,10 @@
 """Headroom-normalised gains, dataset bootstrap and predictor ranking agreement."""
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 
 from src.evaluation import aggregate
-from src.visualize import aggregate as views
 
 TEXT = {"BIN_A": 2, "BIN_B": 3, "BIN_ONE": 1, "REG_A": 2}
 
@@ -123,9 +121,6 @@ def test_kendall_tau_b_on_constructed_rankings():
     assert tau[("catboost", "tabpfn_3_5")] == pytest.approx(-1.0)
     assert mean_tau == pytest.approx(-1 / 3)
     assert aggregate.kendall_tau_b([1, 2, 2], [1, 2, 3]) == pytest.approx(2 / np.sqrt(6))
-    figures = list(views.ranking_agreement_figures(pairs))
-    assert [name for _, name, _ in figures] == ["ranking_agreement"]
-    plt.close("all")
 
 
 def test_empty_input_gives_empty_frames_and_no_figure():
@@ -134,15 +129,3 @@ def test_empty_input_gives_empty_frames_and_no_figure():
     assert table.empty and list(table.columns) == aggregate.SUMMARY_COLUMNS
     pairs, mean_tau = aggregate.ranking_stability(empty, text_columns=TEXT)
     assert pairs.empty and np.isnan(mean_tau)
-    assert list(views.gain_forest_figures(table)) == []
-    assert list(views.ranking_agreement_figures(pairs)) == []
-
-
-def test_forest_draws_one_panel_per_predictor_with_intervals():
-    paired = frame(*(arm(d, model=m, feature_set=f) for d in ["BIN_A", "BIN_B"]
-                     for m in ["catboost", "linear"] for f in aggregate.DECISION_MODES))
-    figures = list(views.gain_forest_figures(summary_of(paired, n_boot=50)))
-    assert [name for _, name, _ in figures] == ["normalized_gain_headline", "normalized_gain_decision_modes"]
-    assert [ax.get_title() for ax in figures[0][0].axes if ax.get_visible() and ax.get_title()] == [
-        "CatBoost", "Linear/logistic"]
-    plt.close("all")

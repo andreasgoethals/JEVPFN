@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -104,8 +105,8 @@ def test_failed_gpfs_stage_output_cleaned_without_touching_assets(output, monkey
 
 def test_partial_figure_cleanup_invalidates_combined_reports(output):
     root = paths.outputs_dir()
-    report = root / "exp04_decision_features/results/notebook/_report.txt"
-    for name in ("figures/exp04_decision_features/01_plot.pdf", "figures/CAPTIONS.md",
+    report = root / "B/exp04_decision_features/results/notebook/_report.txt"
+    for name in ("figures/B/exp04_decision_features/01_plot.pdf", "figures/CAPTIONS.md",
                  "All_Results.md", report.relative_to(root).as_posix()):
         file = root / name
         file.parent.mkdir(parents=True, exist_ok=True)
@@ -119,7 +120,7 @@ def test_partial_figure_cleanup_invalidates_combined_reports(output):
 def test_partial_pdf_cleanup_preserves_only_surviving_captions(output):
     import json
     root = paths.outputs_dir()
-    figure_dir = root / "figures/00_data/nb"
+    figure_dir = root / "figures/general/1_data_and_questions/nb"
     figure_dir.mkdir(parents=True)
     for stem in ("01_old", "02_keep"):
         (figure_dir / f"{stem}.pdf").write_text("pdf")
@@ -134,11 +135,16 @@ def test_partial_pdf_cleanup_preserves_only_surviving_captions(output):
 
 def test_figure_records_pair_figures_with_notebook_reports(tmp_path):
     root = tmp_path / "output_JEVPFN"
-    assert cleanup.figure_records(root, root / "figures/exp01_outputs/01_a.pdf") == (
-        root / "figures/exp01_outputs/_figures.json",
-        root / "exp01_outputs/results/notebook/_report.txt")
-    assert cleanup.figure_records(root, root / "figures/00_data/nb/01_a.pdf") == (
-        root / "figures/00_data/nb/_figures.json",
+    assert cleanup.figure_records(root, root / "figures/A/exp01_outputs/01_a.pdf") == (
+        root / "figures/A/exp01_outputs/_figures.json",
+        root / "A/exp01_outputs/results/notebook/_report.txt")
+    data = "figures/general/1_data_and_questions"
+    assert cleanup.figure_records(root, root / f"{data}/nb/01_a.pdf") == (
+        root / f"{data}/nb/_figures.json",
         root / "00_data/results/notebook/nb/_report.txt")
     assert cleanup.figure_records(root, root / "figures/unknown_group/01_a.pdf") is None
+    assert cleanup.figure_records(root, root / "figures/exp01_outputs/01_a.pdf") is None  # Flat layout.
+    assert cleanup.classify(Path("B/exp04_decision_features/logs/a.log")) == "logs"
+    assert cleanup.classify(Path("01_exp0a/manifests/a.json")) == "manifests"
+    assert cleanup.phase_of(Path("B/exp09_data_efficiency/results/a.json")) == "data_efficiency"
     assert cleanup.figure_records(root, root / "01_exp0a/results/a.pdf") is None

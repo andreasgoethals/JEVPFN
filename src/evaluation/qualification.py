@@ -32,6 +32,28 @@ PHASE_CONFIGS = {
 #: copies of profiled pipelines too: C1 is per-group PCA of precomputed vectors (as frozen
 #: embeddings) and C2 adds a B1-width joint probability block.
 PROFILED_PHASES = ("experiment_1", "experiment_2", "experiment_3", "experiment_4")
+#: Declared 0B case (23 Nov 2026): the widest Kumo arm above the default 500-column recipe
+#: (Rotten Tomatoes decision + E5, 557 columns) runs a full-fold profile on a real B200 with
+#: every column per estimator, recording peak GPU memory and fold time.
+KUMO_OVERRIDE_PROFILE = "kumo_max_columns_override_b200_profile"
+#: Longest Mindwell bucket (benchmark_sizing.TIME_BUCKETS_HOURS[-1]); five folds must fit.
+LONGEST_JOB_SECONDS = 72 * 3600
+
+
+def kumo_override_arm(arms):
+    """The widest planned Kumo arm whose recipe limit is widened beyond 500 columns."""
+    from src.evaluation.models import KUMO_RECIPE_COLUMNS
+
+    wide = [
+        a for a in arms
+        if a["model"] == "kumo_tabular" and a["phase"] in PROFILED_PHASES
+        and a.get("width_status") != "unsupported_width" and a["predictor_columns"] > KUMO_RECIPE_COLUMNS
+    ]
+    if not wide:
+        return None
+    rows = {e["id"]: e["paper_summary"]["rows"] for e in load_catalog()["datasets"]}
+    # First maximum in plan order, as the width extreme of profile_plan selects it: one profile.
+    return max(wide, key=lambda a: (a["predictor_columns"], rows[a["dataset_id"]]))
 
 
 def decision_selector(config, provider):
@@ -139,6 +161,11 @@ def profile_plan(arms=None):
                 paths_to_check[family] = (key, arm)
         for _, arm in paths_to_check.values():
             selected[digest(arm)] = arm
+    # Declared, not left to the width extremes: the real-B200 memory/time check for the
+    # widened Kumo recipe.
+    wide = kumo_override_arm([a for group in groups.values() for a in group])
+    if wide is not None:
+        selected[digest(wide)] = wide
     return list(selected.values())
 
 
@@ -220,6 +247,8 @@ def save_profile(arm, dataset, features, runtime, records):
         body = json.loads(record.read_text(encoding="utf-8"))
         meta = body["metadata"]
         role = meta["prediction_role"]
+        if role == "outer_test":
+            outer = body
         fold_ids.add(meta["fold_recipe_id"])
         positions = roles.pop(role)
         table = read_predictions(record)
@@ -247,6 +276,14 @@ def save_profile(arm, dataset, features, runtime, records):
         raise ValueError("Full-fold profile lacks required prediction roles")
     if len(fold_ids) != 1:
         raise ValueError("0B roles belong to different completed folds")
+    measured = profile_resources(outer)
+    overrides = kumo_overrides(records)
+    from src.evaluation.models import KUMO_RECIPE_COLUMNS
+
+    if arm["model"] == "kumo_tabular" and arm["predictor_columns"] > KUMO_RECIPE_COLUMNS and (
+        not overrides or min(overrides) < arm["predictor_columns"]
+    ):
+        raise ValueError("Wide Kumo profile lacks its recorded kumo_max_columns_override")
     report = {
         "status": "full_fold_profile_passed",
         "fold_recipe_id": fold_ids.pop(),
@@ -262,6 +299,8 @@ def save_profile(arm, dataset, features, runtime, records):
         "training_rows": len(fold["train"]),
         "predictor_columns": arm["predictor_columns"],
         "roles": verified,
+        "resources": measured,
+        "kumo_max_columns_override": max(overrides) if overrides else None,
         "created_at": datetime.now(UTC).isoformat(),
     }
     write_json(
@@ -269,6 +308,56 @@ def save_profile(arm, dataset, features, runtime, records):
         / f"profile_{arm['model']}_{uuid4().hex}.json",
         report,
     )
+
+
+def kumo_overrides(records):
+    """Expanded widths recorded by KumoBackend whenever it widened SelectColumns(500)."""
+    widths = []
+    for record in records:
+        for item in json.loads(record.read_text(encoding="utf-8")).get("warnings", []):
+            message = str(item.get("message", ""))
+            if message.startswith("kumo_max_columns_override="):
+                widths.append(int(message.split("=", 1)[1].split(":", 1)[0]))
+    return widths
+
+
+def profile_resources(record):
+    """Peak memory and outer-fold time of the profiled fit, plus the GPU it ran on."""
+    timing, resources = record.get("timing", {}), record.get("resources", {})
+    device = str(timing.get("device") or "cpu")
+    gpu_name = gpu_total = None
+    if device.startswith("cuda"):
+        import torch
+
+        gpu_name = torch.cuda.get_device_name(device)
+        gpu_total = int(torch.cuda.get_device_properties(device).total_memory)
+    return {
+        "device": device,
+        "gpu_name": gpu_name,
+        "gpu_total_bytes": gpu_total,
+        "peak_gpu_allocated_bytes": resources.get("peak_gpu_allocated_bytes"),
+        "peak_gpu_reserved_bytes": resources.get("peak_gpu_reserved_bytes"),
+        "peak_rss_bytes": resources.get("peak_rss_bytes"),
+        "device_workers": resources.get("device_workers"),
+        "fold_wall_seconds": timing.get("measured_wall_seconds"),
+    }
+
+
+def verify_kumo_override_profile(report, planned):
+    """Real B200, every column kept, exclusive device, measured memory, five folds in time."""
+    measured = report.get("resources") or {}
+    seconds, reserved = measured.get("fold_wall_seconds"), measured.get("peak_gpu_reserved_bytes")
+    total = measured.get("gpu_total_bytes")
+    if (
+        not isinstance(report.get("kumo_max_columns_override"), int)
+        or report["kumo_max_columns_override"] < planned["predictor_columns"]
+        or "B200" not in str(measured.get("gpu_name") or "")
+        or measured.get("device_workers") != 1
+        or type(reserved) is not int or type(total) is not int or not 0 < reserved <= total
+        or not isinstance(seconds, int | float) or seconds <= 0
+        or 1.5 * 5 * seconds + 1800 > LONGEST_JOB_SECONDS
+    ):
+        raise ValueError(f"0B lacks a passing {KUMO_OVERRIDE_PROFILE} for {planned['dataset_id']}")
 
 
 def _complete(rows, keys, expected, label):
@@ -447,7 +536,9 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
     profiles = {digest(r["arm"]): r for r in live if r.get("status") == "full_fold_profile_passed"}
     if len(profiles) != sum(r.get("status") == "full_fold_profile_passed" for r in live):
         raise ValueError("Select exactly one full-fold profile per planned arm")
-    for planned in profile_plan():
+    required = profile_plan()
+    wide = kumo_override_arm(required)
+    for planned in required:
         report = profiles.get(digest(planned))
         dataset = features[0][planned["dataset_id"],]
         expected_ids, expected_hashes = expected_artifacts(features, planned)
@@ -488,6 +579,8 @@ def benchmark_evidence(filename, arm, *, verify_publication=False):
             raise ValueError(
                 f"0B full-fold profile rows differ from the complete first fold for {planned['model']}"
             )
+        if planned == wide:
+            verify_kumo_override_profile(report, planned)
         if verify_publication:
             verify_published_profile(report)
     return features, predictors[arm["model"]]["runtime_identity"]

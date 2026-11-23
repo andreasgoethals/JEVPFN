@@ -80,7 +80,17 @@ def test_rotten_tomatoes_pca_width_limit_and_joint_alternative():
         pca_scope="per_column",
     )
     assert feature_width(metadata, arm) == 847
-    assert width_status(metadata, arm)["width_status"] == "unsupported_width"
+    # Kumo's 500-column recipe default is widened (owner-approved 23 Nov 2026), not excluded.
+    assert width_status(metadata, arm) == {
+        "predictor_columns": 847, "recipe_column_limit": 847,
+        "width_status": "within_known_width_limit", "kumo_max_columns_override": 847,
+    }
+    # Arms within the default keep their historical width fields (and plan identity).
+    assert width_status(metadata, arm | {"pca_components": 32}) == {
+        "predictor_columns": 431, "recipe_column_limit": 500,
+        "width_status": "within_known_width_limit",
+    }
+    assert width_status(metadata, arm | {"model": "catboost"})["recipe_column_limit"] is None
     assert feature_width(metadata, arm | {"pca_scope": "joint"}) == 79
     assert feature_width(metadata, arm | {"pca_components": 32}) == 431
     combined = arm | dict(feature_set="non_text_plus_both", providers=["jev", "liquid"])
@@ -88,13 +98,90 @@ def test_rotten_tomatoes_pca_width_limit_and_joint_alternative():
     assert feature_width(metadata, combined | {"view": "mean"}) == 2 + 13 + 2 * 14
 
 
-def test_kumo_guard_counts_publisher_category_expansion_before_silent_selection():
-    model = object.__new__(KumoBackend)
-    model.categorical_columns = {"category"}
-    values = pd.DataFrame(np.zeros((51, 499)))
-    values["category"] = [f"value_{i}" for i in range(51)]
-    with pytest.raises(ValueError, match="category-count"):
-        model.fit(values, np.zeros(51))
+class _SelectColumns:
+    def __init__(self, max_columns):
+        self.max_columns = max_columns
+
+
+def _kumo(calls, *, selectors=(500,)):
+    """KumoBackend with publisher-shaped fakes: default_recipe() holds SelectColumns(500)."""
+    from contextlib import nullcontext
+
+    def default_recipe():
+        modules = [object(), *(_SelectColumns(n) for n in selectors), object()]
+        return SimpleNamespace(features=SimpleNamespace(modules=lambda: iter(modules)))
+
+    class Output:
+        def __init__(self, rows):
+            self.numerical = self
+            self.rows = rows
+
+        def float(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return np.zeros((self.rows, 3))
+
+    def call(**kwargs):
+        calls.append(kwargs)
+        return Output(len(kwargs["x_query"]))
+
+    backend = object.__new__(KumoBackend)
+    backend.categorical_columns = {"category"}
+    backend.task = "regression"
+    backend.settings = {"device": "cpu", "seed": 1}
+    backend.sdm = SimpleNamespace(processing=SimpleNamespace(SelectColumns=_SelectColumns))
+    backend.torch = SimpleNamespace(
+        Generator=lambda device: SimpleNamespace(manual_seed=lambda seed: "generator"),
+        inference_mode=nullcontext, autocast=lambda **kw: nullcontext(), float16="float16",
+    )
+    backend.model = type("Model", (), {"default_recipe": staticmethod(default_recipe),
+                                       "__call__": lambda self, **kw: call(**kw)})()
+    backend._table = lambda frame, target=False: frame
+    return backend
+
+
+def _wide(columns, *, categories):
+    values = pd.DataFrame(np.zeros((51, columns)))
+    values["category"] = [f"value_{i % categories}" for i in range(51)]
+    return values
+
+
+def test_kumo_within_500_expanded_columns_passes_nothing_new(recwarn):
+    calls = []
+    model = _kumo(calls)
+    # 499 numeric + one categorical with 50 values: 500 columns, no count column added.
+    model.fit(_wide(499, categories=50), np.zeros(51))
+    model.predict(_wide(499, categories=50))
+    assert model.recipe_ is None and model.max_columns_override_ is None
+    assert "recipe" not in calls[0]
+    assert set(calls[0]) == {"x_context", "y_context", "x_query", "num_estimators", "generator"}
+    assert not [w for w in recwarn if "kumo_max_columns_override" in str(w.message)]
+
+
+def test_kumo_wider_than_500_widens_select_columns_to_every_expanded_column():
+    calls = []
+    model = _kumo(calls)
+    # 499 numeric + one categorical with 51 values: Kumo adds a count column (501 columns).
+    with pytest.warns(UserWarning, match="kumo_max_columns_override=501"):
+        model.fit(_wide(499, categories=51), np.zeros(51))
+    model.predict(_wide(499, categories=51))
+    assert model.max_columns_override_ == 501
+    selector, = [m for m in calls[0]["recipe"].features.modules() if isinstance(m, _SelectColumns)]
+    assert selector.max_columns == 501
+    calls.clear()
+    with pytest.warns(UserWarning, match="kumo_max_columns_override=557"):
+        model.fit(_wide(556, categories=2), np.zeros(51))
+
+
+@pytest.mark.parametrize("selectors", [(), (500, 500), (400,)])
+def test_kumo_override_refuses_an_unexpected_publisher_recipe(selectors):
+    model = _kumo([], selectors=selectors)
+    with pytest.raises(ValueError, match="SelectColumns"):
+        model.fit(_wide(556, categories=2), np.zeros(51))
 
 
 def test_encoder_namespaces_are_distinct_and_recipes_match_publishers(isolated_output):

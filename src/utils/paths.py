@@ -143,12 +143,12 @@ OUTPUT_DIR_NAME = "output_JEVPFN"
 PHASES = structure.PHASES
 
 # Physical folders come from config/structure.yaml; phase identities never change.
-#: Phase -> config folder (home folder of the phase).
-CONFIG_GROUPS = {phase: structure.registry().home(phase).split("/")[0] for phase in PHASES}
+#: Phase -> config directory of its home entry (`config/<folder>/` or `config/<group>/`).
+CONFIG_GROUPS = {phase: structure.registry().home_entry(phase).config_dir for phase in PHASES}
 #: Notebook ID (current and previous) -> internal phase.
 NOTEBOOK_PHASES = {
     **{n.id: n.phase for n in structure.registry().notebooks},
-    **{legacy: n.phase for n in structure.registry().notebooks for legacy in n.legacy},
+    **{alias: n.phase for n in structure.registry().notebooks for alias in n.aliases},
 }
 #: Retired pre-research notebook stems, still accepted as `<phase folder>/<stem>`.
 _RETIRED_NOTEBOOK_STEMS = {
@@ -181,14 +181,15 @@ def phase_name(phase: str | None = None) -> str:
         if structure.legacy_phase(value) is None:
             raise ValueError(f"Incorrect phase number: {value}")
         return numbered[2]
-    owners = {e.owner_phase for e in layout().entries if value in {e.folder, *e.previous_folders}}
+    owners = {e.owner_phase for e in layout().entries
+              if not e.notebook_only and value in {e.folder, e.path, *e.previous_folders}}
     if len(owners) == 1:
         return owners.pop()
     raise ValueError(f"Unknown research phase: {value}")
 
 
 def phase_folder(phase: str) -> str:
-    """The home folder of an internal phase, e.g. experiment_1 -> exp04_decision_features."""
+    """The home folder path of an internal phase, e.g. experiment_1 -> B/exp04_decision_features."""
     return layout().home(phase_name(phase))
 
 
@@ -202,7 +203,7 @@ def research_group(phase: str) -> str:
     phase = phase_name(phase)
     if phase in {"rq1", "rq2", "rq3"}:
         return phase
-    if phase in {"data_efficiency", "representations"}:  # B4 (exp11) and C1 (exp09): RQ2 studies
+    if phase in {"data_efficiency", "representations"}:  # B4 (B/exp09) and C1 (C/exp10): RQ2 studies
         return "rq2"
     return "rq2" if phase.startswith("experiment_") and phase != "experiment_0" or phase in {"synthesis", "regression_readout"} else "general"
 
@@ -213,7 +214,7 @@ def result_relative(phase: str, *parts: str) -> Path:
 
 
 def notebook_id(notebook: str) -> str:
-    """Canonical ID (the folder) of a registered notebook; other names are returned as given."""
+    """Canonical ID (`<notebook group>/<name>`) of a registered notebook; others are returned as given."""
     _validate_notebook_name(notebook)
     found = layout().notebook(notebook)
     return found.id if found else notebook
@@ -250,13 +251,14 @@ def notebook_phase(notebook: str) -> str:
 
 
 def notebook_folder(notebook: str) -> str:
-    """Physical folder of a notebook's figures and records."""
+    """Physical folder path of a notebook's records (e.g. `B/exp04_decision_features`)."""
     found = layout().notebook(notebook)
     if found:
         return found.folder
     parts = notebook.split("/")
-    if len(parts) == 2 and parts[0] in layout().folders:
-        return parts[0]
+    entry = layout().flat_entry(parts[0]) if len(parts) == 2 else None
+    if entry is not None:
+        return entry.path
     return phase_folder(notebook_phase(notebook))
 
 
@@ -364,11 +366,11 @@ def manifests_dir(phase: str | None = None) -> Path:
 def _record_folder(notebook: str | None, phase: str | None) -> str | None:
     if notebook is not None:
         return notebook_folder(notebook) if phase is None else phase_folder(phase)
-    return phase_folder(phase).split("/")[0] if phase is not None else None
+    return layout().home_entry(phase_name(phase)).path if phase is not None else None
 
 
 def _record_parts(notebook: str | None, phase: str | None) -> tuple[str, tuple[str, ...]]:
-    """(experiment folder, sub-path): `()` for a registered (flat) notebook, else `(<stem>,)`."""
+    """(experiment folder path, sub-path): `()` for a registered notebook, else `(<stem>,)`."""
     folder = _record_folder(notebook, phase)
     if folder is None:
         raise ValueError("Notebook records need a notebook or a phase (experiment folder first)")
@@ -390,7 +392,7 @@ def _unlinked(folder: Path) -> Path:
 def figures_dir(notebook: str | None = None, *, phase: str | None = None) -> Path:
     """The ONE figures folder, or `figures/<group>/` of a notebook: its PDFs and `_figures.json`.
 
-    The group comes from `structure.figure_group` (today: the notebook ID == its folder).
+    The group comes from `structure.figure_group`: the notebook ID, `<notebook group>/<name>`.
     """
     root = notebook_outputs_dir() / structure.FIGURES
     if notebook is None and phase is None:
@@ -420,8 +422,9 @@ def report_folder(selection: str | None) -> str | None:
     """
     if selection is None:
         return None
-    folder = selection if selection in layout().folders else phase_folder(selection).split("/")[0]
-    return None if folder in PREPARATION_FOLDERS else folder
+    hit = layout().locate(selection)
+    entry = hit[0] if hit is not None else layout().home_entry(phase_name(selection))
+    return None if entry.folder in PREPARATION_FOLDERS else entry.path
 
 
 def report_index_path(selection: str) -> Path | None:
@@ -452,7 +455,7 @@ def archive_dir(output_root: Path | None = None) -> Path:
 
 
 def recorded_output_path(value) -> Path:
-    """A path recorded in a previous layout (18/19-11-2026 migrations), located in the current one.
+    """A path recorded in a previous layout (18/19/23-11-2026 migrations), located in the current one.
 
     Archived records resolve into `archive_dir()` beside the recorded output root."""
     return structure.recorded_output_path(value, OUTPUT_DIR_NAME)
@@ -578,9 +581,9 @@ def token_audit_dir() -> Path:
 def config_path(name: str) -> Path:
     """Resolve a logical config key through the layout registry.
 
-    Current keys (`exp04_decision_features/main`), internal-phase keys (`experiment_1/main`),
-    registered stems (`main`) and previous folders (`rq2/4. experiment_1/main`) all resolve to
-    the same file. Previous locations are read only when the current file is absent, so an
+    Current keys (`B/main`), internal-phase keys (`experiment_1/main`), registered stems
+    (`main`), flat-layout keys (`exp04_decision_features/main`) and older folders
+    (`rq2/4. experiment_1/main`) all resolve to the same file. Previous locations are read only when the current file is absent, so an
     archived checkout or fixture keeps working.
     """
     stem = name[:-5] if name.endswith(".yaml") else name
@@ -603,21 +606,26 @@ def config_file(filename: str) -> Path:
     folder = structure.registry().config_index().get(filename)
     if folder is None or Path(filename).name != filename:
         raise ValueError(f"Unregistered config file: {filename}")
-    return REPO_ROOT / "config" / folder / filename
+    return REPO_ROOT / "config" / folder / filename  # `config/<folder>/` or `config/<group>/`
 
 
 def _legacy_config_locations(stem: str, current: str) -> list[str]:
+    """Previous homes of a config file, read only when its registry file is absent."""
     folder, _, rest = current.partition("/")
     if not rest:
         return []
-    phases = [p for p in PHASES if layout().home(p).split("/")[0] == folder]
+    entry = layout().config_entry(rest) or next(
+        (e for e in layout().entries if e.config_dir == folder and not e.group), None)
+    if entry is None:
+        return []
     found = []
-    for phase in phases:
+    for phase in (*entry.phases, *entry.nested):
         legacy = structure.LEGACY_PHASE_FOLDERS.get(phase)
         if legacy:
             found += [f"general/{legacy}/{rest}", f"rq2/{legacy}/{rest}", f"{legacy}/{rest}"]
     found += [f"{group}/{rest}" for group in ("rq1", "rq3")]
-    found += [f"{old}/{rest}" for old, new in layout().previous_folders.items() if new == folder]
+    # The flat layout (18-23-11-2026) and earlier folder names of the same entry.
+    found += [f"{old}/{rest}" for old in (entry.folder, *entry.previous_folders) if old != folder]
     return found
 
 

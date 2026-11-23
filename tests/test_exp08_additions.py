@@ -369,41 +369,14 @@ def _check(figures):
     return figures
 
 
-def test_exp08_figures_render_at_print_width_and_stay_empty_when_pending():
-    style.apply()
-    gains = aggregate.dataset_gains(_paired())
-    covariates = pd.DataFrame({"provider": PROVIDERS, "parameters_billion": [1, 2, 4, 9, 27, 31],
-                               "architecture_family": ["decoder_lm_head"] * 6,
-                               "readout_type": ["api", None, "api", "api", "api", "api"]})
-    _check(views.model_gain_figures(m.model_gain_table(gains), covariates))
-    _check(views.raw_gain_headroom_figures(gains))
-    balanced = pd.DataFrame([
-        {"task": "binary_classification", "phase": phase, "model": "catboost", "axis": axis,
-         "cohort": cohort, "mean_benefit": 0.01 * i, "datasets": 3}
-        for phase in ("experiment_1", "experiment_2")
-        for axis, cohorts in {"availability": ["present", "absent"],
-                              "prediction_shift": ["shift_0", "shift_1"],
-                              "novelty_by_field_type:long_text": ["seen", "unseen", "missing"]}.items()
-        for i, cohort in enumerate(cohorts)])
-    (fig, _, caption), = _check(views.cohort_figures(balanced))
-    assert "post-treatment" in caption
-    rng = np.random.default_rng(0)
-    pairs = pd.concat([comp.complementarity_pairs(_benefits(rng), dataset_id=f"D{i}",
-                                                  task_type="binary_classification")
-                       for i in range(3)])
-    _check(views.complementarity_figures(comp.complementarity_summary(pairs, n_boot=0)))
-    grid = comp.data_map_grid(rng.uniform(size=300), rng.uniform(size=300),
-                              rng.standard_normal(300), bins=10)
-    grids = pd.DataFrame([{"dataset_id": f"D{i}", "task_type": "binary_classification",
-                           "model_id": "catboost", "checkpoint_id": "cb",
-                           "feature_set": "non_text_plus_joint", "x_axis": axis, **grid}
-                          for i in range(11) for axis in comp.X_AXES])
-    maps = _check(views.data_map_figures(grids))
-    assert [name for _, name, _ in maps] == ["data_map_joint_baseline_max_probability_1",
-                                             "data_map_joint_baseline_max_probability_2"]
-    for function in (views.model_gain_figures, views.raw_gain_headroom_figures,
-                     views.cohort_figures, views.complementarity_figures, views.data_map_figures):
-        assert list(function(pd.DataFrame())) == []
+def test_b3_figures_wait_on_empty_tables():
+    """B3 figures now read the Group B export schema (tests/test_group_b_views.py renders them
+    from realistic fixtures); empty tables give no figure."""
+    for function in (views.cohort_benefits, views.column_refits):
+        assert list(function(pd.DataFrame(), name="x", what="x")) == []
+    assert list(views.headroom_and_associations(pd.DataFrame(), None, name="x", what="x")) == []
+    assert list(views.diagnostics_vs_usefulness(pd.DataFrame(), None, name="x", what="x")) == []
+    assert list(views.lodo(pd.DataFrame(), None, name="x", what="x")) == []
 
 
 # ------------------------------------------------------------------------- paper figures
@@ -412,17 +385,17 @@ def test_exp08_figures_render_at_print_width_and_stay_empty_when_pending():
 def test_paper_figure_map_validates_and_resolves_saved_files(tmp_path):
     raw = paper_figures.load()
     ids = [f["id"] for f in raw["figures"]]
-    assert ids[:4] == ["fig1_headline_gain", "fig2_per_predictor_gains_and_compute",
-                       "fig3_dataset_and_model_explanations", "fig4_fields_rows_complementarity"]
+    assert ids[:4] == ["fig1_headline_gain", "fig2_representation_ladder_and_compute",
+                       "fig3_dataset_and_model_explanations", "fig4_fields_and_prediction_in_advance"]
     assert all(f["placement"] == "undecided" for f in raw["figures"])
-    folder = tmp_path / "exp08_when_text_helps"
-    folder.mkdir()
+    folder = tmp_path / "B" / "exp08_when_text_helps"
+    folder.mkdir(parents=True)
     (folder / "03_raw_gain_vs_headroom.pdf").write_bytes(b"%PDF")
-    (folder / "04_decision_models_ranked_joint.pdf").write_bytes(b"%PDF")
+    (folder / "04_model_diagnostics_vs_usefulness.pdf").write_bytes(b"%PDF")
     table = paper_figures.resolve(raw, figures_root=tmp_path).set_index("id")
     assert table.loc["fig3_dataset_and_model_explanations", "saved_figures"] == (
-        "decision_models_ranked_joint, raw_gain_vs_headroom")
-    assert table.loc["fig4_fields_rows_complementarity", "saved_figures"] == "pending"
+        "model_diagnostics_vs_usefulness, raw_gain_vs_headroom")
+    assert table.loc["fig4_fields_and_prediction_in_advance", "saved_figures"] == "pending"
     for mutate, message in [
         (lambda r: r["figures"][0].update(notebook="exp99_missing"), "unknown notebook"),
         (lambda r: r["figures"][0].update(placement="front"), "placement"),

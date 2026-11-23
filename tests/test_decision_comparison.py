@@ -3,7 +3,6 @@
 import copy
 import sqlite3
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -25,8 +24,6 @@ from src.jev.requests import IntendedRequest
 from src.utils import paths
 from src.utils.config import load_config
 from src.utils.serialization import canonical_json, digest
-from src.visualize import decision_comparison as plots
-from src.visualize import style
 
 
 def options(providers=("jev", "liquid", "strands")):
@@ -337,91 +334,6 @@ def test_missing_or_stale_context_screen_is_explicit(tmp_path, monkeypatch):
     (tmp_path / "context_screen.json").write_text(json.dumps({"datasets": []}), encoding="utf-8")
     summary, scenarios, origins = saved_screen_tables()
     assert summary["status"] == "historical_inputs_changed" and scenarios.empty and origins.empty
-
-
-@pytest.mark.parametrize(
-    "task", ["binary_classification", "multiclass_classification", "regression"]
-)
-def test_every_plot_path_accepts_realistic_synthetic_results(task):
-    style.apply()
-    result = Comparison()
-    rng = np.random.default_rng(3)
-    k = 9 if task == "regression" else 3 if task == "multiclass_classification" else 2
-    for mode in ["per_column", "joint"]:
-        groups = [
-            group(name, rng.dirichlet(np.ones(k), 12), task=task) for name in options()["providers"]
-        ]
-        analyze_group(groups, {**CONTEXT, "representation": mode}, options(), result)
-        for name in options()["providers"]:
-            result.add(
-                "inventory",
-                {**CONTEXT, "representation": mode, "provider": name, "status": "available"},
-            )
-    count = 0
-    for function in [
-        plots.coverage_figures,
-        plots.pair_figures,
-        plots.consensus_figures,
-        plots.distribution_figures,
-        plots.example_figures,
-    ]:
-        for fig, name, caption in function(result, options()):
-            fig.canvas.draw()
-            assert name and caption
-            plt.close(fig)
-            count += 1
-    assert count >= 15
-    (headline,) = plots.pair_figures(result, options(), headline_only=True)
-    fig, name, _ = headline
-    assert name == f"pairs_{task}_joint_total_variation"
-    assert fig.axes[0].images[0].get_clim() == (0, 1)
-    plt.close(fig)
-
-
-def test_all_configured_models_paginate_all_duplicate_sensitivity_pairs():
-    from itertools import combinations
-
-    result = Comparison()
-    providers = list(plots.LABELS)
-    for a, b in combinations(providers, 2):
-        for weighting in ("rows", "unique_inputs"):
-            result.add("pairs", {**CONTEXT, "task": "multiclass_classification",
-                                "weighting": weighting, "model_a": a, "model_b": b,
-                                "agreement": 0.8, "total_variation": 0.1,
-                                "js_divergence": 0.05, "scalar_mae": 0.2,
-                                "pearson": 0.9, "spearman": 0.9})
-    shown = []
-    pages = 0
-    for fig, name, _ in plots.pair_figures(result, {"providers": providers}):
-        if name.startswith("reuse_"):
-            labels = [tick.get_text() for tick in fig.axes[0].get_yticklabels()]
-            assert len(labels) <= 12
-            shown.extend(labels)
-            pages += 1
-        plt.close(fig)
-    expected_pairs = len(providers) * (len(providers) - 1) // 2
-    assert pages == (expected_pairs + 11) // 12
-    assert len(set(shown)) == expected_pairs
-
-
-def test_thirty_class_example_keeps_all_probabilities_legible_across_pages():
-    import json
-
-    result = Comparison()
-    labels = [f"class-{i}" for i in range(30)]
-    probabilities = {p: [1 / 30] * 30 for p in plots.LABELS}
-    result.add("examples", {**CONTEXT, "task": "multiclass_classification",
-                            "disagreement": 0.2, "row_id": "csv:0",
-                            "labels": json.dumps(labels), "probabilities": json.dumps(probabilities)})
-    shown = []
-    for fig, _, caption in plots.example_figures(result, {"providers": list(plots.LABELS)}):
-        ax = fig.axes[0]
-        assert len(ax.get_yticks()) <= 12
-        assert ax.images[0].get_clim() == (0, 1)
-        assert "label-blind" in caption
-        shown.extend(tick.get_text() for tick in ax.get_yticklabels())
-        plt.close(fig)
-    assert shown == labels
 
 
 def test_exact_ties_are_undecided_not_votes_for_class_order():

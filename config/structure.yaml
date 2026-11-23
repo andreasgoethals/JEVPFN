@@ -1,35 +1,48 @@
 # Physical and human-facing layout of config/, notebooks/ and output_JEVPFN/.
 # Numbering approved by the owner on 18 November 2026; revised 19 November 2026 (one flat
 # notebook per folder; supervised adaptation renumbered Exp 10, Exp 9 reserved) and
-# 20 November 2026 (Group B adds exp11_data_efficiency, internal phase data_efficiency;
-# Group C activates the reserved Exp 9 as exp09_representations, internal phase
-# representations, and replaces the Exp 10 adaptation design).
+# 20 November 2026 (Group B adds exp11_data_efficiency, Group C activates Exp 9).
+# Schema v3, owner-approved 23 November 2026: letter groups A/B/C, and Group B4/C renumbered
+# so each group is contiguous: exp11_data_efficiency -> B/exp09_data_efficiency,
+# exp09_representations -> C/exp10_representations, exp10_adaptation -> C/exp11_adaptation.
 #
 # Folder names only. Internal phase IDs (exploration, question_preparation,
-# feature_creation, experiment_0..4, synthesis, rq1..rq3, regression_readout) remain the
-# keys of hashes, recipes, receipts and manifests and are never renamed here.
-# Each internal phase has one home folder (`phases`, the first listed phase owns the
+# feature_creation, experiment_0..4, synthesis, rq1..rq3, regression_readout, data_efficiency,
+# representations) and entry IDs remain the keys of hashes, recipes, receipts, manifests and
+# the `paper:` mapping and are never renamed here (so entry exp11 is B/exp09_data_efficiency,
+# exp09 is C/exp10_representations and exp10 is C/exp11_adaptation).
+#
+# Entries without `group` are general: output `<folder>/`, config `config/<folder>/`, notebook
+# `notebooks/general/<name>.ipynb`. Entries with `group: A|B|C`: output `<group>/<folder>/`,
+# config flat in `config/<group>/`, notebook `notebooks/<group>/<name>.ipynb`. A notebook ID is
+# `<notebook group>/<name>` (the relative path without .ipynb, passed to FigureSaver); its
+# figures go to output_JEVPFN/figures/<notebook group>/<name>/. Bare folder names are globally
+# unique, so previous flat paths and notebook IDs stay accepted aliases.
+# Each internal phase has one home entry (`phases`, the first listed phase owns the
 # folder's output tree); `routes` send named sub-trees of a phase to another folder.
-# `nested` gives a retired phase a sub-folder of its home. Each folder has at most one
-# notebook, `notebooks/<folder>.ipynb`, whose ID is the folder name; `legacy` lists previous
-# notebook IDs (aliases whose records move to the folder) and `merged` lists previous IDs
-# combined into this notebook (aliases whose records are archived, since several cannot
-# share one record folder). `previous_folders` are earlier names of the same folder.
-# `planned` reserves an experiment number without creating any folder.
+# `nested` gives a retired phase a sub-folder of its home. Each entry has at most one notebook;
+# `legacy` lists previous notebook IDs (aliases whose records move to the entry) and `merged`
+# previous IDs combined into it (aliases whose records are archived). `previous_folders` are
+# earlier names of the same folder. `notebook_only: true` marks an entry that owns only a
+# notebook and its records (one `<letter>_synthesis` per group, the study audit); its notebook
+# `phase` is used only to read results. `planned` reserves an experiment number without a folder.
 # Output: each folder holds its own {logs,manifests,results}/ and its notebook's records in
-# `<kind>/notebook/`. Figures share ONE folder, output_JEVPFN/figures/<notebook>/ (PDFs,
-# _figures.json; grouping in src.utils.structure.figure_group) with figures/CAPTIONS.md, and
-# output_JEVPFN/All_Results.md is the one report. Previous-layout records go to archive/.
-# Paper placement is decided separately under `paper:` and never encoded in a folder.
-schema: jevpfn.structure.v2
+# `<kind>/notebook/`. Figures share ONE folder, output_JEVPFN/figures/<notebook group>/<name>/
+# (PDFs, _figures.json) with figures/CAPTIONS.md, and output_JEVPFN/All_Results.md is the one
+# report. Previous-layout records go to archive/.
+# Paper placement is decided separately under `paper:` and never encoded in a folder;
+# notebooks/paper/ is reserved for paper notebooks and holds none yet.
+schema: jevpfn.structure.v3
 approved: 18-11-2026
-revised: 19-11-2026
+revised: 23-11-2026
+notebook_groups: [general, A, B, C, paper]
 entries:
+# -- general ---------------------------------------------------------------------------
 - id: data
   folder: 00_data
   title: Data exploration and question preparation
   phases: [question_preparation, exploration]
-  notebook: {phase: exploration, legacy: [general/01_data, 00_data/data]}
+  notebook: {name: 1_data_and_questions, phase: exploration, legacy: [general/01_data, 00_data/data]}
   configs: [audit, datasets, dataset_semantics, question_design, question_preparation]
 - id: exp0a
   folder: 01_exp0a
@@ -41,16 +54,33 @@ entries:
   folder: 02_feature_creation
   title: Feature creation
   phases: [feature_creation]
-  notebook: {phase: feature_creation, legacy: [general/02_features, 02_feature_creation/features]}
+  notebook: {name: 2_feature_creation, phase: feature_creation,
+             legacy: [general/02_features, 02_feature_creation/features]}
   configs: [feature_creation, approved_additions, decision_pilot, embedding_models,
             extractors, feature_comparison, model_properties, text_embeddings]
 - id: exp0b
   folder: 03_exp0b
-  title: Experiment 0B, qualification after feature creation
+  title: Experiments 0A and 0B, model and feature qualification
   routes:
     experiment_0: [manifests/after_extraction, logs/after_extraction, manifests/reports.json]
-  notebook: {phase: experiment_0, legacy: [general/03_validation, 03_exp0b/validation]}
+  notebook: {name: 3_model_and_feature_qualification, phase: experiment_0,
+             legacy: [general/03_validation, 03_exp0b/validation]}
+- id: study_audit
+  folder: 04_study_audit
+  title: Study audit
+  notebook_only: true
+  notebook: {name: 4_study_audit, phase: synthesis}
+- id: synthesis
+  folder: 05_synthesis
+  previous_folders: [synthesis]
+  title: Cross-experiment synthesis and paper figures
+  phases: [synthesis]
+  # 23-11-2026: statistical framework state, gated until approval.
+  notebook: {name: 5_synthesis, phase: synthesis}
+  configs: [analysis, paper_figures]
+# -- Group A: decision outputs (RQ1) ---------------------------------------------------
 - id: exp01
+  group: A
   folder: exp01_outputs
   title: Decision outputs and context
   phases: [rq1]
@@ -58,6 +88,7 @@ entries:
     rq1: [results/outputs]
   notebook: {phase: rq1, legacy: [rq1/01_outputs, exp01_outputs/outputs]}
 - id: exp02
+  group: A
   folder: exp02_robustness
   title: Controlled presentation robustness
   routes:
@@ -65,13 +96,22 @@ entries:
   notebook: {phase: rq1, legacy: [rq1/02_robustness, exp02_robustness/robustness]}
   configs: [behavior, question_versions.csv]
 - id: exp03
+  group: A
   folder: exp03_geometry
   title: Decision and encoder geometry
   routes:
     rq1: [results/geometry, results/geometry_pilots]
   notebook: {phase: rq1, legacy: [rq1/03_geometry, exp03_geometry/geometry]}
   configs: [geometry]
+- id: A_synthesis
+  group: A
+  folder: A_synthesis
+  title: Group A synthesis
+  notebook_only: true
+  notebook: {phase: rq1}
+# -- Group B: predictive utility (RQ2) -------------------------------------------------
 - id: exp04
+  group: B
   folder: exp04_decision_features
   title: Decision features in fixed predictors
   phases: [experiment_1]
@@ -79,38 +119,60 @@ entries:
   notebook: {phase: experiment_1, legacy: [rq2/01_decisions, exp04_decision_features/decisions]}
   configs: [main, models, protocol]
 - id: exp05
+  group: B
   folder: exp05_frozen_embeddings
   title: Frozen text embeddings
   phases: [experiment_2]
   notebook: {phase: experiment_2, legacy: [rq2/02_embeddings, exp05_frozen_embeddings/embeddings]}
   configs: [embeddings]
 - id: exp06
+  group: B
   folder: exp06_tar
   title: Target-aware embeddings (TAR)
   phases: [experiment_3]
   notebook: {phase: experiment_3, legacy: [rq2/03_tar, exp06_tar/tar]}
   configs: [tar]
 - id: exp07
+  group: B
   folder: exp07_native_text
   title: Native-text systems
   phases: [experiment_4]
   notebook: {phase: experiment_4, legacy: [rq2/04_native, exp07_native_text/native]}
   configs: [native_text]
 - id: exp08
+  group: B
   folder: exp08_when_text_helps
   title: When decision features help
   phases: [rq2]
   notebook: {phase: rq2, legacy: [rq2/05_when_text_helps, exp08_when_text_helps/when_text_helps]}
   configs: [when_text_helps, text_column_refits]
+- id: exp11
+  group: B
+  folder: exp09_data_efficiency
+  previous_folders: [exp11_data_efficiency]
+  title: Amount of labelled data (training-size curves)
+  phases: [data_efficiency]
+  notebook: {phase: data_efficiency}
+  configs: [data_efficiency]
+- id: B_synthesis
+  group: B
+  folder: B_synthesis
+  title: Group B synthesis
+  notebook_only: true
+  notebook: {phase: rq2}
+# -- Group C: inside and adapting the decision model -----------------------------------
 - id: exp09
-  folder: exp09_representations
+  group: C
+  folder: exp10_representations
+  previous_folders: [exp09_representations]
   title: Inside the decision model (Strands hidden states, label-free)
   phases: [representations]
   notebook: {phase: representations}
   configs: [representations]
 - id: exp10
-  folder: exp10_adaptation
-  previous_folders: [exp09_adaptation]
+  group: C
+  folder: exp11_adaptation
+  previous_folders: [exp10_adaptation, exp09_adaptation]
   title: Learning from labels (Strands head-only, LoRA, LoRA + head)
   phases: [rq3]
   notebook:
@@ -118,23 +180,16 @@ entries:
     merged: [exp09_adaptation/01_calibration, exp09_adaptation/02_head, exp09_adaptation/03_lora,
              exp09_adaptation/04_full, rq3/01_calibration, rq3/02_head, rq3/03_lora, rq3/04_full]
   configs: [adaptation]
-- id: exp11
-  folder: exp11_data_efficiency
-  title: Amount of labelled data (training-size curves)
-  phases: [data_efficiency]
-  notebook: {phase: data_efficiency}
-  configs: [data_efficiency]
-- id: synthesis
-  folder: synthesis
-  title: Cross-experiment synthesis and paper figures
-  phases: [synthesis]
-  # 23-11-2026: one flat notebook (statistical framework state, gated until approval).
-  notebook: {phase: synthesis}
-  configs: [analysis, paper_figures]
+- id: C_synthesis
+  group: C
+  folder: C_synthesis
+  title: Group C synthesis
+  notebook_only: true
+  notebook: {phase: rq3}
 
 # Reserved experiment numbers: documented, never given a folder until implemented.
-# Exp 9 (exp09_representations) was reserved on 19 November 2026 and activated by Group C on
-# 20 November 2026; no number is reserved now.
+# Exp 9 was reserved on 19 November 2026 and activated by Group C on 20 November 2026;
+# no number is reserved now.
 planned: []
 
 # Paper placement: main | appendix | undecided. Decided later, never by folder name.
@@ -143,15 +198,19 @@ paper:
   exp0a: {placement: undecided}
   feature_creation: {placement: undecided}
   exp0b: {placement: undecided}
+  study_audit: {placement: undecided}
   exp01: {placement: undecided}
   exp02: {placement: undecided}
   exp03: {placement: undecided}
+  A_synthesis: {placement: undecided}
   exp04: {placement: undecided}
   exp05: {placement: undecided}
   exp06: {placement: undecided}
   exp07: {placement: undecided}
   exp08: {placement: undecided}
+  exp11: {placement: undecided}
+  B_synthesis: {placement: undecided}
   exp09: {placement: undecided}
   exp10: {placement: undecided}
-  exp11: {placement: undecided}
+  C_synthesis: {placement: undecided}
   synthesis: {placement: undecided}

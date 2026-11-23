@@ -1,59 +1,98 @@
-"""Extraction costs and main feature counts, using measured dataset statistics."""
+"""Measured extraction compute per model and the fixed regression rubric."""
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import FuncFormatter
+import pandas as pd
+from matplotlib.lines import Line2D
 
 from src.visualize import style
 
 
-def extraction_figure(estimates, summary, price):
-    """Unique requests split by mode, and Jev input cost with its tokenizer uncertainty."""
+def extraction_figure(workload, rates, *, jev_charges=None):
+    """Measured extraction compute per decision model and frozen encoder.
+
+    Left: GPU-hours per 1,000 distinct requests (inference only), one grey dot per dataset
+    and a diamond for the pooled rate; an open circle adds the Slurm-ledger rate (whole jobs)
+    when a ledger exists. Right: recorded inference GPU-hours and the share of distinct
+    requests they cover. Models without local timing evidence are labelled, never estimated.
+    """
     from src.visualize import layout
 
-    order = layout.ordered(summary[["dataset_id", "dataset", "task_type"]])
-    central = estimates[estimates.characters_per_token.eq(4)]
-    per_column = central[central["mode"].eq("per_column")].groupby("dataset_id") \
-        .unique_requests_within_group.sum()
-    combined = central.groupby("dataset_id").requests_for_combined_build.sum()
-    tokens = estimates.pivot_table(index="dataset_id", columns="characters_per_token",
-                                   values="wire_tokens_combined_approx", aggfunc="sum")
-    order = order.assign(
-        per_column=order.dataset_id.map(per_column).to_numpy(),
-        joint_extra=(order.dataset_id.map(combined) - order.dataset_id.map(per_column)).to_numpy(),
-    )
-    y = np.arange(len(order))
-    fig, axes = plt.subplots(1, 2, figsize=(style.WIDTH_FULL, 3.9), sharey=True)
-    axes[0].barh(y, order.per_column, height=0.62, color=style.MODE_COLORS["per_column"],
-                 label="Per-column")
-    axes[0].barh(y, order.joint_extra, left=order.per_column, height=0.62,
-                 color=style.MODE_COLORS["joint"], label="Joint, not already per-column")
-    axes[0].xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value / 1000:g}k"))
-    axes[0].set_xlabel("Unique requests after exact reuse")
-    axes[0].legend(loc="lower right", fontsize=7, frameon=False)
-    if price is not None:
-        cost = tokens.reindex(order.dataset_id) * price / 1e6
-        axes[1].hlines(y, cost[5], cost[3], color=style.P95_COLOR, linewidth=1)
-        axes[1].scatter(cost[4], y, s=14, color=style.MEDIAN_COLOR, zorder=3)
-        totals = cost.sum()
-        # "\$" keeps matplotlib from reading a pair of dollar signs as mathtext.
-        axes[1].text(0.98, 0.02, f"All {len(order)} datasets: \\${totals[4]:,.2f}\n"
-                     f"(range \\${totals[5]:,.2f}–\\${totals[3]:,.2f})", ha="right", va="bottom",
-                     fontsize=7, transform=axes[1].transAxes)
-        axes[1].set_xlim(0, cost[3].max() * 1.08)
-        axes[1].set_xlabel("Approximate Jev input cost (USD)\n(dot: 4 chars/token; line: 5–3)")
-    for ax in axes:
-        layout.light_grid(ax)
-        layout.task_rules(ax, order.task_type)
-    layout.dataset_axis(axes[0], list(order.dataset), order.task_type, fontsize=7, separators=False)
+    labels = {**style.DECISION_SHORT, "e5_small_v2": "E5-small-v2", "e5_large_v2": "E5-large-v2",
+              "qwen3_embedding_0_6b": "Qwen3-Emb-0.6B"}
+    data = workload.reset_index(drop=True)
+    y = np.arange(len(data))
+    fig, axes = plt.subplots(1, 2, figsize=(style.WIDTH_FULL, 4.3), sharey=True,
+                             gridspec_kw={"width_ratios": [1.35, 1]})
+    ax = axes[0]
+    for i, row in data.iterrows():
+        part = rates[rates.model_id.eq(row.model_id)]
+        if not part.empty:
+            jitter = np.linspace(-0.18, 0.18, len(part))
+            ax.scatter(part.gpu_hours_per_1000, i + jitter, s=7, color=style.DECISION_POOL_COLOR,
+                       linewidths=0, zorder=2)
+    measured = data.inference_gpu_hours_per_1000.notna()
+    ax.scatter(data.inference_gpu_hours_per_1000[measured], y[measured], marker="D", s=20,
+               color=style.MEDIAN_COLOR, zorder=3)
+    ledger = data.ledger_gpu_hours_per_1000.notna()
+    if ledger.any():
+        ax.scatter(data.ledger_gpu_hours_per_1000[ledger], y[ledger], s=26, facecolors="none",
+                   edgecolors=style.MEDIAN_COLOR, linewidths=0.9, zorder=3)
+    ax.set_xscale("log")
+    ax.set_xlabel("GPU-hours per 1,000 distinct requests (log)")
+    axes[1].barh(y, data.inference_gpu_hours.fillna(0), height=0.6, color=style.QUANTITY_COLOR)
+    top = float(np.nanmax(data.inference_gpu_hours)) if measured.any() else 1.0
+    axes[1].set_xlim(0, top * 1.55)
+    axes[1].set_xlabel("Recorded inference GPU-hours")
+    for i, row in data.iterrows():
+        if row.kind == "hosted":
+            note = "hosted API" + (f" · \\${jev_charges:.2f} charged" if jev_charges is not None else "")
+        elif pd.isna(row.inference_gpu_hours):
+            note = "no local timing manifest"
+        else:
+            share = row.timed_requests / row.distinct_requests if row.distinct_requests else np.nan
+            note = f"{share:.0%} of requests timed" if np.isfinite(share) else ""
+            axes[1].text(row.inference_gpu_hours + top * 0.03, i, note, va="center", fontsize=6.5,
+                         color=style.MEDIAN_COLOR)
+            continue
+        for axis in axes:
+            axis.text(0.02, i, note, va="center", fontsize=6.5, color=style.REMOVED_COLOR,
+                      transform=axis.get_yaxis_transform())
+    axes[0].set_yticks(y, [labels.get(m, m) for m in data.model_id], fontsize=7)
+    axes[0].set_ylim(len(data) - 0.5, -0.5)
+    for tick, model in zip(axes[0].get_yticklabels(), data.model_id):
+        tick.set_color(style.DECISION_COLORS.get(model, style.EMBEDDING_COLORS.get(model, style.TEXT_COLOR)))
+    boundary = int(data.kind.ne("encoder").sum())
+    for axis in axes:
+        layout.light_grid(axis)
+        axis.tick_params(axis="y", length=0)
+        if boundary < len(data):
+            axis.axhline(boundary - 0.5, color=style.GRID_COLOR, linewidth=0.9)
+    handles = [Line2D([], [], linestyle="none", marker="o", markersize=3, color=style.DECISION_POOL_COLOR,
+                      label="one dataset"),
+               Line2D([], [], linestyle="none", marker="D", markersize=4, color=style.MEDIAN_COLOR,
+                      label="pooled over datasets")]
+    if ledger.any():
+        handles.append(Line2D([], [], linestyle="none", marker="o", markersize=5, markerfacecolor="none",
+                              color=style.MEDIAN_COLOR, label="Slurm ledger (whole jobs)"))
+    fig.legend(handles=handles, loc="outside upper center", ncols=len(handles), fontsize=7, frameon=False)
+    requests = data.loc[data.kind.eq("decision"), "distinct_requests"].dropna()
+    texts = data.loc[data.kind.eq("encoder"), "distinct_requests"].dropna()
     return (
         fig,
-        "extraction_workload_and_cost",
-        f"Left: unique requests per extractor for the {len(order)} selected datasets after exact "
-        "reuse; joint requests equal to a single-field request are counted once, as per-column. "
-        "Right: a character-based Jev cost scenario at the configured price for both representations. "
-        "The estimate uses 4 characters per token (range 5 to 3) on request bodies. Costs exclude retries "
-        "and unknown billing overhead; open-weight extractors incur GPU time instead.",
+        "extraction_compute",
+        "Measured extraction compute per decision model (top) and frozen encoder (bottom). Left: GPU-hours "
+        "per 1,000 distinct requests from the timing manifests of the feature-creation jobs (inference "
+        "wall time on one B200; model loading, staging and publication excluded); grey dots are datasets, "
+        "the diamond pools all timed requests"
+        + ("; open circles use successful Slurm job time over audited distinct requests" if ledger.any() else "")
+        + ". Right: total recorded inference GPU-hours and the share of distinct requests they cover; "
+        "the remainder was served from earlier runs whose timings are not held locally. "
+        + (f"Each open-weight decision model answers {int(requests.iloc[0]):,} distinct requests "
+           if len(requests) and requests.nunique() == 1 else "")
+        + (f"and each encoder embeds {int(texts.iloc[0]):,} distinct texts. " if len(texts) and texts.nunique() == 1 else ". ")
+        + "Models without a local timing manifest are labelled, not estimated; Jev is a hosted API "
+        "charged per token.",
     )
 
 
@@ -85,7 +124,7 @@ def regression_scale_figure(labels):
         "regression_evidence_levels",
         "The fixed nine-level rubric used for every regression question. Each level describes "
         "the strength and specificity of textual evidence for a relatively lower or higher "
-        "target value; colour intensity grows with |level|. The extracted feature is the "
-        "probability-weighted mean level; the full nine-level distribution is also stored. "
+        "target value; colour intensity grows with |level|. All nine level probabilities enter the "
+        "predictors as features (no mean readout). "
         "Levels are defined without target statistics or row targets and are not target units.",
     )

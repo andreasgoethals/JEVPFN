@@ -39,7 +39,22 @@ STAGES = (
     ("jevpfn-migration", "infrastructure"),
     ("jevpfn-input-install", "infrastructure"),
     ("jevpfn-stage-tabstar", "infrastructure"),
+    # Added 23-11-2026: Group B/C jobs previously fell through to "other".
+    ("jevpfn-prepare-probe", "label_trained_classifier"),
+    ("jevpfn-c1-hidden", "strands_hidden_states"),
+    ("jevpfn-c2-adaptation", "strands_adaptation"),
+    ("jevpfn-group-b-export", "result_export"),
+    ("jevpfn-group-c-export", "result_export"),
 )
+#: The study each stage serves, for per-experiment compute in the study audit.
+STAGE_STUDY = {
+    "decision_feature_creation": "Feature creation", "frozen_embedding_creation": "Feature creation",
+    "qualification": "0A/0B qualification", "infrastructure": "Infrastructure",
+    "fold_pca": "B2a frozen embeddings", "tar": "B2b TAR",
+    "label_trained_classifier": "B2b label-trained classifier", "benchmark": "Group B/C benchmark fits",
+    "label_free_studies": "Group A", "strands_hidden_states": "C1 hidden states",
+    "strands_adaptation": "C2 adaptation", "result_export": "Result exports", "other": "Other",
+}
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY",
             "PREEMPTED", "BOOT_FAIL", "DEADLINE"}
 

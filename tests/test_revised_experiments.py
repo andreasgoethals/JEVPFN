@@ -25,9 +25,11 @@ def test_primary_grid_and_widths():
     assert all(a["provider"] is None for a in plan
                if a["phase"] in ("experiment_3", "experiment_4")
                or a["feature_set"] == "non_text_plus_frozen_e5")
-    unsupported = [a for a in plan if a["width_status"] != "within_known_width_limit"]
-    assert {(a["model"], a["dataset_id"]) for a in unsupported} == {
+    assert all(a["width_status"] == "within_known_width_limit" for a in plan)
+    widened = [a for a in plan if a.get("kumo_max_columns_override")]
+    assert {(a["model"], a["dataset_id"]) for a in widened} == {
         ("kumo_tabular", "REG_TEXT_ROTTEN_TOMATOES")}  # incl. C1b per-column + hidden (548 columns)
+    assert len(widened) == 18
     table = pca_width_table()
     assert table.per_column_32.max() == 431
     assert table.joint_64.max() == 108

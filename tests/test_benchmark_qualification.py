@@ -337,3 +337,90 @@ def test_0b_requires_real_partition_coverage(reports, corrupt):
         preflight["decision_artifacts"][0]["artifact_checksums"]["joint"] = ""
     with pytest.raises(ValueError):
         q.feature_evidence(preflight)
+
+
+def test_widest_kumo_override_arm_is_a_declared_full_fold_profile():
+    from src.evaluation.campaign import benchmark_plan
+
+    arms = [a for a in benchmark_plan() if a["phase"] in q.PROFILED_PHASES]
+    wide = q.kumo_override_arm(arms)
+    assert (wide["model"], wide["phase"], wide["dataset_id"], wide["feature_set"]) == (
+        "kumo_tabular", "experiment_2", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_both_plus_frozen_e5")
+    assert wide["predictor_columns"] == wide["kumo_max_columns_override"] == 557
+    profiles = q.profile_plan(arms)
+    assert wide in profiles
+    # The declared case reuses the width extreme rather than adding a second 557 profile.
+    assert [a for a in profiles if a.get("kumo_max_columns_override")] == [wide]
+    # The phase/model profile job (benchmark_jobs.plan(profile_fold=True)) also selects it.
+    kumo = [a for a in arms if a["model"] == "kumo_tabular" and a["phase"] == "experiment_2"]
+    assert wide in q.profile_plan(kumo)
+    assert q.kumo_override_arm([a for a in arms if a["predictor_columns"] <= 500]) is None
+    assert "kumo_max_columns_override_b200_profile" in q.load_yaml(
+        "experiment_0/research_questions")["rq2"]
+
+
+def _b200_report(**changes):
+    resources = {
+        "device": "cuda", "gpu_name": "NVIDIA B200", "gpu_total_bytes": 192 * 2**30,
+        "peak_gpu_allocated_bytes": 40 * 2**30, "peak_gpu_reserved_bytes": 48 * 2**30,
+        "peak_rss_bytes": 2**30, "device_workers": 1, "fold_wall_seconds": 3600.0,
+    }
+    report = {"kumo_max_columns_override": 557, "resources": resources}
+    for key, value in changes.items():
+        (resources if key in resources else report)[key] = value
+    return report
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"kumo_max_columns_override": None},  # SelectColumns(500) was not widened
+        {"kumo_max_columns_override": 500},
+        {"gpu_name": "NVIDIA A100-SXM4-80GB"},  # not a real B200
+        {"gpu_name": None},
+        {"device_workers": 2},  # shared-device time is not a burden measure
+        {"peak_gpu_reserved_bytes": None},
+        {"peak_gpu_reserved_bytes": 193 * 2**30},
+        {"fold_wall_seconds": None},
+        {"fold_wall_seconds": 40_000.0},  # five folds would not fit the 72 h bucket
+    ],
+)
+def test_kumo_override_profile_requires_real_b200_memory_and_time(change):
+    planned = {"dataset_id": "REG_TEXT_ROTTEN_TOMATOES", "predictor_columns": 557}
+    q.verify_kumo_override_profile(_b200_report(), planned)
+    with pytest.raises(ValueError, match="kumo_max_columns_override_b200_profile"):
+        q.verify_kumo_override_profile(_b200_report(**change), planned)
+
+
+def test_kumo_override_width_is_read_from_recorded_fit_warnings():
+    import json
+
+    class Record:
+        def __init__(self, messages):
+            self.body = {"warnings": [{"category": "UserWarning", "message": m} for m in messages]}
+
+        def read_text(self, encoding=None):
+            return json.dumps(self.body)
+
+    records = [Record(["other", "kumo_max_columns_override=557: widened"]), Record([])]
+    assert q.kumo_overrides(records) == [557]
+    assert q.kumo_overrides([Record(["other"])]) == []
+    assert q.profile_resources({"timing": {"device": "cpu", "measured_wall_seconds": 2.0},
+                                "resources": {"peak_rss_bytes": 5, "device_workers": 1}}) == {
+        "device": "cpu", "gpu_name": None, "gpu_total_bytes": None,
+        "peak_gpu_allocated_bytes": None, "peak_gpu_reserved_bytes": None,
+        "peak_rss_bytes": 5, "device_workers": 1, "fold_wall_seconds": 2.0,
+    }
+
+
+def test_0b_gate_checks_the_declared_kumo_override_profile(tmp_path, reports, monkeypatch):
+    arm, bodies = deepcopy(reports)
+    arm.update(model="kumo_tabular", predictor_columns=557, width_status="within_known_width_limit")
+    bodies[-1].update(arm=arm, predictor_columns=557, **_b200_report())
+    monkeypatch.setattr(q, "profile_plan", lambda: [arm])
+    monkeypatch.setattr(q, "load_catalog",
+                        lambda: {"datasets": [{"id": "data", "paper_summary": {"rows": 10}}]})
+    q.benchmark_evidence(write_approval(tmp_path / "pass", bodies), arm)
+    bodies[-1]["resources"]["gpu_name"] = "NVIDIA H100"
+    with pytest.raises(ValueError, match="kumo_max_columns_override_b200_profile"):
+        q.benchmark_evidence(write_approval(tmp_path / "fail", bodies), arm)

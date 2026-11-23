@@ -272,7 +272,8 @@ def robustness_matrix_figure(changes):
             ax.axvline(start - 0.5, color=style.BACKGROUND_COLOR, linewidth=3)
         start += width
     ax.set_ylim(len(providers) - 0.5, -1.2)
-    yield fig, "robustness_across_models", (
+    yield fig, "historical_0a_robustness", (
+        "Historical 0A probes (before feature creation; not the A2 stability study). "
         "Total variation between each model's probability vector for an unmodified real input "
         "and for the same input under an intervention that should not change the answer (0 = "
         "identical, 1 = disjoint); one deterministically selected input per task, the same for "

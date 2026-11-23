@@ -7,13 +7,13 @@ on VSC PROJECT; `python -m src.evaluation.benchmark_export --study B1` (Slurm:
 only that ZIP to the same relative path under the local `output_JEVPFN/`; each notebook reads
 nothing else and shows an explicit waiting state when it is absent.
 
-| Study | Folder (notebook) | Phases read |
+| Study | Folder and notebook (`<group>/<folder>`) | Phases read |
 |---|---|---|
-| B1 decision features | exp04_decision_features | experiment_1 |
-| B2 representations | exp05_frozen_embeddings (also read by exp06_tar) | experiment_1-3 |
-| B3 when and for whom | exp08_when_text_helps | experiment_1, rq2 (+ Group A exports, row cohorts) |
-| B4 amount of labelled data | exp11_data_efficiency | data_efficiency |
-| B5 native systems | exp07_native_text | experiment_1, experiment_4 |
+| B1 decision features | B/exp04_decision_features | experiment_1 |
+| B2 representations | B/exp05_frozen_embeddings (also read by B/exp06_tar) | experiment_1-3 |
+| B3 when and for whom | B/exp08_when_text_helps | experiment_1, rq2 (+ Group A exports, row cohorts) |
+| B4 amount of labelled data | B/exp09_data_efficiency (exp11_data_efficiency until 23-11-2026) | data_efficiency |
+| B5 native systems | B/exp07_native_text | experiment_1, experiment_4 |
 """
 
 from __future__ import annotations

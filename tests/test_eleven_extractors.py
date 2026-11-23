@@ -426,31 +426,3 @@ def test_real_publisher_renderers_30_classes_unicode_and_empty_text(real_counter
         real_counter.limit = original_limit
     with pytest.raises(ValueError, match="empty|missing|text"):
         real_counter.prepare({**payload, "state": {"text": {"name": None}}})
-
-
-def test_eleven_provider_status_figure_does_not_overlap_title():
-    import matplotlib.pyplot as plt
-
-    from src.evaluation.decision_comparison import Comparison
-    from src.visualize import style
-    from src.visualize.decision_comparison import coverage_figures
-
-    style.apply()
-    options = load_yaml("feature_comparison")["comparison"]
-    result = Comparison()
-    for provider in options["providers"]:
-        for mode in options["representations"]:
-            result.add(
-                "inventory",
-                dict(
-                    provider=provider, representation=mode, dataset="fixture", status="not_created"
-                ),
-            )
-    fig, _, _ = next(coverage_figures(result, options))
-    try:
-        fig.canvas.draw()
-        ax = fig.axes[0]
-        renderer = fig.canvas.get_renderer()
-        assert ax.tables[0].get_window_extent(renderer).y1 < ax.title.get_window_extent(renderer).y0
-    finally:
-        plt.close(fig)

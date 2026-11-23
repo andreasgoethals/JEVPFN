@@ -164,15 +164,14 @@ def test_output_figures_render_at_print_width():
                       options(("jev", "liquid", "strands")), result)
     shape, pairs, loo = result.table("output_shape"), result.table("pairs"), result.table("loo_consensus")
     figures = [*plots.output_shape_figure(shape), *plots.regression_levels_figure(shape),
-               *plots.pairwise_figures(pairs), *plots.consensus_figure(loo)]
+               *plots.pairwise_figures(pairs)]
     assert [name for _, name, _ in figures] == [
         "output_shape_joint", "regression_levels_joint", "pairwise_agreement_binary_classification_joint",
-        "pairwise_agreement_multiclass_classification_joint", "pairwise_agreement_regression_joint",
-        "consensus_agreement_joint"]
+        "pairwise_agreement_multiclass_classification_joint", "pairwise_agreement_regression_joint"]
     for fig, _, caption in figures:
         assert fig.get_size_inches()[0] <= 6.31 and caption
         plt.close(fig)
-    assert "Qwen3.8-27B" in figures[-1][2] and "not truth" in figures[-1][2]
+    assert not loo.empty and not hasattr(plots, "consensus_figure")  # Folded into the profile strip.
     table = comparison_report.pairwise_table(pairs)
     assert {"top_agreement", "total_variation", "earth_movers"} <= set(table)
 
@@ -235,8 +234,8 @@ def test_standalone_multiclass_ties_and_regression_rank_only():
 
 
 def test_standalone_analysis_moved_from_exp04_to_exp01():
-    exp04 = (NOTEBOOKS / "exp04_decision_features.ipynb").read_text(encoding="utf-8")
-    exp01 = (NOTEBOOKS / "exp01_outputs.ipynb").read_text(encoding="utf-8")
+    exp04 = (NOTEBOOKS / "B" / "exp04_decision_features.ipynb").read_text(encoding="utf-8")
+    exp01 = (NOTEBOOKS / "A" / "exp01_outputs.ipynb").read_text(encoding="utf-8")
     assert "zero_shot" not in exp04 and "direct_score" not in exp04
     assert "direct_score_figures" in exp01 and "joint" in exp01
     assert not hasattr(z, "structured_references") and not hasattr(z, "prediction_matrix")
@@ -247,7 +246,7 @@ def test_standalone_analysis_moved_from_exp04_to_exp01():
     scores = pd.DataFrame([
         {"dataset_id": "BIN_TEXT_FAKE_JOB_POSTING", "task_type": "binary_classification", "provider": "kev",
          "metric": m, "value": v, "status": "descriptive"} for m, v in (("roc_auc", .7), ("log_loss", .3), ("ece", .1))])
-    reliability = pd.DataFrame([{"dataset_id": "BIN_TEXT_FAKE_JOB_POSTING", "provider": "kev", "bin": 9,
+    reliability = pd.DataFrame([{"dataset_id": "BIN_TEXT_FAKE_JOB_POSTING", "provider": "kev", "bin": 9, "lower": .9, "upper": 1.0,
                                  "count": 3, "mean_confidence": .95, "accuracy": .8}])
     figures = list(plots.direct_score_figures(scores, reliability))
     assert [n for _, n, _ in figures] == ["standalone_quality_classification", "standalone_reliability"]

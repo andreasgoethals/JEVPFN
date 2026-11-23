@@ -12,6 +12,7 @@ import importlib
 import importlib.metadata
 import json
 import os
+import warnings
 from pathlib import Path
 from uuid import uuid4
 
@@ -35,6 +36,8 @@ CATEGORY_DTYPE_MODELS = ("tabpfn_3_5", "tabicl_v2", "lightgbm")
 #: Predictors that receive categories as typed-JSON strings (missing = the string "null").
 STRING_CATEGORY_MODELS = ("linear", "catboost")
 TEXT_MODELS = ("tabstar", "contexttab", "ag_mm")
+#: Kumo's default recipe ``SelectColumns(500, method="first")`` per estimator.
+KUMO_RECIPE_COLUMNS = 500
 
 
 def predictor_settings_identity(settings):
@@ -376,6 +379,14 @@ class KumoBackend:
 
     Explicitly loads a local checkpoint without Hub access. Regression uses the mean
     of its 999 predicted quantiles, a documented approximation to the predictive mean.
+
+    The default recipe keeps at most 500 columns per estimator (``SelectColumns(500)``
+    after category-count expansion), a recipe default rather than an architectural
+    limit. Inputs of at most 500 expanded columns use the unmodified default recipe.
+    Wider inputs (owner-approved 23 Nov 2026) get a copy of that recipe whose
+    ``SelectColumns.max_columns`` equals the expanded width, as the publisher's own
+    ``max_columns`` wrapper parameter does, so every estimator sees every column. The
+    deviation is recorded as a ``kumo_max_columns_override`` fit warning.
     """
 
     def __init__(self, task, settings, categorical_columns=()):
@@ -407,11 +418,33 @@ class KumoBackend:
             frame.reset_index(drop=True), stypes=stypes, device=self.settings["device"]
         )
 
+    def _recipe(self, width):
+        """None (the untouched default) up to 500 columns; otherwise a widened copy."""
+        if width <= KUMO_RECIPE_COLUMNS:
+            return None
+        recipe = self.model.default_recipe()
+        selectors = [
+            p for p in recipe.features.modules()
+            if isinstance(p, self.sdm.processing.SelectColumns)
+        ]
+        if len(selectors) != 1 or selectors[0].max_columns != KUMO_RECIPE_COLUMNS:
+            raise ValueError("Kumo default recipe no longer has one SelectColumns(500); review the override")
+        selectors[0].max_columns = width
+        return recipe
+
     def fit(self, x, y):
+        # AddCategoryCounts(min_cardinality=50) adds one column per categorical column whose
+        # fitted vocabulary (missing excluded) exceeds 50 values.
         extra_counts = sum(x[c].nunique(dropna=True) > 50 for c in self.categorical_columns)
-        if x.shape[1] + extra_counts > 500:
-            raise ValueError(
-                "Kumo default recipe selects 500 columns after category-count expansion; refuse silent feature loss"
+        width = int(x.shape[1] + extra_counts)
+        self.recipe_ = self._recipe(width)
+        self.max_columns_override_ = width if self.recipe_ is not None else None
+        if self.recipe_ is not None:
+            warnings.warn(
+                f"kumo_max_columns_override={width}: SelectColumns(500) widened to all "
+                f"{width} expanded columns per estimator",
+                UserWarning,
+                stacklevel=2,
             )
         self.classes_ = np.unique(y) if self.task != "regression" else None
         self.x_, self.y_ = (
@@ -443,6 +476,8 @@ class KumoBackend:
                     x_query=self._table(x.iloc[start : start + batch]),
                     num_estimators=self.settings.get("num_estimators", 8),
                     generator=generator,
+                    # Nothing extra is passed for inputs within the default 500 columns.
+                    **({} if self.recipe_ is None else {"recipe": self.recipe_}),
                 )
             values = out.numerical.float().cpu().numpy()
             if self.task != "regression":

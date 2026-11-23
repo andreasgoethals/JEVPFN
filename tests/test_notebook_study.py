@@ -13,7 +13,7 @@ from src.evaluation.endpoints import HEADLINES
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.visualize import style
-from src.visualize.study import burden_figures, coverage_figures, native_figures
+from src.visualize.study import burden_figures, coverage_figures
 
 
 def fixture_folds():
@@ -81,8 +81,7 @@ def test_cross_system_pairing_is_explicit_and_split_bound():
 
 def test_future_plots_draw_on_final_print_canvas_without_winner_selection():
     style.apply()
-    summary = study.headline_summary(fixture_folds())
-    figures = list(native_figures(summary)) + list(coverage_figures(study.planned_coverage(fixture_folds(), "experiment_1"), "Fixture"))
+    figures = list(coverage_figures(study.planned_coverage(fixture_folds(), "experiment_1"), "Fixture"))
     for fig, _, _ in figures:
         fig.canvas.draw()
         assert fig.get_size_inches()[0] == style.WIDTH_FULL
@@ -98,8 +97,8 @@ def test_no_empty_coverage_figures_before_results_exist():
 def test_every_experiment_has_thin_notebook_and_complete_printed_report():
     from src.utils import structure
 
-    for folder in {n.folder for n in structure.registry().notebooks}:
-        notebooks = [paths.REPO_ROOT / "notebooks" / f"{folder}.ipynb"]
+    for notebook in {n.id for n in structure.registry().notebooks}:
+        notebooks = [paths.REPO_ROOT / "notebooks" / f"{notebook}.ipynb"]
         assert notebooks[0].is_file()
         for filename in notebooks:
             body = json.loads(filename.read_text(encoding="utf-8"))
@@ -111,7 +110,7 @@ def test_every_experiment_has_thin_notebook_and_complete_printed_report():
 
 def test_synthesis_uses_general_notebook_output_without_fake_experiment():
     assert paths.notebook_phase("8. synthesis/01_representation_comparison") == "synthesis"
-    assert paths.phase_folder("synthesis") == "synthesis"
+    assert paths.phase_folder("synthesis") == "05_synthesis"
 
 
 def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():

@@ -49,19 +49,11 @@ def test_demsar_worked_example_ranks_statistics_and_critical_difference():
     assert inference.nemenyi_critical_difference(4, 14) == pytest.approx(1.25, abs=0.01)
 
 
-def test_adjustments_holm_finner_and_shaffer():
+def test_holm_and_no_finner_or_shaffer_corrections():
     p = [0.01, 0.04, 0.03, 0.005]
     assert inference.holm(p).tolist() == pytest.approx([0.03, 0.06, 0.06, 0.02])
-    finner = inference.finner(p)
-    assert np.all(finner <= inference.holm(p) + 1e-12) and np.all(finner >= np.array(p))
-    assert inference._shaffer_counts(4) == [0, 1, 2, 3, 6]
-    six = [0.001, 0.01, 0.02, 0.03, 0.04, 0.05]
-    shaffer = inference.shaffer(six, 4)
-    # First step multiplies by 6, the second by S(4) max <= 5, i.e. 3 (not Holm's 5).
-    assert shaffer[0] == pytest.approx(0.006) and shaffer[1] == pytest.approx(0.03)
-    assert np.all(shaffer <= inference.holm(six) + 1e-12)
-    with pytest.raises(ValueError, match="every pairwise"):
-        inference.shaffer(p[:3], 4)
+    # Owner decision 23-11-2026: Holm is the only multiplicity correction.
+    assert not {"finner", "shaffer", "_shaffer_counts"} & set(dir(inference))
 
 
 def test_bayesian_signed_rank_separates_better_equivalent_and_worse():
@@ -79,14 +71,16 @@ def test_compare_learners_control_and_all_pairs_and_orientation():
     omnibus, versus = inference.compare_learners(
         scores(matrix), higher_is_better=True, control="L0", rope=0.01)
     assert omnibus["learners"] == 3 and omnibus["datasets"] == 18
-    assert set(versus.learner) == {"L1", "L2"} and "p_finner" in versus
+    assert set(versus.learner) == {"L1", "L2"} and versus.comparison.eq("versus_control").all()
+    assert versus.attrs["control"] == "L0"
     strong = versus.set_index("learner").loc["L1"]
     assert strong.wins == 18 and strong.p_holm < 0.01 and strong.bayes_p_better > 0.9
     _, pairs = inference.compare_learners(scores(matrix), higher_is_better=True, rope=0.01)
-    assert len(pairs) == 3 and "p_mean_rank_shaffer" in pairs and "p_shaffer" not in pairs
-    # Shaffer adjusts the transitive mean-rank z-tests, never the Wilcoxon p-values.
-    assert pairs.p_mean_rank_shaffer.tolist() == pytest.approx(
-        inference.shaffer(pairs.p_mean_rank_z, 3).tolist())
+    assert len(pairs) == 3 and pairs.comparison.eq("all_pairwise").all() and pairs.attrs["control"] is None
+    assert pairs.p_holm.tolist() == pytest.approx(inference.holm(pairs.p_wilcoxon).tolist())
+    # Only Wilcoxon + Holm p-values: no Finner, Shaffer or mean-rank z post-hoc columns.
+    for table in (versus, pairs):
+        assert not {c for c in table if "finner" in c or "shaffer" in c or c == "p_mean_rank_z"}
     # Lower-is-better metrics (log loss) are oriented so that positive still means better.
     _, loss = inference.compare_learners(
         scores(-matrix), higher_is_better=False, control="L0", rope=0.01)

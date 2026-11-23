@@ -1,6 +1,6 @@
 """A3 (exp03_geometry): one compact export of the completed geometry summaries.
 
-The analysis itself is unchanged (`geometry_study`, `config/exp03_geometry/geometry.yaml`).
+The analysis itself is unchanged (`geometry_study`, `config/A/geometry.yaml`).
 The Mindwell CPU job (`scripts/slurm/rq1_geometry_export.slurm`) packages every full
 (non-pilot) `results/geometry/<dataset>.json` on PROJECT into
 `results/geometry/geometry.zip`; sampled text keys stay on PROJECT, only counts travel.

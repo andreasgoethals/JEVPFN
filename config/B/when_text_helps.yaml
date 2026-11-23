@@ -1,0 +1,75 @@
+# Exp 8 (RQ2-E) moderator analysis plan, fixed before any benchmark result exists.
+# Read by src.evaluation.moderator_statistics. Proposed 19 November 2026 for owner review.
+# The registry already owns the stem `analysis` (config/05_synthesis/analysis.yaml), so this
+# folder's plan uses the unique stem `when_text_helps`.
+schema: jevpfn.exp08_analysis.v1
+status: proposed_before_results
+proposed: 19-11-2026
+approved_by: null
+# Unit: one headroom-normalised gain per dataset × predictor × representation
+# (aggregate.dataset_gains); raw (unnormalised) gain is always reported alongside.
+outcomes: [gain, raw_gain]
+# The analysed grid: headline representations only (median over decision models per
+# decision mode; each frozen-embedding and TAR recipe), each predictor separately.
+grid: headline_representations
+# No moderator is singled out in advance (owner decision, 19-11-2026): every
+# moderator is reported equally with Spearman rho, a dataset-bootstrap interval and
+# a Benjamini-Hochberg-adjusted permutation p-value across the whole grid.
+primary_moderators: []
+# All numeric moderators from moderators.dataset_moderators are analysed.
+exploratory: all_other_numeric_moderators
+exploratory_correction: benjamini_hochberg_fdr_across_the_exploratory_grid
+fdr_level: 0.10
+# Two-sided permutation test of Spearman rho (moderator shuffled over datasets).
+test: spearman_permutation_two_sided
+n_permutations: 5000
+n_boot: 2000
+seed: 20261119
+min_datasets: 5
+# Random-effects pooling over datasets per predictor × representation.
+meta_analysis:
+  method: dersimonian_laird
+  effect: per_dataset_mean_normalised_gain
+  within_variance: fold_variance_over_five_divided_by_five
+  caveat: outer folds share training rows, so fold variances understate within-dataset variance
+  interval: normal_95
+
+# ---------------------------------------------------------------------------------------
+# Group B, B3 "when and for whom" (approved grid 20 November 2026), fixed before results.
+# Datasets: label-free properties (moderators.dataset_covariates: text length, empty share,
+# repetition/uniqueness, number of text columns, rows) plus decision redundancy (how well the
+# non-text columns predict each model's joint decision output; group_b.decision_redundancy,
+# label-free). Every property x predictor x representation is reported with Spearman rho and
+# one BH adjustment across all of them (primary_moderators stays empty). Decision models:
+# Group A diagnostics vs usefulness, exploratory (n = 17). Text columns: refits without one
+# column (text_column_refits.yaml). Rows: row_benefit cohorts (availability/length, baseline
+# uncertainty, decision confidence, cross-model agreement); novelty and prediction-shift
+# cohorts, permutation importance, SHAP and top-10% turnover analyses are not part of B3.
+group_b:
+  tie_tolerance: 0.001  # |raw gain| <= this counts as a tie (headline-metric units)
+  bootstrap: {n_boot: 2000, seed: 20261120, unit: dataset}
+predict_in_advance:
+  # Leave-one-dataset-out: a ridge rule on <= 2 prespecified label-free properties predicts
+  # each held-out dataset's gain; use decision features when the prediction exceeds 0.
+  # Owner decision 23-11-2026: the same rule on three nested input sets, one common dataset
+  # cohort, so the sets differ only in how much decision output they need beforehand.
+  rule: ridge_on_standardized_properties
+  input_sets:
+    pre_extraction:
+      properties: [log10_median_text_chars]
+      claim: should_i_acquire_decision_features
+    pilot:
+      properties: [log10_median_text_chars, pilot_redundancy_r2]
+      claim: should_i_acquire_after_a_200_request_pilot
+    post_extraction:
+      properties: [log10_median_text_chars, decision_redundancy_r2]
+      claim: should_i_use_decision_features_i_already_have
+  # Pilot redundancy: the 200 rows with the smallest seeded hash of (dataset, row position),
+  # never chosen by label or content; 5-fold CV inside the pilot. Here it reuses stored
+  # outputs of those rows; in deployment it costs 200 decision requests per model.
+  pilot: {rows: 200, seed: 20261123, folds: 5}
+  alpha: 1.0
+  outcome_representation: decision/both/median  # median over all 17 models, per predictor
+  use_threshold: 0.0
+  n_shuffles: 2000  # null: gains shuffled across datasets, whole LODO rule refitted
+  report: [spearman_rho, use_accuracy, regret_vs_always_and_never, shuffle_p]

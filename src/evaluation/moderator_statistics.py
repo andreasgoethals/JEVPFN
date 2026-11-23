@@ -1,6 +1,6 @@
 """Exp 8 (RQ2-E) statistics fixed before results: primary moderators, FDR, pooling.
 
-The plan lives in `config/exp08_when_text_helps/when_text_helps.yaml` (status
+The plan lives in `config/B/when_text_helps.yaml` (status
 ``proposed_before_results``). Three analyses use the per-dataset gains of
 ``aggregate.dataset_gains`` restricted to the headline grid (median over decision models per
 decision mode, and each embedding/TAR recipe), each predictor separately:
@@ -17,7 +17,7 @@ decision mode, and each embedding/TAR recipe), each predictor separately:
 
 About eighteen datasets give little power. Results are associations, never causal effects or
 a basis for selecting a representation, and nothing here replaces the confirmatory plan in
-`config/synthesis/analysis.yaml`.
+`config/05_synthesis/analysis.yaml`.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import pandas as pd
 from src.evaluation.aggregate import MEDIAN, RECIPE
 from src.evaluation.moderators import bootstrap_spearman, moderator_data, spearman_rows
 
-CONFIG = "exp08_when_text_helps/when_text_helps"
+CONFIG = "B/when_text_helps"
 STATUS = "proposed_before_results"
 TEST_COLUMNS = [
     "model_id", "checkpoint_id", "family", "representation", "outcome", "moderator", "role",

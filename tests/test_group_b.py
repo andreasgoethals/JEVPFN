@@ -341,9 +341,17 @@ def test_group_b_plan_counts():
     assert counts == {"experiment_1": 6552, "experiment_2": (6 + 17) * 7 * 18,
                       "experiment_3": (2 + 6) * 7 * 18, "experiment_4": 54, "rq2": 17 * 78 * 7,
                       "data_efficiency": 399 * 22 * 7}
-    unsupported = [a for a in plan if a["width_status"] == "unsupported_width"]
-    assert {(a["model"], a["dataset_id"], a["feature_set"]) for a in unsupported} == {
-        ("kumo_tabular", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_both_plus_frozen_e5")}
+    # Kumo's 500-column recipe default is widened, not excluded (owner-approved 23 Nov 2026).
+    assert not [a for a in plan if a["width_status"] == "unsupported_width"]
+    widened = [a for a in plan if a.get("kumo_max_columns_override")]
+    assert {(a["model"], a["dataset_id"], a["feature_set"], a["predictor_columns"])
+            for a in widened} == {
+        ("kumo_tabular", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_both_plus_frozen_e5", 557)}
+    assert len(widened) == 17
+    assert all(a["recipe_column_limit"] == a["kumo_max_columns_override"] == a["predictor_columns"]
+               for a in widened)
+    assert {a["recipe_column_limit"] for a in plan if a["model"] == "kumo_tabular"
+            and not a.get("kumo_max_columns_override")} == {500}
     assert not any(a.get("feature_set") == "all_models" for a in plan)
 
 
@@ -505,18 +513,17 @@ def test_b4_size_gains_and_pooled_curve():
 
 
 def test_group_b_figures_render_at_a4_width():
+    from src.evaluation import group_b_views
     from src.visualize import group_b as figures
     from src.visualize import style
 
     gains = group_b.dataset_gains(group_b.fold_gains(_folds()))
-    summary = pd.concat([group_b.summarize(gains),
-                         group_b.summarize(group_b.median_over_decision_models(gains, roster=["m1", "m2"]))])
-    produced = [
-        *figures.gain_forest(summary, ["decision/both/median", "frozen/e5_small_v2/per_column32"],
-                             name="a", what="Test"),
-        *figures.win_tie_loss(summary, ["decision/both/median"], name="b", what="Test"),
-        *figures.model_by_predictor(gains, name="c", what="Test"),
-    ]
+    medians = group_b.median_over_decision_models(gains, roster=["m1", "m2"])
+    reps = ["decision/both/median", "frozen/e5_small_v2/per_column32"]
+    summary = group_b_views.family_summaries(pd.concat([gains, medians]), reps, n_boot=50)
+    produced = [*figures.gain_forest(summary, reps, name="a", what="Test"),
+                *figures.gain_forest(summary, reps, name="b", what="Test", share=True),
+                *figures.model_by_predictor(gains, name="c", what="Test")]
     assert len(produced) == 3
     for fig, _, caption in produced:
         assert fig.get_figwidth() == pytest.approx(style.WIDTH_FULL) and caption
@@ -530,7 +537,7 @@ def test_exports_wait_when_absent(tmp_path):
     frames, receipt = benchmark_export.read("B4", target=tmp_path / "absent.zip")
     assert frames == {} and receipt["status"] == study_export.AWAITING
     assert set(benchmark_export.STUDIES) == {"B1", "B2", "B3", "B4", "B5"}
-    assert "exp11_data_efficiency" in str(benchmark_export.export_path("B4"))
+    assert benchmark_export.export_path("B4").parts[-5:-3] == ("B", "exp09_data_efficiency")
 
 
 def test_permutation_attribution_is_disabled_and_row_cohorts_are_pre_treatment():
@@ -647,3 +654,19 @@ def test_probe_crossfit_bins_and_c_never_use_the_scored_rows():
     assert np.allclose(changed.iloc[50].to_numpy(), base.iloc[50].to_numpy())
     (diagnostic,) = probe.diagnostics_
     assert len(diagnostic["crossfit_selected_C"]) == label_probe.CROSSFIT_FOLDS
+
+
+def test_summarize_by_family_never_mixes_auc_and_r2_gains():
+    """Raw gains are summarised per task family; binary and multiclass pool as classification."""
+    import pandas as pd
+
+    from src.evaluation import group_b
+
+    gains = pd.DataFrame({
+        "dataset_id": ["a", "b", "c", "d"], "model_id": "catboost", "representation": "decision/both/m",
+        "task_type": ["binary_classification", "multiclass_classification", "regression", "regression"],
+        "raw_gain": [0.02, 0.04, 0.30, 0.10], "headroom_share": [0.1, 0.2, 0.5, 0.3]})
+    table = group_b.summarize_by_family(gains, n_boot=50).set_index("task_family")
+    assert table.loc["classification", "datasets"] == 2
+    assert abs(table.loc["classification", "mean_raw_gain"] - 0.03) < 1e-12
+    assert abs(table.loc["regression", "mean_raw_gain"] - 0.20) < 1e-12

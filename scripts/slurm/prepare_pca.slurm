@@ -8,8 +8,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=24:00:00
-#SBATCH --output="output_JEVPFN/exp05_frozen_embeddings/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/exp05_frozen_embeddings/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/B/exp05_frozen_embeddings/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/B/exp05_frozen_embeddings/logs/%x_%j.log"
 set -euo pipefail
 source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=experiment_2

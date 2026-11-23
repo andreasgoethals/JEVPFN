@@ -1,4 +1,9 @@
-"""Preflight widths; distinguish a selected recipe's limit from hardware capacity."""
+"""Preflight widths; distinguish a selected recipe's limit from hardware capacity.
+
+Kumo's default recipe keeps 500 columns per estimator. Since 23 November 2026 (owner
+approval) wider Kumo arms widen that recipe limit to their full width instead of being
+excluded (`KumoBackend`); B200 memory and time are a 0B full-fold profile check.
+"""
 
 from src.evaluation.features import (
     ADAPTED,
@@ -8,6 +13,7 @@ from src.evaluation.features import (
     decision_feature_set,
     uses_embeddings,
 )
+from src.evaluation.models import KUMO_RECIPE_COLUMNS
 
 
 def feature_width(metadata, arm):
@@ -61,15 +67,23 @@ def feature_width(metadata, arm):
 
 
 def width_status(metadata, arm):
+    """No selected recipe now silently drops columns, so no arm is `unsupported_width`.
+
+    Kumo arms within the default keep their historical fields (and plan identity); wider
+    Kumo arms record the per-estimator limit raised to their planned width. The fit
+    recomputes the limit after Kumo's category-count expansion.
+    """
     width = feature_width(metadata, arm)
-    limit = 500 if arm["model"] == "kumo_tabular" else None
-    return {
+    status = {
         "predictor_columns": width,
-        "recipe_column_limit": limit,
-        "width_status": "unsupported_width"
-        if limit is not None and width > limit
-        else "within_known_width_limit",
+        "recipe_column_limit": None,
+        "width_status": "within_known_width_limit",
     }
+    if arm["model"] == "kumo_tabular":
+        status["recipe_column_limit"] = max(KUMO_RECIPE_COLUMNS, width)
+        if width > KUMO_RECIPE_COLUMNS:
+            status["kumo_max_columns_override"] = width
+    return status
 
 
 def pca_width_table():

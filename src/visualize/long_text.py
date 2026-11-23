@@ -85,8 +85,14 @@ def long_text_figures(datasets, columns, *, all_columns=False):
         labels = [f"{row.dataset} · {fill(row.text_column, 28)}" for row in part.itertuples()]
         _draw(ax, part, "tokens", labels)
         ax.tick_params(axis="y", labelsize=style.LONG_TEXT_PAGE_FONT, length=0)
+        from src.visualize.exploration import _removed
+
+        removed = _removed()
         for tick, dataset_id in zip(ax.get_yticklabels(), part.dataset_id):
-            tick.set_color(style.TASK_COLORS.get(tasks.get(dataset_id), style.TEXT_COLOR))
+            tick.set_color(style.REMOVED_COLOR if dataset_id in removed
+                           else style.TASK_COLORS.get(tasks.get(dataset_id), style.TEXT_COLOR))
+            if dataset_id in removed:
+                tick.set_fontstyle("italic")
         ax.set_xlim(0.7, xmax)
         for value, label in windows:
             ax.axvline(value, color=style.WINDOW_COLOR, linestyle=(0, (3, 2)), linewidth=0.8,
@@ -107,5 +113,6 @@ def long_text_figures(datasets, columns, *, all_columns=False):
             "Dashed lines mark the E5 window, the configured Qwen chunk, the smallest "
             "decision-model request window (Strands) and the Jev window. Lengths are "
             "ceil(characters/4) for the text alone, whereas decision windows must also hold the "
-            "question. Longer encoder inputs are chunked; decision requests are never truncated.",
+            "question. Longer encoder inputs are chunked; decision requests are never truncated. Grey "
+            "italic labels belong to the two excluded datasets.",
         )

@@ -115,13 +115,15 @@ Retirement requires consumer checks, verified publication/recovery and scoped au
 Preserve resumable failures, referenced images and other projects. Check byte/file quotas;
 never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
-Reusable Python belongs in `src/`. Since 18 November 2026, `config/structure.yaml` is the one
-layout registry: `config/`, `notebooks/` and `output_JEVPFN/` (`<folder>/{logs,manifests,results}/`)
-use its folders `00_data`, `01_exp0a`, `02_feature_creation`, `03_exp0b`, `exp01_outputs` …
-`exp08_when_text_helps`, `exp09_representations` (C1), `exp10_adaptation` (C2),
-`exp11_data_efficiency` (B4) and `synthesis`. Keep at most one flat notebook per folder,
-`notebooks/<folder>.ipynb`; add folders only through the registry, and record paper placement under its
-`paper:` mapping, never in folder names. Internal phase IDs (`experiment_0`…`4`, `rq1`…`rq3`, …)
+Reusable Python belongs in `src/`. `config/structure.yaml` is the one layout registry (v3,
+owner-approved 23 November 2026). General folders (`00_data` … `05_synthesis`) sit at the top of
+`config/` and `output_JEVPFN/`; experiments sit in letter groups (`A/exp01_outputs` …,
+`B/exp04_decision_features` … `B/exp09_data_efficiency`, `C/exp10_representations`,
+`C/exp11_adaptation`), with configs flat in `config/<group>/`. Notebooks live only in
+`notebooks/{general,A,B,C,paper}/` as declared there: one notebook per experiment with its
+statistics inside, one `<letter>_synthesis` per group, and in `general/` data and questions,
+feature creation, 0A+0B qualification, study audit and synthesis. Add folders and notebooks only
+through the registry, and record paper placement under its `paper:` mapping, never in folder names. Internal phase IDs (`experiment_0`…`4`, `rq1`…`rq3`, …)
 remain hash/recipe/receipt keys and config aliases; never rename them. Move existing output trees only
 with `src.utils.layout_migration` at a verified idle handover.
 Do not create empty phase folders or duplicate question files. Permanent questions and
@@ -135,9 +137,10 @@ PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.
 - `src/visualize/style.py` owns colors/sizes. Use `FigureSaver`, PDF and inline display;
   inspect figures at final A4 widths and split dense views into readable panels.
   Captions describe the figure without repeating the title.
-- Save figures to the one `output_JEVPFN/figures/<notebook>/` (grouping: `structure.figure_group`),
-  captions to `figures/CAPTIONS.md`, the report to `output_JEVPFN/All_Results.md` and other
-  notebook records to `<folder>/<kind>/notebook/`; no per-folder copies. Previous-layout
+- Save figures to the one `output_JEVPFN/figures/<notebook group>/<name>/` (grouping:
+  `structure.figure_group`), captions to `figures/CAPTIONS.md`, the report to
+  `output_JEVPFN/All_Results.md` and other notebook records to `[<group>/]<folder>/<kind>/notebook/`;
+  no per-folder copies. Previous-layout
   records go to the git-ignored `archive/` beside the output root (`paths.archive_dir`).
 - Run `python -m pytest -q` before finishing. If notebooks or `src/visualize/` change,
   also run `python -m src.utils.run_notebooks` and inspect every affected figure.

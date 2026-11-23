@@ -1,0 +1,61 @@
+# Planned paper figures (config/05_synthesis/paper_figures.yaml) -> owning notebook and saved figure stem(s). Proposed 19-11-2026.
+# Placement (main | appendix | undecided) is decided later and never by folder name; nothing
+# here moves a notebook, figure or result. `figures` are saved-figure stems as written by
+# FigureSaver (files are `NN_<stem>.pdf` under output_JEVPFN/figures/<notebook ID>/; a trailing
+# `*` matches a family of stems. `status: planned` marks figures whose notebook does not
+# produce them yet. Read by src.utils.paper_figures.
+schema: jevpfn.paper_figures.v1
+proposed: 19-11-2026
+revised: 23-11-2026  # stems follow the 23-11-2026 notebook rebuild; B stems are planned names
+figures:
+- id: fig1_headline_gain
+  title: What decision models add - per-dataset gains and model ranks
+  notebook: B/exp04_decision_features
+  section: summary
+  figures: [gain_landscape, model_rank_heatmap]
+  placement: undecided
+  status: planned
+- id: fig2_representation_ladder_and_compute
+  title: Decision features against embedding, label-trained and native alternatives, and compute
+  notebook: B/B_synthesis
+  figures: [representation_ladder*, quality_vs_compute*]
+  placement: undecided
+  status: planned
+- id: fig3_dataset_and_model_explanations
+  title: When do decision features help - dataset moderators and decision models
+  notebook: B/exp08_when_text_helps
+  figures: [raw_gain_vs_headroom*, model_diagnostics_vs_usefulness*]
+  placement: undecided
+  status: planned
+- id: fig4_fields_and_prediction_in_advance
+  title: Which text columns help, and predicting usefulness in advance
+  notebook: B/exp08_when_text_helps
+  figures: [column_refits*, lodo*]
+  placement: undecided
+  status: planned
+- id: fig_study_at_a_glance
+  title: Study at a glance - every prespecified arm against no text
+  notebook: general/5_synthesis
+  figures: [study_at_a_glance]
+  placement: undecided
+  status: available_when_results_exist
+- id: exp09_representations_panel
+  title: Inside the decision model (Strands hidden states, Group C1)
+  notebook: C/exp10_representations
+  figures: [c1_position_path, c1_contrasts, c1_vector_vs_probabilities_by_dataset, c1_gains_per_column,
+            c1_gains_joint]
+  placement: undecided
+  status: available_when_results_exist
+- id: tab_rq3_adaptation
+  title: Learning from labels with Strands (Group C2)
+  notebook: C/exp11_adaptation
+  kind: table
+  figures: [c2_factorial, c2_cells, c2_context, c2_datasets, c2_gains]
+  placement: undecided
+  status: available_when_results_exist
+- id: fig_strands_ladder
+  title: Strands from zero-shot probabilities to label training
+  notebook: C/C_synthesis
+  figures: [strands_ladder]
+  placement: undecided
+  status: available_when_results_exist

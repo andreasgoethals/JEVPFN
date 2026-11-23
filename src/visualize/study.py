@@ -5,7 +5,6 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 from src.data.loaders import load_catalog
-from src.evaluation.endpoints import LABELS
 from src.utils.config import load_yaml
 from src.visualize import layout, style
 
@@ -69,43 +68,6 @@ def coverage_figures(table, title, *, feature_inventory=False):
     yield fig, "coverage", f"{title}. {detail}"
 
 
-def native_figures(summary):
-    """Headline score of each native system per dataset, one panel per task."""
-    data = summary[summary.phase.eq("experiment_4") & summary.defined_folds.eq(5)] if not summary.empty else summary
-    if data.empty:
-        return
-    if data.duplicated(["dataset_id", "model_id"]).any():
-        raise ValueError("Select one native checkpoint/campaign before plotting")
-    datasets, tasks, names = _ordered_datasets(data.dataset_id)
-    present = [t for t in layout.TASK_ORDER if t in tasks]
-    counts = [tasks.count(t) for t in present]
-    fig, axes = plt.subplots(len(present), 1, figsize=(style.WIDTH_FULL, min(
-        style.MAX_HEIGHT, 1.0 + 0.24 * len(datasets) + 0.35 * len(present))),
-        gridspec_kw={"height_ratios": counts})
-    axes = np.atleast_1d(axes)
-    for ax, task in zip(axes, present):
-        rows = [d for d, t in zip(datasets, tasks) if t == task]
-        group = data[data.task_type.eq(task)]
-        for pos, model in enumerate(style.NATIVE_COLORS):
-            part = group[group.model_id.eq(model)]
-            ax.scatter(part["mean"], [rows.index(d) + (pos - 1) * 0.18 for d in part.dataset_id],
-                       color=style.NATIVE_COLORS[model], marker=style.NATIVE_MARKERS[model], s=22,
-                       zorder=3, label=style.PREDICTOR_LABELS[model])
-        layout.dataset_axis(ax, [names.get(d, d) for d in rows], [task] * len(rows), fontsize=7,
-                            separators=False)
-        layout.light_grid(ax)
-        ax.set_xlabel(LABELS[group.metric.iloc[0]], fontsize=7)
-    fig.legend(*axes[0].get_legend_handles_labels(), loc="outside upper center", ncols=3,
-               fontsize=7, frameon=False)
-    yield fig, "native_systems", (
-        "Headline score of each original-text system on every dataset with five defined outer "
-        "folds (mean over folds; ROC-AUC, macro one-vs-rest ROC-AUC or R²), on the same splits as "
-        "Experiments 1–3. These systems change predictor and text treatment together, so their "
-        "differences do not isolate a representation. Missing systems are absent, not zero; "
-        "negative R² values are shown unmodified."
-    )
-
-
 def burden_figures(table):
     """Representation width against fit time, one small panel per predictor."""
     if table.empty or "seconds.fit" not in table or "columns.representation" not in table:
@@ -148,75 +110,59 @@ def burden_figures(table):
     )
 
 
-def cross_system_figures(contrasts):
-    if contrasts.empty:
-        return
-    semantics = load_yaml("dataset_semantics")["datasets"]
-    for task, task_rows in contrasts.groupby("task_type"):
-        expected = {d for d, s in semantics.items() if s["task_type"] == task}
-        if task_rows.groupby("model_id").checkpoint_id.nunique().gt(1).any() or task_rows.groupby("reference_model").reference_checkpoint.nunique().gt(1).any():
-            raise ValueError("Select one predictor/native checkpoint campaign before comparison")
-        keys = ["model_id", "checkpoint_id", "reference_model", "reference_checkpoint", "family", "arm_id", "dataset_id", "split_id"]
-        means = task_rows.groupby(keys, dropna=False).agg(effect=("difference", "mean"), n=("difference", "count")).reset_index()
-        means = means[means.n.eq(5)]
-        # arm_id is dataset-specific. Use the explicit representation comparison identity across datasets.
-        ids = task_rows[["arm_id", "comparison_id"]].drop_duplicates()
-        means = means.merge(ids, on="arm_id", validate="many_to_one")
-        summaries = []
-        for key, group in means.groupby(["model_id", "reference_model", "family", "comparison_id"]):
-            if group.dataset_id.duplicated().any():
-                raise ValueError("Multiple splits for a cross-system comparison")
-            if set(group.dataset_id) == expected:
-                summaries.append((*key, group.effect.mean()))
-        if not summaries:
-            continue
-        import pandas as pd
-        shown = pd.DataFrame(summaries, columns=["model", "reference", "family", "recipe", "effect"])
-        models = list(style.MAIN_PREDICTORS)
-        fig, axes = plt.subplots(1, 3, figsize=style.DASHBOARD_SIZE, sharey=True, sharex=True)
-        colors = {"Non-text": style.MEDIAN_COLOR, "Decision": style.FAMILY_COLORS["experiment_1"],
-                  "Embedding": style.FAMILY_COLORS["experiment_2"], "TAR": style.FAMILY_COLORS["experiment_3"]}
-        for ax, reference in zip(axes, style.NATIVE_COLORS):
-            for model_pos, model in enumerate(models):
-                for family_pos, (family, color) in enumerate(colors.items()):
-                    values = shown.loc[shown.model.eq(model) & shown.reference.eq(reference) & shown.family.eq(family), "effect"]
-                    ax.scatter(values, model_pos + (family_pos - 1.5)*0.16 + np.linspace(-0.035, 0.035, len(values)),
-                               color=color, s=8, alpha=0.5)
-            ax.axvline(0, color=style.GRID_COLOR)
-            ax.set_title(style.PREDICTOR_LABELS[reference])
-            ax.set_yticks(range(len(models)), [style.PREDICTOR_LABELS[m] for m in models])
-            ax.set_xlabel("Fixed recipe − native")
-        axes[0].invert_yaxis()
-        fig.legend([Line2D([], [], color=c, marker="o", linestyle="none") for c in colors.values()],
-                   list(colors), loc="outside lower center", ncol=4)
-        fig.suptitle(f"{layout.TASK_LABELS[task]} · {len(expected)} matched datasets · {LABELS[task_rows.metric.iloc[0]]} differences", fontsize=9)
-        yield fig, f"cross_system_{task}", (
-            "Descriptive comparison with each native-text reference, pairing the same datasets/splits/folds "
-            "but changing the predictor. Each point is a prespecified fixed-predictor representation recipe, "
-            "averaged equally across all selected datasets of the task after five paired folds per dataset. "
-            "No winning decision model, encoder or PCA width is selected. Recipe counts are unequal between "
-            "families; points are not independent samples, error bars or a statistical test. Positive favors "
-            "the fixed recipe. Incomplete task-wide comparisons are retained in tables but not plotted."
-        )
+def qualification_figure(table, profiles=None):
+    """0B evidence per predictor: contract, then passed/required full-fold profiles per arm family.
 
+    ``table`` is `notebook_study.predictor_evidence`; ``profiles`` is
+    `notebook_study.profile_evidence`. Green: all passed; amber: some; white: none locally;
+    grey: not required. Returns ``(fig, name, caption)``.
+    """
+    from matplotlib.patches import Patch
 
-def qualification_figure(table):
-    """Show observed contract/profile coverage separately from predictor performance."""
-    from matplotlib.colors import ListedColormap
-
-    fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_FULL, 0.54))
-    evidence = np.column_stack((table.contract_passed, table.full_fold_profile)).astype(int)
-    ax.imshow(
-        evidence, aspect="auto", vmin=0, vmax=1,
-        cmap=ListedColormap([style.EVIDENCE_COLORS["unknown"], style.EVIDENCE_COLORS["observed"]]),
-    )
-    ax.set_xticks([0, 1], ["Predictor contract", "Full-fold profiles"])
+    order = ("no text", "decision", "decision+frozen", "frozen", "classifier", "TAR", "native",
+             "Kumo override")
+    profiles = profiles if profiles is not None else pd_empty()
+    families = [f for f in order if f in set(profiles.family)] if len(profiles) else []
+    models = list(table.model)
+    columns = ["Contract", *families]
+    cells = {}
+    for row in table.itertuples():
+        cells[row.model, "Contract"] = ("observed" if row.contract_passed else "unknown",
+                                        "passed" if row.contract_passed else "pending")
+    for row in profiles.itertuples():
+        state = ("observed" if row.passed == row.required else "review" if row.passed else "unknown")
+        cells[row.model, row.family] = (state, f"{int(row.passed)}/{int(row.required)}")
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.3 + 0.24 * len(models))))
+    for i, model in enumerate(models):
+        for j, column in enumerate(columns):
+            state, text = cells.get((model, column), ("not_applicable", ""))
+            ax.add_patch(plt.Rectangle((j - 0.46, i - 0.42), 0.92, 0.84, facecolor=style.EVIDENCE_COLORS[state]
+                                       if state in ("observed", "review") else style.EVIDENCE_MARKS[state],
+                                       edgecolor=style.GRID_COLOR, linewidth=0.6))
+            ax.text(j, i, text, ha="center", va="center", fontsize=7)
+    ax.set_xlim(-0.5, len(columns) - 0.5)
+    ax.set_ylim(len(models) - 0.5, -0.5)
+    ax.set_xticks(range(len(columns)), columns, fontsize=7, rotation=30, ha="left")
     ax.xaxis.tick_top()
-    ax.set_yticks(range(len(table)), [style.PREDICTOR_LABELS[m] for m in table.model])
+    ax.set_yticks(range(len(models)), [style.PREDICTOR_LABELS.get(m, m) for m in models], fontsize=7)
     ax.tick_params(length=0)
-    for i, row in enumerate(table.itertuples()):
-        ax.text(0, i, "Passed" if row.contract_passed else "Evidence pending", ha="center", va="center")
-        ax.text(1, i, f"{row.profiles_passed} / {row.profiles_required}", ha="center", va="center")
     for spine in ax.spines.values():
         spine.set_visible(False)
-    return fig
+    legend = [Patch(facecolor=style.EVIDENCE_COLORS["observed"], label="all passed"),
+              Patch(facecolor=style.EVIDENCE_COLORS["review"], label="some passed"),
+              Patch(facecolor=style.EVIDENCE_MARKS["unknown"], edgecolor=style.GRID_COLOR, label="none locally"),
+              Patch(facecolor=style.EVIDENCE_MARKS["not_applicable"], label="not required")]
+    fig.legend(handles=legend, loc="outside lower center", ncols=4, fontsize=7, frameon=False)
+    return fig, "predictor_qualification", (
+        "Experiment 0B evidence per predictor, read from local records for the current evaluation "
+        "identity. First column: the synthetic task-contract fit on VSC. Other columns: passed over "
+        "required one-outer-fold profiles on real data per arm family, with the same runtime as the "
+        "contract; the Kumo override column is the widest Kumo arm, whose 500-column default recipe "
+        "is widened (owner-approved 23-11-2026). Profiles qualify runtimes; they are not results."
+    )
+
+
+def pd_empty():
+    import pandas as pd
+
+    return pd.DataFrame(columns=["model", "family", "required", "passed"])

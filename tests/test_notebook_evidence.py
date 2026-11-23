@@ -130,26 +130,6 @@ def test_prompt_panels_align_variants_even_when_reversal_is_inapplicable():
     plt.close(fig)
 
 
-def test_paired_plot_requires_five_defined_differences_per_dataset():
-    import matplotlib.pyplot as plt
-
-    from src.visualize.paired import paired_effect_figures
-
-    rows = []
-    for dataset in ["complete", "undefined"]:
-        for fold in range(5):
-            rows.append({"task_type": "binary_classification", "metric": "roc_auc",
-                         "phase": "experiment_1", "feature_set": "non_text_plus_joint",
-                         "provider": "jev", "model_id": "catboost", "reference": "non_text",
-                         "dataset_id": dataset, "split_id": "split", "arm_id": dataset,
-                         "outer_fold": fold,
-                         "difference": 0.2 if dataset == "complete" else None})
-    fig, _, caption = next(paired_effect_figures(pd.DataFrame(rows)))
-    assert "· 1 dataset ·" in fig._suptitle.get_text()
-    assert "five defined" in caption and "confidence interval" in caption
-    plt.close(fig)
-
-
 @pytest.mark.parametrize("task,metric,difference", [
     ("binary_classification", "roc_auc", 0.1),
     ("multiclass_classification", "roc_auc_ovr_macro", 0.1),
@@ -266,14 +246,3 @@ def test_descriptive_shared_inputs_keep_available_pins_and_expose_missing_models
     assert len(evidence.pilot_agreement(shared)["binary_classification"][0]) == 2
 
 
-def test_effect_matrix_rejects_counting_a_dataset_twice():
-    from src.visualize.paired import effect_matrix_figures
-
-    rows = [{"phase": "experiment_1", "task_type": "binary_classification",
-             "metric": "roc_auc", "model_id": "catboost", "reference": "non_text",
-             "feature_set": "non_text_plus_joint", "provider": "jev",
-             "dataset_id": "same_dataset", "split_id": split, "arm_id": split,
-             "outer_fold": fold, "difference": 0.1}
-            for split in ("old", "new") for fold in range(5)]
-    with pytest.raises(ValueError, match="select one campaign"):
-        list(effect_matrix_figures(pd.DataFrame(rows)))

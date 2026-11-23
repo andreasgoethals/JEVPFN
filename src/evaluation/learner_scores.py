@@ -1,4 +1,4 @@
-"""Per-dataset learner scores for the statistical framework (`config/synthesis/analysis.yaml`).
+"""Per-dataset learner scores for the statistical framework (`config/05_synthesis/analysis.yaml`).
 
 Turns the compact study exports (A1 `comparison.zip`, A2 `robustness.zip`, B1-B5 Group B and
 C1-C2 Group C ZIPs) into the ``(dataset_id, learner, score)`` frames that
@@ -25,6 +25,12 @@ Units and scores (fixed before results):
   the results. A missing, incomplete (fewer than five finite folds) or undefined cell stops
   that group's inference with the cells named; nothing is dropped. Arms the plan marks
   ``unsupported_width`` are excluded by design before results, and listed.
+* Fold level (descriptive, `fold_wins`): for applications with fold tables (B1, B2, B4, B5, C1,
+  C2) each group also carries its (dataset, outer fold, learner) headline metric. Within one
+  (dataset, fold) cell all arms of a predictor share the baseline, so ordering the raw headline
+  metric equals ordering the fold-level normalised gain. Roster medians are taken per fold; B4
+  averages a fold over its planned draws. Win rates (vs the group's control, or all pairs) and
+  PAMA use dataset-cluster bootstrap intervals; A1, A2 and B3 have no fold-level scores.
 """
 
 from __future__ import annotations
@@ -46,6 +52,8 @@ BASELINE = "baseline"
 REFERENCE = "reference"
 MODES = ("per_column", "joint", "both")
 SCORE_COLUMNS = ["group", "dataset_id", "task_type", "learner", "score", "status"]
+FOLD_SCORE_COLUMNS = ["group", "dataset_id", "outer_fold", "learner", "score"]
+OUTER_FOLDS = tuple(range(5))
 #: Cell statuses; only "ok" enters inference.
 OK, MISSING, INCOMPLETE, ZERO_HEADROOM, UNDEFINED = (
     "ok", "missing", "incomplete_folds", "zero_headroom", "undefined")
@@ -158,6 +166,46 @@ def decision_medians(gains: pd.DataFrame, roster, *, prefixes=("decision",), ext
     return pd.DataFrame(rows, columns=[*keys, "representation", "score", "status"])
 
 
+def fold_values(folds: pd.DataFrame, roster=(), *, prefixes=(), extra=()) -> pd.DataFrame:
+    """Fold-level headline metric per dataset, predictor, arm and fold (plus roster medians).
+
+    A median over the roster is NaN on a fold where any roster model is absent or non-finite.
+    """
+    keys = ["dataset_id", "model_id", "representation", *extra, "outer_fold"]
+    head = group_b.headline(folds)
+    if head.empty:
+        return pd.DataFrame(columns=[*keys, "score"])
+    if head.duplicated(keys).any():
+        raise ValueError("Several fold records of one arm; select one campaign")
+    out = head[keys].assign(score=head["value"].astype(float))
+    rows = []
+    cell = [k for k in keys if k != "representation"]
+    for prefix in prefixes:
+        for mode in MODES:
+            wanted = [f"{prefix}/{mode}/{p}" for p in roster]
+            for key, group in out[out.representation.isin(wanted)].groupby(cell, dropna=False):
+                values = group.score.to_numpy(float)
+                full = group.representation.nunique() == len(wanted) and np.isfinite(values).all()
+                rows.append(dict(zip(cell, key)) | {"representation": f"{prefix}/{mode}/median",
+                                                     "score": float(np.median(values)) if full else np.nan})
+    if not rows:
+        return out
+    return pd.concat([out, pd.DataFrame(rows)[out.columns]], ignore_index=True)
+
+
+def _fold_grid(frame: pd.DataFrame, group: str, learners, datasets: dict) -> pd.DataFrame:
+    """Every expected (dataset, fold, learner) row; absent scores are NaN, never dropped."""
+    names = ["dataset_id", "outer_fold", "learner"]
+    index = pd.MultiIndex.from_product([list(datasets), list(OUTER_FOLDS), list(learners)], names=names)
+    frame = frame[frame.representation.isin(list(learners))]
+    found = frame.rename(columns={"representation": "learner"}).set_index(names)
+    if found.index.duplicated().any():
+        raise ValueError(f"{group}: several fold scores for one dataset, fold and learner")
+    out = found.reindex(index)[["score"]].reset_index()
+    out["group"] = group
+    return out[FOLD_SCORE_COLUMNS]
+
+
 def _excluded(design: Design, model, learners, roster, **match) -> list[str]:
     """Learners whose planned arm is `unsupported_width` for this predictor on any dataset."""
     plan = design.plan[design.plan.model_id.eq(model)]
@@ -195,6 +243,8 @@ class Group:
     excluded_by_design: list = field(default_factory=list)
     #: Set when the group cannot be scored at all (declared before results), e.g. undeclared datasets.
     stop_reason: str | None = None
+    #: Fold-level headline metric (columns `FOLD_SCORE_COLUMNS`); None when the export has no folds.
+    folds: pd.DataFrame | None = None
 
 
 def _main_models(design: Design) -> list[str]:
@@ -207,14 +257,18 @@ def _planned(design: Design, phase, prefix=None) -> list[str]:
     return reps
 
 
-def _per_predictor(design, gains, learners, control, *, groups_of=None, datasets=None, match=None):
+def _per_predictor(design, gains, learners, control, *, groups_of=None, datasets=None, match=None,
+                   fold_scores=None):
     out = []
+    datasets = datasets or design.datasets
     for model in _main_models(design):
         excluded = _excluded(design, model, learners, design.roster, **(match or {}))
         kept = [learner for learner in learners if learner not in excluded]
         frame = gains[gains.model_id.eq(model)]
         name = model if groups_of is None else f"{model}/{groups_of}"
-        out.append(Group(name, kept, control, _grid(frame, name, kept, datasets or design.datasets), excluded))
+        folds = (None if fold_scores is None else
+                 _fold_grid(fold_scores[fold_scores.model_id.eq(model)], name, kept, datasets))
+        out.append(Group(name, kept, control, _grid(frame, name, kept, datasets), excluded, folds=folds))
     return out
 
 
@@ -222,7 +276,8 @@ def b1_groups(frames, design: Design) -> list[Group]:
     gains = gains_over_baseline(arm_means(frames["folds"]))
     gains = pd.concat([gains, decision_medians(gains, design.roster)], ignore_index=True)
     learners = [BASELINE, *(f"decision/{m}/median" for m in MODES)]
-    return _per_predictor(design, gains, learners, BASELINE)
+    folds = fold_values(frames["folds"], design.roster, prefixes=("decision",))
+    return _per_predictor(design, gains, learners, BASELINE, fold_scores=folds)
 
 
 def b2_groups(frames, design: Design) -> list[Group]:
@@ -231,7 +286,8 @@ def b2_groups(frames, design: Design) -> list[Group]:
                       ignore_index=True)
     others = [*_planned(design, "experiment_2", ("frozen",)), *_planned(design, "experiment_3", ("tar", "probe"))]
     learners = ["decision/both/median", "decision+frozen/both/median", *others]
-    return _per_predictor(design, gains, learners, "decision/both/median")
+    folds = fold_values(frames["folds"], design.roster, prefixes=("decision", "decision+frozen"))
+    return _per_predictor(design, gains, learners, "decision/both/median", fold_scores=folds)
 
 
 def b4_groups(frames, design: Design) -> list[Group]:
@@ -239,6 +295,8 @@ def b4_groups(frames, design: Design) -> list[Group]:
     means = arm_means(frames["folds"], extra=("training_size", "draw"))
     means = means[means.training_size.notna()]
     per_draw = gains_over_baseline(means, extra=("training_size", "draw"))
+    fold_draws = fold_values(frames["folds"], extra=("training_size", "draw"))
+    fold_draws = fold_draws[fold_draws.training_size.notna()]
     plan = design.plan[design.plan.phase.eq("data_efficiency")]
     out = []
     for size in sorted(plan.training_size.dropna().unique()):
@@ -254,8 +312,14 @@ def b4_groups(frames, design: Design) -> list[Group]:
         gains = pd.DataFrame(rows, columns=["dataset_id", "task_type", "model_id", "representation", "score",
                                             "status"])
         learners = list(dict.fromkeys(at.representation))
+        # Fold level: mean over the planned draws of each fold; NaN unless every draw is finite.
+        keys = ["dataset_id", "model_id", "representation", "outer_fold"]
+        fold_rows = [dict(zip(keys, key)) | {"score": float(g.score.mean()) if sorted(g.draw.unique()) == draws
+                                              and np.isfinite(g.score.to_numpy(float)).all() else np.nan}
+                     for key, g in fold_draws[fold_draws.training_size.eq(size)].groupby(keys)]
         out += _per_predictor(design, gains, learners, BASELINE, groups_of=f"n{int(size)}",
-                              datasets=datasets, match={"phase": "data_efficiency", "training_size": size})
+                              datasets=datasets, match={"phase": "data_efficiency", "training_size": size},
+                              fold_scores=pd.DataFrame(fold_rows, columns=[*keys, "score"]))
     return out
 
 
@@ -265,19 +329,15 @@ def b5_groups(frames, design: Design) -> list[Group]:
     means = means.assign(score=means["mean"].where(means.complete),
                          status=np.where(means.complete, OK, INCOMPLETE))
     learners = _planned(design, "experiment_4")
-    return [Group("native_systems", learners, None, _grid(means, "native_systems", learners, design.datasets))]
+    folds = _fold_grid(fold_values(frames["folds"]), "native_systems", learners, design.datasets)
+    return [Group("native_systems", learners, None, _grid(means, "native_systems", learners, design.datasets),
+                  folds=folds)]
 
 
 def _c_groups(frames, design, phase, extra_learners, control):
     gains = gains_over_baseline(arm_means(frames["folds"]))
     learners = [*extra_learners, *_planned(design, phase)]
-    out = []
-    for model in _main_models(design):
-        excluded = _excluded(design, model, learners, design.roster)
-        kept = [learner for learner in learners if learner not in excluded]
-        out.append(Group(model, kept, control, _grid(gains[gains.model_id.eq(model)], model, kept,
-                                                     design.datasets), excluded))
-    return out
+    return _per_predictor(design, gains, learners, control, fold_scores=fold_values(frames["folds"]))
 
 
 def c1_groups(frames, design: Design) -> list[Group]:
@@ -463,6 +523,8 @@ def run_application(name: str, frames: dict | None = None, *, analysis: dict | N
     Returns a record: ``awaiting_owner_approval`` (nothing read), ``not_applicable`` (no
     learner comparison planned), ``awaiting_export`` or ``compared``; within ``compared``
     each group is ``compared`` (omnibus + pairwise table) or ``stopped`` (cells named).
+    Groups with fold tables also carry ``fold_level`` (`fold_level_tables`): descriptive, reported
+    for stopped groups too, with their excluded incomplete (dataset, fold) cells counted.
     """
     from src.evaluation.inference import compare_learners
     from src.utils.config import load_yaml
@@ -490,6 +552,8 @@ def run_application(name: str, frames: dict | None = None, *, analysis: dict | N
     for group in application_groups(name, frames, design):
         record = {"group": group.group, "learners": group.learners, "control": group.control,
                   "excluded_by_design": group.excluded_by_design}
+        if group.folds is not None:
+            record["fold_level"] = fold_level_tables(group, higher_is_better=spec.higher_is_better)
         bad = group.scores[group.scores.status.ne(OK)]
         reason = (group.stop_reason or ("no expected cells" if group.scores.empty else None)
                   or ("incomplete, missing or undefined cells" if not bad.empty else None)
@@ -505,13 +569,40 @@ def run_application(name: str, frames: dict | None = None, *, analysis: dict | N
     return out
 
 
+def fold_level_tables(group: Group, *, higher_is_better: bool, resamples: int = 10_000, seed: int = 0) -> dict:
+    """Fold-level win rates (vs the control, else all pairs) and PAMA of one group.
+
+    Descriptive; the intervals resample datasets (all five folds of each), never folds. Status
+    ``reported`` or ``not_available`` (with the reason); missing cells are counted, not raised.
+    """
+    from itertools import combinations
+
+    from src.evaluation import fold_wins
+
+    learners = list(group.learners)
+    pairs = ([(learner, group.control) for learner in learners if learner != group.control]
+             if group.control is not None else list(combinations(learners, 2)))
+    frame = group.folds[["dataset_id", "outer_fold", "learner", "score"]]
+    options = {"higher_is_better": higher_is_better, "resamples": resamples, "seed": seed}
+    out = {"unit": "dataset_x_outer_fold", "bootstrap_unit": fold_wins.BOOTSTRAP_UNIT,
+           "expected_cells": int(len(frame[["dataset_id", "outer_fold"]].drop_duplicates()))}
+    try:
+        return out | {"status": "reported", "win_rates": fold_wins.fold_win_rates(frame, pairs, **options),
+                      "pama": fold_wins.pama(frame, learners=learners, **options)}
+    except ValueError as error:
+        return out | {"status": "not_available", "reason": str(error)}
+
+
 def summary_record(result: dict) -> dict:
     """JSON-ready summary for notebooks (pairwise tables stay in `result`)."""
     keep = {k: v for k, v in result.items() if k not in {"groups", "receipt"}}
     if "groups" in result:
         keep["groups"] = [
-            {k: v for k, v in g.items() if k not in {"table", "omnibus", "cells"}}
+            {k: v for k, v in g.items() if k not in {"table", "omnibus", "cells", "fold_level"}}
             | ({"stopped_cells": len(g["cells"])} if "cells" in g else {})
+            | ({"fold_level": g["fold_level"]["status"],
+                "pama_excluded_incomplete_cells": int(g["fold_level"]["pama"].excluded_incomplete_cells.iloc[0])}
+               if g.get("fold_level", {}).get("status") == "reported" else {})
             | ({"iman_davenport_p": g["omnibus"]["iman_davenport_p"],
                 "holm_significant": int((g["table"].p_holm < g["omnibus"]["alpha"]).sum())}
                if "omnibus" in g else {})

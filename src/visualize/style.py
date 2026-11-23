@@ -149,6 +149,28 @@ FAMILY_COLORS["experiment_3"] = "#9467BD"
 EMBEDDING_COLORS = {"e5_small_v2_tar": "#9467BD", "e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
                     "qwen3_embedding_0_6b": "#558B2F"}
 EFFECT_CMAP = "BrBG"  # Positive effect means improvement in the explicitly named contrast.
+# Predictors are distinguished by MARKER SHAPE in one ink; colour is reserved for the
+# representation (decision view, encoder, label-trained route, native system).
+PREDICTOR_MARKERS = dict(zip(MAIN_PREDICTORS, ("o", "s", "D", "^", "v", "P", "X")))
+PREDICTOR_INK = "#3D4248"
+PROBE_COLOR = "#D6604D"  # The label-trained classifier on E5-small (B2b, B4).
+TAR_COLOR = EMBEDDING_COLORS["e5_small_v2_tar"]
+NON_TEXT_COLOR = "#8A8F96"  # The same predictor without text: the reference of every gain.
+DECISION_POOL_COLOR = "#B4BAC1"  # One grey dot per decision model; never a provider colour.
+# Group C: Strands arms as a lightness ramp of the Strands provider colour (zero-shot darkest).
+STRANDS_COLORS = {"zero_shot": "#AF4C59", "hidden": "#C97A84", "head": "#7E2F3A",
+                  "lora": "#D9A0A8", "lora_head": "#5A1F28"}
+WTL_COLORS = {"win": "#1B7837", "tie": "#C9CDD2", "loss": "#B2182B"}
+# Raw gains are never averaged across task families: AUC (binary and multiclass) and R^2.
+TASK_FAMILIES = ("classification", "regression")
+TASK_FAMILY_LABELS = {"classification": "Classification (ΔAUC, 9 datasets)",
+                      "regression": "Regression (ΔR², 9 datasets)"}
+EXCLUDED_HATCH = "////"  # Cells excluded by design (not missing results).
+# Group B: decision both + E5-small PCA32 (B2a), and label-free text-column field types (B3).
+DECISION_EMBEDDING_COLOR = "#0B4F2A"
+FIELD_TYPE_COLORS = {"numeric_text": "#8C6D31", "categorical": "#2166AC",
+                     "identifier_or_code": "#7C858E", "short_text": "#C1447E",
+                     "long_text": "#1B7837", "empty": "#D9E2E8"}
 COHORT_COLORS = {"seen_joint": "#72518A", "unseen_joint": "#27878E",
                  "all_columns_unseen": "#BA7B28", "empty_text": "#777777"}
 COHORT_MARKERS = {"seen_joint": "o", "unseen_joint": "s", "all_columns_unseen": "^", "empty_text": "x"}

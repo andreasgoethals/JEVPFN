@@ -206,6 +206,26 @@ def summarize(gains: pd.DataFrame, *, keys=("model_id", "representation"), n_boo
     return pd.DataFrame(rows)
 
 
+def task_family(task_type: str) -> str:
+    """classification (binary and multiclass, AUC) or regression (R^2): raw-gain units."""
+    if task_type in {"binary_classification", "multiclass_classification"}:
+        return "classification"
+    if task_type == "regression":
+        return "regression"
+    raise ValueError(f"Unknown task type: {task_type}")
+
+
+def summarize_by_family(gains: pd.DataFrame, *, keys=("model_id", "representation"), **kwargs) -> pd.DataFrame:
+    """`summarize` within each task family, so raw AUC and R^2 gains are never averaged together.
+
+    The headroom share remains comparable across families; pool it with `summarize` (N = 18).
+    """
+    if gains.empty:
+        return pd.DataFrame()
+    frame = gains.assign(task_family=gains.task_type.map(task_family))
+    return summarize(frame, keys=(*keys, "task_family"), **kwargs)
+
+
 # ---------------------------------------------------------------------- B3: text columns
 
 

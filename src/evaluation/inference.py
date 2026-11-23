@@ -198,10 +198,11 @@ def confirmatory_tests(datasets, plan):
 #   mean-rank post-hoc tests depend on which other learners are in the pool
 #   (Benavoli, Corani & Mangili 2016), so confirmatory pairwise claims use the paired
 #   two-sided Wilcoxon (1945) signed-rank test on per-dataset differences instead.
-# - Families of pairwise p-values: Holm (1979) step-down (confirmatory, any dependence);
-#   Finner for comparisons with one control (Garcia et al. 2010) as a sensitivity analysis;
-#   Shaffer's static procedure (Garcia & Herrera 2008) only on the mean-rank z-tests,
-#   whose "equal mean rank" nulls are transitive as its logical restrictions require.
+# - Families of pairwise p-values: Holm (1979) step-down only (confirmatory, valid under any
+#   dependence). Owner decision 23-11-2026: no Finner/Shaffer sensitivity corrections and no
+#   mean-rank z post-hoc p-values are reported.
+# - Fold-level win rates and PAMA (`fold_wins`) are descriptive, with dataset-cluster
+#   bootstrap intervals; they never enter the Holm family.
 # - The differences must be commensurable across datasets (Demsar 2006): use a
 #   dimensionless score shared by all 18 datasets (normalised gain, proper-score skill),
 #   because a task-specific metric (AUC, R^2) covers only 9 of them.
@@ -277,41 +278,6 @@ def holm(p_values):
     return adjusted
 
 
-def finner(p_values):
-    """Finner step-down: APV_i = max_{j<=i} 1 - (1 - p_(j))^(m/j)."""
-    p = np.asarray(p_values, dtype=float)
-    adjusted, running, m = np.empty_like(p), 0.0, len(p)
-    for rank, index in enumerate(np.argsort(p, kind="stable"), start=1):
-        running = min(1.0, max(running, 1 - (1 - p[index]) ** (m / rank)))
-        adjusted[index] = running
-    return adjusted
-
-
-def _shaffer_counts(k):
-    """Shaffer's S(k): attainable numbers of simultaneously true pairwise hypotheses."""
-    from math import comb
-
-    sets = {0: {0}, 1: {0}}
-    for size in range(2, k + 1):
-        sets[size] = {comb(j, 2) + x for j in range(1, size + 1) for x in sets[size - j]}
-    return sorted(sets[k])
-
-
-def shaffer(p_values, learners):
-    """Shaffer's static procedure for all m = k(k-1)/2 pairwise comparisons."""
-    p = np.asarray(p_values, dtype=float)
-    m = len(p)
-    if m != learners * (learners - 1) // 2:
-        raise ValueError("Shaffer requires every pairwise comparison among the learners")
-    counts = _shaffer_counts(learners)
-    adjusted, running = np.empty_like(p), 0.0
-    for rank, index in enumerate(np.argsort(p, kind="stable"), start=1):
-        t = max(c for c in counts if c <= m - rank + 1)
-        running = min(1.0, max(running, t * p[index]))
-        adjusted[index] = running
-    return adjusted
-
-
 def wilcoxon_p(differences):
     from scipy.stats import wilcoxon
 
@@ -356,13 +322,11 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
     """Full multi-learner report on per-dataset scores (columns dataset_id, learner, score).
 
     Returns the omnibus test and one row per pairwise comparison (with `control`, only
-    the comparisons against it). Wilcoxon + Holm is the confirmatory family; Finner (vs a
-    control), mean-rank z-tests (Shaffer-adjusted for all pairs) and the Bayesian
-    signed-rank test are reported alongside.
+    the comparisons against it). Wilcoxon + Holm is the only family of p-values; the Bayesian
+    signed-rank test and the descriptive mean-rank difference are reported alongside.
+    ``comparison`` is ``versus_control`` or ``all_pairwise`` (also ``table.attrs["control"]``).
     """
     from itertools import combinations
-
-    from scipy.stats import norm
 
     matrix = score_matrix(scores, higher_is_better=higher_is_better)
     n, k = matrix.shape
@@ -376,7 +340,6 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
         if control is not None
         else list(combinations(learners, 2))
     )
-    se = np.sqrt(k * (k + 1) / (6 * n))
     rows = []
     for first, second in pairs:
         differences = (matrix[first] - matrix[second]).to_numpy()
@@ -391,23 +354,15 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
             "median_oriented_difference": float(np.median(differences)),
             "p_wilcoxon": wilcoxon_p(differences),
             "mean_rank_difference": float(ranks[first] - ranks[second]),
-            "p_mean_rank_z": float(2 * norm.sf(abs(ranks[second] - ranks[first]) / se)),
             "bayes_p_worse": bayes["p_worse"],
             "bayes_p_equivalent": bayes["p_equivalent"],
             "bayes_p_better": bayes["p_better"],
         })
     table = pd.DataFrame(rows)
     table["p_holm"] = holm(table.p_wilcoxon)  # Valid under any dependence: confirmatory.
-    if control is not None:
-        # Finner assumes independent tests; comparisons sharing a control are only
-        # positively dependent in practice, so this column is a sensitivity analysis.
-        table["p_finner"] = finner(table.p_wilcoxon)
-    else:
-        # Shaffer's logical restrictions need transitive nulls ("equal mean ranks"), as
-        # in Garcia & Herrera (2008). Wilcoxon nulls ("differences symmetric around 0")
-        # are not transitive, so Shaffer applies to the descriptive mean-rank z-tests only.
-        table["p_mean_rank_shaffer"] = shaffer(table.p_mean_rank_z, k)
+    table["comparison"] = "versus_control" if control is not None else "all_pairwise"
     table["rope"] = rope
+    table.attrs["control"] = control
     return omnibus, table
 
 
@@ -478,7 +433,7 @@ def _pooled_values(pooled, contrast):
 def pooled_confirmatory_tests(pooled, plan, *, datasets=None):
     """The declared confirmatory family with pooled contrasts; Holm over all of it.
 
-    `plan` is the whole analysis plan (`config/synthesis/analysis.yaml`). Contrasts with a
+    `plan` is the whole analysis plan (`config/05_synthesis/analysis.yaml`). Contrasts with a
     ``type`` in `POOLED_CONTRASTS` declare ``application``, ``group``, ``learner``, ``versus``,
     ``datasets`` and ``direction`` and read `pooled` (columns `POOLED_SCORE_COLUMNS`, from
     `learner_scores.pooled_scores`); every other contrast runs through `confirmatory_tests` on

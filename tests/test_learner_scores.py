@@ -118,7 +118,7 @@ def test_b1_end_to_end_synthetic_export_to_cd_diagram(tmp_path):
     assert omnibus["datasets"] == 18 and omnibus["learners"] == 4
     ranks = omnibus["mean_ranks"]
     assert ranks["decision/both/median"] == 1 and ranks["baseline"] == 4
-    assert set(table.versus) == {"baseline"} and "p_finner" in table
+    assert set(table.versus) == {"baseline"} and table.comparison.eq("versus_control").all()
     assert (table.p_holm < 0.05).all()
     # The median over the roster equals the per-dataset normalised median gain.
     scores = learner_scores.application_scores("B1_decision_features", frames, design())
@@ -156,6 +156,62 @@ def test_zero_headroom_missing_dataset_and_incomplete_folds_stop_inference():
                                            design=design())["groups"][0]
     assert group["status"] == "stopped"
     assert {c["status"] for c in group["cells"]} == {learner_scores.INCOMPLETE}
+
+
+def test_fold_level_win_rates_and_pama_are_wired_into_compared_and_stopped_groups():
+    folds = synthetic_folds()
+    result = learner_scores.run_application("B1_decision_features", {"folds": folds},
+                                            analysis=approved_analysis(), design=design())
+    fold_level = result["groups"][0]["fold_level"]
+    assert fold_level["status"] == "reported" and fold_level["expected_cells"] == 90
+    assert fold_level["bootstrap_unit"] == "dataset"
+    wins = fold_level["win_rates"].set_index("learner")
+    assert set(wins.versus) == {"baseline"} and wins.fold_cells.eq(90).all()
+    assert wins.loc["decision/both/median", "wins"] == 90  # every fold beats the baseline
+    assert wins.excluded_incomplete_cells.eq(0).all()
+    pama = fold_level["pama"].set_index("learner")
+    assert pama.loc["decision/both/median", "pama"] == 1.0 and pama.loc["baseline", "pama"] == 0.0
+    summary = learner_scores.summary_record(result)["groups"][0]
+    assert summary["fold_level"] == "reported" and summary["pama_excluded_incomplete_cells"] == 0
+    # A missing baseline fold stops dataset-level inference; the fold level stays descriptive
+    # and counts the excluded (dataset, fold) cell instead of dropping it silently.
+    gap = folds[~(folds.dataset_id.eq("D04") & folds.outer_fold.eq(4) & folds.feature_set.eq("non_text"))]
+    group = learner_scores.run_application("B1_decision_features", {"folds": gap},
+                                           analysis=approved_analysis(), design=design())["groups"][0]
+    assert group["status"] == "stopped"
+    wins = group["fold_level"]["win_rates"]
+    assert wins.excluded_incomplete_cells.eq(1).all() and wins.fold_cells.eq(89).all()
+    # Lower-is-better scores flip the orientation at the fold level too.
+    flipped = learner_scores.fold_level_tables(
+        learner_scores.application_groups("B1_decision_features", {"folds": folds}, design())[0],
+        higher_is_better=False, resamples=200)
+    assert flipped["win_rates"].set_index("learner").loc["decision/both/median", "losses"] == 90
+
+
+def test_b4_fold_level_averages_each_fold_over_the_planned_draws():
+    rows, plan = [], []
+    for dataset, task in DATASETS.items():
+        for model in MODELS:
+            for representation, feature_set, value in (("baseline", "non_text", 0.6),
+                                                       ("decision/joint/m1", "non_text_plus_joint", 0.65)):
+                for draw in (0, 1):
+                    plan.append(dict(phase="data_efficiency", dataset_id=dataset, model_id=model,
+                                     representation=representation, width_status="within_known_width_limit",
+                                     training_size=100, draw=draw))
+                    if (dataset, model, representation, draw) == ("D01", "linear", "baseline", 1):
+                        continue  # a missing draw: incomplete at both levels
+                    for row in fold_rows(dataset, task, model, feature_set, value + 0.01 * draw,
+                                         provider="m1" if "decision" in representation else None):
+                        rows.append(row | {"training_size": 100, "draw": draw})
+    base = design().plan
+    full = design(plan=pd.concat([base, pd.DataFrame(plan)], ignore_index=True))
+    groups = learner_scores.application_groups("B4_data_efficiency", {"folds": pd.DataFrame(rows)}, full)
+    catboost, linear = groups
+    assert catboost.group == "catboost/n100" and catboost.folds.score.notna().all()
+    first = catboost.folds.set_index(["dataset_id", "outer_fold", "learner"]).score
+    assert first[("D00", 0, "baseline")] == pytest.approx(0.6 + 0.005 - 0.002)  # mean of both draws
+    tables = learner_scores.fold_level_tables(linear, higher_is_better=True, resamples=200)
+    assert tables["win_rates"].excluded_incomplete_cells.iloc[0] == 5  # D01's five folds
 
 
 def test_median_requires_the_whole_configured_roster():
@@ -250,7 +306,8 @@ def test_b3_regret_matches_the_lodo_evaluation_policy_regret():
     result = learner_scores.run_application("B3_when_text_helps", {"lodo_predictions": table},
                                             analysis=approved_analysis(), design=design())
     assert result["groups"][0]["status"] == "compared" and result["rope"] == 0.01
-    assert not result["higher_is_better"] and "p_mean_rank_shaffer" in result["groups"][0]["table"]
+    assert not result["higher_is_better"] and result["groups"][0]["table"].comparison.eq("all_pairwise").all()
+    assert "fold_level" not in result["groups"][0]  # B3 regret has no fold-level scores
 
 
 def test_a1_without_a_prespecified_rope_stops():

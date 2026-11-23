@@ -1,8 +1,8 @@
-"""Planned paper figures (`config/synthesis/paper_figures.yaml`) -> owning notebook and saved figures.
+"""Planned paper figures (`config/05_synthesis/paper_figures.yaml`) -> owning notebook and saved figures.
 
 A read-only map: it never moves notebooks, figures or results, and placement stays
 ``undecided`` until the owner decides. ``resolve`` reports, per planned figure, which saved
-figure files already exist under ``output_JEVPFN/figures/<notebook>/`` (pending otherwise).
+figure files already exist under ``output_JEVPFN/figures/<notebook ID>/`` (pending otherwise).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ _SAVED = re.compile(r"^\d+_(?P<stem>.+)\.pdf$")
 
 
 def load(raw: dict | None = None, registry: structure.Registry | None = None) -> dict:
-    """The validated map; notebooks must be registered or reserved (planned) folders."""
+    """The validated map; notebooks must be registered notebook IDs or reserved (planned) folders."""
     if raw is None:
         from src.utils.config import load_yaml
 
@@ -32,7 +32,7 @@ def load(raw: dict | None = None, registry: structure.Registry | None = None) ->
     registry = registry or structure.registry()
     if raw.get("schema") != SCHEMA:
         raise ValueError("Unknown paper-figure schema")
-    current = {n.folder for n in registry.notebooks}
+    current = {n.id for n in registry.notebooks}
     reserved = {p.folder for p in registry.planned}
     seen = set()
     for item in raw.get("figures") or []:

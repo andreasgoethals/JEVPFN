@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64000M
 #SBATCH --time=12:00:00
-#SBATCH --output="output_JEVPFN/exp08_when_text_helps/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/exp08_when_text_helps/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/B/exp08_when_text_helps/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/B/exp08_when_text_helps/logs/%x_%j.log"
 set -euo pipefail
 STUDY="${1:?Pass B1, B2, B3, B4 or B5}"
 case "$STUDY" in B1|B2|B3|B4|B5) ;; *) echo "Unknown Group B study: $STUDY" >&2; exit 2 ;; esac

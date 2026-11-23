@@ -38,28 +38,31 @@ remain ahead.
 
 ## Repository navigation
 
-One registry, [`config/structure.yaml`](config/structure.yaml), names every folder. `config/`,
-`notebooks/` and `output_JEVPFN/` share the same folder per stage, in this order:
+One registry, [`config/structure.yaml`](config/structure.yaml), names every folder (layout v3,
+23 November 2026). General stages sit at the top level; the experiments sit in letter groups
+A, B and C, with their configuration flat in `config/<group>/`:
 
-| Folder | Content | Internal phase IDs |
-|---|---|---|
-| `00_data` | Data exploration and question preparation | `exploration`, `question_preparation` |
-| `01_exp0a` | Experiment 0A, qualification before feature creation | `experiment_0` |
-| `02_feature_creation` | Feature creation | `feature_creation` |
-| `03_exp0b` | Experiment 0B, qualification after feature creation | `experiment_0` (`after_extraction` records) |
-| `exp01_outputs` … `exp03_geometry` | Decision outputs, robustness, geometry | `rq1`, routed by study |
-| `exp04_decision_features` … `exp07_native_text` | Decision features, frozen embeddings, TAR, native text | `experiment_1` … `experiment_4` |
-| `exp08_when_text_helps` | When decision features help | `rq2` |
-| `exp09_representations` | Inside the decision model: Strands hidden states (Group C1) | `representations` |
-| `exp10_adaptation` | Learning from labels with Strands (Group C2, Exp 10) | `rq3` |
-| `exp11_data_efficiency` | Amount of labelled data (Group B, B4) | `data_efficiency` |
-| `synthesis` | Cross-experiment synthesis and paper figures | `synthesis` |
+| Output folder | Notebook | Content | Internal phase IDs |
+|---|---|---|---|
+| `00_data` | `general/1_data_and_questions` | Data exploration and question preparation | `exploration`, `question_preparation` |
+| `01_exp0a`, `03_exp0b` | `general/3_model_and_feature_qualification` | Experiments 0A and 0B, qualification | `experiment_0` |
+| `02_feature_creation` | `general/2_feature_creation` | Feature creation | `feature_creation` |
+| `04_study_audit` | `general/4_study_audit` | Study audit (notebook records only) | — |
+| `05_synthesis` | `general/5_synthesis` | Cross-experiment synthesis and paper figures | `synthesis` |
+| `A/exp01_outputs` … `A/exp03_geometry` | `A/exp01_outputs` …, `A/A_synthesis` | Decision outputs, robustness, geometry | `rq1`, routed by study |
+| `B/exp04_decision_features` … `B/exp08_when_text_helps` | `B/exp04_decision_features` … | Decision features, embeddings, TAR, native text, when features help | `experiment_1` … `experiment_4`, `rq2` |
+| `B/exp09_data_efficiency` | `B/exp09_data_efficiency`, `B/B_synthesis` | Amount of labelled data (B4) | `data_efficiency` |
+| `C/exp10_representations` | `C/exp10_representations` | Inside the decision model: Strands hidden states (C1) | `representations` |
+| `C/exp11_adaptation` | `C/exp11_adaptation`, `C/C_synthesis` | Learning from labels with Strands (C2) | `rq3` |
 
-Exp 9 (reserved on 19 November) was activated by Group C on 20 November 2026. Each folder has at most one notebook,
-`notebooks/<folder>.ipynb`.
+Each experiment has one notebook, with its statistics inside, at
+`notebooks/<group>/<name>.ipynb`; each group has one `<letter>_synthesis` notebook and
+`notebooks/paper/` is reserved. Group B4 and C were renumbered on 23 November 2026
+(`exp11_data_efficiency` → `B/exp09_data_efficiency`, `exp09_representations` →
+`C/exp10_representations`, `exp10_adaptation` → `C/exp11_adaptation`).
 
 Internal phase IDs stay the keys of hashes, recipes, receipts and manifests; previous config
-keys (`experiment_1/main`, `rq1/behavior`) remain aliases. Paper placement is recorded under
+keys (`experiment_1/main`, `rq1/behavior`), flat folder names and notebook IDs remain aliases. Paper placement is recorded under
 `paper:` in the registry and never in a folder name. Existing output trees move only through
 the checksum-verified [layout migration](src/utils/layout_migration.py).
 
@@ -110,10 +113,10 @@ order. New controlled probes and Strands training require their own targeted pil
 | `data/jev_cache/` | Permanent response, accounting and feature stores, plus Jev diagnostic ledgers |
 | `data/decision_features/` | Verified portable snapshots of complete models for local analysis |
 | `data/text_embeddings/` | Frozen vectors per encoder and dataset |
-| `output_JEVPFN/<folder>/{logs,manifests}/` | Operational validation evidence and logs |
-| `output_JEVPFN/<folder>/results/` | PCA, TAR, study and resumable benchmark records |
-| `output_JEVPFN/figures/<notebook>/` | Paper figures of each notebook and their `_figures.json`, with all captions in `figures/CAPTIONS.md` |
-| `output_JEVPFN/<folder>/{logs,manifests,results}/notebook/` | Notebook logs, execution receipts and reports |
+| `output_JEVPFN/[<group>/]<folder>/{logs,manifests}/` | Operational validation evidence and logs |
+| `output_JEVPFN/[<group>/]<folder>/results/` | PCA, TAR, study and resumable benchmark records |
+| `output_JEVPFN/figures/<notebook group>/<name>/` | Paper figures of each notebook and their `_figures.json`, with all captions in `figures/CAPTIONS.md` |
+| `output_JEVPFN/[<group>/]<folder>/{logs,manifests,results}/notebook/` | Notebook logs, execution receipts and reports |
 | `archive/` | Git-ignored previous-layout records, beside `output_JEVPFN/` |
 
 On VSC, DATA holds Git and compact records. GPFS PROJECT holds permanent data, models,
@@ -123,7 +126,7 @@ containers and results. Native scratch holds temporary working stores. Transfer 
 
 Notebooks run locally and write paper-width PDFs and printed reports. The runner supports
 `--only NAME` and `--summaries-only`. Figures are under
-`output_JEVPFN/figures/<notebook>/`; the one report is `output_JEVPFN/All_Results.md` and the
+`output_JEVPFN/figures/<notebook group>/<name>/`; the one report is `output_JEVPFN/All_Results.md` and the
 captions are `output_JEVPFN/figures/CAPTIONS.md`. Run them with the project venv
 (`.venv\Scripts\python.exe`).
 Result figures appear as complete saved evidence becomes available.
@@ -136,12 +139,10 @@ Only extractors with both feature blocks on all 18 datasets enter the comparison
 
 | Stage | Notebooks |
 |---|---|
-| Preparation and qualification | [Data](notebooks/00_data.ipynb), [Features](notebooks/02_feature_creation.ipynb), [0B validation](notebooks/03_exp0b.ipynb) |
-| Exp 1–3 (RQ1) | [Outputs](notebooks/exp01_outputs.ipynb), [Robustness](notebooks/exp02_robustness.ipynb), [Geometry](notebooks/exp03_geometry.ipynb) |
-| Exp 4–8 (RQ2) | [Decisions](notebooks/exp04_decision_features.ipynb), [Embeddings](notebooks/exp05_frozen_embeddings.ipynb), [TAR](notebooks/exp06_tar.ipynb), [Native text](notebooks/exp07_native_text.ipynb), [When decision features help](notebooks/exp08_when_text_helps.ipynb) |
-| Exp 9 (Group C1) | [Inside the decision model](notebooks/exp09_representations.ipynb): Strands hidden states |
-| Exp 10 (RQ3, Group C2) | [Learning from labels](notebooks/exp10_adaptation.ipynb): head-only, LoRA only, LoRA + head |
-| Exp 11 (Group B, B4) | [Amount of labelled data](notebooks/exp11_data_efficiency.ipynb) |
+| General | [Data and questions](notebooks/general/1_data_and_questions.ipynb), [Features](notebooks/general/2_feature_creation.ipynb), [0A/0B qualification](notebooks/general/3_model_and_feature_qualification.ipynb), [Study audit](notebooks/general/4_study_audit.ipynb), [Synthesis](notebooks/general/5_synthesis.ipynb) |
+| Group A, Exp 1–3 (RQ1) | [Outputs](notebooks/A/exp01_outputs.ipynb), [Robustness](notebooks/A/exp02_robustness.ipynb), [Geometry](notebooks/A/exp03_geometry.ipynb), [A synthesis](notebooks/A/A_synthesis.ipynb) |
+| Group B, Exp 4–9 (RQ2) | [Decisions](notebooks/B/exp04_decision_features.ipynb), [Embeddings](notebooks/B/exp05_frozen_embeddings.ipynb), [TAR](notebooks/B/exp06_tar.ipynb), [Native text](notebooks/B/exp07_native_text.ipynb), [When decision features help](notebooks/B/exp08_when_text_helps.ipynb), [Amount of labelled data](notebooks/B/exp09_data_efficiency.ipynb), [B synthesis](notebooks/B/B_synthesis.ipynb) |
+| Group C, Exp 10–11 (C2: RQ3) | [Inside the decision model](notebooks/C/exp10_representations.ipynb): Strands hidden states; [Learning from labels](notebooks/C/exp11_adaptation.ipynb): head-only, LoRA only, LoRA + head; [C synthesis](notebooks/C/C_synthesis.ipynb) |
 
 Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 texts per dataset/field.
 The RQ3 notebook currently shows plans and pending gates, not trained-model results.

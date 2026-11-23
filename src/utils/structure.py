@@ -4,16 +4,23 @@ Internal phase IDs stay the keys of every hash, recipe, receipt and manifest. Th
 only decides WHERE a phase's config, notebooks and outputs live, and how previous layouts
 (numbered `general/rq1/rq2/rq3`; then `<folder>/<name>` notebooks and `exp09_adaptation`
 before 19-11-2026; then `{logs,manifests,results}/notebooks/<folder>/` records, a short-lived
-`<folder>/figures/` with per-folder reports, and `output_JEVPFN/archives/`) translate into the
-current one:
+`<folder>/figures/` with per-folder reports, and `output_JEVPFN/archives/`; then the flat
+one-folder-per-experiment layout of 18-23 November 2026) translate into the current one
+(schema v3, 23-11-2026: letter groups A/B/C, Group B4 and C renumbered):
 
-    figures/<group>/          one folder per notebook (`figure_group`): PDFs and `_figures.json`
+    <folder>/ or <group>/<folder>/{logs,manifests,results}/[notebook/]   per registry entry
+    figures/<notebook group>/<name>/   one folder per notebook: PDFs and `_figures.json`
     figures/CAPTIONS.md       every caption;  All_Results.md   every notebook's report
-    <folder>/{logs,manifests,results}/[notebook/]   everything else, per experiment folder
     ../archive/               previous-layout records, beside (not inside) the output root
 
-`paths` builds every path from it; `layout_migration` moves existing trees with the same translation, so code and
-data always agree after a migration.
+Notebooks live at `notebooks/<notebook group>/<name>.ipynb` (`general` for ungrouped entries);
+their ID is that relative path without `.ipynb`. Config files of a grouped entry live flat in
+`config/<group>/`, those of a general entry in `config/<folder>/`. Bare folder names stay
+globally unique, so a flat path recorded before 23-11-2026 (`exp11_data_efficiency/...`)
+still names exactly one entry.
+
+`paths` builds every path from it; `layout_migration` moves existing trees with the same
+translation, so code and data always agree after a migration.
 
 Import-light on purpose: `paths` imports this module, so it must not import `paths`.
 """
@@ -46,9 +53,14 @@ PHASES = (
     "rq2",
     "rq3",
     "regression_readout",
-    "data_efficiency",
-    "representations",  # Group C, C1 (exp09_representations, 20-11-2026)
+    "data_efficiency",  # Group B, B4 (B/exp09_data_efficiency; exp11_data_efficiency until 23-11-2026)
+    "representations",  # Group C, C1 (C/exp10_representations; exp09_representations until 23-11-2026)
 )
+
+#: Letter groups of the research experiments (output `<group>/<folder>/`, config `config/<group>/`).
+GROUPS = ("A", "B", "C")
+#: Notebook group of the ungrouped (general) entries: `notebooks/general/`.
+GENERAL = "general"
 
 #: The previous physical folder of each numbered phase (frozen history, not configuration).
 LEGACY_PHASE_FOLDERS = {
@@ -78,14 +90,14 @@ ARCHIVE = ARCHIVE_ROOT / "layout_20261118"
 MERGED_ARCHIVE = ARCHIVE_ROOT / "layout_20261119"
 #: Retired per-folder report copies (`<folder>/All_Results.md`, `[figures/]<folder>/CAPTIONS.md`).
 REPORTS_ARCHIVE = ARCHIVE_ROOT / "folder_reports_20261119"
-SCHEMA = "jevpfn.structure.v2"
+SCHEMA = "jevpfn.structure.v3"
 NOTEBOOK_RECORD_KINDS = ("logs", "manifests", "results")
 #: Sub-folder of `<folder>/{logs,manifests,results}/` holding the folder notebook's records,
 #: apart from the experiment's own manifests/logs/results.
 NOTEBOOK_RECORDS = "notebook"
-#: The one top-level figures folder: `figures/<group>/` per notebook, plus CAPTIONS.md.
+#: The one top-level figures folder: `figures/<notebook group>/<name>/` per notebook, plus CAPTIONS.md.
 FIGURES = "figures"
-#: Notebook records kept beside the PDFs in `figures/<group>/`.
+#: Notebook records kept beside the PDFs in `figures/<notebook group>/<name>/`.
 FIGURE_RECORDS = ("_figures.json", "_stdout.txt", "_failure.txt")
 #: The two generated project documents: `All_Results.md` and `figures/CAPTIONS.md`.
 ALL_RESULTS = "All_Results.md"
@@ -97,25 +109,39 @@ PLACEMENTS = ("main", "appendix", "undecided")
 FOLDER_REPORTS = {("manifests", "reports.json")}
 
 
-def figure_group(folder: str) -> str:
-    """THE figure grouping: `figures/<group>/` of the notebook in registry folder `folder`.
+def figure_group(key: str, reg: Registry | None = None) -> str:
+    """THE figure grouping: the `figures/<group>/` of a registry folder or notebook.
 
-    Today one group per notebook, named after it (notebook ID == folder). Change the grouping
-    here only; `paths.figures_dir` and the layout migration (`translate_output`) both use it.
+    `key` is an entry path (`B/exp04_decision_features`, optionally with a nested phase
+    sub-folder), a current or previous folder name, an entry ID or a notebook ID/alias. The
+    group is the folder notebook's ID (`<notebook group>/<name>`); a folder without a notebook
+    groups as `<notebook group>/<folder>`. Unknown keys are returned unchanged.
+    `paths.figures_dir` and the layout migration (`translate_output`) both use it.
     """
-    return folder
+    reg = reg or registry()
+    hit = reg.locate(key)
+    if hit is not None:
+        entry, rest = hit
+        return "/".join((entry.figure_group, *rest))
+    found = reg.notebook(key)
+    return found.id if found is not None else key
 
 
 def figure_folder(group: str, reg: Registry | None = None) -> str | None:
-    """The registry folder whose notebook draws into `figures/<group>/` (inverse of the above)."""
+    """The registry path whose notebook draws into `figures/<group>/` (inverse of the above)."""
     reg = reg or registry()
-    found = [folder for folder in reg.folders if figure_group(folder) == group]
+    found = [e.path for e in reg.entries if e.figure_group == group]
     return found[0] if len(found) == 1 else None
 
 
 @dataclass(frozen=True)
 class Notebook:
-    """The one notebook of a folder: `notebooks/<folder>.ipynb`, ID and name = folder."""
+    """The one notebook of an entry: `notebooks/<group>/<name>.ipynb`, ID `<group>/<name>`.
+
+    `folder` is the physical record folder (the entry path). `previous` holds the flat IDs of
+    the 18-23 November 2026 layout (the folder name and its earlier names); `legacy` and
+    `merged` hold older IDs. All of them stay accepted aliases.
+    """
 
     id: str
     folder: str
@@ -123,10 +149,12 @@ class Notebook:
     phase: str
     legacy: tuple[str, ...]
     merged: tuple[str, ...] = ()
+    group: str = GENERAL
+    previous: tuple[str, ...] = ()
 
     @property
     def aliases(self) -> tuple[str, ...]:
-        return (*self.legacy, *self.merged)
+        return (*self.previous, *self.legacy, *self.merged)
 
 
 @dataclass(frozen=True)
@@ -150,11 +178,44 @@ class Entry:
     notebooks: tuple[Notebook, ...] = ()
     configs: tuple[str, ...] = ()
     previous_folders: tuple[str, ...] = ()
+    group: str | None = None
+    notebook_only: bool = False
+
+    @property
+    def path(self) -> str:
+        """Physical folder relative to an output root: `<group>/<folder>` or `<folder>`."""
+        return f"{self.group}/{self.folder}" if self.group else self.folder
+
+    @property
+    def parts(self) -> tuple[str, ...]:
+        return tuple(self.path.split("/"))
+
+    @property
+    def config_dir(self) -> str:
+        """`config/<group>/` (flat per letter group) or `config/<folder>/` for a general entry."""
+        return self.group or self.folder
+
+    @property
+    def notebook_group(self) -> str:
+        return self.group or GENERAL
+
+    @property
+    def flat_names(self) -> tuple[str, ...]:
+        """Top-level output names of previous layouts that now mean this entry's path."""
+        return ((self.folder,) if self.group else ()) + self.previous_folders
+
+    @property
+    def figure_group(self) -> str:
+        return self.notebooks[0].id if self.notebooks else f"{self.notebook_group}/{self.folder}"
 
     @property
     def owner_phase(self) -> str:
-        """The internal phase that owns this folder's output tree."""
-        return self.phases[0] if self.phases else next(iter(self.routes))
+        """The internal phase owning this folder's tree (read-only phase for notebook-only)."""
+        if self.phases:
+            return self.phases[0]
+        if self.routes:
+            return next(iter(self.routes))
+        return self.notebooks[0].phase
 
 
 @dataclass(frozen=True)
@@ -162,35 +223,70 @@ class Registry:
     entries: tuple[Entry, ...]
     paper: dict
     planned: tuple[Planned, ...] = ()
+    notebook_groups: tuple[str, ...] = (GENERAL, *GROUPS)
 
     # -- lookups -----------------------------------------------------------------------
     @property
     def folders(self) -> tuple[str, ...]:
-        return tuple(e.folder for e in self.entries)
+        """Physical entry paths in registry order (`00_data`, ..., `B/exp04_decision_features`)."""
+        return tuple(e.path for e in self.entries)
+
+    @property
+    def top_level(self) -> tuple[str, ...]:
+        """Top-level output directories holding registry folders (general folders, A, B, C)."""
+        return tuple(dict.fromkeys(e.parts[0] for e in self.entries))
+
+    @property
+    def config_dirs(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(e.config_dir for e in self.entries if e.configs))
 
     def entry(self, key: str) -> Entry:
         for e in self.entries:
-            if key in {e.id, e.folder, *e.previous_folders}:
+            if key in {e.id, e.folder, e.path, *e.previous_folders}:
                 return e
         raise KeyError(f"Unknown layout entry: {key}")
 
+    def locate(self, key: str) -> tuple[Entry, tuple[str, ...]] | None:
+        """(entry, remaining parts) of an entry path, folder or ID, optionally with sub-folders."""
+        parts = tuple(p for p in str(key).split("/") if p)
+        if not parts:
+            return None
+        for e in sorted(self.entries, key=lambda x: -len(x.parts)):
+            if parts[: len(e.parts)] == e.parts:
+                return e, parts[len(e.parts):]
+        for e in self.entries:
+            if parts[0] in {e.id, e.folder, *e.previous_folders}:
+                return e, parts[1:]
+        return None
+
     @property
     def previous_folders(self) -> dict[str, str]:
-        """Earlier folder name -> current folder (e.g. exp09_adaptation -> exp10_adaptation)."""
-        return {old: e.folder for e in self.entries for old in e.previous_folders}
+        """Declared earlier folder name -> current path (exp11_data_efficiency -> B/exp09_data_efficiency)."""
+        return {old: e.path for e in self.entries for old in e.previous_folders}
+
+    @property
+    def flat_paths(self) -> dict[str, str]:
+        """Every previous top-level folder name (flat layout and earlier renames) -> current path."""
+        return {old: e.path for e in self.entries for old in e.flat_names}
+
+    def flat_entry(self, name: str) -> Entry | None:
+        """The entry a current or previous bare folder name denotes, or None."""
+        return next((e for e in self.entries if name in {e.folder, *e.previous_folders}), None)
+
+    def home_entry(self, phase: str) -> Entry:
+        for e in self.entries:
+            if phase in e.phases or phase in e.nested:
+                return e
+        raise ValueError(f"Phase has no registered folder: {phase}")
 
     def home(self, phase: str) -> str:
-        """The default folder of an internal phase (may be nested for a retired phase)."""
-        for e in self.entries:
-            if phase in e.phases:
-                return e.folder
-            if phase in e.nested:
-                return f"{e.folder}/{e.nested[phase]}"
-        raise ValueError(f"Phase has no registered folder: {phase}")
+        """The default folder path of an internal phase (may be nested for a retired phase)."""
+        e = self.home_entry(phase)
+        return e.path if phase in e.phases else f"{e.path}/{e.nested[phase]}"
 
     def routes(self) -> list[tuple[str, tuple[str, ...], str]]:
         found = [
-            (phase, PurePosixPath(prefix).parts, e.folder)
+            (phase, PurePosixPath(prefix).parts, e.path)
             for e in self.entries
             for phase, prefixes in e.routes.items()
             for prefix in prefixes
@@ -205,40 +301,52 @@ class Registry:
                 return folder
         return self.home(phase)
 
-    def owner_of(self, folder_parts: tuple[str, ...]) -> tuple[str, int] | None:
-        """(phase, consumed parts) for a current physical folder prefix, longest first."""
+    def entry_at(self, folder_parts) -> tuple[Entry, str | None, int] | None:
+        """(entry, nested phase or None, consumed parts) for a current physical path prefix."""
+        folder_parts = tuple(folder_parts)
         candidates = []
         for e in self.entries:
             for phase, sub in e.nested.items():
-                candidates.append(((e.folder, sub), phase))
-            candidates.append(((e.folder,), e.owner_phase))
-        for prefix, phase in sorted(candidates, key=lambda c: -len(c[0])):
+                candidates.append(((*e.parts, sub), e, phase))
+            candidates.append((e.parts, e, None))
+        for prefix, e, nested in sorted(candidates, key=lambda c: -len(c[0])):
             if folder_parts[: len(prefix)] == prefix:
-                return phase, len(prefix)
+                return e, nested, len(prefix)
         return None
+
+    def owner_of(self, folder_parts) -> tuple[str, int] | None:
+        """(phase, consumed parts) for a current physical folder prefix, longest first."""
+        hit = self.entry_at(folder_parts)
+        if hit is None:
+            return None
+        entry, nested, consumed = hit
+        return nested or entry.owner_phase, consumed
 
     @property
     def notebooks(self) -> tuple[Notebook, ...]:
         return tuple(n for e in self.entries for n in e.notebooks)
 
     def notebook(self, notebook_id: str) -> Notebook | None:
-        """A current notebook by folder ID, previous (legacy or merged) ID or unique old stem."""
+        """A notebook by current ID, previous (flat, legacy or merged) ID or unique old stem."""
         for n in self.notebooks:
-            if notebook_id in {n.id, *n.aliases}:
+            if notebook_id == n.id:
                 return n
-        if notebook_id in self.previous_folders:
-            found = self.entry(notebook_id).notebooks
-            return found[0] if found else None
+        for n in self.notebooks:
+            if notebook_id in n.aliases:
+                return n
         stems = [n for n in self.notebooks if any(x.split("/")[-1] == notebook_id for x in n.aliases)]
         return stems[0] if len(stems) == 1 else None
 
     def previous_notebook(self, identity: str) -> Notebook | None:
-        """The current notebook whose legacy or merged IDs contain exactly `identity`."""
+        """The current notebook whose previous, legacy or merged IDs contain exactly `identity`."""
         return next((n for n in self.notebooks if identity in n.aliases), None)
 
     def config_index(self) -> dict[str, str]:
-        """Registered config file stem (or data filename) -> folder."""
-        return {name: e.folder for e in self.entries for name in e.configs}
+        """Registered config file stem (or data filename) -> config directory under config/."""
+        return {name: e.config_dir for e in self.entries for name in e.configs}
+
+    def config_entry(self, name: str) -> Entry | None:
+        return next((e for e in self.entries if name in e.configs), None)
 
 
 def _load(path: Path) -> Registry:
@@ -247,12 +355,18 @@ def _load(path: Path) -> Registry:
         raise ValueError("Unknown layout registry schema")
     entries = []
     for item in raw["entries"]:
-        folder = item["folder"]
+        folder, group = item["folder"], item.get("group")
         if "notebooks" in item:
-            raise ValueError("One flat notebook per folder: use `notebook:`, not `notebooks:`")
+            raise ValueError("One notebook per entry: use `notebook:`, not `notebooks:`")
         spec = item.get("notebook")
-        notebooks = (Notebook(folder, folder, folder, spec["phase"], tuple(spec.get("legacy", ())),
-                              tuple(spec.get("merged", ()))),) if spec else ()
+        notebooks = ()
+        if spec:
+            nb_group = group or GENERAL
+            name = spec.get("name", folder)
+            previous = tuple(dict.fromkeys((folder, *item.get("previous_folders", ()))))
+            notebooks = (Notebook(f"{nb_group}/{name}", f"{group}/{folder}" if group else folder,
+                                  name, spec["phase"], tuple(spec.get("legacy", ())),
+                                  tuple(spec.get("merged", ())), nb_group, previous),)
         entries.append(Entry(
             id=item["id"], folder=folder, title=item["title"],
             phases=tuple(item.get("phases", ())),
@@ -260,16 +374,19 @@ def _load(path: Path) -> Registry:
             nested=dict(item.get("nested") or {}),
             notebooks=notebooks, configs=tuple(item.get("configs", ())),
             previous_folders=tuple(item.get("previous_folders", ())),
+            group=group, notebook_only=bool(item.get("notebook_only", False)),
         ))
     planned = tuple(Planned(p["id"], p["folder"], p["title"], p["status"])
                     for p in raw.get("planned") or ())
-    registry = Registry(tuple(entries), dict(raw.get("paper") or {}), planned)
+    groups = tuple(raw.get("notebook_groups") or (GENERAL, *GROUPS))
+    registry = Registry(tuple(entries), dict(raw.get("paper") or {}), planned, groups)
     validate(registry)
     return registry
 
 
 def validate(registry: Registry) -> None:
     ids = [e.id for e in registry.entries] + [p.id for p in registry.planned]
+    # Bare folder names stay globally unique: previous flat paths resolve by name alone.
     folders = ([e.folder for e in registry.entries] + [p.folder for p in registry.planned]
                + [old for e in registry.entries for old in e.previous_folders])
     if len(set(ids)) != len(ids) or len(set(folders)) != len(folders):
@@ -277,23 +394,34 @@ def validate(registry: Registry) -> None:
     for folder in folders:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_]*", folder):
             raise ValueError(f"Unsafe layout folder name: {folder}")
+    if set(folders) & {*GROUPS, GENERAL, FIGURES, ARCHIVE_DIR_NAME, *NOTEBOOK_RECORD_KINDS}:
+        raise ValueError("A layout folder cannot reuse a group, figures, archive or record-kind name")
+    if any(e.group is not None and e.group not in GROUPS for e in registry.entries):
+        raise ValueError(f"Layout groups must be one of {GROUPS}")
+    if GENERAL not in registry.notebook_groups or set(GROUPS) - set(registry.notebook_groups):
+        raise ValueError("Notebook groups must include general and every letter group")
     homes = [p for e in registry.entries for p in (*e.phases, *e.nested)]
     if sorted(homes) != sorted(PHASES):
         raise ValueError("Every internal phase needs exactly one home folder")
     for e in registry.entries:
-        if not e.phases and not e.routes:
+        if e.notebook_only:
+            if e.phases or e.routes or e.nested or e.configs or not e.notebooks:
+                raise ValueError(f"Notebook-only entry {e.id} must own one notebook and nothing else")
+        elif not e.phases and not e.routes:
             raise ValueError(f"Layout entry {e.id} owns no phase or route")
         if set(e.routes) - set(PHASES) or any(n.phase not in PHASES for n in e.notebooks):
             raise ValueError(f"Layout entry {e.id} names an unknown phase")
     configs = [c for e in registry.entries for c in e.configs]
     if len(set(configs)) != len(configs):
         raise ValueError("Registered config names must be unique")
-    names = [n.name for n in registry.notebooks]
+    names = [n.id for n in registry.notebooks]
     legacy = [x for n in registry.notebooks for x in n.aliases]
     if len(set(names)) != len(names) or len(set(legacy)) != len(legacy):
-        raise ValueError("Notebook names and previous notebook IDs must be unique")
+        raise ValueError("Notebook IDs and previous notebook IDs must be unique")
     if set(legacy) & set(names):
         raise ValueError("A previous notebook ID cannot equal a current notebook ID")
+    if any(n.group not in registry.notebook_groups for n in registry.notebooks):
+        raise ValueError("Notebook group is not declared in notebook_groups")
     if set(registry.paper) - set(ids):
         raise ValueError("Paper mapping names an unknown layout entry")
     for value in registry.paper.values():
@@ -334,10 +462,9 @@ def legacy_phase(name: str) -> str | None:
     return None
 
 
-def _legacy_output_prefixes(reg: Registry | None = None) -> list[tuple[tuple[str, ...], str]]:
-    reg = reg or registry()
+def _legacy_output_prefixes() -> list[tuple[tuple[str, ...], str]]:
+    """Numbered and research-question trees before 18-11-2026 -> internal phase."""
     prefixes = [((folder,), phase) for phase, folder in LEGACY_PHASE_FOLDERS.items()]
-    prefixes += [((old,), reg.entry(old).owner_phase) for old in reg.previous_folders]
     prefixes += [(("rq2", LEGACY_PHASE_FOLDERS[p]), p) for p in LEGACY_RQ2_RESULT_PHASES]
     prefixes += [(("rq2", "regression_readout"), "regression_readout"),
                  (("regression_readout",), "regression_readout"),
@@ -345,73 +472,70 @@ def _legacy_output_prefixes(reg: Registry | None = None) -> list[tuple[tuple[str
     return sorted(prefixes, key=lambda p: -len(p[0]))
 
 
+def _normalize(parts, reg: Registry) -> tuple[str, ...]:
+    """A previous flat top-level folder (`exp11_data_efficiency/...`) -> its current path."""
+    parts = tuple(parts)
+    flat = reg.flat_paths
+    if parts and parts[0] in flat:
+        return (*flat[parts[0]].split("/"), *parts[1:])
+    return parts
+
+
 def logical_output(parts, reg: Registry | None = None) -> tuple[str, tuple[str, ...]] | None:
-    """(internal phase, sub-path) of a phase tree path, in either layout; None otherwise."""
+    """(internal phase, sub-path) of a phase tree path, in any layout; None otherwise."""
     reg = reg or registry()
     parts = tuple(parts)
-    for prefix, phase in _legacy_output_prefixes(reg):
+    for prefix, phase in _legacy_output_prefixes():
         if parts[: len(prefix)] == prefix:
             return phase, parts[len(prefix):]
-    owned = reg.owner_of(parts)
+    current = _normalize(parts, reg)
+    owned = reg.owner_of(current)
     if owned:
         phase, consumed = owned
-        return phase, parts[consumed:]
+        return phase, current[consumed:]
     return None
 
 
-def _notebook_record(parts, reg: Registry) -> tuple[str, ...] | None:
-    """figures/<folder>/... and {logs,manifests,results}/notebooks/<folder>/...
+def _notebook_record(parts, reg: Registry) -> tuple[bool, tuple[str, ...] | None]:
+    """(is a notebook-record path, translated parts or None when unmapped).
 
-    Current records are flat (`figures/<folder>/a.pdf`). A previous notebook ID
-    (`<folder>/<name>` or `rq2/01_decisions`) moves its records into its folder; records of
-    notebooks merged into one are archived; earlier folder names move to the current name.
-    """
-    if parts[:1] == ("figures",):
-        head, rest = parts[:1], parts[1:]
-    elif len(parts) >= 2 and parts[0] in NOTEBOOK_RECORD_KINDS and parts[1] == "notebooks":
-        head, rest = parts[:2], parts[2:]
-    else:
-        return None
-    if not rest:
-        return parts
-    group = rest[0]
-    if len(rest) == 1:
-        return None  # A folder directory: its records translate individually.
-    identity = f"{group}/{rest[1]}"
-    previous = reg.previous_notebook(identity)
-    if previous is not None and identity in previous.merged:
-        return (*MERGED_ARCHIVE.parts, *parts)
-    if previous is not None:
-        return (*head, previous.folder, *rest[2:])
-    if group in reg.folders:
-        return parts  # A current flat record.
-    if group in reg.previous_folders:
-        return (*head, reg.previous_folders[group], *rest[1:])
-    known_group = group in LEGACY_GROUPS or legacy_phase(group) is not None
-    return (*ARCHIVE.parts, *parts) if known_group else None  # Records of a retired notebook.
-
-
-def _folder_record(parts, reg: Registry) -> tuple[str, ...]:
-    """Kind-first notebook record -> current location.
-
-    `figures/<folder>/[<stem>/]x` -> `figures/<group>/[<stem>/]x`;
-    `{logs,manifests,results}/notebooks/<folder>/[<stem>/]x` -> `<folder>/<kind>/notebook/...`,
-    except `_figures.json`/`_stdout.txt`/`_failure.txt`, which sit beside the PDFs.
-    Archived and unknown-folder records are returned unchanged.
+    `figures/<x>/...` and kind-first `{logs,manifests,results}/notebooks/<x>/...`. Current
+    records are `figures/<notebook group>/<name>/...`. A previous notebook ID (`00_data`,
+    `exp04_decision_features/decisions`, `rq2/01_decisions`, `general/01_data`) or a previous
+    flat folder (`figures/exp11_data_efficiency/...`) moves to the current notebook's group;
+    records of notebooks merged into one and of retired notebooks are archived. Kind-first
+    records go to `<folder>/<kind>/notebook/...`, except `_figures.json`/`_stdout.txt`/
+    `_failure.txt`, which sit beside the PDFs.
     """
     if parts[:1] == (FIGURES,):
-        rest = parts[1:]
-        if not rest or rest[0] not in reg.folders:
-            return parts
-        return (FIGURES, figure_group(rest[0]), *rest[1:])
-    if len(parts) >= 3 and parts[0] in NOTEBOOK_RECORD_KINDS and parts[1] == "notebooks":
-        folder, rest = parts[2], parts[3:]
-        if folder not in reg.folders:
-            return parts
-        if rest and rest[-1] in FIGURE_RECORDS:
-            return (FIGURES, figure_group(folder), *rest)
-        return (folder, parts[0], NOTEBOOK_RECORDS, *rest)
-    return parts
+        kind, rest = None, parts[1:]
+    elif len(parts) >= 2 and parts[0] in NOTEBOOK_RECORD_KINDS and parts[1] == "notebooks":
+        kind, rest = parts[0], parts[2:]
+    else:
+        return False, None
+    if not rest:
+        return True, parts
+    if len(rest) == 1:
+        # A previous figure folder moves as one unit when every file inside translates alike.
+        entry = reg.flat_entry(rest[0]) if kind is None else None
+        return True, ((FIGURES, *entry.figure_group.split("/")) if entry is not None else None)
+    identity = f"{rest[0]}/{rest[1]}"
+    if kind is None and any(e.figure_group == identity for e in reg.entries):
+        return True, parts  # A current record.
+    previous = reg.previous_notebook(identity)
+    if previous is not None and identity in previous.merged:
+        return True, (*MERGED_ARCHIVE.parts, *parts)
+    if previous is not None:
+        entry, sub = reg.locate(previous.folder)[0], rest[2:]
+    elif (entry := reg.flat_entry(rest[0])) is not None:
+        sub = rest[1:]
+    elif rest[0] in LEGACY_GROUPS or legacy_phase(rest[0]) is not None:
+        return True, (*ARCHIVE.parts, *parts)  # Records of a retired notebook.
+    else:
+        return True, None
+    if kind is None or (sub and sub[-1] in FIGURE_RECORDS):
+        return True, (FIGURES, *entry.figure_group.split("/"), *sub)
+    return True, (*entry.parts, kind, NOTEBOOK_RECORDS, *sub)
 
 
 def _folder_report(parts, reg: Registry) -> bool:
@@ -443,29 +567,38 @@ def translate_output(relative, reg: Registry | None = None) -> PurePosixPath | N
         return PurePosixPath(FIGURES, CAPTIONS)
     if _folder_report(parts, reg):
         return PurePosixPath(*REPORTS_ARCHIVE.parts, *parts)
-    record = _notebook_record(parts, reg)
-    if record is not None or parts[0] in {FIGURES, *NOTEBOOK_RECORD_KINDS}:
-        return PurePosixPath(*_folder_record(record, reg)) if record is not None else None
-    logical = logical_output(parts, reg)
-    if logical is None:
+    is_record, record = _notebook_record(parts, reg)
+    if is_record:
+        return PurePosixPath(*record) if record is not None else None
+    if parts[0] in NOTEBOOK_RECORD_KINDS:
         return None
-    phase, sub = logical
-    folder = reg.previous_folders.get(parts[0], parts[0])
-    if parts[1:2] == (FIGURES,) and folder in reg.folders:
+    for prefix, phase in _legacy_output_prefixes():
+        if parts[: len(prefix)] == prefix:
+            sub = parts[len(prefix):]
+            return PurePosixPath(*reg.folder_for(phase, sub).split("/"), *sub)
+    current = _normalize(parts, reg)
+    hit = reg.entry_at(current)
+    if hit is None:
+        return None
+    entry, nested, consumed = hit
+    rest = current[consumed:]
+    if entry.notebook_only:
+        return PurePosixPath(*current)  # Notebook records only; nothing routes elsewhere.
+    if nested is None and rest[:1] == (FIGURES,):
         # `<folder>/figures/...` (briefly used on 19-11-2026) -> `figures/<group>/...`.
-        return PurePosixPath(FIGURES, figure_group(folder), *parts[2:])
-    if parts[0] in reg.folders and (sub in FOLDER_REPORTS or _own_notebook_record(parts, sub)):
-        return PurePosixPath(*parts)  # Each current folder owns its index and notebook records.
-    return PurePosixPath(reg.folder_for(phase, sub), *sub)
+        return PurePosixPath(FIGURES, *entry.figure_group.split("/"), *rest[1:])
+    if rest in FOLDER_REPORTS or _own_notebook_record(rest):
+        return PurePosixPath(*current)  # Each folder owns its index and notebook records.
+    return PurePosixPath(*reg.folder_for(nested or entry.owner_phase, rest).split("/"), *rest)
 
 
-def _own_notebook_record(parts, sub) -> bool:
+def _own_notebook_record(sub) -> bool:
     """`<folder>/<kind>/notebook/...` (possibly in a nested phase)."""
     return len(sub) >= 2 and sub[0] in NOTEBOOK_RECORD_KINDS and sub[1] == NOTEBOOK_RECORDS
 
 
 def recorded_output_path(value, output_dir_name: str = "output_JEVPFN") -> Path:
-    """Locate a path recorded before the layout migration, e.g. in reviewed acceptances.
+    """Locate a path recorded before a layout migration, e.g. in reviewed acceptances.
 
     Unchanged when it exists or names no output tree. The caller still verifies checksums.
     """
@@ -492,10 +625,11 @@ def recorded_output_path(value, output_dir_name: str = "output_JEVPFN") -> Path:
 def config_relative(name: str, reg: Registry | None = None) -> str:
     """Logical config key -> path under config/, without suffix for YAML files.
 
-    Accepts current keys (`exp04_decision_features/main`), registered stems (`main`), internal
-    phase keys (`experiment_1/main`, `feature_creation/jev.local`), and previous folders
-    (`4. experiment_1/main`, `rq2/4. experiment_1/main`, `general/3. experiment_0/debug`,
-    `rq1/behavior`). Unregistered bare names stay at the config root (e.g. `structure`).
+    Accepts current keys (`B/main`), registered stems (`main`), internal phase keys
+    (`experiment_1/main`, `feature_creation/jev.local`), flat-layout keys
+    (`exp04_decision_features/main`, `synthesis/analysis`) and older folders (`4. experiment_1/main`,
+    `rq2/4. experiment_1/main`, `general/3. experiment_0/debug`, `rq1/behavior`,
+    `exp09_adaptation/adaptation`). Unregistered bare names stay at the config root (`structure`).
     """
     reg = reg or registry()
     index = reg.config_index()
@@ -505,15 +639,16 @@ def config_relative(name: str, reg: Registry | None = None) -> str:
     if parts[0] in {"general", "rq2"} and len(parts) >= 3:
         parts = parts[1:]
     prefix, rest = parts[0], "/".join(parts[1:])
-    if prefix in reg.folders:
+    if prefix in reg.config_dirs:
         return "/".join(parts)
-    if prefix in reg.previous_folders:
-        return f"{reg.previous_folders[prefix]}/{rest}"
+    entry = reg.flat_entry(prefix)
+    if entry is not None:
+        return f"{index[rest]}/{rest}" if rest in index else f"{entry.config_dir}/{rest}"
     phase = prefix if prefix in PHASES else legacy_phase(prefix)
     if rest in index and (phase or prefix in LEGACY_GROUPS):
         return f"{index[rest]}/{rest}"
     if phase:
-        return f"{reg.home(phase)}/{rest}"
+        return f"{reg.home_entry(phase).config_dir}/{rest}"
     return "/".join(parts)
 
 
@@ -531,8 +666,21 @@ def config_aliases(old_files) -> dict[str, str]:
     return moved
 
 
-#: Physical output folders before and after 18-11-2026, for literal source rewrites.
+def notebook_aliases(old_files, reg: Registry | None = None) -> dict[str, str]:
+    """Map previous `notebooks/...ipynb` source paths to their registry paths."""
+    reg = reg or registry()
+    moved = {}
+    for name in old_files:
+        if not (name.startswith("notebooks/") and name.endswith(".ipynb")):
+            continue
+        found = reg.notebook(name.removeprefix("notebooks/").removesuffix(".ipynb"))
+        if found is not None and f"notebooks/{found.id}.ipynb" != name:
+            moved[name] = f"notebooks/{found.id}.ipynb"
+    return moved
+
+
 def legacy_literals(reg: Registry | None = None) -> dict[str, str]:
+    """Physical output/config folders of previous layouts -> current, for literal source rewrites."""
     reg = reg or registry()
     pairs = {f"output_JEVPFN/rq2/{LEGACY_PHASE_FOLDERS[p]}/": f"output_JEVPFN/{reg.home(p)}/"
              for p in LEGACY_RQ2_RESULT_PHASES}
@@ -540,27 +688,40 @@ def legacy_literals(reg: Registry | None = None) -> dict[str, str]:
                   for phase, folder in LEGACY_PHASE_FOLDERS.items()})
     pairs.update({f"output_JEVPFN/{group}/logs/": f"output_JEVPFN/{reg.home(group)}/logs/"
                   for group in ("rq1", "rq2", "rq3")})
-    pairs.update({f"output_JEVPFN/{old}/": f"output_JEVPFN/{new}/"
-                  for old, new in reg.previous_folders.items()})
+    pairs.update({f"output_JEVPFN/{old}/": f"output_JEVPFN/{new}/" for old, new in reg.flat_paths.items()})
+    for e in reg.entries:
+        for old in (e.folder, *e.previous_folders):
+            if e.figure_group != old:
+                pairs[f"output_JEVPFN/figures/{old}/"] = f"output_JEVPFN/figures/{e.figure_group}/"
+            if e.configs and e.config_dir != old:
+                pairs[f"config/{old}/"] = f"config/{e.config_dir}/"
     return pairs
 
 
 def rewrite_legacy_literals(text: str, reg: Registry | None = None) -> str:
-    for old, new in sorted(legacy_literals(reg).items(), key=lambda kv: -len(kv[0])):
-        text = text.replace(old, new)
-    return text
+    """One pass, longest literal first, so a rewritten folder is never rewritten again."""
+    pairs = legacy_literals(reg)
+    pattern = re.compile("|".join(re.escape(k) for k in sorted(pairs, key=len, reverse=True)))
+    return pattern.sub(lambda m: pairs[m.group(0)], text)
 
 
 def layout_only_changes(old_files: dict, current_files: dict, read_old, read_current) -> set[str]:
     """Source paths whose difference is only this layout move.
 
-    A config moved byte-for-byte to its registry path, or a file whose previous content with
-    previous output folders rewritten equals its current content. Anything else stays changed.
+    A config or notebook moved byte-for-byte to its registry path, a moved config whose only
+    change is previous folders rewritten in its text, or a file whose previous content with
+    previous folders rewritten equals its current content. Anything else stays changed.
     """
     explained = set()
-    for old, new in config_aliases(old_files).items():
-        if old not in current_files and old_files.get(old) == current_files.get(new) is not None:
+    for old, new in {**config_aliases(old_files), **notebook_aliases(old_files)}.items():
+        if old in current_files or current_files.get(new) is None:
+            continue
+        if old_files.get(old) == current_files[new]:
             explained |= {old, new}
+        elif new.endswith(".yaml") and (before := read_old(old)) is not None:
+            before = before.replace("\r\n", "\n")
+            if rewrite_legacy_literals(before) == read_current(new).replace("\r\n", "\n"):
+                explained |= {old, new}
     for name in old_files.keys() & current_files.keys():
         if old_files[name] == current_files[name] or name in explained:
             continue

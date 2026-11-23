@@ -1,6 +1,7 @@
 """Read-only, phase-specific notebook tables; planned work is never predictive evidence."""
 
 import json
+from pathlib import Path
 
 import pandas as pd
 
@@ -192,3 +193,44 @@ def predictor_evidence():
             "source": str(path) if path else None,
         })
     return pd.DataFrame(rows)
+
+
+def profile_evidence(predictors=None, profiles=None, plan=None):
+    """0B full-fold profiles per predictor and arm family: required versus passed.
+
+    A profile passes when a ``full_fold_profile_passed`` record for the current evaluation
+    identity and the predictor's contract runtime exists locally. The Kumo override profile
+    (the widest Kumo arm, widened beyond 500 columns) is its own column.
+    """
+    from src.evaluation.acceptance import evaluation_identity
+    from src.evaluation.campaign import benchmark_plan
+    from src.evaluation.qualification import kumo_override_arm, profile_plan
+    from src.evaluation.study_audit import FEATURE_FAMILY
+    from src.utils.serialization import digest
+
+    plan = profile_plan() if plan is None else plan
+    predictors = predictor_evidence() if predictors is None else predictors
+    if profiles is None:
+        current = evaluation_identity()
+        folder = paths.phase_path("experiment_0", "manifests", "after_extraction")
+        profiles = {}
+        for path in folder.glob("profile_*.json"):
+            body = json.loads(path.read_text(encoding="utf-8"))
+            if body.get("evaluation_identity") == current and body.get("status") == "full_fold_profile_passed":
+                profiles[digest(body["arm"])] = body
+    runtimes = {}
+    for row in predictors.itertuples():
+        if row.source and row.contract_passed:
+            runtimes[row.model] = json.loads(Path(row.source).read_text(encoding="utf-8")).get("runtime_identity")
+    override = kumo_override_arm(benchmark_plan())
+    override_key = digest(override) if override else None
+    rows = []
+    for arm in plan:
+        key = digest(arm)
+        family = "Kumo override" if key == override_key else FEATURE_FAMILY.get(arm["feature_set"], arm["feature_set"])
+        found = profiles.get(key)
+        rows.append({"model": arm["model"], "family": family, "dataset_id": arm["dataset_id"],
+                     "passed": bool(found) and found.get("runtime_identity") == runtimes.get(arm["model"])})
+    table = pd.DataFrame(rows)
+    return table.groupby(["model", "family"], as_index=False).agg(
+        required=("passed", "size"), passed=("passed", "sum"))

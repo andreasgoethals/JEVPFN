@@ -1,4 +1,4 @@
-"""B4: how much labelled data do decision features replace? (exp11_data_efficiency)
+"""B4: how much labelled data do decision features replace? (B/exp09_data_efficiency)
 
 This study DELIBERATELY subsamples outer-training rows, as an explicit owner-approved design
 (20 November 2026); AGENTS.md forbids only *silent* caps. Every subsample is recorded in its

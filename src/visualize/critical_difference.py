@@ -76,7 +76,10 @@ def learner_label(name: str) -> str:
 
 def control_of(table: pd.DataFrame) -> str | None:
     """The control learner of a `compare_learners` table, or None for all pairwise rows."""
-    if "p_finner" in table and table.versus.nunique() == 1:
+    control = table.attrs.get("control")
+    if control is not None:
+        return str(control)
+    if "comparison" in table and table.comparison.eq("versus_control").all() and table.versus.nunique() == 1:
         return str(table.versus.iloc[0])
     return None
 

@@ -21,10 +21,11 @@ from src.utils.config import load_yaml
 
 def test_research_layout_keeps_legacy_config_and_output_identities():
     assert paths.config_path("experiment_1/main") == paths.config_path("rq2/4. experiment_1/main")
-    assert paths.config_path("experiment_1/main").parent.name == "exp04_decision_features"
+    assert paths.config_path("experiment_1/main").parent.name == "B"
+    assert paths.config_path("exp04_decision_features/main") == paths.config_path("experiment_1/main")
     assert paths.notebook_phase("rq2/01_frozen_embeddings") == "experiment_2"
     assert paths.notebook_phase("rq1/04_decision_feature_comparison") == "feature_creation"
-    assert paths.phase_folder("experiment_1") == "exp04_decision_features"
+    assert paths.phase_folder("experiment_1") == "B/exp04_decision_features"
     assert load_yaml("rq3/adaptation")["enabled"] is False
 
 
@@ -163,13 +164,17 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
 def test_summary_discovery_follows_research_order():
     from src.utils.run_notebooks import discover
 
-    # Exp 11 (Group B, B4; RQ2) was numbered after Exp 10 (RQ3) on 20-11-2026; the
-    # cross-experiment synthesis notebook (23-11-2026) follows every experiment.
-    names = [n for n in discover() if n not in {"exp11_data_efficiency", "synthesis"}]
-    assert paths.research_group(paths.notebook_phase("exp11_data_efficiency")) == "rq2"
-    groups = ["general" if n.startswith("general/") else paths.research_group(paths.notebook_phase(n)) for n in names]
-    order = {"general": 0, "rq1": 1, "rq2": 2, "rq3": 3}
+    # Layout v3 (23-11-2026): general notebooks, then the letter groups A (RQ1), B (RQ2) and
+    # C; B4 was renumbered from Exp 11 to B/exp09 so each group's numbers are contiguous.
+    names = discover()
+    order = {"general": 0, "A": 1, "B": 2, "C": 3}
+    groups = [n.split("/")[0] for n in names]
     assert [order[g] for g in groups] == sorted(order[g] for g in groups)
+    assert paths.research_group(paths.notebook_phase("B/exp09_data_efficiency")) == "rq2"
+    assert {paths.research_group(paths.notebook_phase(n)) for n in names if n.startswith("A/")} == {"rq1"}
+    assert {paths.research_group(paths.notebook_phase(n)) for n in names if n.startswith("B/")} == {"rq2"}
+    for group in "ABC":  # Each group ends with its synthesis notebook.
+        assert [n for n in names if n.startswith(f"{group}/")][-1] == f"{group}/{group}_synthesis"
 
 
 def test_replay_control_precedes_interventions():

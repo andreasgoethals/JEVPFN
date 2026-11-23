@@ -1,6 +1,5 @@
 """Synthetic fixtures test pairing/plots only; never written as research results."""
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 
@@ -9,10 +8,6 @@ from src.evaluation.representation_views import decision_vs_embedding
 from src.visualize import style
 from src.visualize.decision_comparison import LABELS
 from src.visualize.paired import MODES
-from src.visualize.representation_views import (
-    direct_comparison_figures,
-    overlap_figures,
-)
 
 
 def fixture_folds():
@@ -66,23 +61,6 @@ def test_direct_pairing_does_not_select_winners_and_never_crosses_splits():
     assert decision_vs_embedding(undefined).empty
     with pytest.raises(ValueError, match="Multiple"):
         decision_vs_embedding(pd.concat([folds, folds.iloc[[0]]]))
-
-
-def test_new_panels_require_real_evidence_and_render_at_paper_width():
-    empty = pd.DataFrame()
-    for make in (direct_comparison_figures, overlap_figures):
-        assert list(make(empty)) == []
-    style.apply()
-    figures = [*direct_comparison_figures(decision_vs_embedding(fixture_folds())),
-               *overlap_figures(fixture_paired())]
-    assert len(figures) == 2
-    for fig, _, caption in figures:
-        try:
-            fig.canvas.draw()
-            assert fig.get_size_inches()[0] == style.WIDTH_FULL
-            assert caption and not any("index" in ax.get_xlabel().lower() for ax in fig.axes)
-        finally:
-            plt.close(fig)
 
 
 def test_tar_contrasts_retain_split_pairing_and_exclude_incomplete_folds():

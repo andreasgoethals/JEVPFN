@@ -1,4 +1,4 @@
-"""Group C, C2: learning from labels with Strands 2B (exp10_adaptation, internal phase rq3).
+"""Group C, C2: learning from labels with Strands 2B (C/exp11_adaptation, internal phase rq3).
 
 A 2 x 2 design on the JOINT question with probability features only:
 
@@ -8,7 +8,7 @@ A 2 x 2 design on the JOINT question with probability features only:
 | LoRA-trained torso | LoRA only (head frozen) | LoRA + head |
 
 Every trained cell starts from Strands' released adapter and head and uses Strands' own
-published recipe (`config/exp10_adaptation/adaptation.yaml`, each value with its source line
+published recipe (`config/C/adaptation.yaml`, each value with its source line
 in the pinned snapshot). Targets are the true class; regression uses nine equal-frequency bins
 of the fit's own training rows, mapped lowest-first to Strands' nine ordered levels.
 

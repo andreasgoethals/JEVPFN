@@ -2,7 +2,6 @@
 
 import json
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,7 +16,6 @@ from src.evaluation.decision_diagnostics import (
     peer_majority_agreement,
 )
 from src.utils.config import load_config
-from src.visualize import decision_diagnostics as plots
 from src.visualize import style
 
 
@@ -148,28 +146,6 @@ def test_case_browser_html_is_escaped():
     assert "&lt;script&gt;bad&lt;/script&gt;" in html
 
 
-@pytest.mark.parametrize("task,k", [("binary_classification", 2), ("multiclass_classification", 3), ("regression", 9)])
-def test_new_views_render_without_targets_and_keep_a4_dimensions(task, k):
-    style.apply()
-    rng = np.random.default_rng(4)
-    result = compare([rng.dirichlet(np.ones(k), 20) for _ in range(5)], task=task)
-    separate = compare([rng.dirichlet(np.ones(k), 20) for _ in range(5)], task=task, mode="per_column")
-    for name, records in separate.records.items():
-        result.records.setdefault(name, []).extend(records)
-    majority = peer_majority_agreement(result)
-    assert len(majority) == 5 and majority.agreement.between(0, 1).all()
-    views = [*plots.similarity_figure(result), *plots.model_profile_figure(result),
-             *plots.peer_majority_figure(majority), *plots.consensus_figure(result),
-             *plots.disputed_cases_figure(result.table("cases"))]
-    assert len(views) == 5
-    for fig, name, caption in views:
-        fig.canvas.draw()
-        assert name and caption
-        assert fig.get_figwidth() == style.WIDTH_FULL
-        assert fig.get_figheight() <= style.MAX_HEIGHT
-        plt.close(fig)
-
-
 def test_peer_majority_excludes_tied_peers():
     # Rows: all agree; model 0 alone dissents; the other two tie (one each).
     result = compare([[.9, .9, .9], [.9, .1, .1], [.9, .1, .9]])
@@ -177,17 +153,3 @@ def test_peer_majority_excludes_tied_peers():
     first = list(style.DECISION_COLORS)[0]
     assert table.loc[first, "n"] == 2 and table.loc[first, "tied_peers"] == 1
     assert table.loc[first, "agreement"] == pytest.approx(.5)
-
-
-def test_case_plot_groups_small_options_without_losing_probability_mass():
-    labels = [f"class {i}" for i in range(30)]
-    frame = pd.DataFrame([{"category": "disputed", "task": "multiclass_classification", "dataset": "Fixture",
-                           "dataset_id": "fixture", "row_id": "csv:1", "mean_pair_tv": .4, "vote_pattern": "1:1",
-                           "input_multiplicity": 1, "probabilities": json.dumps({"jev": [.5, *([.5/29]*29)], "liquid": [1/30]*30}),
-                           "labels": json.dumps(labels)}])
-    for fig, _, _ in plots.disputed_cases_figure(frame):
-        ax = fig.axes[0]
-        assert [t.get_text() for t in ax.get_yticklabels()] == ["class 0", "29 other classes (sum)"]
-        assert np.allclose(np.asarray(ax.images[0].get_array()).sum(axis=0), 1)
-        plt.close(fig)
-    assert json.loads(frame.labels.item()) == labels

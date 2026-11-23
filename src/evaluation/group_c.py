@@ -1,10 +1,10 @@
 """Group C (owner-approved 20 November 2026; Strands only): arms, features, comparisons, exports.
 
-* C1, inside the decision model (exp09_representations, internal phase ``representations``):
+* C1, inside the decision model (C/exp10_representations, internal phase ``representations``):
   C1a = 3 positions x 2 layers x {per text column, joint} = 12 hidden-state arms (PCA 32 per
   column / 64 joint on outer-training rows); C1b = the ``<answer>``-last vector plus Strands'
   own probabilities, per column and joint (2 arms). Label-free.
-* C2, learning from labels (exp10_adaptation, internal phase ``rq3``): head-only, LoRA-only and
+* C2, learning from labels (C/exp11_adaptation, internal phase ``rq3``): head-only, LoRA-only and
   LoRA + head cross-fitted probabilities for the joint question (3 arms); zero-shot is B1's
   Strands joint arm.
 
