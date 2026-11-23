@@ -17,7 +17,7 @@ test_pool_limits:
   gpu: 12
   download: 2
   build: 2
-  transfer: 1  # Serialize bulk copy/release; two resident GPU runtimes can still run together.
+  transfer: 3  # Bulk copy/release jobs at once (was 1; 23-11-2026). Shared dataset locks still serialize per store.
 account: lp_verbekelab
 default_gpu_profile: mindwell_b200
 routes: {}
@@ -33,4 +33,8 @@ profiles:
     scratch_root: /gpfs1/scratch/383/vsc38338  # VSC_SCRATCH_GPFS1 takes precedence
     durable_root: /gpfs1/project/ALLOCATION
     runtime_profile: blackwell-cu130
+# Concurrent dataset allocations per decision runtime in feature creation (was a fixed 2).
+# Owner request 23-11-2026: more parallel jobs. Datasets of one runtime publish to
+# different stores; Slurm still decides placement.
+feature_jobs_per_provider: 4
 monitor_interval_seconds: 10

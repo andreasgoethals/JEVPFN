@@ -1,7 +1,7 @@
 """Bounded open-weight feature creation after reviewed 0A; preview by default.
 
-Each GPU allocation handles one dataset, with two concurrent allocations per
-resident decision runtime. The existing two-workspace lease/quota/publication
+Each GPU allocation handles one dataset, with `feature_jobs_per_provider` (scheduling
+config) concurrent allocations per resident decision runtime. The existing two-workspace lease/quota/publication
 protocol bounds storage. Jev and all predictive benchmarks are excluded.
 Explicit --provider selections use their own receipt and exclude encoder jobs;
 they never extend or overwrite the historical full-campaign receipt.
@@ -168,7 +168,7 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
         if encoder_config(encoder)["enabled"] is not True:
             raise ValueError("Enable the reviewed encoder configuration first")
     settings = load_yaml("experiment_0/scheduling")
-    settings["test_pool_limits"] = {**settings["test_pool_limits"], **dict.fromkeys(selected, 2)}
+    settings["test_pool_limits"] = {**settings["test_pool_limits"], **dict.fromkeys(selected, settings.get("feature_jobs_per_provider", 2))}
     identity = digest(
         dict(frozen=frozen, runtime_pins=runtime_pins(), steps=steps, settings=settings)
     )

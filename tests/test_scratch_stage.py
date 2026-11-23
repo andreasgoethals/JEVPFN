@@ -115,6 +115,35 @@ def test_unchanged_store_is_not_republished_but_any_new_write_is(roots, monkeypa
         request("intern", text="new"), kind="verified_response") == response()
 
 
+def test_store_unchanged_since_staging_is_not_reunioned_until_it_is_written(roots, monkeypatch):
+    """Qualification jobs that add nothing must not re-union every multi-GB store at exit."""
+    durable, work = roots
+    marker(durable, work)
+    cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    remote = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    receipt = json.loads((work / stage.MARKER).read_text())
+    receipt["files"] = {"data/jev_cache/fixture.sqlite3": file_sha256(remote.path)}
+    (work / stage.MARKER).write_text(json.dumps(receipt))
+    monkeypatch.setattr(stage, "_PUBLISHED_IDENTITIES", {})
+    monkeypatch.setattr(stage, "_DIVERGED_FROM_STAGE", set())
+    merges = []
+    real = stage._merge_native_decision
+    monkeypatch.setattr(stage, "_merge_native_decision", lambda *a: merges.append(a) or real(*a))
+    first = stage._publish(durable, work)
+    assert first["decision_stores"] == 1 and first["unchanged_skipped"] == 1 and merges == []
+    remote.put(request("intern", text="new"), response(), kind="verified_response")
+    assert stage._publish(durable, work)["unchanged_skipped"] == 0 and len(merges) == 1
+    assert cache(durable / "data/jev_cache/fixture.sqlite3").get(
+        request("intern", text="new"), kind="verified_response") == response()
+    # A durable destination that vanished is always republished, staged hash or not.
+    (durable / "data/jev_cache/fixture.sqlite3").unlink()
+    monkeypatch.setattr(stage, "_DIVERGED_FROM_STAGE", set())
+    receipt["files"] = {"data/jev_cache/fixture.sqlite3": file_sha256(remote.path)}
+    (work / stage.MARKER).write_text(json.dumps(receipt))
+    stage._publish(durable, work)
+    assert (durable / "data/jev_cache/fixture.sqlite3").is_file()
+
+
 def test_unchanged_skip_never_applies_to_a_missing_destination(roots, monkeypatch):
     durable, work = roots
     marker(durable, work)

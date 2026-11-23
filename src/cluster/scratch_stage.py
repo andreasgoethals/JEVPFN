@@ -26,6 +26,12 @@ from src.utils.serialization import digest, file_sha256, write_json
 MARKER = "_JEVPFN_WORKSPACE.json"
 # (durable root, relative path) -> closed source identity published by THIS process.
 _PUBLISHED_IDENTITIES = {}
+# Workspace stores observed to differ from their staged bytes. Stores only grow, so a
+# store never returns to its staged content; remembering this avoids rehashing it.
+_DIVERGED_FROM_STAGE = set()
+# A shared dataset lock can be held by another job's validated union of a multi-GB
+# store (Kickstarter took 73 min on 22-11-2026); one hour made staging fail spuriously.
+LOCK_WAIT_SECONDS = 4 * 3600
 PUBLICATION_PROGRESS = "_JEVPFN_PUBLICATION_PROGRESS.json"
 
 
@@ -245,6 +251,21 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                 # since (same inode, size, mtime and ctime, no journal), is durable:
                 # durable stores only grow by validated unions.
                 published_key = (str(durable), relative.as_posix())
+                # Staging publishes any earlier workspace results first and then only
+                # copies or unions durable records into the workspace, so a store whose
+                # bytes still equal its staged hash holds nothing durable lacks. Without
+                # this, every qualification job re-unioned all 18 multi-GB stores at
+                # exit (5 h timeouts, 22-11-2026) while holding the shared dataset locks.
+                if (
+                    kind != "outputs"
+                    and destination.is_file()
+                    and _unchanged_since_stage(source, work, relative, staged)
+                ):
+                    counts[kind] += 1
+                    counts["unchanged_skipped"] += 1
+                    print(json.dumps({"event": "publication_unchanged_since_stage",
+                                      "path": relative.as_posix(), "periodic": periodic}), flush=True)
+                    continue
                 if source.suffix == ".sqlite3":
                     unchanged = _closed_db_identity(source)
                     if (unchanged is not None and destination.is_file()
@@ -259,7 +280,7 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                 lock = durable / ".publication-locks" / (digest(relative.as_posix()) + ".lock")
                 with ExitStack() as stack:
                     try:
-                        stack.enter_context(file_lock(lock, timeout=0 if periodic else 3600))
+                        stack.enter_context(file_lock(lock, timeout=0 if periodic else LOCK_WAIT_SECONDS))
                     except TimeoutError as exc:
                         if not periodic:
                             raise PublicationLockUnavailable(
@@ -275,7 +296,7 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                             source_sha = file_sha256(source)
                             saved = progress.get(relative_key)
                             if saved and saved["source_sha256"] == source_sha:
-                                with file_lock(destination.with_suffix(".extraction.lock"), timeout=3600,
+                                with file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS,
                                                shared=True):
                                     destination_identity = _closed_db_identity(destination)
                                 if destination_identity is not None and saved["destination"] == destination_identity:
@@ -323,6 +344,19 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                     print(json.dumps({"event": "publication_completed", "path": relative.as_posix(),
                                       "seconds": time.monotonic() - started}), flush=True)
     return counts
+
+
+def _unchanged_since_stage(source, work, relative, staged):
+    key = relative.as_posix()
+    seen = (str(work), key)
+    if key not in staged or seen in _DIVERGED_FROM_STAGE:
+        return False
+    if _closed_db_identity(source) is None:  # An open writer or a pending journal.
+        return False
+    if file_sha256(source) == staged[key]:
+        return True
+    _DIVERGED_FROM_STAGE.add(seen)
+    return False
 
 
 def _union_bytes(incoming_bytes, destination):
@@ -437,7 +471,7 @@ def _merge_native_decision(incoming, destination, work):
     if shutil.disk_usage(temporary_root).free < required:
         raise OSError("Insufficient native space for a validated publication union")
     with (
-        file_lock(destination.with_suffix(".extraction.lock"), timeout=3600),
+        file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS),
         tempfile.TemporaryDirectory(prefix=".union-", dir=temporary_root) as temporary,
     ):
         native_root = Path(temporary) / "JEVPFN"
@@ -514,7 +548,7 @@ def _provider_cache(source, destination, provider):
     # Publication backs up the durable union under this same extraction lock.
     # Hold it before even reading identity, through the complete filtered copy;
     # SQLite's short busy timeout cannot span a multi-minute publication.
-    with file_lock(source.with_suffix(".extraction.lock"), timeout=3600):
+    with file_lock(source.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS):
         _recover_rollback(source)
         return _provider_cache_locked(source, destination, provider)
 
@@ -754,7 +788,7 @@ def stage(runtime, *, datasets=None):
                     files[key] = saved["sha256"]
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                with file_lock(destination.with_suffix(".extraction.lock"), timeout=3600):
+                with file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS):
                     _recover_rollback(destination)
                 with tempfile.TemporaryDirectory(prefix=".warm-", dir=destination.parent) as temp:
                     incoming = _provider_cache(source, Path(temp) / source.name, runtime)
