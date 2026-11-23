@@ -168,10 +168,23 @@ def association_heatmap(associations, *, name, what):
         "these are associations, not causal effects.")
 
 
-def lodo_scatter(predictions, *, name, what):
+INPUT_SET_TEXT = {
+    "pre_extraction": ("median text length only", "whether to acquire decision features"),
+    "pilot": ("median text length and decision redundancy on a fixed 200-row label-free pilot",
+              "whether to acquire them after a 200-request pilot"),
+    "post_extraction": ("median text length and decision redundancy on all rows",
+                        "whether to use decision features already extracted"),
+}
+
+
+def lodo_scatter(predictions, *, name, what, input_set=None):
     """Leave-one-dataset-out predicted versus actual gain, one panel per predictor."""
     if predictions is None or predictions.empty:
         return
+    if input_set is not None and "input_set" in predictions:
+        predictions = predictions[predictions.input_set.eq(input_set)]
+        if predictions.empty:
+            return
     models = [m for m in PREDICTORS if m in set(predictions.model_id)]
     columns = 4
     rows = int(np.ceil(len(models) / columns))
@@ -188,11 +201,13 @@ def lodo_scatter(predictions, *, name, what):
         ax.axis("off")
     fig.supxlabel("Predicted gain (held-out dataset)", fontsize=8)
     fig.supylabel("Actual gain", fontsize=8)
+    inputs, decision = INPUT_SET_TEXT.get(
+        input_set, ("two prespecified label-free properties", "whether to use decision features"))
     yield fig, name, (
         f"{what}: each dataset's gain from the median decision model's both-view features, predicted "
-        "before seeing it by a ridge rule fitted on the other datasets' two prespecified label-free "
-        "properties (median text length, decision redundancy), against the actual gain. Points in the "
-        "upper-right and lower-left quadrants are correct use/don't-use decisions.")
+        f"before seeing it by a ridge rule fitted on the other datasets' {inputs}, against the actual "
+        f"gain; the rule decides {decision}. Points in the upper-right and lower-left quadrants are "
+        "correct use/don't-use decisions.")
 
 
 def size_curves(size_gains, *, name, what, outcome="raw_gain", curve="main", main_max=2048):

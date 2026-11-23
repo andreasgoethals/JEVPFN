@@ -49,10 +49,25 @@ group_b:
   tie_tolerance: 0.001  # |raw gain| <= this counts as a tie (headline-metric units)
   bootstrap: {n_boot: 2000, seed: 20261120, unit: dataset}
 predict_in_advance:
-  # Leave-one-dataset-out: a ridge rule on two prespecified label-free properties predicts
+  # Leave-one-dataset-out: a ridge rule on <= 2 prespecified label-free properties predicts
   # each held-out dataset's gain; use decision features when the prediction exceeds 0.
+  # Owner decision 23-11-2026: the same rule on three nested input sets, one common dataset
+  # cohort, so the sets differ only in how much decision output they need beforehand.
   rule: ridge_on_standardized_properties
-  properties: [log10_median_text_chars, decision_redundancy_r2]
+  input_sets:
+    pre_extraction:
+      properties: [log10_median_text_chars]
+      claim: should_i_acquire_decision_features
+    pilot:
+      properties: [log10_median_text_chars, pilot_redundancy_r2]
+      claim: should_i_acquire_after_a_200_request_pilot
+    post_extraction:
+      properties: [log10_median_text_chars, decision_redundancy_r2]
+      claim: should_i_use_decision_features_i_already_have
+  # Pilot redundancy: the 200 rows with the smallest seeded hash of (dataset, row position),
+  # never chosen by label or content; 5-fold CV inside the pilot. Here it reuses stored
+  # outputs of those rows; in deployment it costs 200 decision requests per model.
+  pilot: {rows: 200, seed: 20261123, folds: 5}
   alpha: 1.0
   outcome_representation: decision/both/median  # median over all 17 models, per predictor
   use_threshold: 0.0

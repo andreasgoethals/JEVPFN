@@ -28,3 +28,31 @@ proposal:
   ranking_stability: kendall_tau_b_between_predictors
   task_types: descriptive_only_never_separate_inference
   when_text_helps_axes: [availability, length, novelty, baseline_entropy, prediction_shift, field_type]
+# Statistical framework (23-11-2026), implemented in src/evaluation/inference.py
+# (`compare_learners`, `confirmatory_tests`). Sources: Demsar 2006; Garcia & Herrera 2008;
+# Garcia et al. 2010; Iman & Davenport 1980; Holm 1979; Wilcoxon 1945; Friedman 1937;
+# Nemenyi 1963; Benavoli et al. 2014, 2017; Gneiting & Raftery 2007.
+# Always all 18 datasets as the units; folds only form each dataset's mean.
+# Proposal: inactive until approved together with the contrasts above.
+framework:
+  status: awaiting_owner_approval
+  unit: per_dataset_mean_of_five_outer_folds_all_18_datasets
+  omnibus_several_learners: friedman_with_iman_davenport_f
+  ranks_and_cd_diagram: descriptive_nemenyi_critical_difference
+  confirmatory_pairwise: two_sided_wilcoxon_signed_rank_on_dataset_differences
+  family_correction: holm
+  sensitivity_corrections: {versus_control: finner, all_pairwise: shaffer_static}
+  bayesian: {test: bayesian_signed_rank_dirichlet_process, prior_strength: 0.5, decision: largest_posterior_region}
+  rope: {roc_auc: 0.01, roc_auc_ovr_macro: 0.01, r2: 0.01, headroom_normalised_gain: 0.01, log_loss: 0.01, ranked_probability_score: 0.005}
+  mean_rank_post_hoc: reported_not_confirmatory  # depends on the learner pool (Benavoli et al. 2016)
+  application:
+    A1_outputs: {comparison: 17_decision_models, procedure: friedman_ranks_cd_diagram, metric: log_loss_joint_requests, inference: descriptive}
+    A2_stability: {comparison: averaged_presentations_vs_canonical_per_model, procedure: wilcoxon_holm_over_17_models_plus_bayesian, metrics: [log_loss, roc_auc], inference: confirmatory_if_approved}
+    A3_geometry: {inference: descriptive_only}
+    B1_decision_features: {comparison: decision_modes_vs_non_text_control_per_predictor, procedure: wilcoxon_holm_plus_bayesian, ranking: friedman_cd_over_arms, inference: confirmatory_if_approved}
+    B2_representations: {comparison: decision_vs_frozen_embeddings_tar_label_classifier, procedure: wilcoxon_holm_plus_bayesian, inference: confirmatory_if_approved}
+    B3_when_text_helps: {comparison: three_lodo_rules_vs_always_and_never, procedure: wilcoxon_on_regret_plus_bayesian, inference: exploratory}
+    B4_data_efficiency: {comparison: arms_vs_baseline_per_size, procedure: wilcoxon_finner_vs_control, inference: exploratory}
+    B5_native_text_systems: {comparison: native_text_systems, procedure: friedman_cd_diagram, inference: descriptive}
+    C1_strands_states: {comparison: 14_arms_vs_non_text_control, procedure: friedman_then_wilcoxon_finner_vs_control, inference: exploratory}
+    C2_strands_adaptation: {comparison: 2x2_zero_shot_head_lora_both, procedure: friedman_then_all_pairwise_wilcoxon_shaffer, inference: exploratory}

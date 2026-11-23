@@ -10,10 +10,15 @@ metrics are fixed (binary ROC-AUC, multiclass macro one-vs-rest ROC-AUC, regress
 
 B3 adds label-free dataset properties (including decision redundancy), exploratory
 model-level relations (n = 17 decision models), text-column refit importance and a
-leave-one-dataset-out (LODO) rule that predicts each dataset's gain in advance.
+leave-one-dataset-out (LODO) rule that predicts each dataset's gain in advance. The rule runs
+on three nested input sets (owner decision 23-11-2026): label-free properties only ("should I
+acquire?"), plus redundancy on a fixed 200-row label-free pilot ("should I acquire after a
+200-request pilot?") and plus redundancy on all rows ("should I use features I already have?").
 """
 
 from __future__ import annotations
+
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -392,7 +397,70 @@ def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000
     return result
 
 
+def lodo_input_sets(outcome: pd.DataFrame, properties: pd.DataFrame, *, input_sets, alpha=1.0,
+                    threshold=0.0, n_shuffles=2000, seed=SEED, unit="dataset_id"):
+    """The same LODO rule, outcome and shuffle null on several prespecified input sets.
+
+    All sets use one common dataset cohort: datasets with the outcome and every property of
+    every set defined, so the sets differ only in their inputs. Returns (predictions, summary);
+    both carry `input_set` and its `claim`, and the summary lists excluded datasets.
+    """
+    needed = sorted({f for spec in input_sets.values() for f in spec["properties"]})
+    missing = [f for f in needed if f not in properties]
+    if missing:
+        raise ValueError(f"Prespecified LODO properties are absent: {missing}")
+    data = outcome[[unit, "raw_gain"]].merge(properties[[unit, *needed]], on=unit, how="left")
+    complete = data.notna().all(axis=1)
+    cohort = set(data.loc[complete, unit])
+    excluded = sorted(set(data[unit]) - cohort)
+    outcome = outcome[outcome[unit].isin(cohort)]
+    properties = properties[properties[unit].isin(cohort)]
+    rows, summary = [], []
+    for name, spec in input_sets.items():
+        predictions = lodo_predictions(outcome, properties, features=spec["properties"], alpha=alpha,
+                                       unit=unit)
+        rows.append(predictions.assign(input_set=name, claim=spec["claim"]))
+        summary.append({"input_set": name, "claim": spec["claim"],
+                        "properties": ",".join(spec["properties"]),
+                        "excluded_datasets": ",".join(excluded),
+                        **lodo_evaluation(predictions, threshold=threshold, n_shuffles=n_shuffles,
+                                          seed=seed, outcome=outcome, properties=properties,
+                                          features=spec["properties"], alpha=alpha)})
+    return pd.concat(rows, ignore_index=True), pd.DataFrame(summary)
+
+
 # ------------------------------------------------------------------ B3: redundancy
+
+
+def pilot_rows(n_rows: int, *, dataset_id: str, size: int = 200, seed: int = SEED) -> np.ndarray:
+    """Fixed label-free pilot: the `size` row positions with the smallest seeded hash.
+
+    The hash of (seed, dataset ID, row position in the loaded dataset) never reads a target,
+    feature value or decision output, so the same rows would be requested before extraction.
+    In a real deployment the pilot costs `size` decision requests per model.
+    """
+    keys = [hashlib.sha256(f"{seed}:{dataset_id}:{i}".encode()).digest() for i in range(n_rows)]
+    order = sorted(range(n_rows), key=keys.__getitem__)
+    return np.sort(np.asarray(order[:min(size, n_rows)], dtype=int))
+
+
+def pilot_redundancy(non_text: pd.DataFrame, decision: np.ndarray, *, dataset_id, task_type,
+                     size=200, seed=SEED, folds=5, alpha=1.0) -> dict:
+    """`decision_redundancy` on the fixed pilot only, with `folds`-fold CV inside the pilot.
+
+    Folds assign pilot rows by their position in hash order, so they are label-free too.
+    """
+    rows = pilot_rows(len(non_text), dataset_id=dataset_id, size=size, seed=seed)
+    rank = np.argsort(np.argsort([hashlib.sha256(f"{seed}:{dataset_id}:{r}".encode()).digest()
+                                  for r in rows]))
+    splits = [{"train": [i for i, q in enumerate(rank) if q % folds != k],
+               "test": [i for i, q in enumerate(rank) if q % folds == k]} for k in range(folds)]
+    result = decision_redundancy(non_text.iloc[rows].reset_index(drop=True),
+                                 np.asarray(decision, float)[rows], splits, task_type=task_type,
+                                 alpha=alpha)
+    return {"pilot_rows": len(rows), **{f"pilot_{k}": v for k, v in result.items()}}
+
+
 
 
 def decision_redundancy(non_text: pd.DataFrame, decision: np.ndarray, splits, *, task_type,

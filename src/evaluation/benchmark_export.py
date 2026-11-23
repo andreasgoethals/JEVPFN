@@ -229,6 +229,7 @@ def dataset_properties_and_redundancy():
     from src.evaluation.row_benefit import block_probabilities, load_decision_block
 
     main = load_yaml("experiment_1/main")
+    pilot = load_yaml("rq2/when_text_helps")["predict_in_advance"]["pilot"]
     properties, redundancy = [], []
     for entry in selected_entries(load_catalog(), main):
         dataset = load_dataset(entry, allow_download=False)
@@ -244,16 +245,21 @@ def dataset_properties_and_redundancy():
                 redundancy.append({"dataset_id": entry["id"], "provider": provider, "status": source})
                 continue
             matrix = block_probabilities(block, dataset.metadata.task_type, len(dataset.frame))["all_text"]
-            result = group_b.decision_redundancy(non_text.reset_index(drop=True), matrix, splits,
+            frame = non_text.reset_index(drop=True)
+            result = group_b.decision_redundancy(frame, matrix, splits,
                                                  task_type=dataset.metadata.task_type)
+            result.update(group_b.pilot_redundancy(
+                frame, matrix, dataset_id=entry["id"], task_type=dataset.metadata.task_type,
+                size=pilot["rows"], seed=pilot["seed"], folds=pilot["folds"]))
             redundancy.append({"dataset_id": entry["id"], "provider": provider, "status": "computed",
                                **result})
         print(f"{entry['id']}: properties and redundancy computed", flush=True)
     properties = pd.DataFrame(properties)
     redundancy = pd.DataFrame(redundancy)
-    if "r2" in redundancy:
-        per_dataset = redundancy.groupby("dataset_id").r2.median().rename("decision_redundancy_r2")
-        properties = properties.merge(per_dataset.reset_index(), on="dataset_id", how="left")
+    for column, name in (("r2", "decision_redundancy_r2"), ("pilot_r2", "pilot_redundancy_r2")):
+        if column in redundancy:
+            per_dataset = redundancy.groupby("dataset_id")[column].median().rename(name)
+            properties = properties.merge(per_dataset.reset_index(), on="dataset_id", how="left")
     return properties, redundancy
 
 
@@ -305,13 +311,11 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
         outcome = medians[medians.representation.eq(rule["outcome_representation"])]
         lodo_rows, lodo = [], []
         for model, group in outcome.groupby("model_id"):
-            predictions = group_b.lodo_predictions(group, properties, features=rule["properties"],
-                                                   alpha=rule["alpha"])
+            predictions, summary = group_b.lodo_input_sets(
+                group, properties, input_sets=rule["input_sets"], alpha=rule["alpha"],
+                threshold=rule["use_threshold"], n_shuffles=rule["n_shuffles"])
             lodo_rows.append(predictions.assign(model_id=model))
-            lodo.append({"model_id": model, **group_b.lodo_evaluation(
-                predictions, threshold=rule["use_threshold"], n_shuffles=rule["n_shuffles"],
-                outcome=group, properties=properties, features=rule["properties"],
-                alpha=rule["alpha"])})
+            lodo.append(summary.assign(model_id=model))
         a = _group_a_frames()
         diagnostics = group_b.model_diagnostics(
             a.get("quality"), a.get("output_shape"), a.get("loo_consensus"), a.get("model_profile"),
@@ -331,7 +335,7 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
             model_diagnostics=diagnostics, model_usefulness=usefulness, model_relations=relations,
             column_importance=group_b.text_column_importance(head), row_cohorts=cohorts,
             lodo_predictions=pd.concat(lodo_rows, ignore_index=True) if lodo_rows else pd.DataFrame(),
-            lodo=pd.DataFrame(lodo))
+            lodo=pd.concat(lodo, ignore_index=True) if lodo else pd.DataFrame())
     return tables
 
 

@@ -187,3 +187,208 @@ def confirmatory_tests(datasets, plan):
         results[index]["holm_rank"] = rank + 1
         results[index]["holm_step_threshold_at_0_05"] = 0.05 / (len(results) - rank)
     return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
+# Comparing several learners over the same datasets (owner's statistics collection).
+#
+# Unit: one score per dataset and learner (mean of the five outer folds), never folds.
+# - Omnibus: Friedman (1937) with the Iman-Davenport (1980) F correction (Demsar 2006).
+# - Mean ranks and the Nemenyi (1963) critical difference are DESCRIPTIVE (CD diagram):
+#   mean-rank post-hoc tests depend on which other learners are in the pool
+#   (Benavoli, Corani & Mangili 2016), so confirmatory pairwise claims use the paired
+#   two-sided Wilcoxon (1945) signed-rank test on per-dataset differences instead.
+# - Families of pairwise p-values: Holm (1979) step-down; Finner for comparisons with
+#   one control and Shaffer's static procedure for all pairwise comparisons
+#   (Garcia & Herrera 2008; Garcia et al. 2010) as reported sensitivity analyses.
+# - Bayesian signed-rank test with a region of practical equivalence (Benavoli et al.
+#   2014, 2017) reports P(worse), P(equivalent), P(better) next to every p-value.
+# ---------------------------------------------------------------------------
+
+
+def score_matrix(scores, *, higher_is_better):
+    """Dataset x learner table from rows (dataset_id, learner, score); complete rows only."""
+    if scores.duplicated(["dataset_id", "learner"]).any():
+        raise ValueError("One score per dataset and learner is required")
+    table = scores.pivot(index="dataset_id", columns="learner", values="score").astype(float)
+    if table.isna().any().any():
+        missing = table.columns[table.isna().any()].tolist()
+        raise ValueError(f"Learners lack a score on some datasets: {missing}; inference stops")
+    if not np.isfinite(table.to_numpy()).all():
+        raise ValueError("Nonfinite score")
+    return table if higher_is_better else -table
+
+
+def friedman(matrix):
+    """Friedman chi-square and the Iman-Davenport F on a dataset x learner matrix.
+
+    `matrix` is oriented so that larger is better; rank 1 is the best learner on a
+    dataset and ties receive average ranks.
+    """
+    from scipy.stats import chi2, f
+
+    values = np.asarray(matrix, dtype=float)
+    n, k = values.shape
+    if n < 2 or k < 2:
+        raise ValueError("Friedman needs at least two datasets and two learners")
+    ranks = pd.DataFrame(values).rank(axis=1, ascending=False, method="average").to_numpy()
+    mean_ranks = ranks.mean(axis=0)
+    chi_square = 12 * n / (k * (k + 1)) * (np.sum(mean_ranks**2) - k * (k + 1) ** 2 / 4)
+    denominator = n * (k - 1) - chi_square
+    iman_davenport = (n - 1) * chi_square / denominator if denominator > 0 else np.inf
+    df1, df2 = k - 1, (k - 1) * (n - 1)
+    return {
+        "datasets": n,
+        "learners": k,
+        "mean_ranks": dict(zip(getattr(matrix, "columns", range(k)), mean_ranks.tolist())),
+        "friedman_chi2": float(chi_square),
+        "friedman_p": float(chi2.sf(chi_square, df1)),
+        "iman_davenport_f": float(iman_davenport),
+        "iman_davenport_df": [df1, df2],
+        "iman_davenport_p": float(f.sf(iman_davenport, df1, df2)) if np.isfinite(iman_davenport) else 0.0,
+    }
+
+
+def nemenyi_critical_difference(learners, datasets, alpha=0.05):
+    """Demsar's CD = q_alpha * sqrt(k(k+1)/(6N)), q from the studentized range / sqrt(2)."""
+    from scipy.stats import studentized_range
+
+    q = studentized_range.ppf(1 - alpha, learners, np.inf) / np.sqrt(2)
+    return float(q * np.sqrt(learners * (learners + 1) / (6 * datasets)))
+
+
+def holm(p_values):
+    p = np.asarray(p_values, dtype=float)
+    adjusted, running = np.empty_like(p), 0.0
+    for rank, index in enumerate(np.argsort(p, kind="stable")):
+        running = min(1.0, max(running, p[index] * (len(p) - rank)))
+        adjusted[index] = running
+    return adjusted
+
+
+def finner(p_values):
+    """Finner step-down: APV_i = max_{j<=i} 1 - (1 - p_(j))^(m/j)."""
+    p = np.asarray(p_values, dtype=float)
+    adjusted, running, m = np.empty_like(p), 0.0, len(p)
+    for rank, index in enumerate(np.argsort(p, kind="stable"), start=1):
+        running = min(1.0, max(running, 1 - (1 - p[index]) ** (m / rank)))
+        adjusted[index] = running
+    return adjusted
+
+
+def _shaffer_counts(k):
+    """Shaffer's S(k): attainable numbers of simultaneously true pairwise hypotheses."""
+    from math import comb
+
+    sets = {0: {0}, 1: {0}}
+    for size in range(2, k + 1):
+        sets[size] = {comb(j, 2) + x for j in range(1, size + 1) for x in sets[size - j]}
+    return sorted(sets[k])
+
+
+def shaffer(p_values, learners):
+    """Shaffer's static procedure for all m = k(k-1)/2 pairwise comparisons."""
+    p = np.asarray(p_values, dtype=float)
+    m = len(p)
+    if m != learners * (learners - 1) // 2:
+        raise ValueError("Shaffer requires every pairwise comparison among the learners")
+    counts = _shaffer_counts(learners)
+    adjusted, running = np.empty_like(p), 0.0
+    for rank, index in enumerate(np.argsort(p, kind="stable"), start=1):
+        t = max(c for c in counts if c <= m - rank + 1)
+        running = min(1.0, max(running, t * p[index]))
+        adjusted[index] = running
+    return adjusted
+
+
+def wilcoxon_p(differences):
+    from scipy.stats import wilcoxon
+
+    differences = np.asarray(differences, dtype=float)
+    if np.all(differences == 0):
+        return 1.0
+    return float(
+        wilcoxon(differences, alternative="two-sided", zero_method="wilcox", method="auto").pvalue
+    )
+
+
+def bayesian_signed_rank(differences, rope, *, prior_strength=0.5, samples=50_000, seed=0):
+    """Benavoli et al. (2014, 2017): Dirichlet-process signed-rank posterior.
+
+    A pseudo-observation at zero carries the prior strength. Each posterior draw
+    weights the Walsh averages (x_i + x_j)/2; the reported probabilities are the
+    shares of draws in which left (< -rope), rope or right (> rope) has the most mass.
+    Positive differences favour the first learner.
+    """
+    x = np.concatenate(([0.0], np.asarray(differences, dtype=float)))
+    if not np.isfinite(x).all() or rope < 0:
+        raise ValueError("Nonfinite difference or negative ROPE")
+    weights = np.ones(len(x))
+    weights[0] = prior_strength
+    walsh = x[:, None] + x[None, :]
+    right, left = (walsh > 2 * rope).astype(float), (walsh < -2 * rope).astype(float)
+    draws = np.random.default_rng(seed).dirichlet(weights, samples)
+    p_right = np.einsum("si,ij,sj->s", draws, right, draws)
+    p_left = np.einsum("si,ij,sj->s", draws, left, draws)
+    winner = np.argmax(np.stack([p_left, 1 - p_right - p_left, p_right]), axis=0)
+    return {
+        "p_worse": float(np.mean(winner == 0)),
+        "p_equivalent": float(np.mean(winner == 1)),
+        "p_better": float(np.mean(winner == 2)),
+        "rope": float(rope),
+        "prior_strength": prior_strength,
+        "posterior_samples": samples,
+    }
+
+
+def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05):
+    """Full multi-learner report on per-dataset scores (columns dataset_id, learner, score).
+
+    Returns the omnibus test and one row per pairwise comparison (with `control`, only
+    the comparisons against it). Wilcoxon + Holm is the confirmatory family; Finner or
+    Shaffer, mean-rank z-tests and the Bayesian signed-rank test are reported alongside.
+    """
+    from itertools import combinations
+
+    from scipy.stats import norm
+
+    matrix = score_matrix(scores, higher_is_better=higher_is_better)
+    n, k = matrix.shape
+    omnibus = friedman(matrix) | {"nemenyi_cd": nemenyi_critical_difference(k, n, alpha), "alpha": alpha}
+    ranks = omnibus["mean_ranks"]
+    learners = list(matrix.columns)
+    if control is not None and control not in learners:
+        raise ValueError("The control learner has no scores")
+    pairs = (
+        [(learner, control) for learner in learners if learner != control]
+        if control is not None
+        else list(combinations(learners, 2))
+    )
+    se = np.sqrt(k * (k + 1) / (6 * n))
+    rows = []
+    for first, second in pairs:
+        differences = (matrix[first] - matrix[second]).to_numpy()
+        bayes = bayesian_signed_rank(differences, rope)
+        rows.append({
+            "learner": first,
+            "versus": second,
+            "datasets": n,
+            "wins": int((differences > 0).sum()),
+            "ties": int((differences == 0).sum()),
+            "losses": int((differences < 0).sum()),
+            "median_oriented_difference": float(np.median(differences)),
+            "p_wilcoxon": wilcoxon_p(differences),
+            "mean_rank_difference": float(ranks[first] - ranks[second]),
+            "p_mean_rank_z": float(2 * norm.sf(abs(ranks[second] - ranks[first]) / se)),
+            "bayes_p_worse": bayes["p_worse"],
+            "bayes_p_equivalent": bayes["p_equivalent"],
+            "bayes_p_better": bayes["p_better"],
+        })
+    table = pd.DataFrame(rows)
+    table["p_holm"] = holm(table.p_wilcoxon)
+    if control is not None:
+        table["p_finner"] = finner(table.p_wilcoxon)
+    else:
+        table["p_shaffer"] = shaffer(table.p_wilcoxon, k)
+    table["rope"] = rope
+    return omnibus, table

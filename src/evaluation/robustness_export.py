@@ -11,10 +11,22 @@ CPU job (`scripts/slurm/rq1_robustness_export.slurm`) writes `results/robustness
 * ``wording_averaging``: how much averaging over wordings reduces wording sensitivity — the
   distance between the averages of two disjoint pairs {original, p1} and {p2, p3}, against the
   mean distance between single versions across those pairs ({o,p1} × {p2,p3}).
-* ``averaging_quality``: stand-alone quality on the sampled JOINT requests of the original
-  presentation versus the average of the four wordings, of original and reversed option order
-  (multiclass, realigned by class identity) and of original and reversed field order. Target
-  labels are used only for scoring, never for sampling or selection.
+* ``averaging_quality``: stand-alone quality on the sampled JOINT requests of three
+  presentations per factor: the standard (``original``) presentation used in production, the
+  ``average`` over the factor's presentations (four wordings; original and reversed option order,
+  multiclass, realigned by class identity; original and reversed field order) and
+  ``mean_single`` (each presentation scored on its own, then averaged). Target labels are used
+  only for scoring, never for sampling or selection.
+
+  Scores follow strictly proper scoring rules (Gneiting & Raftery 2007): log loss (primary) and
+  Brier for classes; the ranked probability score over the nine ordered levels for regression
+  (primary), with the observed level from nine equal-frequency bins of the dataset's targets.
+  ROC-AUC (binary) / macro one-vs-rest AUC (multiclass) and Spearman of the expected level are
+  rank measures. The primary contrast is ``average`` versus ``original``: nothing guarantees it.
+  ``average`` versus ``mean_single`` is the Jensen gap; for the convex proper scores it is never
+  negative and equals ensemble diversity (Wood et al., JMLR 2023), so it is reported as
+  guaranteed and is not evidence that averaging helps. Rank measures are not convex, so no
+  contrast on them is guaranteed (``CONTRASTS``/``METRIC_ROLES``).
 * ``historical_0a`` / ``historical_0a_sources``: the dated 0A sensitivity probes (three real
   inputs) and their receipts (file name, SHA-256), so the notebook reads nothing else.
 
@@ -39,7 +51,22 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, file_sha256
 
-SCHEMA = "jevpfn.rq1b.export.v2"  # v2: historical 0A sensitivity probes travel in the ZIP
+SCHEMA = "jevpfn.rq1b.export.v3"  # v3: mean_single presentation and ranked probability score
+#: Ordered regression levels (lowest first) that the decision answers distribute over.
+REGRESSION_LEVELS = 9
+#: Scoring roles: lower_is_better, and convex in the probabilities (averaging gain guaranteed).
+METRIC_ROLES = {
+    "log_loss": {"role": "primary", "lower_is_better": True, "convex": True},
+    "ranked_probability_score": {"role": "primary", "lower_is_better": True, "convex": True},
+    "brier": {"role": "secondary_proper", "lower_is_better": True, "convex": True},
+    "roc_auc": {"role": "secondary_rank", "lower_is_better": False, "convex": False},
+    "roc_auc_ovr_macro": {"role": "secondary_rank", "lower_is_better": False, "convex": False},
+    "spearman_expected_level": {"role": "secondary_rank", "lower_is_better": False, "convex": False},
+    "ece": {"role": "descriptive", "lower_is_better": True, "convex": False},
+}
+#: (contrast, presentation, reference): ``average`` minus reference, per dataset.
+CONTRASTS = (("average_vs_original", "average", "original"),
+             ("average_vs_mean_single", "average", "mean_single"))
 COLLECTED = ("sources", "effects", "coverage", "mode_effects", "wording_averaging", "averaging_quality")
 #: The dated 0A sensitivity receipts (DATA manifests), so the notebook reads only this ZIP.
 HISTORICAL = ("historical_0a", "historical_0a_sources")
@@ -125,7 +152,7 @@ def wording_records(trials: dict[int, dict], regression: bool) -> pd.DataFrame:
 
 
 def averaged_presentations(trials: dict[int, dict]) -> dict[str, dict[int, tuple]]:
-    """(original, average) probability pairs per factor and request; incomplete sets excluded."""
+    """(original, average, all versions) per factor and request; incomplete sets excluded."""
     factors = {"wording": WORDINGS, "option_order": ("original", "option_order"),
                "field_order": ("original", "field_order")}
     found: dict[str, dict[int, tuple]] = {factor: {} for factor in factors}
@@ -135,29 +162,60 @@ def averaged_presentations(trials: dict[int, dict]) -> dict[str, dict[int, tuple
                 continue
             versions = [_probabilities(results, v) for v in variants]
             if all(v is not None for v in versions):
-                found[factor][number] = (versions[0], np.mean(versions, axis=0))
+                found[factor][number] = (versions[0], np.mean(versions, axis=0), versions)
     return found
 
 
-def quality_records(found, links, targets, task, bins) -> list[dict]:
-    """Stand-alone scores of original versus averaged presentations on joint source rows."""
+def outcome_levels(all_targets, y, levels=REGRESSION_LEVELS):
+    """Observed ordered level 0..levels-1 of each target: equal-frequency bins of the dataset's
+    targets (evaluation only). Tied cut-offs are kept, so some levels may stay empty."""
+    reference = np.asarray(all_targets, float)
+    reference = reference[np.isfinite(reference)]
+    edges = np.quantile(reference, np.arange(1, levels) / levels)
+    return np.searchsorted(edges, np.asarray(y, float), side="right")
+
+
+def ranked_probability_score(observed_level, p):
+    """Mean ranked probability score (Epstein 1969; strictly proper for ordered outcomes) in [0, 1]."""
+    p = np.asarray(p, float)
+    observed = np.arange(p.shape[1])[None, :] >= np.asarray(observed_level)[:, None]
+    return float(np.mean(((np.cumsum(p, axis=1) - observed) ** 2).sum(axis=1) / (p.shape[1] - 1)))
+
+
+def _scores(y, p, task, bins, observed_level):
     from src.evaluation.zero_shot import score_classification, score_regression
 
+    p = p / p.sum(axis=1, keepdims=True)
+    if task != "regression":
+        return score_classification(y, p, task, bins)[0]
+    return {**score_regression(y, p),
+            "ranked_probability_score": ranked_probability_score(observed_level, p)}
+
+
+def quality_records(found, links, targets, task, bins) -> list[dict]:
+    """Stand-alone scores of the original, averaged and single presentations on joint rows."""
     joint = links[links["mode"].eq("joint")]
     rows = []
-    for factor, pairs in found.items():
-        rows_used = joint[joint.input_no.isin(pairs)]
+    for factor, sets in found.items():
+        rows_used = joint[joint.input_no.isin(sets)]
         if rows_used.empty:
             continue
         y = targets[rows_used.row_position.to_numpy()]
-        for position, presentation in enumerate(("original", "average")):
-            p = np.stack([pairs[n][position] for n in rows_used.input_no])
-            p = p / p.sum(axis=1, keepdims=True)
-            scores = (score_regression(y, p) if task == "regression"
-                      else score_classification(y, p, task, bins)[0])
-            rows += [{"factor": factor, "presentation": presentation, "metric": metric, "value": value,
-                      "requests": int(rows_used.input_no.nunique()), "rows": len(rows_used)}
-                     for metric, value in scores.items()]
+        observed = outcome_levels(targets, y) if task == "regression" else None
+        numbers = rows_used.input_no.tolist()
+
+        stacks = {"original": [np.stack([sets[n][0] for n in numbers])],
+                  "average": [np.stack([sets[n][1] for n in numbers])],
+                  "mean_single": [np.stack([sets[n][2][i] for n in numbers])
+                                  for i in range(len(sets[numbers[0]][2]))]}
+        presentations = {name: [_scores(y, p, task, bins, observed) for p in stack]
+                         for name, stack in stacks.items()}
+        for presentation, scored in presentations.items():
+            for metric in scored[0]:
+                rows.append({"factor": factor, "presentation": presentation, "metric": metric,
+                             "value": float(np.mean([s[metric] for s in scored])),
+                             "requests": int(rows_used.input_no.nunique()), "rows": len(rows_used),
+                             "versions": len(scored) if presentation == "mean_single" else 1})
     return rows
 
 
@@ -232,7 +290,8 @@ def collect(root: Path, cfg: dict, *, load_targets=None, question_path=None) -> 
             {**base, "task": task, **row, "field_order_canonicalized": canonicalized}
             for row in quality_records(found, links, targets, task, bins)]
     columns = {"averaging_quality": ["dataset", "provider", "task", "factor", "presentation", "metric",
-                                     "value", "requests", "rows", "field_order_canonicalized"]}
+                                     "value", "requests", "rows", "versions",
+                                     "field_order_canonicalized"]}
     return {name: pd.DataFrame(rows, columns=columns.get(name)) if rows or name in columns
             else pd.DataFrame(rows) for name, rows in tables.items()}
 

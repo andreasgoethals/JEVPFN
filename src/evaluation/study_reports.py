@@ -62,15 +62,39 @@ def wording_averaging_summary(table):
 
 
 def averaging_quality_summary(table):
-    """Average-minus-original stand-alone score per dataset, then equal dataset weight."""
-    columns = ["provider", "factor", "metric", "datasets", "original", "average", "difference"]
+    """Per contrast: averaged minus reference presentation per dataset, then equal dataset weight.
+
+    ``average_vs_original`` is primary and not guaranteed; ``average_vs_mean_single`` is the
+    Jensen gap. ``improvement`` is signed so that positive means averaging scored better;
+    ``guaranteed`` marks the convex proper scores in the Jensen contrast (never negative there).
+    """
+    from src.evaluation.robustness_export import CONTRASTS, METRIC_ROLES
+
+    columns = ["provider", "factor", "contrast", "metric", "role", "guaranteed", "datasets",
+               "reference", "average", "difference", "improvement", "datasets_improved"]
     if table.empty:
         return pd.DataFrame(columns=columns)
     wide = table.pivot_table(index=["dataset", "provider", "factor", "metric"], columns="presentation",
                              values="value").reset_index()
-    if not {"original", "average"} <= set(wide.columns):
-        return pd.DataFrame(columns=columns)
-    wide["difference"] = wide["average"] - wide["original"]
-    return (wide.groupby(["provider", "factor", "metric"])
-            .agg(datasets=("dataset", "nunique"), original=("original", "mean"),
-                 average=("average", "mean"), difference=("difference", "mean")).reset_index())[columns]
+    out = []
+    for contrast, presentation, reference in CONTRASTS:
+        if not {presentation, reference} <= set(wide.columns):
+            continue
+        part = wide[["dataset", "provider", "factor", "metric"]].copy()
+        part["reference"], part["average"] = wide[reference], wide[presentation]
+        part["difference"] = part["average"] - part["reference"]
+        lower = part.metric.map(lambda m: METRIC_ROLES.get(m, {}).get("lower_is_better", True))
+        part["improvement"] = np.where(lower, -part["difference"], part["difference"])
+        part = part.dropna(subset=["improvement"])
+        summary = (part.groupby(["provider", "factor", "metric"])
+                   .agg(datasets=("dataset", "nunique"), reference=("reference", "mean"),
+                        average=("average", "mean"), difference=("difference", "mean"),
+                        improvement=("improvement", "mean"),
+                        datasets_improved=("improvement", lambda v: int((v > 0).sum())))
+                   .reset_index())
+        summary["contrast"] = contrast
+        summary["role"] = summary.metric.map(lambda m: METRIC_ROLES.get(m, {}).get("role", "descriptive"))
+        summary["guaranteed"] = (contrast == "average_vs_mean_single") & summary.metric.map(
+            lambda m: METRIC_ROLES.get(m, {}).get("convex", False))
+        out.append(summary)
+    return pd.concat(out, ignore_index=True)[columns] if out else pd.DataFrame(columns=columns)

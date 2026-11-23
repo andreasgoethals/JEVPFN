@@ -421,6 +421,48 @@ def test_lodo_rule_excludes_the_held_out_dataset_and_scores_policies():
         group_b.lodo_predictions(outcome, properties.assign(p3=1.0), features=["p1", "p2", "p3"])
 
 
+def test_lodo_input_sets_share_one_cohort_and_label_each_claim():
+    rng = np.random.default_rng(3)
+    ids = [f"d{i}" for i in range(9)]
+    properties = pd.DataFrame({"dataset_id": ids, "text": rng.normal(size=9),
+                               "pilot": np.arange(9.0), "full": np.arange(9.0)})
+    properties.loc[4, "pilot"] = np.nan  # Undefined pilot redundancy drops d4 from every set.
+    outcome = pd.DataFrame({"dataset_id": ids, "raw_gain": np.arange(9) * 0.01 - 0.04})
+    sets = {"pre_extraction": {"properties": ["text"], "claim": "acquire"},
+            "pilot": {"properties": ["text", "pilot"], "claim": "acquire_after_pilot"},
+            "post_extraction": {"properties": ["text", "full"], "claim": "use"}}
+    predictions, summary = group_b.lodo_input_sets(outcome, properties, input_sets=sets, n_shuffles=20)
+    assert list(summary.input_set) == list(sets) and set(summary.claim) == {"acquire", "acquire_after_pilot", "use"}
+    assert (summary.datasets == 8).all() and (summary.excluded_datasets == "d4").all()
+    assert set(predictions.dataset_id) == set(ids) - {"d4"}
+    assert predictions.groupby("input_set").dataset_id.count().eq(8).all()
+    # Pilot and full redundancy are identical here, so their rules must agree exactly.
+    pilot, full = (predictions[predictions.input_set.eq(s)].predicted.to_numpy() for s in ("pilot", "post_extraction"))
+    assert np.allclose(pilot, full)
+    assert summary.set_index("input_set").loc["post_extraction", "spearman_rho"] > 0.9
+    with pytest.raises(ValueError, match="absent"):
+        group_b.lodo_input_sets(outcome, properties.drop(columns="pilot"), input_sets=sets, n_shuffles=0)
+
+
+def test_pilot_rows_are_fixed_label_free_and_independent_of_content():
+    first = group_b.pilot_rows(5000, dataset_id="d", size=200, seed=7)
+    assert len(first) == 200 == len(set(first)) and (np.diff(first) > 0).all()
+    assert np.array_equal(first, group_b.pilot_rows(5000, dataset_id="d", size=200, seed=7))
+    assert not np.array_equal(first, group_b.pilot_rows(5000, dataset_id="e", size=200, seed=7))
+    assert len(group_b.pilot_rows(50, dataset_id="d", size=200)) == 50
+    rng = np.random.default_rng(1)
+    non_text = pd.DataFrame({"x": rng.normal(size=3000)})
+    decision = 1 / (1 + np.exp(-3 * non_text.x.to_numpy()))[:, None]
+    result = group_b.pilot_redundancy(non_text, decision, dataset_id="d", task_type="binary_classification",
+                                      size=200, seed=7)
+    assert result["pilot_rows"] == 200
+    assert result["pilot_r2"] > 0.8 and result["pilot_top_agreement"] > 0.9
+    # Selection depends only on (seed, dataset, position): shuffling contents keeps the rows.
+    shuffled = group_b.pilot_redundancy(non_text.sample(frac=1, random_state=0).reset_index(drop=True),
+                                        decision, dataset_id="d", task_type="binary_classification", size=200, seed=7)
+    assert shuffled["pilot_rows"] == 200 and shuffled["pilot_r2"] < 0.5
+
+
 def test_redundancy_is_label_free_and_detects_predictable_outputs():
     rng = np.random.default_rng(1)
     non_text = pd.DataFrame({"x": rng.normal(size=300), "c": rng.choice(["a", "b"], 300)})

@@ -363,7 +363,8 @@ def test_averaged_presentation_quality_uses_joint_rows_and_labels_only_for_scori
     trials[0]["field_order"] = {"status": "canonicalized_by_runtime"}
     found = robustness_export.averaged_presentations(trials)
     assert 0 not in found["field_order"] and len(found["wording"]) == 40
-    original, average = found["wording"][5]
+    original, average, versions = found["wording"][5]
+    assert len(versions) == 4 and original is versions[0]
     assert average == pytest.approx(np.mean([trials[5][v]["probabilities"] for v in robustness_export.WORDINGS], axis=0))
     links = pd.DataFrame({"input_no": [*range(40), 0], "row_position": [*range(40), 40],
                           "mode": ["joint"] * 40 + ["per_column"]})
@@ -445,3 +446,56 @@ def test_robustness_export_carries_historical_0a_probes_without_local_paths(tmp_
     frames, _ = study_export.read_export(
         target, schema=robustness_export.SCHEMA, tables=robustness_export.TABLES)
     assert frames["historical_0a"].probe.tolist() == ["real_X__base"]
+
+
+def test_ranked_probability_score_is_zero_for_a_certain_correct_level_and_proper_ordering():
+    certain = np.eye(9)[[3]]
+    assert robustness_export.ranked_probability_score([3], certain) == 0
+    near, far = np.eye(9)[[4]], np.eye(9)[[8]]
+    assert 0 < robustness_export.ranked_probability_score([3], near) < robustness_export.ranked_probability_score([3], far)
+    assert robustness_export.ranked_probability_score([0], np.eye(9)[[8]]) == pytest.approx(1.0)
+    levels = robustness_export.outcome_levels(np.arange(90.0), [0.0, 45.0, 89.0])
+    assert levels.tolist() == [0, 4, 8]
+
+
+def test_averaging_contrasts_label_the_jensen_gap_guaranteed_and_the_original_contrast_not():
+    from src.evaluation import study_reports
+
+    rng = np.random.default_rng(7)
+    rows = []
+    for dataset in ("D1", "D2"):
+        trials = {}
+        for n in range(60):
+            base = rng.uniform(0.1, 0.9)
+            trials[n] = {v: _measured([1 - p, p]) for v, p in zip(
+                robustness_export.WORDINGS, np.clip(base + rng.normal(0, 0.2, 4), 0.01, 0.99))}
+        found = robustness_export.averaged_presentations(trials)
+        links = pd.DataFrame({"input_no": range(60), "row_position": range(60), "mode": ["joint"] * 60})
+        targets = (rng.uniform(size=60) < np.array([found["wording"][n][1][1] for n in range(60)])).astype(int)
+        rows += [{"dataset": dataset, "provider": "kev", **r} for r in
+                 robustness_export.quality_records(found, links, targets, "binary_classification", 10)]
+    table = pd.DataFrame(rows)
+    assert set(table.presentation) == {"original", "average", "mean_single"}
+    assert table.query("presentation == 'mean_single'").versions.eq(4).all()
+    summary = study_reports.averaging_quality_summary(table).set_index(["contrast", "metric"])
+    jensen = summary.loc[("average_vs_mean_single", "log_loss")]
+    assert bool(jensen.guaranteed) and jensen.improvement >= 0 and jensen.datasets_improved == 2
+    assert summary.loc[("average_vs_mean_single", "brier")].improvement >= 0
+    assert not summary.loc[("average_vs_mean_single", "roc_auc")].guaranteed
+    assert not summary.loc[("average_vs_original", "log_loss")].guaranteed
+    assert summary.loc[("average_vs_original", "log_loss"), "role"] == "primary"
+    # Positive improvement means averaging scored better for both loss and rank measures.
+    auc = summary.loc[("average_vs_original", "roc_auc")]
+    assert auc.improvement == pytest.approx(auc.average - auc.reference)
+
+
+def test_regression_averaging_quality_reports_ranked_probability_score():
+    levels = np.eye(9)
+    trials = {n: {v: _measured(levels[min(8, n // 5 + k)]) for v, k in zip(robustness_export.WORDINGS, (0, 1, 0, 1))}
+              for n in range(40)}
+    found = robustness_export.averaged_presentations(trials)
+    links = pd.DataFrame({"input_no": range(40), "row_position": range(40), "mode": ["joint"] * 40})
+    rows = pd.DataFrame(robustness_export.quality_records(found, links, np.arange(40.0), "regression", 10))
+    rps = rows.query("metric == 'ranked_probability_score'").set_index("presentation").value
+    assert set(rps.index) == {"original", "average", "mean_single"}
+    assert rps["average"] <= rps["mean_single"] + 1e-12  # Convexity (Jensen).
