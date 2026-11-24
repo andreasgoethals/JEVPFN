@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
-from contextlib import closing
+from contextlib import closing, nullcontext
 from pathlib import Path
 
 from src.jev.cache import ResponseCache
@@ -60,6 +60,15 @@ def snapshot(source: Path, destination: Path) -> Path:
         destination.unlink(missing_ok=True)
         raise
     return destination
+
+
+def bound_dataset(path: Path) -> str:
+    """The single dataset identity of an existing store, without a full validation scan."""
+    with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        bound = db.execute("SELECT dataset_id FROM dataset_identity").fetchall()
+    if len(bound) != 1:
+        raise ValueError("Merge requires exactly one dataset identity")
+    return paths.output_component(bound[0][0])
 
 
 def validate_cache(source: Path) -> str:
@@ -194,6 +203,9 @@ def merge_cache(
     backup_dir: Path | None = None,
     backup_destination: bool = True,
     deduplicate_ledger: bool = False,
+    destination_locked: bool = False,
+    validate_destination: bool = True,
+    commit_unchanged: bool = True,
 ) -> dict:
     """One dataset transaction, bounded-memory inserts and idempotent exact reuse.
 
@@ -203,6 +215,13 @@ def merge_cache(
     intact and the validated union commits in one SQLite transaction. It may also retain
     each distinct ledger record version once, keeping its first actual snapshot attribution.
     Ordinary imports keep their historical per-snapshot accounting behavior by default.
+
+    A scratch publisher that already holds the destination's extraction lock passes
+    ``destination_locked``. It may skip re-validating an existing durable store, which
+    only ever grew through validated unions, with ``validate_destination=False``; the
+    dataset identity is still checked and every incoming row is still validated and
+    compared with any existing row under the same key. ``commit_unchanged=False``
+    rolls back a union that adds nothing, leaving the durable file byte-identical.
     """
     source, destination = Path(source).resolve(), paths.require_project_output(Path(destination))
     destination = destination.resolve()
@@ -213,9 +232,14 @@ def merge_cache(
     dataset_id = validate_cache(source)
     source_hash = file_sha256(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with file_lock(destination.with_suffix(".extraction.lock"), timeout=1):
+    with (
+        nullcontext() if destination_locked
+        else file_lock(destination.with_suffix(".extraction.lock"), timeout=1)
+    ):
         backup = None
-        if destination.exists() and validate_cache(destination) != dataset_id:
+        if destination.exists() and (
+            validate_cache(destination) if validate_destination else bound_dataset(destination)
+        ) != dataset_id:
             raise ValueError("Caches belong to different datasets")
         if destination.exists() and backup_destination:
             backup_root = paths.require_project_output(
@@ -369,6 +393,10 @@ def merge_cache(
             if "imported_extraction_records" in tables:
                 for row in incoming.execute("SELECT * FROM imported_extraction_records"):
                     counts["ledger_records_added"] += append_ledger(row)
+            if not commit_unchanged and not any(
+                value for key, value in counts.items() if key.endswith("_added")
+            ):
+                db.rollback()
         return {
             "dataset_id": dataset_id,
             "source_sha256": source_hash,

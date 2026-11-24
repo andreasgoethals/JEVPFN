@@ -102,8 +102,8 @@ def test_unchanged_store_is_not_republished_but_any_new_write_is(roots, monkeypa
     remote = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
     monkeypatch.setattr(stage, "_PUBLISHED_IDENTITIES", {})
     merges = []
-    real = stage._merge_native_decision
-    monkeypatch.setattr(stage, "_merge_native_decision",
+    real = stage._merge_decision_delta
+    monkeypatch.setattr(stage, "_merge_decision_delta",
                         lambda *a: merges.append(a) or real(*a))
     assert stage._publish(durable, work, periodic=True)["decision_stores"] == 1
     again = stage._publish(durable, work)  # Final publication after an idle interval.
@@ -127,8 +127,8 @@ def test_store_unchanged_since_staging_is_not_reunioned_until_it_is_written(root
     monkeypatch.setattr(stage, "_PUBLISHED_IDENTITIES", {})
     monkeypatch.setattr(stage, "_DIVERGED_FROM_STAGE", set())
     merges = []
-    real = stage._merge_native_decision
-    monkeypatch.setattr(stage, "_merge_native_decision", lambda *a: merges.append(a) or real(*a))
+    real = stage._merge_decision_delta
+    monkeypatch.setattr(stage, "_merge_decision_delta", lambda *a: merges.append(a) or real(*a))
     first = stage._publish(durable, work)
     assert first["decision_stores"] == 1 and first["unchanged_skipped"] == 1 and merges == []
     remote.put(request("intern", text="new"), response(), kind="verified_response")
@@ -191,35 +191,56 @@ def test_dataset_publication_does_not_scan_another_jobs_store(roots, monkeypatch
     assert not (durable / "data/jev_cache/unrelated.sqlite3").exists()
 
 
-def test_union_validates_both_stores_on_native_storage_and_includes_durable_wal(roots, monkeypatch):
+def test_delta_union_validates_incoming_rows_and_includes_durable_wal(roots):
+    """Only new scratch rows are unioned; each is validated; durable WAL commits count."""
     durable, work = roots
     marker(durable, work)
     target = cache(durable / "data/jev_cache/fixture.sqlite3")
-    cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
-    real = stage.merge_cache
-    calls = []
-
-    def native_merge(source, destination, **kwargs):
-        assert source.is_relative_to(work) and destination.is_relative_to(work)
-        calls.append((source, destination))
-        return real(source, destination, **kwargs)
-
-    monkeypatch.setattr(stage, "merge_cache", native_merge)
-    with sqlite3.connect(target.path) as db:
-        db.execute("PRAGMA journal_mode=WAL")
+    remote = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    with sqlite3.connect(remote.path) as db:
         db.execute("INSERT INTO responses SELECT 'invalid',kind,payload_json,settings_json,response_json,created_at "
                    "FROM responses LIMIT 1")
-        db.commit()
-        # A conflict/invalid record in committed WAL must be validated before publication.
-        with pytest.raises(ValueError, match="identity"):
-            stage.publish("intern")
+    before = file_sha256(target.path)
+    with pytest.raises(ValueError, match="identity"):
+        stage.publish("intern")
+    assert file_sha256(target.path) == before  # A rejected union writes nothing durable.
+    with sqlite3.connect(remote.path) as db:
         db.execute("DELETE FROM responses WHERE request_key='invalid'")
+    with sqlite3.connect(target.path) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("DELETE FROM responses")  # Committed only in durable's WAL.
         db.commit()
         stage.publish("intern")
-    assert len(calls) == 2
-    assert target.get(request(), kind="verified_response") == response()
+        assert db.execute("SELECT COUNT(*) FROM responses").fetchone() == (1,)
     assert target.get(request("intern"), kind="verified_response") == response()
-    assert not list(work.glob(".publish-*")) and not list(work.glob(".union-*"))
+    assert not list(work.glob(".delta-*")) and not list(work.glob(".union-*"))
+
+
+def test_delta_union_skips_warm_rows_already_durable(roots, monkeypatch):
+    """Rows staged from durable are not re-copied; only post-stage rows are compared."""
+    durable, work = roots
+    target = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    remote = cache(work / "data/jev_cache/fixture.sqlite3", request("intern"))
+    marker(durable, work)
+    receipt = json.loads((work / stage.MARKER).read_text())
+    receipt["staged_rowids"] = {"data/jev_cache/fixture.sqlite3": stage._store_rowids(remote.path)}
+    (work / stage.MARKER).write_text(json.dumps(receipt))
+    monkeypatch.setattr(stage, "_PUBLISHED_ROWIDS", {})
+    remote.put(request("intern", text="new"), response(), kind="verified_response")
+    seen = []
+    real = stage.merge_cache
+    def counting(source, destination, **kwargs):
+        with closing(sqlite3.connect(source)) as db:
+            seen.append(db.execute("SELECT COUNT(*) FROM responses").fetchone()[0])
+        return real(source, destination, **kwargs)
+
+    monkeypatch.setattr(stage, "merge_cache", counting)
+    stage._publish(durable, work)
+    assert seen == [1]
+    assert target.get(request("intern", text="new"), kind="verified_response") == response()
+    remote.put(request("intern", text="newer"), response(), kind="verified_response")
+    stage._publish(durable, work)
+    assert seen == [1, 1]  # The second pass starts above the first pass's rowids.
 
 
 def test_publication_readback_detects_valid_sqlite_with_changed_content(roots, monkeypatch):
@@ -261,6 +282,23 @@ def test_provider_warm_cache_keeps_only_matching_responses_origins_and_features(
         assert {json.loads(r[0])["identity"]["provider"] for r in db.execute("SELECT manifest_json FROM feature_artifacts")} == {"intern"}
         assert not db.execute("SELECT 1 FROM origins WHERE request_key NOT IN (SELECT request_key FROM responses)").fetchone()
     assert target.stat().st_size <= provider_cache_bound(source.path, "intern")
+
+
+def test_incremental_warm_reads_only_durable_rows_added_since_the_previous_warm(roots):
+    durable, work = roots
+    source = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    rowids = {}
+    first = work / "first.sqlite3"
+    first.parent.mkdir(parents=True, exist_ok=True)
+    stage._provider_cache(source.path, first, "intern", rowids=rowids)
+    assert rowids["responses"] == stage._store_rowids(source.path)["responses"]
+    source.put(request("intern", text="later"), response(), kind="verified_response")
+    source.put(request("jev", text="other model"), response(), kind="verified_response")
+    second = work / "second.sqlite3"
+    stage._provider_cache(source.path, second, "intern", after=rowids)
+    with closing(sqlite3.connect(second)) as db:
+        keys = [json.loads(r[0]) for r in db.execute("SELECT payload_json FROM responses")]
+    assert len(keys) == 1  # Only the later row of this provider.
 
 
 def test_provider_size_reserves_utf8_bytes_and_covers_filtered_sqlite(roots):
@@ -351,13 +389,13 @@ def test_publication_discards_each_store_snapshot_before_starting_the_next(roots
     marker(durable, work)
     for name in ("one", "two"):
         cache(work / "data/jev_cache" / (name + ".sqlite3"))
-    real = stage._merge_native_decision
+    real = stage._merge_decision_delta
 
-    def bounded(source, destination, root):
-        assert len(list(work.glob(".publish-*"))) == 1
-        return real(source, destination, root)
+    def bounded(*args):
+        assert not list(work.glob(".delta-*")) and not list(work.glob(".publish-*"))
+        return real(*args)
 
-    monkeypatch.setattr(stage, "_merge_native_decision", bounded)
+    monkeypatch.setattr(stage, "_merge_decision_delta", bounded)
     assert stage.publish("intern")["decision_stores"] == 2
 
 
@@ -745,25 +783,25 @@ def test_interrupted_publication_resumes_verified_dataset_and_preserves_new_rows
     marker(durable, work)
     first = cache(work / "data/jev_cache/one.sqlite3", request("intern"))
     cache(work / "data/jev_cache/two.sqlite3", request("intern"))
-    original = stage._merge_native_decision
+    original = stage._merge_decision_delta
     calls = []
 
-    def interrupt(incoming, destination, root):
-        calls.append(destination.name)
-        if destination.name == "two.sqlite3":
+    def interrupt(*args):
+        calls.append(args[1].name)
+        if args[1].name == "two.sqlite3":
             raise TimeoutError("fixture timeout")
-        return original(incoming, destination, root)
+        return original(*args)
 
-    monkeypatch.setattr(stage, "_merge_native_decision", interrupt)
+    monkeypatch.setattr(stage, "_merge_decision_delta", interrupt)
     with pytest.raises(TimeoutError, match="fixture timeout"):
         stage._publish(durable, work, resume=True)
     assert calls == ["one.sqlite3", "two.sqlite3"]
 
-    def record(incoming, destination, root):
-        calls.append(destination.name)
-        return original(incoming, destination, root)
+    def record(*args):
+        calls.append(args[1].name)
+        return original(*args)
 
-    monkeypatch.setattr(stage, "_merge_native_decision", record)
+    monkeypatch.setattr(stage, "_merge_decision_delta", record)
     calls.clear()
     assert stage._publish(durable, work, resume=True)["decision_stores"] == 2
     assert calls == ["two.sqlite3"]

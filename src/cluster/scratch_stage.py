@@ -29,6 +29,8 @@ _PUBLISHED_IDENTITIES = {}
 # Workspace stores observed to differ from their staged bytes. Stores only grow, so a
 # store never returns to its staged content; remembering this avoids rehashing it.
 _DIVERGED_FROM_STAGE = set()
+# Per-process rowids already unioned into durable; later passes start above them.
+_PUBLISHED_ROWIDS = {}
 # A shared dataset lock can be held by another job's validated union of a multi-GB
 # store (Kickstarter took 73 min on 22-11-2026); one hour made staging fail spuriously.
 LOCK_WAIT_SECONDS = 4 * 3600
@@ -305,19 +307,28 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                                           flush=True)
                                     continue
                     started = time.monotonic()
-                    # The incoming snapshot and its union share one temporary root
-                    # whenever that root can hold both.
-                    needed = source.stat().st_size + (
-                        _union_bytes(source.stat().st_size, destination)
-                        if kind == "decision_stores" else 0
-                    )
-                    temporary_root = _publication_temporary_root(work, needed)
+                    before_snapshot = _closed_db_identity(source) if source.suffix == ".sqlite3" else None
+                    if kind == "decision_stores":
+                        # Incremental union: never re-copy and re-validate a multi-GB
+                        # durable store to add a few rows (8 h contract timeouts, 23-11-2026).
+                        print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
+                                          "periodic": periodic, "mode": "delta"}), flush=True)
+                        identity = _merge_decision_delta(source, destination, work, published_key, relative)
+                        if source_sha is not None and identity is not None:
+                            progress[relative_key] = {"source_sha256": source_sha, "destination": identity}
+                            write_json(progress_path, {"durable_root": str(durable), "stores": progress})
+                        if before_snapshot is not None and _closed_db_identity(source) == before_snapshot:
+                            _PUBLISHED_IDENTITIES[published_key] = before_snapshot
+                        counts[kind] += 1
+                        print(json.dumps({"event": "publication_completed", "path": relative.as_posix(),
+                                          "seconds": time.monotonic() - started}), flush=True)
+                        continue
+                    temporary_root = _publication_temporary_root(work, source.stat().st_size)
                     print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
                                       "periodic": periodic,
                                       "temporary_storage": str(temporary_root)}), flush=True)
                     # Bound temporary bytes to ONE store, rather than retaining
                     # all eighteen snapshots until the release process exits.
-                    before_snapshot = _closed_db_identity(source) if source.suffix == ".sqlite3" else None
                     with tempfile.TemporaryDirectory(prefix=".publish-", dir=temporary_root) as temporary:
                         copied = Path(temporary) / relative
                         copied.parent.mkdir(parents=True, exist_ok=True)
@@ -325,12 +336,7 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                             snapshot(source, copied)
                         else:
                             shutil.copyfile(source, copied)
-                        if kind == "decision_stores":
-                            identity = _merge_native_decision(copied, destination, work)
-                            if source_sha is not None and identity is not None:
-                                progress[relative_key] = {"source_sha256": source_sha, "destination": identity}
-                                write_json(progress_path, {"durable_root": str(durable), "stores": progress})
-                        elif merger is not None:
+                        if merger is not None:
                             merger(copied, destination)
                         elif source.suffix == ".sqlite3" and "evaluation" in relative.parts:
                             merge_evaluations(copied, destination)
@@ -520,6 +526,145 @@ def _merge_native_decision(incoming, destination, work):
         return _closed_db_identity(destination)
 
 
+DELTA_TABLES = {
+    # table: (key columns, whether new rows carry a created_at column)
+    "responses": (("request_key", "kind"), True),
+    "origins": (("request_key", "kind", "provenance_hash"), False),
+    "failures": (("event_id",), True),
+    "feature_artifacts": (("artifact_id",), False),
+}
+LEDGER_TABLES = ("extraction_policy", "extraction_policy_history", "extraction_jobs",
+                 "extraction_recoveries", "imported_extraction_records")
+STAGE_CUTOFF_MARGIN_SECONDS = 3600
+
+
+def _store_rowids(path):
+    """Highest rowid per delta table; durable stores only grow, never delete or rewrite."""
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        return {t: db.execute(f"SELECT COALESCE(MAX(rowid),0) FROM {t}").fetchone()[0]
+                for t in DELTA_TABLES if t in tables}
+
+
+def _stage_cutoff(work, relative):
+    """Rows a GPU job may have added since staging: rowid watermark, else time cutoff.
+
+    Workspaces staged before 24-11-2026 carry no rowid watermark. Their marker was
+    last written when staging finished, before any inference could start (staging
+    holds the exclusive workspace lease), so rows created since then minus a
+    margin are a superset of every new or possibly conflicting row.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    marker = work / MARKER
+    data = json.loads(marker.read_text()) if marker.is_file() else {}
+    rowids = data.get("staged_rowids", {}).get(relative.as_posix())
+    if rowids is not None:
+        return {"rowids": rowids}
+    if not marker.is_file():
+        return {"created_at": ""}  # Unknown staging: compare every row.
+    # An explicit staging time survives later marker edits; the file time does not.
+    staged = (datetime.fromisoformat(data["staged_utc"]) if data.get("staged_utc")
+              else datetime.fromtimestamp(marker.stat().st_mtime, UTC))
+    return {"created_at": (staged - timedelta(seconds=STAGE_CUTOFF_MARGIN_SECONDS)).isoformat()}
+
+
+def _merge_decision_delta(source, destination, work, key, relative):
+    """Union only rows written since staging, in one durable transaction.
+
+    Staging copies this runtime's rows FROM durable into scratch, and durable
+    stores never delete or rewrite rows, so rows present at staging are durable
+    by construction. Only rows written later (above the staged rowids, or for
+    workspaces staged before 24-11-2026 created since staging) are copied, plus
+    feature artifacts durable lacks with their referenced responses. ``merge_cache``
+    validates every copied row and compares it with any durable row under the same
+    key, so a conflicting paid response still aborts the whole union. Candidates
+    are written in key order so durable B-tree pages are visited sequentially.
+    Probing every scratch key against PROJECT instead costs ~5 ms per row
+    (174 s for 34,633 rows, probe job 11870855, 24-11-2026). Rows up to an earlier
+    successful publication by this process are skipped.
+    """
+    from src.jev.cache import ResponseCache
+    from src.jev.features import load_block
+
+    size = source.stat().st_size
+    if not destination.exists():
+        root = _publication_temporary_root(work, size + _union_bytes(size, destination))
+        with tempfile.TemporaryDirectory(prefix=".publish-", dir=root) as t:
+            return _merge_native_decision(snapshot(source, Path(t) / source.name), destination, work)
+    published = _PUBLISHED_ROWIDS.get(key, {})
+    cutoff = _stage_cutoff(work, relative)
+    with (
+        file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS),
+        tempfile.TemporaryDirectory(prefix=".delta-",
+                                    dir=_publication_temporary_root(work, size + 512 * 2**20)) as temporary,
+    ):
+        _recover_rollback(destination)
+        delta = Path(temporary) / source.name
+        with closing(sqlite3.connect(delta.as_uri(), uri=True)) as db:
+            db.execute("ATTACH DATABASE ? AS src", (source.resolve().as_uri() + "?mode=ro",))
+            db.execute("ATTACH DATABASE ? AS dst", (destination.resolve().as_uri() + "?mode=ro",))
+            db.execute("BEGIN")  # One consistent read of the scratch store.
+            schema = dict(db.execute(
+                "SELECT name, sql FROM src.sqlite_master WHERE type='table' AND sql IS NOT NULL "
+                "AND name NOT LIKE 'sqlite_%'"))
+            dst_tables = {r[0] for r in db.execute(
+                "SELECT name FROM dst.sqlite_master WHERE type='table'")}
+            for sql in schema.values():
+                db.execute(sql)
+            db.execute("INSERT INTO main.dataset_identity SELECT * FROM src.dataset_identity")
+            high = {}
+            for table, (columns, timed) in DELTA_TABLES.items():
+                if table not in schema:
+                    continue
+                floor = published.get(table, 0)
+                high[table] = db.execute(f"SELECT COALESCE(MAX(rowid),0) FROM src.{table}").fetchone()[0]
+                order = ", ".join(columns)
+                if "rowids" in cutoff:
+                    new, args = "rowid > ?", (max(floor, cutoff["rowids"].get(table, 0)),)
+                elif timed:
+                    new, args = "rowid > ? AND created_at >= ?", (floor, cutoff["created_at"])
+                elif table == "origins":
+                    db.execute("INSERT OR IGNORE INTO main.origins SELECT o.* FROM main.responses AS r "
+                               "JOIN src.origins AS o ON o.request_key=r.request_key AND o.kind=r.kind "
+                               "WHERE o.rowid > ? ORDER BY o.request_key, o.kind, o.provenance_hash",
+                               (floor,))
+                    continue
+                else:
+                    new, args = "rowid > ?", (floor,)
+                if table == "feature_artifacts" and table in dst_tables:
+                    # Artifacts are few; durable ones are complete, so only absent IDs travel.
+                    new += (" AND NOT EXISTS (SELECT 1 FROM dst.feature_artifacts AS x "
+                            "WHERE x.artifact_id=s.artifact_id)")
+                db.execute(f"INSERT OR IGNORE INTO main.{table} SELECT * FROM src.{table} AS s "
+                           f"WHERE {new} ORDER BY {order}", args)
+            for table in LEDGER_TABLES:
+                if table in schema:
+                    db.execute(f"INSERT INTO main.{table} SELECT * FROM src.{table}")
+            db.execute("COMMIT")
+            artifacts = ([r[0] for r in db.execute("SELECT artifact_id FROM main.feature_artifacts")]
+                         if "feature_artifacts" in schema else [])
+            if artifacts:
+                db.execute("BEGIN")
+                for artifact_id in artifacts:
+                    keys = load_block(delta, artifact_id).requests.request_key.dropna().unique()
+                    db.executemany(
+                        "INSERT OR IGNORE INTO main.responses SELECT * FROM src.responses "
+                        "WHERE request_key=? AND kind='verified_response'", ((k,) for k in keys))
+                db.execute("COMMIT")
+            db.execute("DETACH DATABASE src")
+            db.execute("DETACH DATABASE dst")
+        ResponseCache(delta)  # Same schema guarantees as every store.
+        merged = merge_cache(delta, destination, backup_destination=False, deduplicate_ledger=True,
+                             destination_locked=True, validate_destination=False,
+                             commit_unchanged=False)
+        _PUBLISHED_ROWIDS[key] = high
+        print(json.dumps({"event": "publication_delta", "path": destination.name,
+                          **{k: v for k, v in merged.items() if k.endswith(("_added", "_reused"))}}),
+              flush=True)
+        return _closed_db_identity(destination)
+
+
 def _backup_page_identity(path):
     """Compare backup content; only SQLite's storage/header counters may differ."""
     with path.open("rb") as stream:
@@ -538,42 +683,50 @@ def _backup_page_identity(path):
     return result.hexdigest()
 
 
-def _provider_cache(source, destination, provider):
+def _provider_cache(source, destination, provider, *, after=None, rowids=None):
     """Warm only this open-weight provider; leave all durable history untouched.
 
     Imported ledgers are archival, never an executable scratch queue. Existing
     scratch queues are preserved by the caller's validated union. Predictor
     staging still receives every representation through its original path.
+    With ``after`` (durable rowids of the previous warm), only later rows are read;
+    ``rowids`` receives durable's rowids at this warm, captured under the lock.
     """
     # Publication backs up the durable union under this same extraction lock.
     # Hold it before even reading identity, through the complete filtered copy;
     # SQLite's short busy timeout cannot span a multi-minute publication.
     with file_lock(source.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS):
         _recover_rollback(source)
-        return _provider_cache_locked(source, destination, provider)
+        if rowids is not None:
+            rowids.update(_store_rowids(source))  # Durable cannot grow while the lock is held.
+        return _provider_cache_locked(source, destination, provider, after)
 
 
-def _provider_cache_locked(source, destination, provider):
+def _provider_cache_locked(source, destination, provider, after=None):
     from src.jev.cache import ResponseCache
     from src.jev.merge import ARTIFACT_SQL, validate_cache
 
+    after = after or {}
     with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         dataset_id, = db.execute("SELECT dataset_id FROM dataset_identity").fetchone()
     cache = ResponseCache(destination, dataset_id)
     with cache._connect() as db:
         db.execute("ATTACH DATABASE ? AS upstream", (source.resolve().as_uri() + "?mode=ro",))
         db.execute("INSERT INTO responses SELECT * FROM upstream.responses "
-                   "WHERE json_extract(settings_json,'$.provider')=?", (provider,))
+                   "WHERE rowid > ? AND json_extract(settings_json,'$.provider')=?",
+                   (after.get("responses", 0), provider))
         db.execute("INSERT INTO origins SELECT o.* FROM upstream.origins o "
                    "JOIN responses r ON r.request_key=o.request_key AND r.kind=o.kind")
         tables = {r[0] for r in db.execute("SELECT name FROM upstream.sqlite_master WHERE type='table'")}
         if "failures" in tables:
             db.execute("INSERT INTO failures SELECT * FROM upstream.failures "
-                       "WHERE json_extract(settings_json,'$.provider')=?", (provider,))
+                       "WHERE rowid > ? AND json_extract(settings_json,'$.provider')=?",
+                       (after.get("failures", 0), provider))
         if "feature_artifacts" in tables:
             db.execute(ARTIFACT_SQL)
             db.execute("INSERT INTO feature_artifacts SELECT * FROM upstream.feature_artifacts "
-                       "WHERE json_extract(manifest_json,'$.identity.provider')=?", (provider,))
+                       "WHERE rowid > ? AND json_extract(manifest_json,'$.identity.provider')=?",
+                       (after.get("feature_artifacts", 0), provider))
     validate_cache(destination)
     return destination
 
@@ -625,6 +778,9 @@ def stage(runtime, *, datasets=None):
             if previous.get("status") != "staging":
                 _publish(durable, work, resume=True)  # Protect earlier inference before restaging.
         warm = previous.get("warm_cache_progress", {}) if previous.get("status") == "staging" else {}
+        # Durable rowids already copied into each scratch store (24-11-2026); kept across restages.
+        previous_warm = previous.get("warm_rowids", {})
+        warm_rowids = dict(previous_warm)
         staging_marker = {
             "runtime": runtime,
             "runtime_profile": selected(),
@@ -790,14 +946,22 @@ def stage(runtime, *, datasets=None):
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS):
                     _recover_rollback(destination)
+                # A scratch store that already holds this runtime's durable rows up to
+                # recorded rowids needs only later rows; durable never deletes rows.
+                after = previous_warm.get(key) if destination.is_file() else None
+                rowids = {}
                 with tempfile.TemporaryDirectory(prefix=".warm-", dir=destination.parent) as temp:
-                    incoming = _provider_cache(source, Path(temp) / source.name, runtime)
+                    incoming = _provider_cache(source, Path(temp) / source.name, runtime,
+                                               after=after, rowids=rowids)
                     with staging_environment(work):
-                        merge_cache(incoming, destination, backup_destination=False, deduplicate_ledger=True)
+                        merge_cache(incoming, destination, backup_destination=False, deduplicate_ledger=True,
+                                    validate_destination=after is None)
+                warm_rowids[key] = rowids
+                staging_marker["warm_rowids"] = warm_rowids
                 files[key] = file_sha256(destination)
                 if before is not None and before == _closed_db_identity(source):
                     warm[key] = {"source": before, "sha256": files[key]}
-                    write_json(work / MARKER, staging_marker)
+                write_json(work / MARKER, staging_marker)
             elif relative.parts[:2] == ("data", "jev_cache") and destination.is_file():
                 with (
                     staging_environment(work),
@@ -848,8 +1012,17 @@ def stage(runtime, *, datasets=None):
             # Prime file identities on the native filesystem during the CPU transfer.
             with staging_environment(work):
                 verify_checkpoint(runtime)
+        from datetime import UTC, datetime
+
         report = {
             "schema": "jevpfn.scratch.v1",
+            "staged_utc": datetime.now(UTC).isoformat(),
+            "warm_rowids": warm_rowids,
+            # Rows above these rowids were written after staging; see _stage_cutoff.
+            "staged_rowids": {
+                p.relative_to(work).as_posix(): _store_rowids(p)
+                for p in _dataset_stores(work / "data/jev_cache")
+            },
             "runtime": runtime,
             "runtime_profile": selected(),
             "durable_root": str(durable),
