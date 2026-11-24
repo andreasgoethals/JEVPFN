@@ -248,6 +248,23 @@ def pooled_curve(gains, *, outcome="raw_gain"):
     return pd.DataFrame(rows)
 
 
+def pooled_curve_by_family(gains, *, outcome="raw_gain"):
+    """`pooled_curve` separately for classification (AUC) and regression (R^2) datasets.
+
+    Raw gains are in task-specific units and are never pooled across task families; the
+    result carries a ``task_family`` column.
+    """
+    from src.evaluation.group_b import task_family
+
+    if gains.empty:
+        return pd.DataFrame()
+    parts = []
+    for family, group in gains.assign(task_family=gains.task_type.map(task_family)).groupby("task_family"):
+        pooled = pooled_curve(group.drop(columns="task_family"), outcome=outcome)
+        parts.append(pooled.assign(task_family=family))
+    return pd.concat(parts, ignore_index=True)
+
+
 def gain_slopes(gains, *, outcome="raw_gain"):
     """Per dataset x predictor x arm: least-squares slope of gain on log2(size)."""
     rows = []

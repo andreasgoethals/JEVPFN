@@ -328,10 +328,7 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
         lodo.append(summary.assign(model_id=model))
     diagnostics = b3_model_diagnostics()
     usefulness = group_b.per_model_usefulness(gains)
-    relations = group_b.associations(usefulness.rename(columns={"provider": "unit"}),
-                                     diagnostics.rename(columns={"provider": "unit"}),
-                                     by=("model_id", "mode"), unit="unit",
-                                     n_permutations=n_permutations, min_units=5)
+    relations = group_b.model_relations(usefulness, diagnostics, n_permutations=n_permutations, min_units=5)
     redundancy = pd.DataFrame([{"dataset_id": d, "provider": p, "status": "computed", "rows": 1000,
                                 "r2": r, "top_agreement": 0.8}
                                for d, r in zip(properties.dataset_id, properties.decision_redundancy_r2)

@@ -512,6 +512,36 @@ def test_b4_size_gains_and_pooled_curve():
     assert slopes.slope_per_doubling.round(3).eq(-0.01).all()
 
 
+def test_b4_raw_pooling_never_mixes_auc_and_r2():
+    rows = []
+    for d, task, delta in ((0, "regression", 0.20), (1, "regression", 0.20),
+                           (2, "binary_classification", 0.01), (3, "binary_classification", 0.01)):
+        for draw in range(2):
+            for fold in range(5):
+                for rep, gain in (("baseline", 0), ("decision/both/m", delta + 0.001 * draw)):
+                    rows.append(dict(dataset_id=f"d{d}", task_type=task, model_id="linear",
+                                     representation=rep, training_size=128, draw=draw,
+                                     outer_fold=fold, value=0.5 + gain))
+    sizes = data_efficiency.size_gains(pd.DataFrame(rows))
+    pooled = data_efficiency.pooled_curve_by_family(sizes).set_index("task_family")
+    assert pooled.pooled.round(4).to_dict() == {"classification": 0.0105, "regression": 0.2005}
+    assert pooled.datasets.eq(2).all()
+
+
+def test_b3_usefulness_averages_raw_gain_only_within_a_task_family():
+    gains = pd.DataFrame([
+        dict(dataset_id=f"d{i}", task_type=task, family="decision", model_id="linear",
+             representation="decision/both/m1", raw_gain=raw, headroom_share=share)
+        for i, (task, raw, share) in enumerate((("regression", 0.2, 0.4), ("regression", 0.4, 0.6),
+                                                 ("binary_classification", 0.01, 0.1)))])
+    use = group_b.per_model_usefulness(gains).set_index("task_family")
+    assert use.loc["regression", "raw_gain"] == pytest.approx(0.3)
+    assert use.loc["classification", "raw_gain"] == pytest.approx(0.01)
+    assert np.isnan(use.loc["all", "raw_gain"])
+    assert use.loc["all", "headroom_share"] == pytest.approx(1.1 / 3)
+    assert use.loc["all", "datasets"] == 3
+
+
 def test_group_b_figures_render_at_a4_width():
     from src.evaluation import group_b_views
     from src.visualize import group_b as figures

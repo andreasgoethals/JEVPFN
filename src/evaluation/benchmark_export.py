@@ -280,7 +280,7 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
         tables.update(dataset_gains=gains, summary=group_b.summarize(
             curves, keys=("curve", "model_id", "representation", "training_size"))
             if not curves.empty else curves,
-            size_gains=sizes, pooled_raw=data_efficiency.pooled_curve(curves),
+            size_gains=sizes, pooled_raw=data_efficiency.pooled_curve_by_family(curves),
             pooled_share=data_efficiency.pooled_curve(curves, outcome="headroom_share"),
             slopes=data_efficiency.gain_slopes(sizes))
         return tables
@@ -322,11 +322,8 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
             a.get("quality"), a.get("output_shape"), a.get("loo_consensus"), a.get("model_profile"),
             a.get("a2_mode_effects"))
         usefulness = group_b.per_model_usefulness(gains)
-        relations = (group_b.associations(usefulness.rename(columns={"provider": "unit"}),
-                                          diagnostics.rename(columns={"provider": "unit"}),
-                                          by=("model_id", "mode"), unit="unit",
-                                          n_permutations=cfg["n_permutations"], min_units=5)
-                     if not usefulness.empty and len(diagnostics.columns) > 1 else pd.DataFrame())
+        relations = group_b.model_relations(usefulness, diagnostics,
+                                            n_permutations=cfg["n_permutations"], min_units=5)
         _, cohorts = summaries()
         tables.update(
             properties=properties, redundancy=redundancy,

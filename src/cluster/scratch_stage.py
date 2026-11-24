@@ -645,12 +645,15 @@ def _merge_decision_delta(source, destination, work, key, relative):
             artifacts = ([r[0] for r in db.execute("SELECT artifact_id FROM main.feature_artifacts")]
                          if "feature_artifacts" in schema else [])
             if artifacts:
+                # Read every artifact through its own connection BEFORE writing: a large
+                # insert spills to an exclusive lock and a concurrent reader of the same
+                # file then fails with "database is locked" (11872119/11872121, 24-11-2026).
+                keys = sorted({k for artifact_id in artifacts
+                               for k in load_block(delta, artifact_id).requests.request_key.dropna()})
                 db.execute("BEGIN")
-                for artifact_id in artifacts:
-                    keys = load_block(delta, artifact_id).requests.request_key.dropna().unique()
-                    db.executemany(
-                        "INSERT OR IGNORE INTO main.responses SELECT * FROM src.responses "
-                        "WHERE request_key=? AND kind='verified_response'", ((k,) for k in keys))
+                db.executemany(
+                    "INSERT OR IGNORE INTO main.responses SELECT * FROM src.responses "
+                    "WHERE request_key=? AND kind='verified_response'", ((k,) for k in keys))
                 db.execute("COMMIT")
             db.execute("DETACH DATABASE src")
             db.execute("DETACH DATABASE dst")

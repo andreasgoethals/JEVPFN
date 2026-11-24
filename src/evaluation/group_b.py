@@ -475,15 +475,55 @@ def model_diagnostics(quality=None, output_shape=None, consensus=None, profile=N
 
 
 def per_model_usefulness(gains: pd.DataFrame) -> pd.DataFrame:
-    """Equal-dataset mean raw gain of each decision model, per predictor and mode."""
+    """Equal-dataset mean gain of each decision model, per predictor and mode.
+
+    Raw gain is in task-specific units (AUC or R^2), so it is averaged only within a task
+    family (``task_family`` classification/regression). Rows with ``task_family == "all"``
+    average the unit-free headroom share over all datasets and leave ``raw_gain`` empty.
+    """
     data = gains[gains.family.eq("decision")].copy()
     if data.empty:
         return pd.DataFrame()
     parts = data.representation.str.split("/")
     data["mode"], data["provider"] = parts.str[1], parts.str[2]
-    return data.groupby(["model_id", "mode", "provider"], as_index=False).agg(
+    data["task_family"] = data.task_type.map(task_family)
+    keys = ["model_id", "mode", "provider"]
+    by_family = data.groupby([*keys, "task_family"], as_index=False).agg(
         raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
         datasets=("dataset_id", "nunique"))
+    pooled = data.groupby(keys, as_index=False).agg(
+        headroom_share=("headroom_share", "mean"), datasets=("dataset_id", "nunique")).assign(
+        task_family="all", raw_gain=np.nan)
+    return pd.concat([by_family, pooled[by_family.columns]], ignore_index=True)
+
+
+def model_relations(usefulness: pd.DataFrame, diagnostics: pd.DataFrame, *,
+                    n_permutations=5000, seed=SEED, min_units=5) -> pd.DataFrame:
+    """Spearman associations of model usefulness with Group A diagnostics (n = models).
+
+    Raw gain is related within each task family; headroom share over all datasets. One
+    Benjamini-Hochberg adjustment spans every row, as in `associations`.
+    """
+    from src.evaluation.moderator_statistics import benjamini_hochberg
+
+    if usefulness.empty or diagnostics is None or len(diagnostics.columns) <= 1:
+        return pd.DataFrame()
+    units = usefulness.rename(columns={"provider": "unit"})
+    props = diagnostics.rename(columns={"provider": "unit"})
+    parts = []
+    for outcome, rows in (("raw_gain", units[units.task_family.ne("all")]),
+                          ("headroom_share", units[units.task_family.eq("all")])):
+        if rows.empty:
+            continue
+        out = associations(rows, props, by=("model_id", "mode", "task_family"), unit="unit",
+                           outcome=outcome, n_permutations=n_permutations, seed=seed,
+                           min_units=min_units)
+        parts.append(out.assign(outcome=outcome))
+    if not parts:
+        return pd.DataFrame()
+    out = pd.concat(parts, ignore_index=True)
+    out["q_value_bh"] = benjamini_hochberg(out.p_value)
+    return out
 
 
 # ------------------------------------------------------------------ B3: predict in advance

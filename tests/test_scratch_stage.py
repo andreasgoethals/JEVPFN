@@ -216,6 +216,33 @@ def test_delta_union_validates_incoming_rows_and_includes_durable_wal(roots):
     assert not list(work.glob(".delta-*")) and not list(work.glob(".union-*"))
 
 
+def test_delta_reads_artifacts_while_no_writer_holds_the_delta(roots, monkeypatch):
+    """Campaign jobs failed with 'database is locked' reading artifacts mid-write (24-11-2026)."""
+    from test_cache_merge import feature
+
+    from src.jev import features
+
+    durable, work = roots
+    marker(durable, work)
+    cache(durable / "data/jev_cache/fixture.sqlite3")
+    remote = cache(work / "data/jev_cache/fixture.sqlite3")
+    with stage.staging_environment(work):
+        ids = {feature(remote, "intern"), feature(remote, "jev")}
+    real = features.load_block
+
+    def guarded(path, artifact_id):
+        # Any open write transaction on this file makes an immediate writer fail at once.
+        with closing(sqlite3.connect(path, timeout=0)) as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.rollback()
+        return real(path, artifact_id)
+
+    monkeypatch.setattr(features, "load_block", guarded)
+    stage._publish(durable, work)
+    with closing(sqlite3.connect(durable / "data/jev_cache/fixture.sqlite3")) as db:
+        assert {r[0] for r in db.execute("SELECT artifact_id FROM feature_artifacts")} == ids
+
+
 def test_delta_union_skips_warm_rows_already_durable(roots, monkeypatch):
     """Rows staged from durable are not re-copied; only post-stage rows are compared."""
     durable, work = roots
