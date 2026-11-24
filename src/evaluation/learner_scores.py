@@ -4,8 +4,9 @@ Turns the compact study exports (A1 `comparison.zip`, A2 `robustness.zip`, B1-B5
 C1-C2 Group C ZIPs) into the ``(dataset_id, learner, score)`` frames that
 `inference.compare_learners` expects, one frame per comparison group of each
 ``framework.application`` entry. `run_application` runs the comparison only when
-``framework.status == "approved"``; until then it returns an explicit awaiting-approval
-record and reads no export.
+``framework.status == "approved"`` (owner approval of 24-11-2026); otherwise it returns an
+explicit awaiting-approval record and reads no export. `run_confirmatory_family` runs the
+declared pooled contrasts of ``contrasts`` (Holm over all of them) once their exports exist.
 
 Units and scores (fixed before results):
 
@@ -661,3 +662,78 @@ def confirmatory_family_state(analysis: dict | None = None) -> dict:
             "per_task_contrasts": len(contrasts) - len(pooled),
             "pooled_types": sorted(POOLED_CONTRASTS),
             "status": "ready_to_run" if ready else AWAITING}
+
+
+#: Short names of the confirmatory learners (figure and table labels only).
+CONTRAST_LABELS = {"baseline": "no text", "decision/both/median": "decision",
+                   "frozen/e5_small_v2/per_column32": "frozen E5-small", "tar/e5_small_v2_tar/per_column32":
+                   "TAR E5-small"}
+
+
+def contrast_label(contrast: dict) -> str:
+    learner, versus = (CONTRAST_LABELS.get(contrast[k], contrast[k]) for k in ("learner", "versus"))
+    return f"{contrast['group']}: {learner} vs {versus}"
+
+
+def confirmatory_forest_table(pooled: pd.DataFrame, contrasts, results: pd.DataFrame, *,
+                              n_boot: int = group_b.N_BOOT, seed: int = group_b.SEED) -> pd.DataFrame:
+    """One row per declared pooled contrast for `visualize.overview.confirmatory_forest`: the
+    median oriented per-dataset difference with a 95% percentile interval from resampling
+    datasets, the Holm p over the whole family and the Bayesian signed-rank posteriors."""
+    from src.evaluation.inference import _pooled_values
+
+    rows = []
+    rng = np.random.default_rng(seed)
+    for contrast, result in zip(contrasts, results.to_dict("records")):
+        values = _pooled_values(pooled, contrast)
+        medians = np.median(values[rng.integers(0, len(values), (n_boot, len(values)))], axis=1)
+        rows.append({"contrast": contrast_label(contrast), "estimate": float(np.median(values)),
+                     "low": float(np.quantile(medians, 0.025)), "high": float(np.quantile(medians, 0.975)),
+                     "p_holm": result["p_holm"], "p_left": result.get("bayes_p_worse", np.nan),
+                     "p_rope": result.get("bayes_p_equivalent", np.nan),
+                     "p_right": result.get("bayes_p_better", np.nan), "datasets": len(values)})
+    return pd.DataFrame(rows)
+
+
+def run_confirmatory_family(frames_by_application: dict | None = None, *, analysis: dict | None = None,
+                            design: Design | None = None, n_boot: int = group_b.N_BOOT) -> dict:
+    """Run the declared confirmatory family (`config/05_synthesis/analysis.yaml` ``contrasts``).
+
+    Returns a record with ``status``: ``awaiting_owner_approval`` (plan not approved; nothing
+    read), ``awaiting_export`` (``missing`` lists the applications whose export is absent; no
+    test is run on part of the family), ``stopped`` (``reason``: incomplete or undefined cells,
+    or per-task contrasts without their dataset differences) or ``compared`` (``results`` from
+    `inference.pooled_confirmatory_tests`, Holm over every declared contrast, and ``forest`` for
+    `visualize.overview.confirmatory_forest`).
+    """
+    from src.evaluation.inference import pooled_confirmatory_tests
+    from src.utils.config import load_yaml
+
+    analysis = analysis or load_yaml("synthesis/analysis")
+    state = confirmatory_family_state(analysis)
+    out = {"family": state}
+    if state["status"] != "ready_to_run":
+        return out | {"status": AWAITING}
+    contrasts = analysis["contrasts"]
+    if any("type" not in c for c in contrasts):
+        return out | {"status": "stopped", "reason": "per-task contrasts are declared; pass their dataset "
+                      "differences to inference.pooled_confirmatory_tests"}
+    frames_by_application = dict(frames_by_application or {})
+    names = list(dict.fromkeys(c["application"] for c in contrasts))
+    missing = []
+    for name in names:
+        if name not in frames_by_application:
+            frames, _ = read_frames(APPLICATIONS[name].source)
+            if not frames:
+                missing.append(name)
+                continue
+            frames_by_application[name] = frames
+    if missing:
+        return out | {"status": "awaiting_export", "missing": missing}
+    pooled = pooled_scores({n: frames_by_application[n] for n in names}, design)
+    try:
+        results = pooled_confirmatory_tests(pooled, analysis)
+    except ValueError as error:
+        return out | {"status": "stopped", "reason": str(error)}
+    forest = confirmatory_forest_table(pooled, contrasts, results, n_boot=n_boot)
+    return out | {"status": "compared", "results": results, "forest": forest}

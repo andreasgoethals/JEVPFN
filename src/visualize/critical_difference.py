@@ -214,8 +214,8 @@ def cd_diagram(omnibus: dict, table: pd.DataFrame, *, labels=None, title: str | 
 def cd_figures(result: dict, *, labels=None):
     """(figure, name, caption) per compared group of a `learner_scores.run_application` record.
 
-    Yields nothing unless the framework is approved and the group's scores were complete, so
-    notebooks show the gated or stopped state instead of an empty figure.
+    Yields nothing unless the framework is approved, the export exists and the group's scores
+    were complete, so notebooks show the waiting or stopped state instead of an empty figure.
     """
     if not result or result.get("status") != "compared":
         return

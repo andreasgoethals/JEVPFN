@@ -560,3 +560,24 @@ def render(save, generator):
         save(fig, name, caption=caption)
         display_local(fig)
         plt.close(fig)
+
+
+def strands_normalized_ladder(summary, *, name):
+    """C synthesis: the Strands ladder on the MulTaBench-style normalised score (all datasets)."""
+    from src.visualize.group_b import normalized_score_forest
+
+    rows = ["baseline", ZERO_SHOT, "hidden/joint/answer/L24", CELLS["head_only"], CELLS["lora_only"],
+            CELLS["lora_head"], *TAR, PROBES[0]]
+    if summary is None or summary.empty or not _present(summary, rows[1:]):
+        return
+    colors = {"baseline": style.NON_TEXT_COLOR, ZERO_SHOT: style.STRANDS_COLORS["zero_shot"],
+              rows[2]: style.STRANDS_COLORS["hidden"],
+              **{CELLS[c]: CELL_COLORS[c] for c in ("head_only", "lora_only", "lora_head")},
+              TAR[0]: style.TAR_COLOR, TAR[1]: style.TAR_COLOR, PROBES[0]: style.PROBE_COLOR}
+    labels = {"baseline": "No text (same predictor)", ZERO_SHOT: "Zero-shot probabilities (B1)",
+              rows[2]: "<answer> L24 hidden vector (C1)",
+              **{CELLS[c]: f"{CELL_LABELS[c]} (C2)" for c in ("head_only", "lora_only", "lora_head")},
+              **{r: label(r) for r in (*TAR, PROBES[0])}}
+    yield from normalized_score_forest(
+        summary, rows, name=name, what="Strands from zero-shot to label-trained, joint question, beside TAR and "
+        "the label-trained classifier on E5-small", separators=[1, 3, 6], labels=labels, colors=colors)

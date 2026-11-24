@@ -129,6 +129,9 @@ def confirmatory_tests(datasets, plan):
         or not plan.get("reviewed_by")
     ):
         raise ValueError("An explicit analysis plan approved before results is required")
+    if any("type" in c for c in plan["contrasts"]):
+        # Holm must cover the whole declared family; never run only its per-task part.
+        raise ValueError("The plan declares pooled contrasts; run the family with pooled_confirmatory_tests")
     results, identities = [], set()
     for contrast in plan["contrasts"]:
         keys = contrast["match"]
@@ -367,7 +370,7 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
 
 
 # ---------------------------------------------------------------------------
-# Pooled contrasts over both task types (framework proposal, inactive until approved).
+# Pooled contrasts over both task types (framework and proposal approved 24-11-2026).
 #
 # A pooled contrast compares two learners of one framework application on ONE dimensionless
 # score shared by all 18 datasets (9 classification + 9 regression), so its signed-rank test
@@ -473,7 +476,7 @@ def pooled_confirmatory_tests(pooled, plan, *, datasets=None):
     if standard:
         if datasets is None:
             raise ValueError("Per-task contrasts are planned; pass their dataset differences")
-        found = confirmatory_tests(datasets, {**plan, "contrasts": standard})
+        found = confirmatory_tests(datasets, {**plan, "contrasts": standard})  # Holm re-done below
         for record in found.drop(columns=["p_holm", "holm_rank", "holm_step_threshold_at_0_05",
                                           "holm_family_size"]).to_dict("records"):
             results.append(record | {"contrast_type": "per_task"})

@@ -226,6 +226,148 @@ def summarize_by_family(gains: pd.DataFrame, *, keys=("model_id", "representatio
     return summarize(frame, keys=(*keys, "task_family"), **kwargs)
 
 
+# ------------------------------------------- normalised score (MulTaBench-style pooling)
+
+NORMALIZED_COLUMNS = ["dataset_id", "task_type", "normalized_score", "folds", "tied_folds"]
+NORMALIZED_SUMMARY = ["task_family", "datasets", "configurations", "mean_normalized_score",
+                      "normalized_ci_low", "normalized_ci_high", "median_normalized_score",
+                      "median_normalized_ci_low", "median_normalized_ci_high"]
+
+
+def normalized_scores(scores: pd.DataFrame, *, keys=("model_id", "representation"), within=(),
+                      clip_negative_r2=True) -> pd.DataFrame:
+    """Per dataset and configuration: the min-max normalised headline score in [0, 1].
+
+    MulTaBench (Arazi et al. 2026) puts classification AUC and regression R^2 on one scale by
+    min-max normalising each dataset's scores across the compared configurations and then
+    averaging over datasets. Here, per (dataset, outer fold) cell and comparison set:
+    ``(score - min) / (max - min)`` over every configuration of that set, then the mean over the
+    dataset's usable folds. A configuration is one combination of `keys` (default predictor x
+    arm); `within` names extra keys that form separate comparison sets (e.g. ``("model_id",)`` to
+    normalise each predictor's arms on their own).
+
+    `scores` holds the raw headline metric in ``value`` (binary ROC-AUC, multiclass macro OvR
+    ROC-AUC, regression R^2; `headline`) with ``dataset_id``, ``task_type`` and, when fold scores
+    exist, ``outer_fold`` (otherwise each dataset is one cell). Rules, fixed before results:
+
+    * negative R^2 is clipped at 0 before normalising (MulTaBench Tables 11/12): worse than the
+      training mean counts as "no skill", so one failed configuration cannot stretch the scale;
+      AUC is never clipped;
+    * the comparison set is every configuration present anywhere in the input for that set; a
+      cell lacking a finite score for any of them is excluded for all (no configuration is
+      normalised against a different set), so the normalisation set is the same on every cell;
+    * a cell on which all configurations tie (max = min; e.g. every R^2 clipped to 0) carries no
+      ordering and is excluded rather than given an arbitrary value; ``tied_folds`` counts them;
+    * a dataset with no usable cell is absent from the result. Excluded cells are listed in
+      ``attrs["excluded_cells"]`` (reason ``incomplete`` or ``all_tied``).
+
+    The normalised score is RELATIVE: it depends on which configurations are compared (adding
+    or removing one can change every other score), so it is a descriptive pooled view next to,
+    never instead of, the per-task-family raw scores and gains. 1 = best compared configuration
+    on that dataset, 0 = worst.
+    """
+    within = list(within)
+    keys = [k for k in keys if k not in within]  # a set key identifies configurations already
+    columns = ["dataset_id", "task_type", *within, *keys, "normalized_score", "folds", "tied_folds"]
+    excluded_columns = ["dataset_id", *within, "outer_fold", "reason"]
+    empty = pd.DataFrame(columns=columns)
+    empty.attrs["excluded_cells"] = pd.DataFrame(columns=excluded_columns)
+    if scores is None or scores.empty:
+        return empty
+    data = scores.astype({c: object for c in scores.columns
+                          if isinstance(scores[c].dtype, pd.CategoricalDtype)})
+    if "outer_fold" not in data:
+        data = data.assign(outer_fold=0)
+    cell = ["dataset_id", *within, "outer_fold"]
+    if data.duplicated([*cell, *keys]).any():
+        raise ValueError("Several scores for one configuration in one dataset and fold")
+    if data.groupby("dataset_id").task_type.nunique().gt(1).any():
+        raise ValueError("A dataset has several task types")
+    value = data["value"].astype(float).to_numpy()
+    if clip_negative_r2:
+        value = np.where(data.task_type.eq("regression").to_numpy() & (value < 0), 0.0, value)
+    data = data.assign(clipped=value)
+    rows, excluded = [], []
+    sets = data.groupby(within, dropna=False) if within else [((), data)]
+    for _, part in sets:
+        configurations = part[keys].drop_duplicates().reset_index(drop=True)
+        n_config = len(configurations)
+        for cell_key, group in part.groupby(cell, dropna=False):
+            finite = group[np.isfinite(group.clipped.to_numpy(float))]
+            if len(finite) < n_config or n_config < 2:
+                excluded.append(dict(zip(cell, cell_key)) | {"reason": "incomplete"})
+                continue
+            low, high = finite.clipped.min(), finite.clipped.max()
+            if not high > low:
+                excluded.append(dict(zip(cell, cell_key)) | {"reason": "all_tied"})
+                continue
+            rows.append(finite.assign(normalized_score=(finite.clipped - low) / (high - low)))
+    excluded = pd.DataFrame(excluded, columns=excluded_columns)
+    if not rows:
+        empty.attrs["excluded_cells"] = excluded
+        return empty
+    cells = pd.concat(rows, ignore_index=True)
+    out = cells.groupby(["dataset_id", "task_type", *within, *keys], as_index=False, dropna=False).agg(
+        normalized_score=("normalized_score", "mean"), folds=("outer_fold", "nunique"))
+    tied = excluded[excluded.reason.eq("all_tied")].groupby(["dataset_id", *within]).size()
+    if within:
+        index = pd.MultiIndex.from_frame(out[["dataset_id", *within]])
+        out["tied_folds"] = tied.reindex(index).fillna(0).astype(int).to_numpy()
+    else:
+        out["tied_folds"] = out.dataset_id.map(tied).fillna(0).astype(int)
+    out = out[columns].reset_index(drop=True)
+    out.attrs["excluded_cells"] = excluded
+    return out
+
+
+def summarize_normalized(per_dataset: pd.DataFrame, *, keys=("model_id", "representation"), within=(),
+                         n_boot=N_BOOT, seed=SEED) -> pd.DataFrame:
+    """Equal-dataset mean and median normalised score per configuration, pooled over all
+    datasets (``task_family = "all"``) and within each task family, with 95% percentile
+    intervals from resampling datasets (all configurations of a set share each resample).
+
+    `per_dataset` is `normalized_scores` output. Only datasets scored for every configuration of
+    the set enter (they all are, by construction of `normalized_scores`). The scores depend on
+    the compared set; see `normalized_scores`.
+    """
+    within = list(within)
+    keys = [k for k in keys if k not in within]  # a set key identifies configurations already
+    columns = [*within, *keys, *NORMALIZED_SUMMARY]
+    if per_dataset is None or per_dataset.empty:
+        return pd.DataFrame(columns=columns)
+    data = per_dataset.assign(task_family=per_dataset.task_type.map(task_family))
+    rows = []
+    sets = data.groupby(within, dropna=False) if within else [((), data)]
+    for set_key, part in sets:
+        set_key = set_key if isinstance(set_key, tuple) else (set_key,)
+        for scope in ("all", "classification", "regression"):
+            frame = part if scope == "all" else part[part.task_family.eq(scope)]
+            if frame.empty:
+                continue
+            table = frame.pivot_table(index="dataset_id", columns=keys, values="normalized_score",
+                                      aggfunc="first").dropna()
+            if table.empty:
+                continue
+            values = table.to_numpy(float)
+            n = len(values)
+            rng = np.random.default_rng(seed)
+            draws = rng.integers(0, n, (n_boot, n)) if n >= 2 else None
+            for j, config in enumerate(table.columns):
+                column = values[:, j]
+                if draws is not None:
+                    means, medians = column[draws].mean(axis=1), np.median(column[draws], axis=1)
+                    ci = (*np.quantile(means, [0.025, 0.975]), *np.quantile(medians, [0.025, 0.975]))
+                else:
+                    ci = (np.nan,) * 4
+                config = config if isinstance(config, tuple) else (config,)
+                rows.append(dict(zip(within, set_key)) | dict(zip(keys, config)) | {
+                    "task_family": scope, "datasets": n, "configurations": table.shape[1],
+                    "mean_normalized_score": float(column.mean()), "normalized_ci_low": float(ci[0]),
+                    "normalized_ci_high": float(ci[1]), "median_normalized_score": float(np.median(column)),
+                    "median_normalized_ci_low": float(ci[2]), "median_normalized_ci_high": float(ci[3])})
+    return pd.DataFrame(rows, columns=columns)
+
+
 # ---------------------------------------------------------------------- B3: text columns
 
 

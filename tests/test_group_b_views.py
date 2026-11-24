@@ -199,3 +199,56 @@ def test_pca_variance_figure_and_empty_states():
     assert list(figures.size_curves(empty, name="x", what="x")) == []
     assert list(synthesis.representation_ladder(empty, name="x", what="x")) == []
     assert views.ladder({}, {}, {}).empty
+
+
+def test_normalized_score_views_and_figures(exports):
+    b1, b2, b5 = exports["B1"], exports["B2"], exports["B5"]
+    arms = ["baseline", "decision/per_column/median", "decision/joint/median", "decision/both/median"]
+    per, summary = views.normalized_view(views.fold_long(b1["folds"]), arms, roster=ROSTER, n_boot=50)
+    assert per.normalized_score.between(0, 1).all() and per.dataset_id.nunique() == 18
+    assert set(per.representation) == set(arms) and per.model_id.nunique() == 7
+    pooled = summary[summary.task_family.eq("all")]
+    assert pooled.datasets.eq(18).all() and pooled.configurations.eq(28).all()
+    assert set(summary[summary.task_family.ne("all")].datasets) == {9}
+    # Per dataset and fold the best configuration scores 1 and the worst 0, so every dataset's
+    # fold-mean scores span at most [0, 1] and someone is near each end.
+    spread = per.groupby("dataset_id").normalized_score.agg(["min", "max"])
+    assert (spread["min"] < 0.5).all() and (spread["max"] > 0.5).all()
+    produced = _check(figures.normalized_score_forest(summary, arms, name="n", what="Test"))
+    assert "28 compared configurations" in produced[0][2] and "clipped at 0" in produced[0][2]
+    _, ladder = views.normalized_ladder(b1, b2, b5, roster=ROSTER, n_boot=50)
+    assert {"baseline", "native/tabstar", "tar/e5_small_v2_tar/per_column32"} <= set(ladder.representation)
+    assert ladder.configurations.max() == (1 + len(views.LADDER)) * 7 + 3
+    _check(synthesis.normalized_ladder(ladder, name="l", what="Test"))
+    assert list(figures.normalized_score_forest(pd.DataFrame(), arms, name="x", what="x")) == []
+    assert all(t.empty for t in views.normalized_view(pd.DataFrame(), arms, roster=ROSTER))
+
+
+def test_glance_adds_the_normalized_scope_when_fold_tables_exist(exports):
+    from src.evaluation.synthesis_overview import NO_TEXT, glance_table
+    from src.visualize.overview import study_at_a_glance
+
+    table = glance_table({"B1": exports["B1"], "B2": exports["B2"], "C2": {}}, n_boot=50)
+    normalized = table[table.scope.eq("normalized")]
+    assert NO_TEXT in set(normalized.arm) and normalized.datasets.eq(18).all()
+    assert normalized.estimate.between(0, 1).all()
+    fig, name, caption = study_at_a_glance(table)
+    assert name == "study_at_a_glance" and len(fig.axes) == 4 and "MulTaBench" in caption
+    assert NO_TEXT not in [t.get_text() for t in fig.axes[0].get_yticklabels()]
+    plt.close(fig)
+
+
+def test_confirmatory_family_runs_on_the_declared_contrasts(exports):
+    from src.evaluation import learner_scores
+    from src.visualize.overview import confirmatory_forest
+
+    frames = {"B1_decision_features": exports["B1"], "B2_representations": exports["B2"]}
+    result = learner_scores.run_confirmatory_family(frames, n_boot=100)
+    assert result["status"] == "compared", result.get("reason")
+    results, forest = result["results"], result["forest"]
+    assert len(results) == len(forest) == 21 and results.holm_family_size.eq(21).all()
+    assert results.datasets.eq(18).all() and forest.datasets.eq(18).all()
+    assert ((forest.low <= forest.estimate) & (forest.estimate <= forest.high)).all()
+    fig, name, _ = confirmatory_forest(forest)
+    assert name == "confirmatory_family"
+    plt.close(fig)

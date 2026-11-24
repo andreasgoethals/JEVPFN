@@ -559,6 +559,57 @@ def main_arm_fold_scores(b1: dict, b2: dict, *, roster) -> pd.DataFrame:
     return head[head.representation.isin(MAIN_ARMS)]
 
 
+# ------------------------------------------------- normalised score (MulTaBench-style)
+
+#: Arms of the B synthesis normalised-score ladder: the no-text baseline, then the ladder.
+NORMALIZED_LADDER = ("baseline", *LADDER)
+FOLD_KEYS = ["dataset_id", "task_type", "model_id", "representation", "outer_fold"]
+
+
+def merged_heads(*folds_tables) -> pd.DataFrame:
+    """Headline fold scores of several exports in one frame. An arm (representation) carried by
+    several exports (shared baselines and references on identical folds) is taken whole from the
+    FIRST export listed that has it, so no arm mixes records of two exports."""
+    parts, seen = [], set()
+    for folds in folds_tables:
+        if folds is None or folds.empty:
+            continue
+        head = group_b.headline(folds)[[*FOLD_KEYS, "checkpoint_id", "split_id", "value"]]
+        head = head[~head.representation.isin(seen)]
+        seen |= set(head.representation)
+        if not head.empty:
+            parts.append(head)
+    if not parts:
+        return pd.DataFrame(columns=[*FOLD_KEYS, "checkpoint_id", "split_id", "value"])
+    return pd.concat(parts, ignore_index=True)
+
+
+def normalized_view(head: pd.DataFrame, representations, *, roster, n_boot=N_BOOT, seed=SEED):
+    """MulTaBench-style normalised score of the given arms over every predictor present.
+
+    Configurations are (predictor, arm); per dataset and outer fold the headline score is min-max
+    normalised across ALL of them (`group_b.normalized_scores`: negative R^2 clipped at 0, tied or
+    incomplete cells excluded), averaged over folds, then summarised over datasets with equal
+    weight (`group_b.summarize_normalized`, dataset bootstrap). Median-model arms use the per-fold
+    median over the whole roster (`median_fold_scores`). Returns ``(per_dataset, summary)``; both
+    empty when no arm is present. The scores are relative to this comparison set.
+    """
+    if head is None or head.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    wanted = list(dict.fromkeys(representations))
+    medians = []
+    for family in ("decision", "decision+frozen"):
+        modes = [r.split("/")[1] for r in wanted if r.startswith(f"{family}/") and r.endswith("/median")]
+        if modes:
+            medians.append(median_fold_scores(head, roster=roster, modes=tuple(modes), family=family))
+    fold = pd.concat([head, *medians], ignore_index=True)
+    fold = fold[fold.representation.isin(wanted)][FOLD_KEYS + ["value"]]
+    if fold.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    per_dataset = group_b.normalized_scores(fold)
+    return per_dataset, group_b.summarize_normalized(per_dataset, n_boot=n_boot, seed=seed)
+
+
 def compute_costs(folds: pd.DataFrame, *, rows: dict, extraction: pd.DataFrame | None = None,
                   roster=()) -> pd.DataFrame:
     """Per arm: predictor fit hours per 1,000 training rows (median over datasets, predictors and
@@ -607,3 +658,12 @@ def pareto_points(summaries, costs: pd.DataFrame) -> pd.DataFrame:
         value=("mean_headroom_share", "median"), low=("mean_headroom_share", "min"),
         high=("mean_headroom_share", "max"))
     return points.merge(costs, on="representation", how="left")
+
+
+def normalized_ladder(b1: dict, b2: dict, b5: dict, *, roster, n_boot=N_BOOT):
+    """The B synthesis ladder (no-text baseline, every main arm, each native system) on the
+    normalised score, from the B1, B2 and B5 fold tables that exist (B1 arms first, then B2,
+    then B5; `merged_heads`). Returns ``(per_dataset, summary)``; relative to this set."""
+    head = merged_heads(*((f or {}).get("folds") for f in (b1, b2, b5)))
+    natives = sorted(r for r in set(head.representation) if str(r).startswith("native/"))
+    return normalized_view(head, [*NORMALIZED_LADDER, *natives], roster=roster, n_boot=n_boot)

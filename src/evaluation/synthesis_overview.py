@@ -3,6 +3,9 @@
 Each prespecified arm is reduced per dataset to the mean gain over the seven predictors
 (datasets are the unit), then summarised with `group_b.summarize`: the headroom-normalised
 gain pools all 18 datasets; raw gains stay within a task family (ΔAUC N = 9, ΔR² N = 9).
+When the fold tables are present, a MulTaBench-style normalised score (`group_b.normalized_scores`:
+per dataset and fold, min-max over every predictor x glance arm plus the no-text baseline; negative
+R² clipped at 0) is added as a second pooled scope; it is relative to that comparison set.
 No arm is selected by its outcome: the Strands row is the prespecified LoRA + head cell.
 """
 
@@ -22,6 +25,8 @@ GLANCE_ARMS = (
     ("Strands LoRA + head (C2)", "C2", "dataset_gains", "adapted/joint/lora_head"),
 )
 COLUMNS = ["arm", "scope", "statistic", "estimate", "low", "high", "datasets", "predictors"]
+#: Reference row of the normalised scope (drawn as a line, not as an arm).
+NO_TEXT = "No text (same predictor)"
 
 
 def _dataset_level(gains: pd.DataFrame) -> pd.DataFrame:
@@ -56,4 +61,55 @@ def glance_table(frames_by_study: dict, *, arms=GLANCE_ARMS, n_boot=group_b.N_BO
                          s.datasets, predictors])
             rows.append([label, s.task_family, "median", s.median_raw_gain, None, None, s.datasets,
                          predictors])
+    rows += normalized_rows(frames_by_study, arms=arms, n_boot=n_boot)
     return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def normalized_rows(frames_by_study: dict, *, arms=GLANCE_ARMS, n_boot=group_b.N_BOOT, roster=None) -> list:
+    """Glance rows of scope ``normalized``: per arm (and the no-text baseline), the equal-dataset
+    mean and median of the predictor-averaged normalised score with dataset-bootstrap intervals.
+
+    The comparison set is every predictor x (glance arm present, no-text baseline); each arm's fold
+    scores come from its own export (baseline from B1). Empty without the B1 fold table.
+    """
+    from src.evaluation import group_b_views
+
+    b1 = frames_by_study.get("B1") or {}
+    if b1.get("folds") is None or b1["folds"].empty:
+        return []
+    if roster is None:
+        from src.evaluation.benchmark_export import decision_roster
+
+        roster = decision_roster()
+    labels = {"baseline": NO_TEXT}
+    keep = group_b_views.FOLD_KEYS + ["value"]
+    parts = [group_b_views.fold_long(b1["folds"]).query("representation == 'baseline'")[keep]]
+    for label, study, _, representation in arms:
+        folds = (frames_by_study.get(study) or {}).get("folds")
+        if folds is None or folds.empty:
+            continue
+        head = group_b_views.fold_long(folds)
+        family, *_ = representation.split("/")
+        if representation.endswith("/median"):
+            head = group_b_views.median_fold_scores(head, roster=roster, modes=(representation.split("/")[1],),
+                                                    family=family)
+        head = head[head.representation.eq(representation)]
+        if not head.empty:
+            labels[representation] = label
+            parts.append(head[keep])
+    fold = pd.concat(parts, ignore_index=True)
+    if fold.representation.nunique() < 2:
+        return []
+    per_dataset = group_b.normalized_scores(fold)
+    level = per_dataset.groupby(["dataset_id", "task_type", "representation"], as_index=False).agg(
+        normalized_score=("normalized_score", "mean"), predictors=("model_id", "nunique"))
+    summary = group_b.summarize_normalized(level, keys=("representation",), n_boot=n_boot)
+    rows = []
+    for s in summary[summary.task_family.eq("all")].itertuples():
+        predictors = int(level.loc[level.representation.eq(s.representation), "predictors"].min())
+        label = labels[s.representation]
+        rows.append([label, "normalized", "mean", s.mean_normalized_score, s.normalized_ci_low,
+                     s.normalized_ci_high, s.datasets, predictors])
+        rows.append([label, "normalized", "median", s.median_normalized_score, s.median_normalized_ci_low,
+                     s.median_normalized_ci_high, s.datasets, predictors])
+    return rows

@@ -11,7 +11,7 @@ the joint-request probabilities with log loss, Brier, ECE and ROC-AUC for the ni
 classification datasets, and only with the expected-level Spearman rho (a rank measure) for the
 nine regression datasets; log loss is undefined there and the export carries no ranked
 probability score. A1 therefore never pools the two families: classification quality has
-N = 9 (ROC-AUC in the figures, log loss in the gated descriptive CD diagram, as
+N = 9 (ROC-AUC in the figures, log loss in the descriptive CD diagram, as
 `learner_scores.a1_groups`), and regression is the separate rank-only rho with N = 9. The
 pooled proper-score skill (log loss or RPS) belongs to A2, where the export provides both.
 """

@@ -378,6 +378,73 @@ def gain_forest(summary, representations, *, name, what, share=False, separators
         "mean; median-model rows take the per-dataset median over all seventeen decision models.")
 
 
+NORMALIZED_TEXT = (
+    "Per dataset and outer fold, each configuration's headline score (binary ROC-AUC, multiclass "
+    "macro one-vs-rest ROC-AUC, regression R² with negative values clipped at 0) is min-max "
+    "normalised across all {configurations} compared configurations (predictor x arm), so 1 is the "
+    "best and 0 the worst of them on that dataset; folds on which all tie are skipped, and the fold "
+    "mean is each dataset's score (MulTaBench-style pooling of AUC and R²). The score is relative to "
+    "this comparison set and complements, never replaces, the per-task-family gains.")
+
+
+def normalized_score_forest(summary, representations, *, name, what, separators=(), labels=None,
+                            colors=None, note=""):
+    """Equal-dataset mean (filled) and median (open) normalised score per arm and predictor over
+    all datasets, with the dataset-bootstrap 95% interval of the mean (`group_b.summarize_normalized`)."""
+    if summary is None or summary.empty:
+        return
+    data = summary[summary.task_family.eq("all") & summary.representation.isin(representations)]
+    if data.empty:
+        return
+    rows = [r for r in representations if r in set(data.representation)]
+
+    def label(representation):
+        return (labels or {}).get(representation) or _label(representation)
+
+    def color(representation):
+        return (colors or {}).get(representation) or color_of(representation)
+
+    models = [m for m in PREDICTORS if m in set(data.model_id)]
+    natives = sorted(set(data.model_id) - set(PREDICTORS))
+    fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, min(style.MAX_HEIGHT, 1.0 + 0.3 * len(rows))),
+                           layout="constrained")
+    offsets = dict(zip(models, np.linspace(-0.32, 0.32, max(len(models), 1))))
+    for model in [*models, *natives]:
+        frame = data[data.model_id.eq(model)].set_index("representation").reindex(rows)
+        y = np.arange(len(rows)) + offsets.get(model, 0.0)
+        colors_ = [color(r) for r in rows]
+        marker = MARKERS.get(model, NATIVE_MARKER)
+        size = 14 if model in offsets else 30
+        ax.hlines(y, frame.normalized_ci_low, frame.normalized_ci_high, colors=colors_, lw=0.7, zorder=2)
+        ax.scatter(frame.mean_normalized_score, y, marker=marker, s=size, c=colors_, linewidths=0, zorder=3)
+        ax.scatter(frame.median_normalized_score, y, marker=marker, s=size * 0.85, facecolors="none",
+                   edgecolors=colors_, linewidths=0.6, zorder=3)
+    for position in separators:
+        ax.axhline(position - 0.5, color=style.GRID_COLOR, lw=0.8)
+    ax.set_xlim(-0.02, 1.02)
+    layout.light_grid(ax)
+    ax.tick_params(axis="x", labelsize=7)
+    n, k = int(data.datasets.max()), int(data.configurations.max())
+    ax.set_xlabel(f"Normalised score (0 = worst, 1 = best of {k} configurations; all {n} datasets)",
+                  fontsize=7.5)
+    ax.set_yticks(range(len(rows)), [label(r) for r in rows], fontsize=7)
+    for tick, r in zip(ax.get_yticklabels(), rows):
+        tick.set_color(color(r))
+    ax.set_ylim(len(rows) - 0.5, -0.5)
+    ax.tick_params(axis="y", length=0)
+    handles = predictor_handles(models)
+    if natives:
+        handles.append(Line2D([], [], ls="none", marker=NATIVE_MARKER, ms=5, color=style.PREDICTOR_INK,
+                              label="Native-text system"))
+    handles.append(Line2D([], [], ls="none", marker=None, label="filled = mean, open = median"))
+    fig.legend(handles=handles, loc="outside lower center", ncol=4, frameon=False, fontsize=7)
+    yield fig, name, (
+        f"{what}: equal-dataset mean (filled marker) and median (open marker) normalised score; lines are "
+        "95% percentile intervals of the mean from resampling datasets (2,000 draws). One marker shape "
+        "per predictor; colour marks the representation. " + NORMALIZED_TEXT.format(configurations=k)
+        + (f" {note}" if note else ""))
+
+
 def fold_win_rate_forest(win_rates, learners, *, name, what):
     """Fold-level win rate against the same predictor without text, per predictor and pooled."""
     if win_rates is None or win_rates.empty:

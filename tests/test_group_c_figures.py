@@ -128,3 +128,20 @@ def test_ladder_annotates_missing_gpu_hours_explicitly(exports):
     assert texts.count("not in export") == 3 and "no training" in texts
     plt.close(fig)
     assert np.isfinite(views.coverage_summary(c1["coverage"]).share_complete).all()
+
+
+def test_strands_ladder_on_the_normalized_score(exports):
+    c1, c2 = exports
+    per, summary = views.normalized_ladder(c1, c2, n_boot=50)
+    rungs = {"baseline", *views.LADDER}
+    assert set(per.representation) == rungs and per.normalized_score.between(0, 1).all()
+    assert summary.configurations.max() == len(rungs) * 7
+    produced = list(figures.strands_normalized_ladder(summary, name="n"))
+    assert len(produced) == 1
+    fig, name, caption = produced[0]
+    fig.canvas.draw()
+    assert fig.get_figwidth() == pytest.approx(style.WIDTH_FULL) and fig.get_figheight() <= style.MAX_HEIGHT
+    assert name == "n" and "normalised" in caption
+    plt.close(fig)
+    assert list(figures.strands_normalized_ladder(pd.DataFrame(), name="x")) == []
+    assert all(t.empty for t in views.normalized_ladder({}, {}))

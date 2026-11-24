@@ -18,13 +18,17 @@ ARM_COLORS = {
     "Strands LoRA + head (C2)": style.STRANDS_COLORS["lora_head"],
 }
 SCOPES = (("pooled", "Headroom-normalised gain\n(all datasets)"),
+          ("normalized", "Normalised score, 0–1\n(all datasets)"),
           ("classification", "ΔAUC, classification"), ("regression", "ΔR², regression"))
+#: Reference arm of the normalised scope, drawn as a vertical line (the gain panels draw 0).
+NO_TEXT = "No text (same predictor)"
 
 
 def study_at_a_glance(table):
-    """Mean (circle, 95% CI) and median (diamond) per arm: pooled normalised gain and raw
-    gains per task family in separate panels with separate axes."""
-    arms = list(dict.fromkeys(table.arm))
+    """Mean (circle, 95% CI) and median (diamond) per arm: pooled normalised gain, the pooled
+    MulTaBench-style normalised score (when fold tables exist) and raw gains per task family in
+    separate panels with separate axes."""
+    arms = [a for a in dict.fromkeys(table.arm) if a != NO_TEXT]
     if not arms:
         return None
     scopes = [s for s in SCOPES if s[0] in set(table.scope)]
@@ -46,7 +50,13 @@ def study_at_a_glance(table):
                     ax.hlines(i + offset, row.low, row.high, color=color, linewidth=1)
                 ax.scatter(row.estimate, i + offset, marker=marker, s=18, zorder=3,
                            facecolors="none" if hollow else color, edgecolors=color, linewidths=0.9)
-        ax.axvline(0, color=style.NON_TEXT_COLOR, linewidth=0.8, zorder=0)
+        reference = part[part.arm.eq(NO_TEXT) & part.statistic.eq("mean")]
+        if scope == "normalized":
+            if not reference.empty:
+                ax.axvline(reference.estimate.iloc[0], color=style.NON_TEXT_COLOR, linewidth=0.8, zorder=0)
+            ax.set_xlim(-0.02, 1.02)
+        else:
+            ax.axvline(0, color=style.NON_TEXT_COLOR, linewidth=0.8, zorder=0)
         n = int(part.datasets.max()) if len(part) else 0
         ax.set_xlabel(f"{label}\n(N = {n} datasets)", fontsize=7)
         layout.light_grid(ax)
@@ -56,19 +66,24 @@ def study_at_a_glance(table):
     handles = [Line2D([], [], linestyle="none", marker="o", markersize=4, color=style.MEDIAN_COLOR,
                       label="mean, dataset-bootstrap 95% CI"),
                Line2D([], [], linestyle="none", marker="D", markersize=4, color=style.MEDIAN_COLOR,
-                      label="median (CI on the pooled panel)"),
+                      label="median (CI on the pooled panels)"),
                Line2D([], [], color=style.NON_TEXT_COLOR, label="no text (same predictor)")]
     fig.legend(handles=handles, loc="outside lower center", ncols=3, fontsize=7, frameon=False)
     predictors = int(table.predictors.min())
+    normalized = ("normalized" in set(table.scope))
     return fig, "study_at_a_glance", (
         "Gain of each prespecified arm over the same predictor without text. Per dataset, the "
         f"five-fold mean gain is averaged over the {predictors} predictors; circles give the "
         "equal-dataset mean with a dataset-bootstrap 95% percentile interval (2,000 resamples), "
-        "diamonds the median (interval on the pooled panel only). Left: headroom-normalised gain "
-        "(gain divided by 1 − baseline score), pooled over all datasets. Middle and right: raw gains "
-        "within each task family (binary and multiclass ROC-AUC; regression R²), never averaged "
-        "across families. Decision rows use the per-dataset median over all 17 decision models; the "
-        "Strands row is the prespecified LoRA + head cell, not a selected best arm."
+        "diamonds the median (interval on the pooled panels only). Left: headroom-normalised gain "
+        "(gain divided by 1 − baseline score), pooled over all datasets. "
+        + ("Second: MulTaBench-style normalised score, per dataset and fold the headline score "
+           "(negative R² clipped at 0) min-max normalised across every predictor x arm shown plus the "
+           "no-text baseline (grey line: its mean), averaged over predictors; relative to this "
+           "comparison set. " if normalized else "")
+        + "Right: raw gains within each task family (binary and multiclass ROC-AUC; regression R²), "
+        "never averaged across families. Decision rows use the per-dataset median over all 17 decision "
+        "models; the Strands row is the prespecified LoRA + head cell, not a selected best arm."
     )
 
 
@@ -112,7 +127,8 @@ def confirmatory_forest(results):
                         Patch(color=colors[2], label="first arm better")],
                loc="outside lower center", ncols=3, fontsize=7, frameon=False)
     return fig, "confirmatory_family", (
-        f"All {len(data)} declared confirmatory contrasts. Left: paired effect with dataset-bootstrap "
+        f"All {len(data)} declared confirmatory contrasts. Left: median paired per-dataset effect with "
+        "dataset-bootstrap "
         "95% interval; red marks Holm-adjusted two-sided Wilcoxon p < 0.05 over the whole family. "
         "Right: Bayesian signed-rank posterior probabilities that the second arm is better, that the "
         "difference lies within the region of practical equivalence (ROPE), or that the first arm is better."

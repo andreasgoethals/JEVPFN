@@ -172,3 +172,16 @@ def training_gpu_hours(fits: pd.DataFrame) -> dict[str, float]:
     if fits is None or fits.empty:
         return {}
     return {cell: float(hours) for cell, hours in fits.groupby("cell").gpu_hours.sum().items()}
+
+
+def normalized_ladder(c1: dict, c2: dict, *, n_boot=group_b.N_BOOT):
+    """MulTaBench-style normalised score of the Strands ladder (plus the no-text baseline).
+
+    Configurations are (predictor, rung) over the rungs present in the C2 and C1 exports (an arm
+    in both is taken from C2); see `group_b_views.normalized_view`. Returns ``(per_dataset,
+    summary)``, empty while both exports are absent. Relative to this comparison set.
+    """
+    from src.evaluation import group_b_views
+
+    head = group_b_views.merged_heads(*((c or {}).get("folds") for c in (c2, c1)))
+    return group_b_views.normalized_view(head, ["baseline", *LADDER], roster=(), n_boot=n_boot)

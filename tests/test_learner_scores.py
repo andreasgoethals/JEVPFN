@@ -90,20 +90,72 @@ def test_application_names_match_the_framework_entries():
     assert set(learner_scores.APPLICATIONS) == entries - {"A3_geometry"}
 
 
-def test_every_application_awaits_approval_and_reads_nothing(monkeypatch):
+def test_unapproved_framework_reads_nothing(monkeypatch):
     def refuse(_source):
         raise AssertionError("No export may be read before approval")
 
     monkeypatch.setattr(learner_scores, "read_frames", refuse)
-    analysis = load_yaml("synthesis/analysis")
-    assert analysis["framework"]["status"] != "approved"
+    analysis = copy.deepcopy(load_yaml("synthesis/analysis"))
+    analysis["framework"]["status"] = learner_scores.AWAITING
     for name in analysis["framework"]["application"]:
-        result = learner_scores.run_application(name)
+        result = learner_scores.run_application(name, analysis=analysis)
         assert result["status"] == learner_scores.AWAITING
         assert "groups" not in result
         assert list(critical_difference.cd_figures(result)) == []
+    state = learner_scores.confirmatory_family_state(analysis)
+    assert state["status"] == learner_scores.AWAITING
+    assert learner_scores.run_confirmatory_family(analysis=analysis)["status"] == learner_scores.AWAITING
+
+
+def test_approved_framework_waits_for_absent_exports(monkeypatch):
+    """Owner approval of 24-11-2026: every application reads its export and waits while it is absent."""
+    read = []
+
+    def absent(source):
+        read.append(source)
+        return {}, {"status": "awaiting_export"}
+
+    monkeypatch.setattr(learner_scores, "read_frames", absent)
+    analysis = load_yaml("synthesis/analysis")
+    assert analysis["framework"]["status"] == learner_scores.APPROVED
+    assert analysis["proposal"]["status"] == learner_scores.APPROVED
+    assert analysis["approved_before_results"] is True and analysis["reviewed_by"]
+    for name in learner_scores.APPLICATIONS:
+        result = learner_scores.run_application(name)
+        assert result["status"] == "awaiting_export" and "groups" not in result
+        assert list(critical_difference.cd_figures(result)) == []
+    assert set(read) == {spec.source for spec in learner_scores.APPLICATIONS.values()}
     state = learner_scores.confirmatory_family_state()
-    assert state["status"] == learner_scores.AWAITING and state["pooled_contrasts"] == 0
+    assert state["status"] == "ready_to_run" and state["pooled_contrasts"] == 21
+    family = learner_scores.run_confirmatory_family()
+    assert family["status"] == "awaiting_export"
+    assert family["missing"] == ["B1_decision_features", "B2_representations"]
+
+
+def test_declared_contrasts_are_the_proposal_per_predictor_on_planned_learners():
+    analysis = load_yaml("synthesis/analysis")
+    contrasts = analysis["contrasts"]
+    plan = learner_scores.planned_design()
+    models = learner_scores._main_models(plan)
+    b2 = ["decision/both/median", "decision+frozen/both/median",
+          *learner_scores._planned(plan, "experiment_2", ("frozen",)),
+          *learner_scores._planned(plan, "experiment_3", ("tar", "probe"))]
+    learners = {"B1_decision_features": ["baseline", *(f"decision/{m}/median" for m in learner_scores.MODES)],
+                "B2_representations": b2}
+    assert len(contrasts) == 3 * len(models) == 21
+    references = []
+    for contrast in contrasts:
+        assert set(contrast) == set(inference.POOLED_KEYS) and contrast["type"] == "pooled_normalised_gain"
+        assert contrast["direction"] == 1 and contrast["datasets"] == list(plan.datasets)
+        assert contrast["group"] in models and contrast["learner"] == "decision/both/median"
+        assert {contrast["learner"], contrast["versus"]} <= set(learners[contrast["application"]])
+        references.append(contrast["versus"])
+    assert sorted(set(references)) == ["baseline", "frozen/e5_small_v2/per_column32",
+                                       "tar/e5_small_v2_tar/per_column32"]
+    assert len(analysis["proposal"]["primary_contrasts"]) == 3
+    # The per-task runner refuses a plan with pooled contrasts: Holm must cover the whole family.
+    with pytest.raises(ValueError, match="pooled_confirmatory_tests"):
+        inference.confirmatory_tests(pd.DataFrame(), analysis)
 
 
 def test_b1_end_to_end_synthetic_export_to_cd_diagram(tmp_path):

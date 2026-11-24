@@ -11,7 +11,7 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 from src.visualize import layout, style
-from src.visualize.group_b import _label, color_of, gain_forest
+from src.visualize.group_b import _label, color_of, gain_forest, normalized_score_forest
 
 LADDER_GROUPS = ("decision", "decision+frozen", "frozen", "probe", "tar", "native")
 
@@ -33,6 +33,16 @@ def representation_ladder(summary, *, name, what, share=False):
         return
     rows, separators = _ladder_rows(summary)
     yield from gain_forest(summary, rows, name=name, what=what, share=share, separators=separators)
+
+
+def normalized_ladder(summary, *, name, what):
+    """The ladder on the MulTaBench-style normalised score (no-text baseline as the first row)."""
+    if summary is None or summary.empty:
+        return
+    rows, separators = _ladder_rows(summary)
+    if "baseline" in set(summary.representation):
+        rows, separators = ["baseline", *rows], [1, *(s + 1 for s in separators)]
+    yield from normalized_score_forest(summary, rows, name=name, what=what, separators=separators)
 
 
 def win_rate_matrix(pairwise, *, name, what):
