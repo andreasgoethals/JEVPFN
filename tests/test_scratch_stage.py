@@ -311,6 +311,54 @@ def test_provider_warm_cache_keeps_only_matching_responses_origins_and_features(
     assert target.stat().st_size <= provider_cache_bound(source.path, "intern")
 
 
+def test_incremental_warm_retains_new_origin_and_old_artifact_dependency(roots):
+    from test_cache_merge import feature
+
+    durable, work = roots
+    source = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    work.mkdir(parents=True, exist_ok=True)
+    rowids = {}
+    stage._provider_cache(source.path, work / "first.sqlite3", "intern", rowids=rowids)
+    source.get(request("intern", row="csv:extra"), kind="verified_response")
+    artifact = feature(source, "intern")
+    increment = work / "increment.sqlite3"
+    stage._provider_cache(source.path, increment, "intern", after=rowids)
+    with closing(sqlite3.connect(increment)) as db:
+        assert (artifact,) in list(db.execute("SELECT artifact_id FROM feature_artifacts"))
+        assert db.execute("SELECT count(*) FROM responses").fetchone() == (1,)
+        origins = [json.loads(v) for v, in db.execute("SELECT provenance_json FROM origins")]
+        assert [row["row_id"] for row in origins] == ["csv:extra"]
+
+
+def test_old_marker_publishes_new_origin_on_earlier_response(roots):
+    durable, work = roots
+    marker(durable, work)
+    relative = "data/jev_cache/fixture.sqlite3"
+    cache(durable / relative, request("intern"))
+    source = cache(work / relative, request("intern"))
+    with source._connect() as db:
+        db.execute("UPDATE responses SET created_at='2000-01-01T00:00:00+00:00'")
+        db.execute("UPDATE origins SET first_seen_at='2000-01-01T00:00:00+00:00'")
+    source.get(request("intern", row="csv:new"), kind="verified_response")
+    stage._publish(durable, work)
+    with closing(sqlite3.connect(durable / relative)) as db:
+        assert db.execute("SELECT count(*) FROM origins").fetchone() == (2,)
+
+
+def test_periodic_publish_defers_a_held_extraction_lock(roots):
+    from src.utils.locking import file_lock
+
+    durable, work = roots
+    marker(durable, work)
+    relative = "data/jev_cache/fixture.sqlite3"
+    original = cache(durable / relative)
+    cache(work / relative, request("intern"))
+    with file_lock(original.path.with_suffix(".extraction.lock"), timeout=0):
+        assert stage._publish(durable, work, periodic=True)["busy_skipped"] == 1
+    assert stage._publish(durable, work)["decision_stores"] == 1
+    assert original.get(request("intern"), kind="verified_response") == response()
+
+
 def test_incremental_warm_reads_only_durable_rows_added_since_the_previous_warm(roots):
     durable, work = roots
     source = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))

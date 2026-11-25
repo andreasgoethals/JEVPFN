@@ -313,7 +313,16 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                         # durable store to add a few rows (8 h contract timeouts, 23-11-2026).
                         print(json.dumps({"event": "publication_started", "path": relative.as_posix(),
                                           "periodic": periodic, "mode": "delta"}), flush=True)
-                        identity = _merge_decision_delta(source, destination, work, published_key, relative)
+                        try:
+                            identity = _merge_decision_delta(source, destination, work, published_key,
+                                                             relative, periodic)
+                        except TimeoutError as exc:
+                            if not periodic:
+                                raise PublicationLockUnavailable(
+                                    f"Timed out publishing {relative.as_posix()}: {exc}"
+                                ) from exc
+                            counts["busy_skipped"] += 1
+                            continue
                         if source_sha is not None and identity is not None:
                             progress[relative_key] = {"source_sha256": source_sha, "destination": identity}
                             write_json(progress_path, {"durable_root": str(durable), "stores": progress})
@@ -463,7 +472,7 @@ def _publication_temporary_root(work, required=0):
     return work
 
 
-def _merge_native_decision(incoming, destination, work):
+def _merge_native_decision(incoming, destination, work, periodic=False):
     """Validate/union on native storage; transactionally back up the union to PROJECT.
 
     The destination extraction lock covers its snapshot, merge and publication,
@@ -477,7 +486,7 @@ def _merge_native_decision(incoming, destination, work):
     if shutil.disk_usage(temporary_root).free < required:
         raise OSError("Insufficient native space for a validated publication union")
     with (
-        file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS),
+        file_lock(destination.with_suffix(".extraction.lock"), timeout=0 if periodic else LOCK_WAIT_SECONDS),
         tempfile.TemporaryDirectory(prefix=".union-", dir=temporary_root) as temporary,
     ):
         native_root = Path(temporary) / "JEVPFN"
@@ -569,7 +578,19 @@ def _stage_cutoff(work, relative):
     return {"created_at": (staged - timedelta(seconds=STAGE_CUTOFF_MARGIN_SECONDS)).isoformat()}
 
 
-def _merge_decision_delta(source, destination, work, key, relative):
+def _copy_artifact_responses(db, path, source_schema):
+    """A standalone increment must also contain older responses referenced by new blocks."""
+    from src.jev.features import load_block
+
+    ids = [r[0] for r in db.execute("SELECT artifact_id FROM main.feature_artifacts")]
+    # Decode all blocks before acquiring a write lock on the same file.
+    keys = sorted({k for artifact_id in ids for k in
+                   load_block(path, artifact_id).requests.request_key.dropna()})
+    db.executemany(f"INSERT OR IGNORE INTO main.responses SELECT * FROM {source_schema}.responses "
+                   "WHERE request_key=? AND kind='verified_response'", ((k,) for k in keys))
+
+
+def _merge_decision_delta(source, destination, work, key, relative, periodic=False):
     """Union only rows written since staging, in one durable transaction.
 
     Staging copies this runtime's rows FROM durable into scratch, and durable
@@ -585,17 +606,16 @@ def _merge_decision_delta(source, destination, work, key, relative):
     successful publication by this process are skipped.
     """
     from src.jev.cache import ResponseCache
-    from src.jev.features import load_block
 
     size = source.stat().st_size
     if not destination.exists():
         root = _publication_temporary_root(work, size + _union_bytes(size, destination))
         with tempfile.TemporaryDirectory(prefix=".publish-", dir=root) as t:
-            return _merge_native_decision(snapshot(source, Path(t) / source.name), destination, work)
+            return _merge_native_decision(snapshot(source, Path(t) / source.name), destination, work, periodic)
     published = _PUBLISHED_ROWIDS.get(key, {})
     cutoff = _stage_cutoff(work, relative)
     with (
-        file_lock(destination.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS),
+        file_lock(destination.with_suffix(".extraction.lock"), timeout=0 if periodic else LOCK_WAIT_SECONDS),
         tempfile.TemporaryDirectory(prefix=".delta-",
                                     dir=_publication_temporary_root(work, size + 512 * 2**20)) as temporary,
     ):
@@ -625,11 +645,8 @@ def _merge_decision_delta(source, destination, work, key, relative):
                 elif timed:
                     new, args = "rowid > ? AND created_at >= ?", (floor, cutoff["created_at"])
                 elif table == "origins":
-                    db.execute("INSERT OR IGNORE INTO main.origins SELECT o.* FROM main.responses AS r "
-                               "JOIN src.origins AS o ON o.request_key=r.request_key AND o.kind=r.kind "
-                               "WHERE o.rowid > ? ORDER BY o.request_key, o.kind, o.provenance_hash",
-                               (floor,))
-                    continue
+                    # Cache hits add new row provenance without rewriting their response.
+                    new, args = "rowid > ? AND first_seen_at >= ?", (floor, cutoff["created_at"])
                 else:
                     new, args = "rowid > ?", (floor,)
                 if table == "feature_artifacts" and table in dst_tables:
@@ -642,19 +659,9 @@ def _merge_decision_delta(source, destination, work, key, relative):
                 if table in schema:
                     db.execute(f"INSERT INTO main.{table} SELECT * FROM src.{table}")
             db.execute("COMMIT")
-            artifacts = ([r[0] for r in db.execute("SELECT artifact_id FROM main.feature_artifacts")]
-                         if "feature_artifacts" in schema else [])
-            if artifacts:
-                # Read every artifact through its own connection BEFORE writing: a large
-                # insert spills to an exclusive lock and a concurrent reader of the same
-                # file then fails with "database is locked" (11872119/11872121, 24-11-2026).
-                keys = sorted({k for artifact_id in artifacts
-                               for k in load_block(delta, artifact_id).requests.request_key.dropna()})
-                db.execute("BEGIN")
-                db.executemany(
-                    "INSERT OR IGNORE INTO main.responses SELECT * FROM src.responses "
-                    "WHERE request_key=? AND kind='verified_response'", ((k,) for k in keys))
-                db.execute("COMMIT")
+            if "feature_artifacts" in schema:
+                _copy_artifact_responses(db, delta, "src")
+                db.commit()
             db.execute("DETACH DATABASE src")
             db.execute("DETACH DATABASE dst")
         ResponseCache(delta)  # Same schema guarantees as every store.
@@ -719,7 +726,9 @@ def _provider_cache_locked(source, destination, provider, after=None):
                    "WHERE rowid > ? AND json_extract(settings_json,'$.provider')=?",
                    (after.get("responses", 0), provider))
         db.execute("INSERT INTO origins SELECT o.* FROM upstream.origins o "
-                   "JOIN responses r ON r.request_key=o.request_key AND r.kind=o.kind")
+                   "JOIN upstream.responses r ON r.request_key=o.request_key AND r.kind=o.kind "
+                   "WHERE o.rowid > ? AND json_extract(r.settings_json,'$.provider')=?",
+                   (after.get("origins", 0), provider))
         tables = {r[0] for r in db.execute("SELECT name FROM upstream.sqlite_master WHERE type='table'")}
         if "failures" in tables:
             db.execute("INSERT INTO failures SELECT * FROM upstream.failures "
@@ -730,6 +739,9 @@ def _provider_cache_locked(source, destination, provider, after=None):
             db.execute("INSERT INTO feature_artifacts SELECT * FROM upstream.feature_artifacts "
                        "WHERE rowid > ? AND json_extract(manifest_json,'$.identity.provider')=?",
                        (after.get("feature_artifacts", 0), provider))
+            if after:
+                db.commit()
+                _copy_artifact_responses(db, destination, "upstream")
     validate_cache(destination)
     return destination
 
