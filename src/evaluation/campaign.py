@@ -62,8 +62,11 @@ PROBE_VIEWS = ("per_column", "joint")
 B2_DECISION_EMBEDDING = {"encoder": "e5_small_v2", "pca_scope": "per_column", "pca_components": 32}
 
 
-def benchmark_plan(main=None, text=None):
+def benchmark_plan(main=None, text=None, *, cohort="all"):
+    from src.evaluation.design import decision_providers, incremental_cohort, pca_grid
+
     main = main or load_yaml("experiment_1/main")
+    providers = decision_providers(cohort, main)
     text = text or load_yaml("experiment_4/native_text")
     embedding = load_yaml("experiment_2/embeddings")
     tar = load_yaml("experiment_3/tar")
@@ -72,7 +75,7 @@ def benchmark_plan(main=None, text=None):
         or tuple(text["candidate_models"]) != TEXT_MODELS
     ):
         raise ValueError(
-            "Model roster differs from the reviewed six predictors/three text baselines"
+            "Model roster differs from the reviewed structured predictors or native-text systems"
         )
     if tuple(main["candidate_combinations"]) != DECISION_FEATURE_SETS:
         raise ValueError("Experiment 1 has exactly four decision feature configurations")
@@ -88,8 +91,6 @@ def benchmark_plan(main=None, text=None):
         raise ValueError("TAR must use the reviewed encoder, matched PCA grid and fixed threshold")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
-    from src.evaluation.design import pca_grid
-
     grid = pca_grid()  # read once: the reviewed per-column PCA32 / joint PCA64 recipes
 
     def add(entry, model, feature_set, phase, **extra):
@@ -107,7 +108,7 @@ def benchmark_plan(main=None, text=None):
     def arms(entry, models, combinations, phase, **extra):
         for model in models:
             add(entry, model, combinations[0], phase, **extra)
-            for provider in main["candidate_extractors"]:
+            for provider in providers:
                 for feature_set in combinations[1:]:
                     add(entry, model, feature_set, phase, **extra)
                     rows[-1]["provider"] = provider
@@ -127,7 +128,7 @@ def benchmark_plan(main=None, text=None):
             add(entry, model, NATIVE_FEATURE_SETS[0], "experiment_4")
         # B2a: each decision model's "both" block with frozen E5-small per-column PCA32.
         for model in MAIN_MODELS:
-            for provider in main["candidate_extractors"]:
+            for provider in providers:
                 add(entry, model, DECISION_PLUS_EMBEDDING, "experiment_2", **B2_DECISION_EMBEDDING)
                 rows[-1]["provider"] = provider
         # B2b: label-trained classifier on each frozen encoder, per text column and joint.
@@ -140,18 +141,20 @@ def benchmark_plan(main=None, text=None):
         if entry["paper_summary"]["text_columns"] >= 2:
             for column in range(entry["paper_summary"]["text_columns"]):
                 for model in MAIN_MODELS:
-                    for provider in main["candidate_extractors"]:
+                    for provider in providers:
                         add(entry, model, PER_COLUMN_WITHOUT_ONE, "rq2",
                             dropped_text_column=column)
                         rows[-1]["provider"] = provider
     # B4: training-size curves (explicit, recorded subsamples; see data_efficiency).
     from src.evaluation.data_efficiency import data_efficiency_arms
 
-    rows.extend(data_efficiency_arms(selected, MAIN_MODELS, main["candidate_extractors"]))
+    rows.extend(data_efficiency_arms(selected, MAIN_MODELS, providers))
     # Group C: C1a hidden states (12), C1b hidden + probabilities (2), C2 adapted cells (3).
     from src.evaluation.group_c import arms as group_c_arms
 
     rows.extend(group_c_arms(selected, MAIN_MODELS))
+    if incremental_cohort(cohort):
+        rows = [row for row in rows if row["phase"] in GROUP_B_PHASES and row.get("provider") in providers]
     for arm in rows:
         # Explicit view distinguishes the nine-probability regression protocol from historical
         # records whose implicit "main" view selected the mean.
@@ -191,13 +194,13 @@ def _cached(key, load, *, copy_result=True):
     return copy.deepcopy(result) if copy_result else result
 
 
-def _retain_representation(provider, encoder):
+def _retain_representation(provider, encoder, hidden_key=None):
     if _TASK_CACHE is None:
         return
     for key in list(_TASK_CACHE):
         if (key[0] == "decision" and key[1] != provider) or (
             key[0] == "embeddings" and key[1] != encoder
-        ):
+        ) or (key[0] == "hidden" and key != hidden_key):
             del _TASK_CACHE[key]
 
 
@@ -208,6 +211,19 @@ def _representation_storage():
     if os.environ.get("SLURM_CLUSTER_NAME") == "mindwell" and paths.native_gpfs_project(root):
         return staging_environment(root / paths.PROJECT_NAME)
     return nullcontext()
+
+
+def _retain_for_arm(arm):
+    hidden_key = None
+    if arm["feature_set"] in HIDDEN_FEATURE_SETS:
+        from src.jev.strands_hidden import active_artifact_id
+
+        with _representation_storage():
+            artifact = active_artifact_id(arm["dataset_id"])
+        hidden_key = ("hidden", arm["dataset_id"], arm["hidden_view"],
+                      arm["hidden_position"], arm["hidden_layer"], artifact)
+    _retain_representation(arm.get("provider"), arm.get("encoder"), hidden_key)
+    return hidden_key
 
 
 @contextmanager
@@ -242,13 +258,15 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         raise RuntimeError("Benchmark execution is disabled; plan only")
     from src.cluster.freeze import check_if_present
 
-    check_if_present()
+    frozen = check_if_present()
     if not profile:
-        from src.evaluation.qualification import benchmark_evidence
+        if not frozen["frozen"]:
+            raise ValueError("Freeze the reviewed source before executing a production benchmark arm")
+        from src.evaluation.qualification import acceptance_for, benchmark_evidence
 
-        acceptance = cfg.get("experiment_0_acceptance")
+        acceptance = acceptance_for(cfg.get("experiment_0_acceptance"), arm.get("provider"))
         qualified = _cached(
-            ("evidence", acceptance, arm.get("model")),
+            ("evidence", acceptance, arm["phase"], arm.get("model"), arm.get("provider")),
             lambda: benchmark_evidence(acceptance, arm),
             copy_result=False,
         )
@@ -256,7 +274,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
                       copy_result=False)
     if digest(arm) not in planned:
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
-    _retain_representation(arm.get("provider"), arm.get("encoder"))
+    hidden_key = _retain_for_arm(arm)
     catalog = load_yaml("experiment_1/models")
     settings = copy.deepcopy(catalog["models"][arm["model"]]["runtime"])
     settings["threads"] = min(
@@ -348,10 +366,12 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         with _representation_storage():
             vectors = _cached(
-                ("hidden", entry["id"], arm["hidden_view"], arm["hidden_position"], arm["hidden_layer"]),
+                hidden_key,
                 lambda: vector_frame(dataset, view=arm["hidden_view"], position=arm["hidden_position"],
                                      layer=arm["hidden_layer"]),
             )
+            if vectors.attrs["feature_artifact_ids"] != [hidden_key[-1]]:
+                raise ValueError("Hidden-state artifact changed while its view was being read")
         features = group_c.add_hidden(features, vectors)
     selector = selectors.get(arm["provider"]) if arm["provider"] else selectors or None
     embedding_cfg = None
@@ -373,7 +393,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         if arm["model"] not in embedding_cfg["models"]:
             raise ValueError("Predictor is not enabled for the embedding feature configurations")
         features = add_embeddings(features, embeddings)
-    from src.evaluation.qualification import execution_runtime, verify_inputs
+    from src.evaluation.qualification import execution_runtime, profile_fold_number, verify_inputs
 
     features.attrs["decision_artifact_checksums"] = checksums
     settings["execution_runtime"] = _cached(("runtime",), execution_runtime)
@@ -478,11 +498,13 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         representation["hidden"] = {
             "provider": "strands", "view": arm["hidden_view"], "position": arm["hidden_position"],
+            "decision_model": group_c.decision_model_for_fit([vectors.attrs.get("decision_model")]),
             "layer": arm["hidden_layer"], "pca_scope": arm["pca_scope"],
             "pca_components": arm["pca_components"], "fitted_on": "outer_training_rows_inline",
             "artifact_ids": vectors.attrs["feature_artifact_ids"],
         }
     if adapted_arm:
+        from src.evaluation import group_c
         from src.evaluation.strands_adaptation import AdaptedControl
 
         base_factory = factory
@@ -492,6 +514,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
         representation["adaptation"] = {
             "provider": "strands", "question": "joint", "cell": arm["adaptation_cell"],
+            "decision_model": group_c.decision_model_for_fit(
+                [bundle["recipe"]["sources"].get("decision_model") for bundle in adapted]),
             "crossfit_parts": 3, "artifact_ids": [b["artifact_id"] for b in adapted],
         }
     if tar_arm:
@@ -533,7 +557,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             device=settings["device"],
             estimator_settings=settings,
             representation_recipe=representation,
-            fold_numbers=[0] if profile else None,
+            fold_numbers=[profile_fold_number(arm)] if profile else None,
         )
     except Exception as exc:
         # Do not record raw text/row values from third-party exception messages.
@@ -550,7 +574,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     if profile:
         from src.evaluation.qualification import save_profile
 
-        save_profile(arm, dataset, features, settings["execution_runtime"], records)
+        save_profile(arm, dataset, features, settings["execution_runtime"], records,
+                     specification=specification)
     append_event(log, "arm_completed", records=len(records), **arm)
     return records
 
@@ -558,6 +583,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset")
+    parser.add_argument("--cohort", metavar="COHORT", default="open_weight",
+                      help="Plan a registered full release, or use its <name>_added scope for new fits only.")
     parser.add_argument("--phase", choices=(*GROUP_B_PHASES, *GROUP_C_PHASES))
     parser.add_argument("--encoder")
     parser.add_argument("--pca-components", type=int)
@@ -584,7 +611,7 @@ def main():
         help="Experiment 0B: full first outer fold, no row cap",
     )
     args = parser.parse_args()
-    plan = benchmark_plan()
+    plan = benchmark_plan(cohort=args.cohort)
     selected = [
         a
         for a in plan

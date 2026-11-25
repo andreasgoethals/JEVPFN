@@ -8,7 +8,9 @@ phase: rq3
 name: strands_adaptation
 enabled: false
 experiment_0_acceptance: null
+pilot_enabled: false  # C0: enable after approval to spend B200 time on the nine qualification runs
 training_enabled: false
+pilot_acceptance: null  # reviewed c2_adaptation_pilot evidence for the applicable task and cell
 provider: strands
 model: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
 question: joint
@@ -19,7 +21,7 @@ cells:
   lora_only: {torso: lora_trained, head: frozen_released, run: b200}
   lora_head: {torso: lora_trained, head: trained, run: b200}
 trained_cells: [head_only, lora_only, lora_head]
-# Targets: the true class; regression -> nine equal-frequency bins of the fit's training rows,
+# Targets: the true class; regression -> nine equal-frequency bins of the optimizer rows,
 # mapped lowest-first to Strands' nine ordered levels (-4 ... +4 evidence).
 regression_bins: 9
 # Cross-fitting inside every outer training fold: unstratified, label-independent parts.
@@ -65,8 +67,12 @@ recipe:
   temperature: {value: 1.0, source: 52401, note: init_from resets fitted temperatures}
   seed: {value: 0, source: 6238}
   # Not used (outside the approved design): the KL anchor to v19 (6204) and the teacher file.
+# C0 — Strands v1 training qualification for C2.
 pilot:
-  dataset: smallest_selected_dataset
+  dataset: smallest_selected_dataset_per_task_type
   fold: 0
-  part: 0
+  # One epoch of each cross-fit part; pilot products have a separate publication directory.
+  train_rows: 256
+  test_rows: 64
+  seed: 20261120
   cell: lora_head

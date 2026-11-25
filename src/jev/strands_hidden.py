@@ -41,9 +41,10 @@ import pandas as pd
 
 from src.utils import paths
 from src.utils.config import load_yaml
+from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
 
-SCHEMA = "jevpfn.strands_hidden.v1"
+SCHEMA = "jevpfn.strands_hidden.v2"
 CONFIG = "representations/representations"
 POSITIONS = ("state_end", "question_end", "answer")
 LAYERS = (12, 24)
@@ -200,6 +201,10 @@ def _connect(path: Path, *, readonly=False):
             options BLOB, probabilities BLOB NOT NULL, deviation REAL NOT NULL,
             sha256 TEXT NOT NULL
         ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS engine_checks (
+            input_no INTEGER PRIMARY KEY REFERENCES vectors(input_no),
+            max_abs_difference REAL NOT NULL
+        ) WITHOUT ROWID;
     """)
     return db
 
@@ -215,13 +220,18 @@ def encode_record(input_no, kind, positions, block, options, probabilities, devi
         raise ValueError("Hidden state is not finite in float16; never stored")
     options_blob = None if options is None else np.ascontiguousarray(options, dtype="<f2").tobytes()
     probabilities = np.ascontiguousarray(probabilities, dtype="<f4")
+    if (probabilities.ndim != 1 or not np.isfinite(probabilities).all()
+            or (probabilities < 0).any() or (probabilities > 1).any()
+            or not np.isclose(probabilities.sum(), 1.0, atol=1e-5, rtol=0)
+            or not np.isfinite(deviation) or deviation < 0):
+        raise ValueError("Hidden-state record has invalid probabilities or reproduction error")
     payload = block.tobytes() + (options_blob or b"") + probabilities.tobytes()
     return (int(input_no), kind, int(len(probabilities)), int(positions["tokens"]),
             json.dumps(positions, sort_keys=True), block.tobytes(), options_blob,
             probabilities.tobytes(), float(deviation), hashlib.sha256(payload).hexdigest())
 
 
-def write_records(path: Path, recipe: dict, records) -> None:
+def write_records(path: Path, recipe: dict, records, engine_checks=()) -> None:
     with closing(_connect(path)) as db, db:
         stored = db.execute("SELECT value FROM meta WHERE key='recipe'").fetchone()
         if stored is None:
@@ -229,6 +239,7 @@ def write_records(path: Path, recipe: dict, records) -> None:
         elif json.loads(stored[0]) != recipe:
             raise ValueError("Hidden-state store belongs to another recipe; never mixed")
         db.executemany("INSERT INTO vectors VALUES (?,?,?,?,?,?,?,?,?,?)", records)
+        db.executemany("INSERT INTO engine_checks VALUES (?,?)", engine_checks)
 
 
 def done_inputs(path: Path) -> set[int]:
@@ -280,9 +291,11 @@ def read_training_vectors(path: Path, input_numbers, hidden: int) -> dict:
 
 def save_head(folder: Path, state: dict, temperature: float, temperature_by_kind: dict) -> Path:
     target = Path(folder) / HEAD
-    np.savez(target, **{k: np.asarray(v, dtype=np.float32) for k, v in state.items()},
+    partial = target.with_suffix(".partial.npz")
+    np.savez(partial, **{k: np.asarray(v, dtype=np.float32) for k, v in state.items()},
              meta=np.array(json.dumps({"temperature": temperature,
                                        "temperature_by_kind": temperature_by_kind})))
+    os.replace(partial, target)
     return target
 
 
@@ -354,9 +367,11 @@ def read_manifest(dataset_id: str, *, verify=True) -> dict:
     target = manifest_path(dataset_id)
     body = json.loads(target.read_text(encoding="utf-8"))
     if body.get("schema") != SCHEMA or body.get("status") != "complete":
-        raise ValueError(f"{dataset_id}: hidden-state store is not complete")
-    if body["artifact_id"] != digest({k: v for k, v in body.items() if k != "artifact_id"}):
+        raise ValueError(f"{dataset_id}: hidden-state store lacks current per-input evidence")
+    if body["artifact_id"] != _artifact_identity(body):
         raise ValueError(f"{dataset_id}: hidden-state manifest checksum differs")
+    if body.get("dataset_id") != dataset_id or set(body["files"]) != {STORE, HEAD}:
+        raise ValueError(f"{dataset_id}: hidden-state manifest has unexpected members")
     if verify:
         for name, checksum in body["files"].items():
             if file_sha256(target.parent / name) != checksum:
@@ -364,29 +379,71 @@ def read_manifest(dataset_id: str, *, verify=True) -> dict:
     return body
 
 
+def _artifact_identity(body):
+    return digest({k: v for k, v in body.items() if k not in {"created_utc", "artifact_id"}})
+
+
+def active_artifact_id(dataset_id):
+    """Check small sealed identities even when a worker already has this view in memory."""
+    from src.jev.inputs import _read_set
+
+    manifest = read_manifest(dataset_id, verify=False)
+    questions = paths.dataset_question_path(dataset_id)
+    with closing(sqlite3.connect(questions.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        active = _read_set(db, None)[0]
+    if manifest["recipe"]["input_set_id"] != active:
+        raise ValueError("Hidden-state store differs from the active prepared inputs")
+    return manifest["artifact_id"]
+
+
 def finalize(dataset_id: str) -> dict:
     """Publish the manifest only when every planned input is stored and every contract held."""
     folder = store_dir(dataset_id)
-    identity, recipe_inputs, summary, _, joint = input_plan(dataset_id)
+    with file_lock(folder / ".extraction.lock"):
+        return _finalize(dataset_id)
+
+
+def _finalize(dataset_id):
+    folder = store_dir(dataset_id)
+    identity, _, summary, matrix, joint = input_plan(dataset_id)
+    planned = np.unique(matrix[matrix >= 0]).tolist()
+    extraction = config()["extraction"]
+    tolerance = extraction["probability_tolerance"]
     store = folder / STORE
     with closing(_connect(store, readonly=True)) as db:
         recipe = json.loads(db.execute("SELECT value FROM meta WHERE key='recipe'").fetchone()[0])
-        count, worst = db.execute("SELECT COUNT(*), MAX(deviation) FROM vectors").fetchone()
-        keyless = {n for (n,) in db.execute("SELECT input_no FROM vectors WHERE options IS NULL")}
-        missing_keys = len(keyless & joint)
-        contracts = json.loads((db.execute("SELECT value FROM meta WHERE key='engine_check'").fetchone()
-                                or ["{}"])[0])
-    if recipe["input_set_id"] != identity or count != summary["unique_inputs"] or missing_keys:
-        raise ValueError(f"{dataset_id}: store incomplete ({count}/{summary['unique_inputs']} inputs)")
-    if worst > config()["extraction"]["probability_tolerance"] or contracts.get("status") != "passed":
+        stored = [n for (n,) in db.execute("SELECT input_no FROM vectors ORDER BY input_no")]
+        keyed = {n for (n,) in db.execute("SELECT input_no FROM vectors WHERE options IS NOT NULL")}
+        least, worst = db.execute("SELECT MIN(deviation), MAX(deviation) FROM vectors").fetchone()
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='engine_checks' AND type='table'").fetchone():
+            raise ValueError(f"{dataset_id}: hidden-state store lacks per-input engine checks")
+        checks = dict(db.execute("SELECT input_no, max_abs_difference FROM engine_checks ORDER BY input_no"))
+    if (recipe.get("schema") != SCHEMA or recipe.get("dataset_id") != dataset_id
+            or recipe["input_set_id"] != identity or stored != planned
+            or len(planned) != summary["unique_inputs"] or keyed != joint):
+        raise ValueError(f"{dataset_id}: stored inputs or joint option keys differ from the prepared input plan")
+    expected = planned[:extraction["engine_check_requests"]]
+    if (not expected or list(checks) != expected or least is None or least < 0
+            or not np.isfinite(worst) or worst > tolerance
+            or any(not np.isfinite(value) or not 0 <= value <= tolerance for value in checks.values())):
         raise ValueError(f"{dataset_id}: reproduction contract did not pass")
+    head_hash = file_sha256(folder / HEAD)
+    if recipe["head_sha256"] != head_hash:
+        raise ValueError(f"{dataset_id}: released head changed after extraction")
+    contracts = {"status": "passed", "requests": len(expected), "input_numbers": expected,
+                 "max_abs_difference": max(checks.values()), "tolerance": tolerance}
     body = {
         "schema": SCHEMA, "status": "complete", "dataset_id": dataset_id, "recipe": recipe,
-        "unique_inputs": count, "joint_inputs": len(joint), "max_probability_deviation": worst,
+        "unique_inputs": len(planned), "joint_inputs": len(joint), "max_probability_deviation": worst,
         "engine_check": contracts, "created_utc": datetime.now(UTC).isoformat(),
-        "files": {name: file_sha256(folder / name) for name in (STORE, HEAD)},
+        "files": {STORE: file_sha256(store), HEAD: head_hash},
     }
-    body["artifact_id"] = digest(body)
+    body["artifact_id"] = _artifact_identity(body)
+    if manifest_path(dataset_id).exists():
+        previous = read_manifest(dataset_id, verify=False)
+        if previous["artifact_id"] != body["artifact_id"]:
+            raise ValueError(f"{dataset_id}: the published hidden-state store changed")
+        return previous
     write_json(manifest_path(dataset_id), body)
     return body
 
@@ -405,7 +462,9 @@ def vector_frame(dataset, *, view: str, position: str, layer: int) -> pd.DataFra
     dataset_id = dataset.metadata.dataset_id
     manifest = read_manifest(dataset_id)
     identity, recipe, _, matrix, _ = input_plan(dataset_id)
-    if manifest["recipe"]["input_set_id"] != identity or len(matrix) != len(dataset.frame):
+    if (manifest["recipe"]["input_set_id"] != identity or len(matrix) != len(dataset.frame)
+            or recipe["data_identity"] != dataset.source["data_identity"]
+            or recipe["task_schema_sha256"] != dataset.metadata.fingerprint):
         raise ValueError("Hidden-state store differs from the active prepared inputs")
     hidden = manifest["recipe"]["hidden_size"]
     slots = [i for i, s in enumerate(recipe["slots"])
@@ -422,7 +481,8 @@ def vector_frame(dataset, *, view: str, position: str, layer: int) -> pd.DataFra
         frames.append(pd.DataFrame(values, columns=names, index=[f"csv:{i}" for i in range(len(matrix))]))
         groups.append(names)
     result = pd.concat(frames, axis=1)
-    result.attrs.update(feature_artifact_ids=[manifest["artifact_id"]], embedding_groups=groups)
+    result.attrs.update(feature_artifact_ids=[manifest["artifact_id"]], embedding_groups=groups,
+                        decision_model=manifest["recipe"].get("decision_model"))
     return result
 
 
@@ -437,11 +497,25 @@ def extract(dataset_id: str, *, execute=False, limit: int | None = None) -> dict
         raise RuntimeError("C1 extraction is disabled; enable representations.extraction and pass --execute")
     if not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("C1 extraction runs only inside a VSC B200 allocation")
+    if (os.environ.get("SLURM_CLUSTER_NAME"), os.environ.get("SLURM_JOB_PARTITION")) != ("mindwell", "gpu_b200"):
+        raise RuntimeError("C1 extraction requires Mindwell gpu_b200")
+    if limit is not None and limit < 1:
+        raise ValueError("A pilot limit must be positive")
+    with file_lock(store_dir(dataset_id) / ".extraction.lock"):
+        return _extract(dataset_id, extraction, limit)
+
+
+def _extract(dataset_id, extraction, limit):
+    from src.evaluation.design import decision_versions
     from src.jev.self_hosted import SelfHostedClient, inference_environment
 
     inference_environment()
     identity, recipe_inputs, summary, matrix, joint = input_plan(dataset_id)
     client = SelfHostedClient("strands", allow_model_runs=True)  # A100/storage/freeze/checkpoint gates
+    producer, = decision_versions(["strands"])
+    if (client.settings["model"] != producer["model"] or client.settings["version"] != producer["version"]
+            or client.settings["request_configuration"].get("runtime_revision") != producer.get("runtime_revision")):
+        raise ValueError("The Strands runtime differs from its registered model revision")
     torch = client.torch
     engine, model = client.model, client.model.model
     from strands_decider import modeling, prompting
@@ -467,18 +541,25 @@ def extract(dataset_id: str, *, execute=False, limit: int | None = None) -> dict
     recipe = {
         "schema": SCHEMA, "dataset_id": dataset_id, "input_set_id": identity,
         "settings_sha256": digest(client.settings), "checkpoint": client.settings["request_configuration"]["checkpoint_sha256"],
-        "model": client.settings["model"], "hidden_size": hidden, "num_hidden_layers": layers,
+        "model": client.settings["model"], "decision_model": producer,
+        "hidden_size": hidden, "num_hidden_layers": layers,
         "positions": list(POSITIONS), "layers": list(LAYERS), "block": [list(b) for b in BLOCK],
         "option_ends": "joint_inputs_layer_24", "dtype": "float16",
         "head_sha256": file_sha256(folder / HEAD), "code_sha256": file_sha256(Path(__file__)),
     }
     store = folder / STORE
+    if store.exists():
+        with closing(_connect(store, readonly=True)) as db:
+            saved = db.execute("SELECT value FROM meta WHERE key='recipe'").fetchone()
+            if not saved or json.loads(saved[0]) != recipe:
+                raise ValueError("Existing hidden-state inputs belong to another recipe")
     done = done_inputs(store)
+    check_ids = set(np.unique(matrix[matrix >= 0])[:extraction["engine_check_requests"]].tolist())
     tolerance = extraction["probability_tolerance"]
     backend = engine.tok.backend_tokenizer
     backend.no_padding()
     backend.no_truncation()
-    checked, engine_deviation, pending, started, new = 0, 0.0, [], time.perf_counter(), 0
+    pending, checks, started, new = [], [], time.perf_counter(), 0
     log = paths.logs_dir("representations") / "strands_hidden" / f"{dataset_id}_{os.environ['SLURM_JOB_ID']}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     for record in iter_prepared_inputs(paths.dataset_question_path(dataset_id), input_set_id=identity):
@@ -524,37 +605,32 @@ def extract(dataset_id: str, *, execute=False, limit: int | None = None) -> dict
             keys16 = keys[0].cpu().numpy().astype(np.float16)
         deviation = check_reproduction(block[block_index("answer", 24)], keys16, head, temperature,
                                        probabilities, tolerance=tolerance)
-        if checked < extraction["engine_check_requests"]:
+        if number in check_ids:
             response = client.evaluate(prepared_request(record, settings=client.settings,
                                                         provenance={"dataset_id": dataset_id}))
             published = published_vector(response["publisher_response"]["answers"][QUESTION_ID], kind,
                                          len(probabilities))
-            engine_deviation = max(engine_deviation, float(np.max(np.abs(published - probabilities))))
-            checked += 1
-            if engine_deviation > tolerance:
+            engine_deviation = float(np.max(np.abs(published - probabilities)))
+            if not np.isfinite(engine_deviation) or engine_deviation > tolerance:
                 raise ValueError(f"Strands engine answer differs from the extraction forward ({engine_deviation:.5f})")
+            checks.append((number, engine_deviation))
         pending.append(encode_record(number, kind, positions, block,
                                      keys16 if number in joint else None, probabilities, deviation))
         new += 1
         if len(pending) >= extraction["commit_every"]:
-            write_records(store, recipe, pending)
-            pending = []
+            write_records(store, recipe, pending, checks)
+            pending, checks = [], []
             print(f"{dataset_id}: {len(done) + new:,}/{summary['unique_inputs']:,} inputs", flush=True)
     if pending:
-        write_records(store, recipe, pending)
-    if checked:
-        with closing(_connect(store)) as db, db:
-            db.execute("INSERT OR REPLACE INTO meta VALUES ('engine_check', ?)", (json.dumps(
-                {"status": "passed", "requests": checked, "max_abs_difference": engine_deviation,
-                 "tolerance": tolerance}),))
+        write_records(store, recipe, pending, checks)
     report = {"dataset_id": dataset_id, "new_inputs": new, "stored": len(done) + new,
               "planned": summary["unique_inputs"], "seconds": time.perf_counter() - started,
               "peak_gpu_allocated_bytes": torch.cuda.max_memory_allocated(),
               "job_id": os.environ.get("SLURM_JOB_ID")}
     with log.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(report) + "\n")
-    if limit is None and report["stored"] == report["planned"]:
-        report["manifest"] = finalize(dataset_id)["artifact_id"]
+    if limit is None:
+        report["manifest"] = _finalize(dataset_id)["artifact_id"]
     return report
 
 

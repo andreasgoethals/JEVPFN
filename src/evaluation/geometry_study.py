@@ -84,21 +84,33 @@ def relation(left, right, seed, permutations=19):
     )
 
 
-def run(dataset_id, *, pilot=False):
+def geometry_protocol(dataset_id, source, cfg, main, members):
+    from src.evaluation.design import decision_versions
+    from src.evaluation.qualification import decision_artifact_pins
+    from src.utils.provenance import code_identity
+
+    return {
+        "source": source, "config": digest(cfg), "decision_model_versions": decision_versions(members),
+        "implementation": code_identity(["src/evaluation/geometry_study.py", "src/evaluation/geometry.py",
+                                         "src/evaluation/decision_comparison.py"]),
+        "providers": {p: [main["feature_selectors"].get(p), decision_artifact_pins(main, dataset_id, p)]
+                      for p in members},
+        "decision_roster": members,
+    }
+
+
+def run(dataset_id, *, pilot=False, cohort=None):
+    from src.evaluation.benchmark_export import cohort_key, cohort_record
+
     cfg = load_yaml("rq1/geometry")
     main = load_yaml("experiment_1/main")
+    members = cohort_record(cohort, main=main)["decision_roster"]
+    folder = cohort_key(cohort, main=main)
     entry = next(e for e in selected_entries(load_catalog(), main) if e["id"] == dataset_id)
     dataset = load_dataset(entry, allow_download=False)
     from src.evaluation.qualification import decision_artifact_pins, decision_selector
-    from src.utils.serialization import file_sha256
-
-    protocol = {
-        "source": dataset.source["data_identity"], "config": digest(cfg),
-        "implementation": file_sha256(Path(__file__)),
-        "providers": {p: [main["feature_selectors"].get(p), decision_artifact_pins(main, dataset_id, p)]
-                      for p in main["candidate_extractors"]},
-    }
-    pilot_path = paths.results_dir("geometry_pilots", phase="rq1") / (dataset_id + ".json")
+    protocol = geometry_protocol(dataset_id, dataset.source["data_identity"], cfg, main, members)
+    pilot_path = paths.results_dir("geometry_pilots", phase="rq1") / folder / (dataset_id + ".json")
     if not pilot:
         if not pilot_path.is_file():
             raise ValueError("Full geometry requires a current pilot for this dataset")
@@ -167,7 +179,7 @@ def run(dataset_id, *, pilot=False):
     rows, missing, signatures = [], [], {}
     from src.evaluation.features import match_artifact_pins
 
-    for provider in main["candidate_extractors"]:
+    for provider in members:
         selected = inventory[
             inventory.provider.eq(provider) & inventory.representation.eq("per_column")
         ]
@@ -240,7 +252,7 @@ def run(dataset_id, *, pilot=False):
             {r["provider"]: r["artifact_id"] for r in prior["comparisons"]} !=
             {r["provider"]: r["artifact_id"] for r in rows}):
         raise ValueError("The pilot and full geometry use different saved artifacts")
-    destination = paths.results_dir("geometry_pilots" if pilot else "geometry", phase="rq1") / (dataset_id + ".json")
+    destination = pilot_path if pilot else paths.results_dir("geometry", phase="rq1") / folder / (dataset_id + ".json")
     write_json(destination, body)
     return destination
 
@@ -248,6 +260,7 @@ def run(dataset_id, *, pilot=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument("--cohort", metavar="COHORT")
     parser.add_argument("--pilot", action="store_true", help="0B readback with at most 12 distinct texts per field")
     args = parser.parse_args()
-    print(run(args.dataset, pilot=args.pilot))
+    print(run(args.dataset, pilot=args.pilot, cohort=args.cohort))

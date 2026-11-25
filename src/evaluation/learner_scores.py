@@ -16,8 +16,8 @@ Units and scores (fixed before results):
   headline metric (binary ROC-AUC, multiclass macro OvR ROC-AUC, regression R2). All arms of a
   dataset and predictor share one denominator, so per-dataset ranks equal raw-metric ranks and
   differences between arms stay commensurable across the 18 datasets. A baseline >= 1 (zero
-  headroom) leaves the gain UNDEFINED: no floor is applied here (unlike the descriptive
-  ``headroom_share`` of `group_b`), and inference stops.
+  headroom) leaves the gain UNDEFINED: the descriptive and confirmatory
+  calculations both leave the value missing.
 * Medians over decision models use the configured roster (never the results present); a
   dataset lacking any roster model leaves the median undefined.
 * A2: `study_reports.POOLED_SKILL` per dataset (log loss or RPS skill of the averaged over the
@@ -73,11 +73,11 @@ class Design:
     a2_datasets: dict = field(default_factory=dict)
 
 
-def planned_design() -> Design:
-    """The configured design: 18 datasets, 17 decision models, every planned arm."""
+def planned_design(cohort=None) -> Design:
+    """The configured datasets, complete selected decision-model cohort, and planned arms."""
     from src.data.loaders import load_catalog
     from src.data.selection import selected_entries
-    from src.evaluation.campaign import benchmark_plan
+    from src.evaluation.benchmark_export import comparison_plan, decision_roster
     from src.utils.config import load_yaml
 
     main = load_yaml("experiment_1/main")
@@ -88,12 +88,12 @@ def planned_design() -> Design:
     # named text fields; the catalog's text-column count fixes the eligible datasets before
     # results (16 of 18: Jigsaw Toxicity and Product Sentiment have one text column).
     multi_field = [e["id"] for e in entries if e["paper_summary"]["text_columns"] >= 2]
-    plan = pd.DataFrame(benchmark_plan())
+    plan = pd.DataFrame(comparison_plan(cohort))
     plan["model_id"] = plan["model"]
     plan["representation"] = [group_b.representation(r) for r in plan.to_dict("records")]
     rule = load_yaml("rq2/when_text_helps")["predict_in_advance"]
     multiclass = [d for d, t in datasets.items() if t == "multiclass_classification"]
-    return Design(datasets=datasets, roster=tuple(main["candidate_extractors"]), plan=plan,
+    return Design(datasets=datasets, roster=tuple(decision_roster(cohort)), plan=plan,
                   lodo_input_sets=tuple(rule["input_sets"]), lodo_threshold=float(rule["use_threshold"]),
                   a2_datasets={"wording": list(datasets), "option_order": multiclass, "field_order": multi_field})
 
@@ -114,14 +114,16 @@ def arm_means(folds: pd.DataFrame, extra=()) -> pd.DataFrame:
     keys = ["dataset_id", "task_type", "model_id", "representation", *extra]
     head = group_b.headline(folds)
     if head.empty:
-        return pd.DataFrame(columns=[*keys, "mean", "split_id", "complete"])
+        return pd.DataFrame(columns=[*keys, "mean", "split_id", "checkpoint_id", "complete"])
     if head.duplicated([*keys, "outer_fold"]).any():
         raise ValueError("Several fold records of one arm; select one campaign")
+    group_b.validate_fold_identities(head, extra=extra)
     identity = head.groupby(keys, dropna=False)[["split_id", "checkpoint_id"]].nunique(dropna=False)
     if identity.gt(1).any(axis=None):
         raise ValueError("A dataset mean must use five folds of one split and checkpoint")
     out = head.groupby(keys, dropna=False, as_index=False).agg(
-        mean=("value", "mean"), split_id=("split_id", "first"), folds=("outer_fold", "nunique"),
+        mean=("value", "mean"), split_id=("split_id", "first"), checkpoint_id=("checkpoint_id", "first"),
+        folds=("outer_fold", "nunique"),
         finite=("value", lambda v: int(np.isfinite(v.to_numpy(float)).sum())))
     out["complete"] = out.folds.eq(5) & out.finite.eq(5)
     return out.drop(columns=["folds", "finite"])
@@ -130,11 +132,14 @@ def arm_means(folds: pd.DataFrame, extra=()) -> pd.DataFrame:
 def gains_over_baseline(means: pd.DataFrame, extra=()) -> pd.DataFrame:
     """Normalised gain of every arm over its predictor's baseline, with a cell status."""
     pair = ["dataset_id", "task_type", "model_id", *extra]
-    base = means[means.representation.eq(BASELINE)][[*pair, "mean", "split_id", "complete"]]
-    base = base.rename(columns={"mean": "baseline", "split_id": "baseline_split", "complete": "base_ok"})
+    base = means[means.representation.eq(BASELINE)][[*pair, "mean", "split_id", "checkpoint_id", "complete"]]
+    base = base.rename(columns={"mean": "baseline", "split_id": "baseline_split",
+                                "checkpoint_id": "baseline_checkpoint", "complete": "base_ok"})
     data = means.merge(base, on=pair, how="left")
     if (data.base_ok.notna() & data.split_id.ne(data.baseline_split)).any():
         raise ValueError("An arm and its baseline use different splits")
+    if (data.base_ok.notna() & data.checkpoint_id.ne(data.baseline_checkpoint)).any():
+        raise ValueError("An arm and its baseline use different predictor checkpoints")
     data["score"] = normalised_gain(data["mean"], data["baseline"])
     data["status"] = np.select(
         [data.baseline.isna(), ~data.complete.eq(True) | ~data.base_ok.eq(True),
@@ -176,6 +181,7 @@ def fold_values(folds: pd.DataFrame, roster=(), *, prefixes=(), extra=()) -> pd.
     head = group_b.headline(folds)
     if head.empty:
         return pd.DataFrame(columns=[*keys, "score"])
+    group_b.validate_fold_identities(head, extra=extra)
     if head.duplicated(keys).any():
         raise ValueError("Several fold records of one arm; select one campaign")
     out = head[keys].assign(score=head["value"].astype(float))
@@ -326,11 +332,14 @@ def b4_groups(frames, design: Design) -> list[Group]:
 
 def b5_groups(frames, design: Design) -> list[Group]:
     """Native systems: five-fold mean headline metric (descriptive; ranks per dataset)."""
-    means = arm_means(frames["folds"])
+    # The B5 export also carries structured baselines for its separate reference plots.
+    folds = frames["folds"]
+    native = folds if folds.empty else folds[folds.phase.eq("experiment_4")]
+    means = arm_means(native)
     means = means.assign(score=means["mean"].where(means.complete),
                          status=np.where(means.complete, OK, INCOMPLETE))
     learners = _planned(design, "experiment_4")
-    folds = _fold_grid(fold_values(frames["folds"]), "native_systems", learners, design.datasets)
+    folds = _fold_grid(fold_values(native), "native_systems", learners, design.datasets)
     return [Group("native_systems", learners, None, _grid(means, "native_systems", learners, design.datasets),
                   folds=folds)]
 
@@ -358,10 +367,14 @@ def b3_groups(frames, design: Design) -> list[Group]:
     (predicted > threshold) else 0, exactly as `group_b.lodo_evaluation` averages it.
     """
     table = frames["lodo_predictions"]
+    if table.empty:
+        table = pd.DataFrame(columns=["model_id", "dataset_id", "input_set", "actual", "predicted"])
+    elif "outcome" not in table or not table.outcome.eq("headroom_share").fillna(False).all():
+        raise ValueError("The all-dataset B3 regret comparison requires headroom-share outcomes")
     learners = [*(f"rule/{s}" for s in design.lodo_input_sets), "always", "never"]
     out = []
     for model in _main_models(design):
-        part = table[table.model_id.eq(model)] if not table.empty else table
+        part = table[table.model_id.eq(model)]
         rows = []
         for dataset, g in part.groupby("dataset_id"):
             actual = g.actual.to_numpy(float)
@@ -432,6 +445,17 @@ def a2_groups(frames, design: Design) -> list[Group]:
             frame = part.rename(columns={"dataset": "dataset_id", "provider": "representation",
                                          "skill": "score"})[["dataset_id", "representation", "score"]]
             frame["status"] = np.where(np.isfinite(frame.score.to_numpy(float)), OK, UNDEFINED)
+            coverage = frames.get("coverage")
+            if factor == "field_order" and coverage is not None and not coverage.empty:
+                fields = coverage[coverage.variant.eq("field_order")]
+                canonical = fields[fields.status.eq("canonicalized_by_runtime") & fields["count"].gt(0)]
+                other = fields[fields.status.ne("canonicalized_by_runtime") & fields["count"].gt(0)]
+                unavailable = set(zip(canonical.dataset, canonical.provider)) - set(zip(other.dataset, other.provider))
+                existing = set(zip(frame.dataset_id, frame.representation))
+                absent = [{"dataset_id": d, "representation": p, "score": np.nan, "status": "canonicalized_by_runtime"}
+                          for d, p in sorted(unavailable - existing)]
+                if absent:
+                    frame = pd.concat([frame, pd.DataFrame(absent)], ignore_index=True)
             reference = pd.DataFrame({"dataset_id": list(eligible), "representation": REFERENCE,
                                       "score": 0.0, "status": OK})
             datasets = {d: design.datasets[d] for d in eligible}
@@ -466,20 +490,19 @@ APPLICATIONS = {
 }
 
 
-def read_frames(source: str):
+def read_frames(source: str, *, cohort=None):
     """(frames, receipt) of one verified export; empty frames while it is awaited."""
-    from src.evaluation import benchmark_export, group_c, robustness_export, study_export
+    from src.evaluation import benchmark_export, group_c, robustness_export
 
     if source == "A1":
         from src.evaluation import comparison_report
 
-        return study_export.read_export(comparison_report.report_path(), schema=comparison_report.SCHEMA,
-                                        tables=comparison_report.TABLES)
+        return comparison_report.read_tables(comparison_report.report_config(cohort), cohort=cohort)
     if source == "A2":
-        return robustness_export.read_export()
+        return robustness_export.read_export(cohort=cohort)
     if source in group_c.STUDIES:
         return group_c.read(source)
-    return benchmark_export.read(source)
+    return benchmark_export.read(source, cohort=cohort)
 
 
 def application_groups(name: str, frames: dict, design: Design | None = None) -> list[Group]:
@@ -499,10 +522,11 @@ def application_scores(name: str, frames: dict, design: Design | None = None) ->
 
 
 def rope_for(score_type: str, framework: dict):
-    """The prespecified ROPE; headline-metric and regret scores need one value shared by the
-    three headline metrics. None when the plan declares none (inference then stops)."""
+    """Look up the prespecified ROPE in the units of the score."""
     rope = framework.get("rope") or {}
-    if score_type in (HEADLINE, REGRET):
+    if score_type == REGRET:
+        return rope.get(NORMALISED_GAIN)
+    if score_type == HEADLINE:
         values = {rope.get(m) for m in HEADLINES.values()}
         return values.pop() if len(values) == 1 and None not in values else None
     return rope.get(score_type)
@@ -518,7 +542,7 @@ def framework_state(analysis: dict | None = None) -> dict:
 
 
 def run_application(name: str, frames: dict | None = None, *, analysis: dict | None = None,
-                    design: Design | None = None, alpha: float = 0.05) -> dict:
+                    design: Design | None = None, alpha: float = 0.05, cohort=None) -> dict:
     """Compare the learners of one application, only when the framework is approved.
 
     Returns a record: ``awaiting_owner_approval`` (nothing read), ``not_applicable`` (no
@@ -535,23 +559,38 @@ def run_application(name: str, frames: dict | None = None, *, analysis: dict | N
     entry = (framework.get("application") or {}).get(name)
     if entry is None:
         raise KeyError(f"No framework.application entry {name}")
-    base = {"application": name, "framework_status": framework.get("status"), "procedure": entry}
+    scope = entry.get("holm_family", "application_group")
+    if entry.get("inference") in {"descriptive", "descriptive_only"}:
+        scope = None
+    base = {"application": name, "framework_status": framework.get("status"), "procedure": entry,
+            "multiplicity_scope": scope}
     if framework.get("status") != APPROVED:
         return base | {"status": AWAITING, "note": "framework.status is not 'approved'; no export was read "
                        "and no test was run."}
     if name not in APPLICATIONS:
         return base | {"status": "not_applicable", "note": f"inference: {entry.get('inference')}"}
+    from src.evaluation import benchmark_export
+
+    base.update(benchmark_export.cohort_record(cohort) if design is None else {
+        "decision_cohort": cohort or "supplied_design", "decision_models": len(design.roster),
+        "decision_roster": list(design.roster)})
     spec = APPLICATIONS[name]
     receipt = {}
     if frames is None:
-        frames, receipt = read_frames(spec.source)
+        frames, receipt = read_frames(spec.source, cohort=cohort) if cohort is not None else read_frames(spec.source)
         if not frames:
             return base | {"status": "awaiting_export", "receipt": receipt}
     rope = rope_for(spec.score_type, framework)
     out = base | {"status": "compared", "score_type": spec.score_type, "rope": rope,
                   "higher_is_better": spec.higher_is_better, "receipt": receipt, "groups": []}
-    for group in application_groups(name, frames, design):
+    try:
+        groups = application_groups(name, frames, design or planned_design(cohort))
+    except ValueError as error:
+        return out | {"status": "stopped", "reason": str(error)}
+    for group in groups:
+        descriptive = entry.get("inference") == "descriptive" or group.group.endswith("/average_vs_mean_single")
         record = {"group": group.group, "learners": group.learners, "control": group.control,
+                  "inference": "descriptive" if descriptive else entry.get("inference"),
                   "excluded_by_design": group.excluded_by_design}
         if group.folds is not None:
             record["fold_level"] = fold_level_tables(group, higher_is_better=spec.higher_is_better)
@@ -565,7 +604,15 @@ def run_application(name: str, frames: dict | None = None, *, analysis: dict | N
             continue
         omnibus, table = compare_learners(
             group.scores[["dataset_id", "learner", "score"]], higher_is_better=spec.higher_is_better,
-            control=group.control, rope=rope, alpha=alpha)
+            control=group.control, rope=rope, alpha=alpha,
+            pairwise=not descriptive)
+        table["holm_family"] = f"{name}/{group.group}"
+        table["holm_family_size"] = len(table)
+        if name == "C2_strands_adaptation":
+            from src.evaluation.group_c import c2_contrasts
+
+            named = {frozenset((c["a"], c["b"])) for c in c2_contrasts() if "context" not in c}
+            table["named_recipe_contrast"] = [frozenset((a, b)) in named for a, b in zip(table.learner, table.versus)]
         out["groups"].append(record | {"status": "compared", "omnibus": omnibus, "table": table})
     return out
 
@@ -604,8 +651,9 @@ def summary_record(result: dict) -> dict:
             | ({"fold_level": g["fold_level"]["status"],
                 "pama_excluded_incomplete_cells": int(g["fold_level"]["pama"].excluded_incomplete_cells.iloc[0])}
                if g.get("fold_level", {}).get("status") == "reported" else {})
-            | ({"iman_davenport_p": g["omnibus"]["iman_davenport_p"],
-                "holm_significant": int((g["table"].p_holm < g["omnibus"]["alpha"]).sum())}
+            | ({"omnibus_status": g["omnibus"]["status"], "iman_davenport_p": g["omnibus"]["iman_davenport_p"],
+                "holm_tests": len(g["table"]),
+                "holm_significant": int((g["table"].p_holm < g["omnibus"]["alpha"]).sum()) if len(g["table"]) else None}
                if "omnibus" in g else {})
             for g in result["groups"]]
     return keep
@@ -622,6 +670,7 @@ def applications_table(analysis: dict | None = None) -> pd.DataFrame:
         spec = APPLICATIONS.get(name)
         rows.append({"application": name, "comparison": entry.get("comparison"),
                      "procedure": entry.get("procedure"), "inference": entry.get("inference"),
+                     "holm_family": entry.get("holm_family"),
                      "score": spec.score_type if spec else None,
                      "export": spec.source if spec else None,
                      "gate": "approved" if framework.get("status") == APPROVED else framework.get("status")})
@@ -680,7 +729,7 @@ def confirmatory_forest_table(pooled: pd.DataFrame, contrasts, results: pd.DataF
     """One row per declared pooled contrast for `visualize.overview.confirmatory_forest`: the
     median oriented per-dataset difference with a 95% percentile interval from resampling
     datasets, the Holm p over the whole family and the Bayesian signed-rank posteriors."""
-    from src.evaluation.inference import _pooled_values
+    from src.evaluation.inference import POOLED_CONTRASTS, _pooled_values
 
     rows = []
     rng = np.random.default_rng(seed)
@@ -691,12 +740,13 @@ def confirmatory_forest_table(pooled: pd.DataFrame, contrasts, results: pd.DataF
                      "low": float(np.quantile(medians, 0.025)), "high": float(np.quantile(medians, 0.975)),
                      "p_holm": result["p_holm"], "p_left": result.get("bayes_p_worse", np.nan),
                      "p_rope": result.get("bayes_p_equivalent", np.nan),
-                     "p_right": result.get("bayes_p_better", np.nan), "datasets": len(values)})
+                     "p_right": result.get("bayes_p_better", np.nan), "datasets": len(values),
+                     "score_type": POOLED_CONTRASTS[contrast["type"]], "rope": result.get("bayes_rope", np.nan)})
     return pd.DataFrame(rows)
 
 
 def run_confirmatory_family(frames_by_application: dict | None = None, *, analysis: dict | None = None,
-                            design: Design | None = None, n_boot: int = group_b.N_BOOT) -> dict:
+                            design: Design | None = None, n_boot: int = group_b.N_BOOT, cohort=None) -> dict:
     """Run the declared confirmatory family (`config/05_synthesis/analysis.yaml` ``contrasts``).
 
     Returns a record with ``status``: ``awaiting_owner_approval`` (plan not approved; nothing
@@ -706,14 +756,23 @@ def run_confirmatory_family(frames_by_application: dict | None = None, *, analys
     `inference.pooled_confirmatory_tests`, Holm over every declared contrast, and ``forest`` for
     `visualize.overview.confirmatory_forest`).
     """
+    from src.evaluation.design import incremental_cohort
     from src.evaluation.inference import pooled_confirmatory_tests
     from src.utils.config import load_yaml
 
     analysis = analysis or load_yaml("synthesis/analysis")
     state = confirmatory_family_state(analysis)
-    out = {"family": state}
+    from src.evaluation import benchmark_export
+
+    cohort_info = (benchmark_export.cohort_record(cohort) if design is None else {
+        "decision_cohort": cohort or "supplied_design", "decision_models": len(design.roster),
+        "decision_roster": list(design.roster)})
+    out = {"family": state, **cohort_info}
     if state["status"] != "ready_to_run":
         return out | {"status": AWAITING}
+    if incremental_cohort(cohort_info["decision_cohort"]):
+        return out | {"status": "not_applicable", "reason":
+                      "This cohort selects incremental fits. Use the full named edition for the expanded primary release."}
     contrasts = analysis["contrasts"]
     if any("type" not in c for c in contrasts):
         return out | {"status": "stopped", "reason": "per-task contrasts are declared; pass their dataset "
@@ -721,19 +780,85 @@ def run_confirmatory_family(frames_by_application: dict | None = None, *, analys
     frames_by_application = dict(frames_by_application or {})
     names = list(dict.fromkeys(c["application"] for c in contrasts))
     missing = []
+    out["export_receipts"] = {}
     for name in names:
         if name not in frames_by_application:
-            frames, _ = read_frames(APPLICATIONS[name].source)
+            frames, receipt = (read_frames(APPLICATIONS[name].source, cohort=cohort) if cohort is not None
+                         else read_frames(APPLICATIONS[name].source))
             if not frames:
                 missing.append(name)
                 continue
+            if design is None and any(receipt.get(k) != cohort_info[k] for k in
+                                      ("decision_cohort", "decision_roster", "decision_model_versions", "roster_sha256")):
+                return out | {"status": "stopped", "reason": f"{name} export has different decision-model versions or cohort"}
+            out["export_receipts"][name] = {k: receipt.get(k) for k in
+                                            ("sha256", "receipt_sha256", "config_sha256", "roster_sha256")}
             frames_by_application[name] = frames
     if missing:
         return out | {"status": "awaiting_export", "missing": missing}
-    pooled = pooled_scores({n: frames_by_application[n] for n in names}, design)
     try:
+        from src.evaluation.group_b_views import merged_heads
+
+        # Shared baseline and decision measurements in separately exported studies must agree.
+        merged_heads(*(frames_by_application[n].get("folds") for n in names))
+        pooled = pooled_scores({n: frames_by_application[n] for n in names}, design or planned_design(cohort))
         results = pooled_confirmatory_tests(pooled, analysis)
     except ValueError as error:
         return out | {"status": "stopped", "reason": str(error)}
     forest = confirmatory_forest_table(pooled, contrasts, results, n_boot=n_boot)
+    for table in (results, forest):
+        table["decision_cohort"] = cohort_info["decision_cohort"]
+        table["decision_models"] = cohort_info["decision_models"]
+        table["decision_roster"] = ",".join(cohort_info["decision_roster"])
+        if "roster_sha256" in cohort_info:
+            table["roster_sha256"] = cohort_info["roster_sha256"]
     return out | {"status": "compared", "results": results, "forest": forest}
+
+
+def publish_confirmatory(result, *, target=None, analysis=None):
+    """Archive a full primary family and its plot data under the exact decision roster."""
+    from src.evaluation import study_export
+    from src.evaluation.design import decision_providers, incremental_cohort
+    from src.utils import paths
+    from src.utils.config import load_yaml
+    from src.utils.provenance import code_identity
+    from src.utils.serialization import digest
+
+    if result["status"] != "compared":
+        raise ValueError("Only a completed confirmatory family can be published")
+    roster = list(result["decision_roster"])
+    cohort = result["decision_cohort"]
+    if incremental_cohort(cohort):
+        raise ValueError("Use the full named edition to publish the expanded primary release")
+    versions = result.get("decision_model_versions")
+    if (not isinstance(versions, list) or not versions or result.get("decision_models") != len(roster)
+            or any(not isinstance(v, dict) or any(not isinstance(v.get(k), str) or not v[k].strip()
+                                                   for k in ("provider", "model", "version")) for v in versions)
+            or [v.get("provider") for v in versions] != roster or digest(versions) != result.get("roster_sha256")
+            or roster != list(decision_providers(cohort))):
+        raise ValueError("A primary archive requires the recorded ordered cohort, exact model versions and their digest")
+    signature = result["roster_sha256"]
+    if target is None:
+        target = (paths.notebook_artifacts("general/5_synthesis", kind="results") / "confirmatory"
+                  / f"{cohort}-{signature[:16]}.zip")
+    plan = analysis or load_yaml("synthesis/analysis")
+    contrasts = plan["contrasts"]
+    if len(result["results"]) != len(contrasts) or len(result["forest"]) != len(contrasts):
+        raise ValueError("The archived tables must cover every declared contrast")
+    for table in (result["results"], result["forest"]):
+        for column, expected in (("roster_sha256", signature), ("decision_roster", ",".join(roster)),
+                                 ("decision_cohort", cohort), ("decision_models", len(roster))):
+            if column in table and not table[column].eq(expected).fillna(False).all():
+                raise ValueError(f"Primary table {column} differs from the recorded analysis cohort")
+    code = code_identity(["src/evaluation/learner_scores.py", "src/evaluation/group_b.py",
+                          "src/evaluation/inference.py", "src/evaluation/group_b_views.py"])
+    return study_export.write_export(target, {"results": result["results"], "forest": result["forest"]},
+                                     schema="jevpfn.confirmatory_family.v1",
+                                     identity=digest({"contrasts": plan["contrasts"], "framework": plan["framework"],
+                                                      "decision_cohort": cohort, "decision_model_versions": versions, "code": code}),
+                                     origin="pooled_confirmatory_tests",
+                                     extra={"decision_cohort": cohort, "decision_roster": roster,
+                                            "decision_models": len(roster), "decision_model_versions": versions,
+                                            "roster_sha256": signature,
+                                            "contrasts": len(plan["contrasts"]),
+                                            "source_exports": result.get("export_receipts", {})})

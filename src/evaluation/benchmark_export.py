@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation import group_b, study_export
+from src.evaluation.design import cohort_name, cohort_record
 from src.evaluation.endpoints import HEADLINES
 from src.utils import paths
 from src.utils.config import load_yaml
@@ -65,22 +66,54 @@ def tables_for(study):
     return COMMON_TABLES + EXTRA_TABLES[study]
 
 
-def export_path(study) -> Path:
+def cohort_key(cohort=None, *, main=None):
+    record = cohort_record(cohort, main=main)
+    return f"{record['decision_cohort']}-{record['roster_sha256'][:16]}"
+
+
+def export_path(study, cohort=None) -> Path:
     spec = STUDIES[study]
-    return paths.results_dir("group_b", spec["file"], phase=spec["phase"])
+    file = Path(spec["file"])
+    return paths.results_dir("group_b", f"{file.stem}.{cohort_key(cohort)}{file.suffix}", phase=spec["phase"])
 
 
-def analysis_identity(study) -> str:
+def scientific_configs(names, *, roster=None):
+    from src.evaluation.acceptance import EXECUTION_FIELDS
+
+    configs = {}
+    for name in names:
+        cfg = {k: v for k, v in load_yaml(name).items() if k not in EXECUTION_FIELDS}
+        if roster is not None:
+            cfg.pop("initial_decision_providers", None)
+            cfg.pop("decision_extensions", None)
+            if "candidate_extractors" in cfg:
+                cfg["candidate_extractors"] = [p for p in cfg["candidate_extractors"] if p in roster]
+            if "feature_selectors" in cfg:
+                cfg["feature_selectors"] = {p: v for p, v in cfg["feature_selectors"].items() if p in roster}
+            if "dataset_feature_artifacts" in cfg:
+                pins = {d: {p: v for p, v in providers.items() if p in roster}
+                        for d, providers in cfg["dataset_feature_artifacts"].items()}
+                cfg["dataset_feature_artifacts"] = {d: v for d, v in pins.items() if v}
+        configs[name] = cfg
+    return configs
+
+
+def analysis_identity(study, cohort=None) -> str:
     from src.utils.provenance import code_identity
 
-    configs = {name: load_yaml(name) for name in (
-        "experiment_1/main", "experiment_1/protocol", "experiment_2/embeddings", "experiment_3/tar",
-        "experiment_4/native_text", "rq2/when_text_helps", "rq2/text_column_refits",
-        "data_efficiency/data_efficiency")}
-    return digest({"schema": SCHEMA, "study": study, "configs": configs,
-                   "analysis": code_identity(["src/evaluation/group_b.py",
-                                              "src/evaluation/data_efficiency.py",
-                                              "src/evaluation/benchmark_export.py"])})
+    configs = scientific_configs(("experiment_1/main", "experiment_1/protocol", "experiment_2/embeddings",
+                                  "experiment_3/tar", "experiment_4/native_text", "rq2/when_text_helps",
+                                  "rq2/text_column_refits", "data_efficiency/data_efficiency"),
+                                 roster=decision_roster(cohort))
+    modules = ["group_b", "benchmark_export", "campaign", "design", "data_efficiency", "endpoints",
+               "records", "study_export"]
+    if study == "B2":
+        modules.extend(["attribution", "complementarity", "row_benefit", "moderators"])
+    if study == "B3":
+        modules.extend(["group_a", "group_b_views", "moderators", "moderator_statistics", "row_benefit", "comparison_report",
+                        "robustness_export", "study_reports"])
+    return digest({"schema": SCHEMA, "study": study, "configs": configs, "cohort": cohort_record(cohort),
+                   "analysis": code_identity([f"src/evaluation/{name}.py" for name in modules])})
 
 
 def recipe_fields(recipe: dict) -> dict:
@@ -110,19 +143,80 @@ def arm_recipe_id(recipe: dict) -> str:
     return digest({k: v for k, v in recipe.items() if k != "outer_fold"})
 
 
-def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
+def cohort_recipes(recipes, scope, main):
+    """Select shared controls and decisions produced by this release's registered versions."""
+    from src.evaluation.features import ADAPTED, HIDDEN_FEATURE_SETS, decision_feature_set
+
+    selectors = {}
+    producers = {}
+    for version in scope["decision_model_versions"]:
+        provider = version["provider"]
+        registered = {k: version[k] for k in ("provider", "model", "version")}
+        producers[provider] = version
+        explicit = main.get("feature_selectors", {}).get(provider) or {}
+        if any(k in explicit and explicit[k] != v for k, v in registered.items()):
+            raise ValueError(f"The {provider} feature selector differs from the registered model or version")
+        selectors[provider] = {**registered, **explicit}
+    pins = main.get("dataset_feature_artifacts", {})
+    for recipe in recipes:
+        rep = recipe.get("representation_recipe") or {}
+        if recipe["feature_set"] in (*HIDDEN_FEATURE_SETS, ADAPTED):
+            component = "adaptation" if recipe["feature_set"] == ADAPTED else "hidden"
+            recorded = (rep.get(component) or {}).get("decision_model")
+            if (not isinstance(recorded, dict) or not isinstance(recorded.get("provider"), str)
+                    or producers.get(recorded["provider"]) != recorded):
+                continue
+        provider = rep.get("provider")
+        mode = group_b.MODE_LABELS.get(decision_feature_set(recipe["feature_set"]))
+        if mode is None:
+            if not provider and not rep.get("providers") and not rep.get("selector"):
+                yield recipe
+            continue
+        saved = rep.get("selector")
+        if (provider not in selectors or not isinstance(saved, dict)
+                or rep.get("providers", [provider]) != [provider]
+                or any(k not in saved or saved[k] != v for k, v in selectors[provider].items())):
+            continue
+        pinned = pins.get(recipe["dataset_id"], {}).get(provider)
+        if pinned is not None:
+            # campaign assembles per-column then joint decision blocks before adding embeddings.
+            modes = ("per_column", "joint") if mode == "both" else (mode,)
+            expected = [pinned.get(m) for m in modes]
+            artifacts = recipe.get("feature_artifact_ids") or []
+            if not all(expected) or artifacts[:len(modes)] != expected:
+                continue
+        yield recipe
+
+
+def collect_folds(phases, *, metrics=None, cohort=None, providers=None) -> pd.DataFrame:
     """Long table of complete outer-test fold metrics (scalar metrics; cohort scores excluded).
 
     An arm is complete only when ONE full recipe (``recipe_id``: every recipe field except the
     fold, including feature-artifact identities) has all five folds; folds of different recipes
-    never combine, and two complete recipes of one arm are refused as ambiguous.
+    never combine, and two complete recipes of one arm are refused as ambiguous. A named
+    cohort checks producer identities before reading scores. Historical unscoped callers
+    can still inspect records written before producer selectors were captured.
     """
     from src.evaluation.records import completed_fold
     from src.evaluation.store import all_recipes
 
+    scope = None
+    if cohort is not None or providers is not None:
+        main = load_yaml("experiment_1/main")
+    if providers is not None:
+        from src.evaluation.design import decision_versions
+
+        if cohort is not None:
+            raise ValueError("Select a named cohort or an explicit provider list")
+        scope = {"decision_model_versions": decision_versions(providers)}
+    elif cohort is not None:
+        scope = cohort_record(cohort, main=main)
     rows = []
     for phase in phases:
-        for recipe in all_recipes(phase):
+        recipes = all_recipes(phase)
+        if scope is not None:
+            recipes = cohort_recipes(recipes, scope, main)
+        for recipe in recipes:
             records = completed_fold(recipe, phase)
             if records is None:
                 continue
@@ -130,7 +224,11 @@ def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
                 record = json.loads(path.read_text(encoding="utf-8"))
                 if record["metadata"]["prediction_role"] != "outer_test":
                     continue
-                base = {"phase": phase, **recipe_fields(recipe), "recipe_id": arm_recipe_id(recipe)}
+                base = {"phase": phase, **recipe_fields(recipe), "recipe_id": arm_recipe_id(recipe),
+                        "data_identity": recipe.get("data_identity"),
+                        "n_train": record["metadata"].get("n_train"),
+                        "pairing_identity": digest({k: recipe.get(k) for k in
+                            ("data_identity", "task_schema_sha256", "protocol_sha256", "estimator_settings")})}
                 values = dict(record["scores"]["metrics"])
                 values["columns.representation"] = record["metadata"].get("representation_feature_count")
                 values["seconds.fit"] = record["timing"]["stages"].get("fit", {}).get("wall_seconds")
@@ -139,7 +237,8 @@ def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
                         continue
                     if value is None or isinstance(value, (int, float)):
                         rows.append({**base, "metric": name, "value": value})
-    frame = pd.DataFrame(rows, columns=[*RECIPE_COLUMNS, "recipe_id", "metric", "value"])
+    frame = pd.DataFrame(rows, columns=[*RECIPE_COLUMNS, "recipe_id", "data_identity", "pairing_identity",
+                                        "n_train", "metric", "value"])
     if frame.empty:
         return frame
     by_recipe = frame.groupby(["phase", "recipe_id", "metric"], dropna=False).outer_fold
@@ -151,20 +250,34 @@ def collect_folds(phases, *, metrics=None) -> pd.DataFrame:
                          f"{list(recipes[recipes.gt(1)].index[:3])}")
     for column in ("phase", "dataset_id", "task_type", "model_id", "feature_set", "provider",
                    "encoder", "pca_scope", "probe_view", "metric", "view", "checkpoint_id", "split_id",
-                   "hidden_view", "hidden_position", "adaptation_cell", "recipe_id"):
+                   "hidden_view", "hidden_position", "adaptation_cell", "recipe_id", "data_identity", "pairing_identity"):
         frame[column] = frame[column].astype("category")
     return frame.reset_index(drop=True)
 
 
-def coverage(folds, phases) -> pd.DataFrame:
-    """Planned versus complete (five-fold) arms per phase and predictor."""
-    from src.evaluation.campaign import benchmark_plan
+def comparison_plan(cohort=None):
+    """Arms needed to compare the selected cohort, including already fitted shared controls."""
+    from src.evaluation.campaign import GROUP_B_PHASES, benchmark_plan
+    from src.evaluation.design import incremental_cohort
 
-    planned = pd.DataFrame([a for a in benchmark_plan() if a["phase"] in phases])
+    selected = cohort_name(cohort)
+    if not incremental_cohort(selected):
+        return benchmark_plan(cohort=selected)
+    providers = set(decision_roster(selected))
+    return [arm for arm in benchmark_plan(cohort="all")
+            if arm["phase"] in GROUP_B_PHASES and (arm["provider"] is None or arm["provider"] in providers)]
+
+
+def coverage(folds, phases, *, cohort=None) -> pd.DataFrame:
+    """Planned versus complete (five-fold) comparison arms per phase and predictor."""
+
+    planned = pd.DataFrame([a for a in comparison_plan(cohort) if a["phase"] in phases])
+    providers = planned.provider.dropna().unique()
     planned = planned.groupby(["phase", "model"]).size().rename("planned_arms").reset_index()
     planned = planned.rename(columns={"model": "model_id"})
     if folds.empty:
         return planned.assign(complete_arms=0)
+    folds = folds[folds.provider.isna() | folds.provider.isin(providers)]
     keys = [c for c in RECIPE_COLUMNS if c != "outer_fold"]
     done = (folds[keys].astype(object).drop_duplicates().groupby(["phase", "model_id"]).size()
             .rename("complete_arms").reset_index())
@@ -172,7 +285,8 @@ def coverage(folds, phases) -> pd.DataFrame:
 
 
 def _gains(head, extra_keys=()):
-    paired = group_b.fold_gains(head)
+    group_b.validate_fold_identities(head, extra=extra_keys)
+    paired = group_b.fold_gains(head, extra_keys=extra_keys)
     gains = group_b.dataset_gains(paired, extra_keys=extra_keys)
     return paired, gains
 
@@ -181,9 +295,9 @@ CONTRAST_COLUMNS = ["dataset_id", "task_type", "model_id", "representation", "fa
                     "decision_both_median", "difference"]
 
 
-def decision_roster() -> list[str]:
+def decision_roster(cohort=None) -> list[str]:
     """The configured decision models every median must contain (never inferred from results)."""
-    return list(load_yaml("experiment_1/main")["candidate_extractors"])
+    return cohort_record(cohort)["decision_roster"]
 
 
 def contrasts(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
@@ -203,33 +317,31 @@ def contrasts(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
     return out[CONTRAST_COLUMNS]
 
 
-def _group_a_frames():
+def _group_a_frames(*, cohort=None):
     """Group A exports on PROJECT (A1 comparison, A2 stability) when they exist."""
     from src.evaluation import comparison_report, robustness_export
 
-    frames = {}
-    target = comparison_report.report_path()
-    if target.exists():
-        found, _ = study_export.read_export(target, schema=comparison_report.SCHEMA,
-                                            tables=comparison_report.TABLES)
-        frames.update(found)
-    try:
-        found, _ = robustness_export.read_export()
-    except ValueError:  # A2 export of another configuration: model relations stay partial.
-        found = {}
-    frames.update({f"a2_{k}": v for k, v in found.items()})
+    frames, _ = comparison_report.read_tables(comparison_report.report_config(cohort), cohort=cohort)
+    # An absent or superseded A2 leaves model relations partial. Verify the archive's
+    # contents before checking its analysis identity so that corruption stops the export.
+    found, receipt = study_export.read_export(robustness_export.export_path(cohort),
+                                              schema=robustness_export.SCHEMA, tables=robustness_export.TABLES)
+    if found and receipt["config_sha256"] == robustness_export.analysis_identity(load_yaml("rq1/behavior"), cohort):
+        frames.update({f"a2_{k}": v for k, v in found.items()})
     return frames
 
 
-def dataset_properties_and_redundancy():
+def dataset_properties_and_redundancy(*, roster=None):
     """Label-free properties of every selected dataset and decision redundancy per model."""
+    from sklearn.model_selection import KFold
+
     from src.data.loaders import load_catalog, load_dataset
     from src.data.selection import selected_entries
     from src.evaluation.moderators import dataset_covariates
-    from src.evaluation.protocol import shared_splits
     from src.evaluation.row_benefit import block_probabilities, load_decision_block
 
     main = load_yaml("experiment_1/main")
+    roster = decision_roster() if roster is None else roster
     pilot = load_yaml("rq2/when_text_helps")["predict_in_advance"]["pilot"]
     properties, redundancy = [], []
     for entry in selected_entries(load_catalog(), main):
@@ -238,9 +350,11 @@ def dataset_properties_and_redundancy():
         row["log10_n_rows"] = float(np.log10(row["n_rows"]))
         row["log10_median_text_chars"] = float(np.log10(max(row["median_text_chars"], 1.0)))
         properties.append(row)
-        splits = shared_splits(dataset, seed=main["random_seed"], folds=5)["folds"]
         non_text = dataset.features.loc[:, list(dataset.metadata.non_text_columns)]
-        for provider in main["candidate_extractors"]:
+        # Deployment has no downstream labels to stratify this covariate's folds.
+        splitter = KFold(n_splits=5, shuffle=True, random_state=main["random_seed"])
+        splits = [{"train": train, "test": test} for train, test in splitter.split(non_text)]
+        for provider in roster:
             block, source = load_decision_block(entry["id"], provider, "joint", main)
             if block is None:
                 redundancy.append({"dataset_id": entry["id"], "provider": provider, "status": source})
@@ -258,21 +372,26 @@ def dataset_properties_and_redundancy():
     properties = pd.DataFrame(properties)
     redundancy = pd.DataFrame(redundancy)
     for column, name in (("r2", "decision_redundancy_r2"), ("pilot_r2", "pilot_redundancy_r2")):
-        if column in redundancy:
-            per_dataset = redundancy.groupby("dataset_id")[column].median().rename(name)
+        if column not in redundancy:
+            properties[name] = np.nan
+        else:
+            per_dataset = redundancy.groupby("dataset_id")[column].agg(["median", "count"])
+            per_dataset = per_dataset["median"].where(per_dataset["count"].eq(len(roster))).rename(name)
             properties = properties.merge(per_dataset.reset_index(), on="dataset_id", how="left")
     return properties, redundancy
 
 
-def build_tables(study, folds) -> dict[str, pd.DataFrame]:
+def build_tables(study, folds, *, cohort=None) -> dict[str, pd.DataFrame]:
     cfg = load_yaml("rq2/when_text_helps")
+    roster = decision_roster(cohort)
+    folds = folds[folds.provider.isna() | folds.provider.isin(roster)]
     head = group_b.headline(folds)
-    tables = {"coverage": coverage(folds, STUDIES[study]["phases"]), "folds": folds}
+    tables = {"coverage": coverage(folds, STUDIES[study]["phases"], cohort=cohort), "folds": folds}
     if study == "B4":
         paired, gains = _gains(head, extra_keys=("training_size", "draw"))
         from src.evaluation import data_efficiency
 
-        sizes = data_efficiency.size_gains(head.dropna(subset=["training_size"]))
+        sizes = data_efficiency.over_draws(gains)
         # Two fixed cohorts (main: all datasets at the main sizes; extended: the configured
         # datasets at all sizes), so no curve changes its dataset membership along the x-axis.
         curves = (data_efficiency.cohort_gains(sizes, data_efficiency.config()["curves"])
@@ -288,9 +407,7 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
     if study == "B3":
         gains = gains[gains.family.eq("decision")]
     tables.update(dataset_gains=gains, summary=group_b.summarize(gains))
-    roster = decision_roster()
-    medians = (group_b.median_over_decision_models(gains, roster=roster) if not gains.empty
-               else pd.DataFrame())
+    medians = group_b.median_over_decision_models(gains, roster=roster)
     gaps = group_b.roster_gaps(gains, roster=roster) if not gains.empty else pd.DataFrame()
     if study == "B1":
         tables.update(median_gains=medians, median_summary=group_b.summarize(medians),
@@ -298,42 +415,46 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
     elif study == "B2":
         from src.evaluation import complementarity
 
-        pairs, _ = complementarity.summaries()
+        pairs, _ = complementarity.summaries(cohort=cohort, headline_folds=head)
+        pairs = pairs[pairs.provider.isin(roster)] if not pairs.empty else pairs
         tables.update(median_gains=medians, median_roster_gaps=gaps,
                       contrasts=contrasts(gains, roster=roster) if not gains.empty else gains,
                       complementarity_pairs=pairs,
-                      complementarity_summary=complementarity.complementarity_summary(pairs)
+                      complementarity_summary=complementarity.complementarity_summary(pairs, roster=roster)
                       if not pairs.empty else pd.DataFrame())
     elif study == "B3":
         from src.evaluation.row_benefit import summaries
 
-        properties, redundancy = dataset_properties_and_redundancy()
+        properties, redundancy = dataset_properties_and_redundancy(roster=roster)
         rule = cfg["predict_in_advance"]
         outcome = medians[medians.representation.eq(rule["outcome_representation"])]
         lodo_rows, lodo = [], []
         for model, group in outcome.groupby("model_id"):
             predictions, summary = group_b.lodo_input_sets(
                 group, properties, input_sets=rule["input_sets"], alpha=rule["alpha"],
-                threshold=rule["use_threshold"], n_shuffles=rule["n_shuffles"])
+                threshold=rule["use_threshold"], n_shuffles=rule["n_shuffles"], value=rule["outcome"])
             lodo_rows.append(predictions.assign(model_id=model))
             lodo.append(summary.assign(model_id=model))
-        a = _group_a_frames()
+        a = _group_a_frames(cohort=cohort)
         diagnostics = group_b.model_diagnostics(
             a.get("quality"), a.get("output_shape"), a.get("loo_consensus"), a.get("model_profile"),
             a.get("a2_mode_effects"))
-        usefulness = group_b.per_model_usefulness(gains)
+        usefulness = group_b.per_model_usefulness(gains, datasets=properties)
         relations = group_b.model_relations(usefulness, diagnostics,
                                             n_permutations=cfg["n_permutations"], min_units=5)
-        _, cohorts = summaries()
+        from src.evaluation.group_b_views import row_cohort_cells
+
+        measured, _ = summaries(cohort=cohort)
+        cohorts = row_cohort_cells(measured, roster=roster, headline_folds=head)
         tables.update(
             properties=properties, redundancy=redundancy,
-            associations=group_b.associations(medians, properties, by=("model_id", "representation"),
-                                              n_permutations=cfg["n_permutations"])
-            if not medians.empty else pd.DataFrame(),
+            associations=group_b.dataset_associations(medians, properties, n_permutations=cfg["n_permutations"]),
             model_diagnostics=diagnostics, model_usefulness=usefulness, model_relations=relations,
             column_importance=group_b.text_column_importance(head), row_cohorts=cohorts,
-            lodo_predictions=pd.concat(lodo_rows, ignore_index=True) if lodo_rows else pd.DataFrame(),
-            lodo=pd.concat(lodo, ignore_index=True) if lodo else pd.DataFrame())
+            lodo_predictions=pd.concat(lodo_rows, ignore_index=True) if lodo_rows else pd.DataFrame(
+                columns=["dataset_id", "actual", "predicted", "input_set", "claim", "outcome", "model_id"]),
+            lodo=pd.concat(lodo, ignore_index=True) if lodo else pd.DataFrame(
+                columns=["input_set", "claim", "outcome", "properties", "excluded_datasets", "datasets", "status", "model_id"]))
     return tables
 
 
@@ -346,33 +467,35 @@ def _parquet_safe(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def read(study, target=None):
+def read(study, target=None, *, cohort=None):
     """Verified tables and receipt, or an explicit waiting state (absent/superseded ZIP)."""
-    return study_export.read_export(target or export_path(study), schema=SCHEMA,
-                                    tables=tables_for(study), identity=analysis_identity(study))
+    return study_export.read_export(target or export_path(study, cohort), schema=SCHEMA,
+                                    tables=tables_for(study), identity=analysis_identity(study, cohort))
 
 
-def build(study):
+def build(study, *, cohort=None):
     study_export.require_mindwell_cpu(f"Group B {study}")
     metrics = B4_METRICS if study == "B4" else None
-    folds = collect_folds(STUDIES[study]["phases"], metrics=metrics)
+    folds = collect_folds(STUDIES[study]["phases"], metrics=metrics, cohort=cohort_name(cohort))
     if folds.empty:
         raise ValueError(f"No complete five-fold arm exists for {study}")
-    tables = {name: _parquet_safe(frame) for name, frame in build_tables(study, folds).items()}
+    tables = {name: _parquet_safe(frame) for name, frame in build_tables(study, folds, cohort=cohort).items()}
     missing = set(tables_for(study)) - set(tables)
     if missing:
         raise ValueError(f"{study} export lacks tables: {sorted(missing)}")
     target = study_export.write_export(
-        export_path(study), {name: tables[name] for name in tables_for(study)}, schema=SCHEMA,
-        identity=analysis_identity(study), origin=study_export.job_origin(),
-        extra={"study": study, "headlines": HEADLINES})
+        export_path(study, cohort), {name: tables[name] for name in tables_for(study)}, schema=SCHEMA,
+        identity=analysis_identity(study, cohort), origin=study_export.job_origin(),
+        extra={"study": study, "headlines": HEADLINES, **cohort_record(cohort)})
     print(f"{target}  SHA256 {file_sha256(target)}", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--study", required=True, choices=tuple(STUDIES))
-    build(parser.parse_args().study)
+    parser.add_argument("--cohort", metavar="COHORT")
+    args = parser.parse_args()
+    build(args.study, cohort=args.cohort)
 
 
 if __name__ == "__main__":

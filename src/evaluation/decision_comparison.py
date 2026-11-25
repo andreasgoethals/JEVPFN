@@ -489,8 +489,9 @@ def analyze_group(groups: list[GroupFeatures], context: dict, cfg: dict, result:
                         "y": scalars[j, k],
                     },
                 )
-    add_loo_consensus(result, base, names, ps, present, hashes, tops, reference.task, cfg)
     roster_complete = set(names) == set(cfg["providers"])
+    if roster_complete or not cfg["require_complete_roster_for_consensus"]:
+        add_loo_consensus(result, base, names, ps, present, hashes, tops, reference.task, cfg)
     if len(names) < 2 or (cfg["require_complete_roster_for_consensus"] and not roster_complete):
         return
     common = present.all(axis=0)
@@ -695,7 +696,7 @@ def _compare_dataset(entry, inventory, *, options, comparison_options):
                     "group": group,
                     "text_column": title,
                 },
-                comparison_options,
+                options,
                 result,
             )
     return result

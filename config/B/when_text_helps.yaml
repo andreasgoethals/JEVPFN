@@ -60,7 +60,7 @@ predict_in_advance:
       claim: should_i_acquire_decision_features
     pilot:
       properties: [log10_median_text_chars, pilot_redundancy_r2]
-      claim: should_i_acquire_after_a_200_request_pilot
+      claim: should_i_acquire_after_a_200_row_pilot_per_decision_model
     post_extraction:
       properties: [log10_median_text_chars, decision_redundancy_r2]
       claim: should_i_use_decision_features_i_already_have
@@ -69,7 +69,8 @@ predict_in_advance:
   # outputs of those rows; in deployment it costs 200 decision requests per model.
   pilot: {rows: 200, seed: 20261123, folds: 5}
   alpha: 1.0
-  outcome_representation: decision/both/median  # median over all 17 models, per predictor
+  outcome: headroom_share  # all-task gain over the same predictor's non-text baseline
+  outcome_representation: decision/both/median  # median over every model in the declared cohort, per predictor
   use_threshold: 0.0
   n_shuffles: 2000  # null: gains shuffled across datasets, whole LODO rule refitted
   report: [spearman_rho, use_accuracy, regret_vs_always_and_never, shuffle_p]

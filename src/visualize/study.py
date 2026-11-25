@@ -119,10 +119,11 @@ def qualification_figure(table, profiles=None):
     """
     from matplotlib.patches import Patch
 
-    order = ("no text", "decision", "decision+frozen", "frozen", "classifier", "TAR", "native",
-             "Kumo override")
     profiles = profiles if profiles is not None else pd_empty()
-    families = [f for f in order if f in set(profiles.family)] if len(profiles) else []
+    order = ("no text", "decision", "decision+frozen", "frozen", "classifier", "TAR", "native",
+             "column refit", "training size", "hidden", "hidden+decision", "adapted", "Kumo override")
+    present = set(profiles.family) if len(profiles) else set()
+    families = [f for f in order if f in present] + sorted(present.difference(order))
     models = list(table.model)
     columns = ["Contract", *families]
     cells = {}

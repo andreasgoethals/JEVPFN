@@ -372,7 +372,7 @@ def test_campaign_embedding_factory_for_every_predictor(
         return []
 
     monkeypatch.setattr(campaign, "evaluate_cv", evaluate)
-    monkeypatch.setattr("src.evaluation.qualification.save_profile", lambda *args: None)
+    monkeypatch.setattr("src.evaluation.qualification.save_profile", lambda *args, **kwargs: None)
     campaign.run_arm(arm, allow_model_runs=True, profile=True)
     assert selected == []
 

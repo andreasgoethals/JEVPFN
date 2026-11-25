@@ -56,6 +56,22 @@ def make_notebook(path, cells: list[str]) -> None:
     )
 
 
+def test_synthesis_reads_figures_from_the_current_run(isolated_output, monkeypatch):
+    names = ("general/5_synthesis", "B/exp04_decision_features")
+    monkeypatch.setattr(rn, "discover", lambda notebooks=None: names)
+    figures = isolated_output / "figures_ready"
+
+    def run_one(name, timeout, scratch):
+        if name == "general/5_synthesis":
+            assert figures.exists()
+        else:
+            figures.touch()
+        return rn.NotebookResult(name, True, 0.1, 0)
+
+    monkeypatch.setattr(rn, "run_one", run_one)
+    assert tuple(r.name for r in rn.run_all(max_workers=1)) == names
+
+
 def test_discovery_follows_registry_order(tmp_path, monkeypatch) -> None:
     """Registry order (general, then A, B, C) is the order CAPTIONS.md uses, so it has to be
     stable — and discovered rather than listed, because a hard-coded list stops covering a

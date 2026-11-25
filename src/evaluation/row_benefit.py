@@ -134,7 +134,8 @@ class DecisionInputs:
     full roster fits in memory on a CPU allocation; probability matrices are discarded.
     """
 
-    def __init__(self, dataset, cfg, *, loader=load_decision_block):
+    def __init__(self, dataset, cfg, *, loader=load_decision_block, require_complete_artifacts=False):
+        self.require_complete_artifacts = require_complete_artifacts
         self.dataset, self.cfg, self.loader = dataset, cfg, loader
         self.task = dataset.metadata.task_type
         self.roster = list(cfg["candidate_extractors"])
@@ -159,6 +160,8 @@ class DecisionInputs:
         per_group = []
         for mode in modes:
             loaded = {p: self.groups(p, mode) for p in self.roster}
+            if self.require_complete_artifacts and not all(loaded.values()):
+                return np.full(len(self.dataset.frame), np.nan)
             names = sorted({g for groups in loaded.values() if groups for g in groups})
             for group in names:
                 choices = np.stack([
@@ -341,13 +344,21 @@ class Pairing:
     baseline are iterated; the others are listed in ``pending``.
     """
 
-    def __init__(self, dataset_id, *, decision_loader=load_decision_block):
+    def __init__(self, dataset_id, *, decision_loader=load_decision_block, cohort=None):
+        from src.evaluation.benchmark_export import (
+            arm_recipe_id,
+            cohort_recipes,
+            cohort_record,
+            recipe_fields,
+        )
         entry = next(e for e in load_catalog()["datasets"] if e["id"] == dataset_id)
         self.dataset_id = dataset_id
         self.ds = ds = load_dataset(entry, allow_download=False)
         main = load_yaml("experiment_1/main")
         self.spec = spec = shared_splits(ds, seed=main["random_seed"], folds=5)
-        self.inputs = DecisionInputs(ds, main, loader=decision_loader)
+        self.cohort = cohort_record(cohort, main=main)
+        self.inputs = DecisionInputs(ds, {**main, "candidate_extractors": self.cohort["decision_roster"]},
+                                     loader=decision_loader, require_complete_artifacts=True)
         lengths = np.zeros(len(ds.frame))
         present = np.zeros(len(ds.frame), dtype=bool)
         for col in ds.metadata.text_columns:
@@ -358,7 +369,8 @@ class Pairing:
         self.lengths = lengths
         arms, baselines = {}, {}
         for phase in ("experiment_1", "experiment_2", "experiment_3"):
-            for r in all_recipes(phase, dataset_id=dataset_id):
+            recipes = all_recipes(phase, dataset_id=dataset_id)
+            for r in cohort_recipes(recipes, self.cohort, main):
                 if r["dataset_id"] != dataset_id:
                     continue
                 if (
@@ -374,16 +386,22 @@ class Pairing:
                         raise ValueError("Ambiguous structured baseline")
                     baselines[key] = r
                 else:
-                    arm = digest({k: v for k, v in r.items() if k != "outer_fold"})
-                    arms.setdefault((phase, arm), []).append(r)
+                    arms.setdefault((phase, arm_recipe_id(r)), []).append(r)
         self.baselines = baselines
         self.arms, self.pending = {}, []
+        complete = set()
         for key, folds in arms.items():
             if sorted(r["outer_fold"] for r in folds) != list(range(5)) or any(
                 self.matching_key(r) not in baselines for r in folds
             ):
                 self.pending.append(key[1])
             else:
+                fields = recipe_fields(folds[0])
+                del fields["outer_fold"]
+                comparison = (key[0], digest(fields))
+                if comparison in complete:
+                    raise ValueError("One row-benefit arm has several complete recipes; select one before reporting")
+                complete.add(comparison)
                 self.arms[key] = sorted(folds, key=lambda r: r["outer_fold"])
         self._baseline_cache = {}
 
@@ -438,13 +456,19 @@ class Pairing:
                 )
 
 
-def run(dataset_id, *, decision_loader=load_decision_block):
+def report_folder(kind, cohort=None):
+    from src.evaluation.benchmark_export import cohort_key
+
+    return paths.results_dir(kind, cohort_key(cohort, main=load_yaml("experiment_1/main")), phase="rq2")
+
+
+def run(dataset_id, *, decision_loader=load_decision_block, cohort=None):
     """Pair saved predictions; decision arms also join their decision inputs by row ID.
 
     Decision inputs come from the canonical per-dataset feature store (VSC CPU) or the
     portable notebook copy (local). Absent artifacts put rows in the "missing" cohort.
     """
-    pairing = Pairing(dataset_id, decision_loader=decision_loader)
+    pairing = Pairing(dataset_id, decision_loader=decision_loader, cohort=cohort)
     ds, spec, inputs, lengths = pairing.ds, pairing.spec, pairing.inputs, pairing.lengths
     decision_rows = {}
     output = []
@@ -478,11 +502,11 @@ def run(dataset_id, *, decision_loader=load_decision_block):
                 cohorts=rows,
             )
         )
-    file = paths.results_dir("row_benefit", dataset_id + ".json", phase="rq2")
+    file = report_folder("row_benefit", cohort) / (dataset_id + ".json")
     return write_json(
         file,
         dict(
-            dataset=dataset_id,
+            dataset=dataset_id, **pairing.cohort,
             split_id=spec["split_id"],
             data_identity=ds.source["data_identity"],
             task=ds.metadata.task_type,
@@ -500,18 +524,25 @@ def run(dataset_id, *, decision_loader=load_decision_block):
     )
 
 
-def summaries():
+def summaries(*, cohort=None):
     """Per-dataset cohort losses and equal-dataset means; ``interpretation`` labels each axis.
 
     ``prediction_shift`` cohorts are defined by the augmented model's own predictions, so
     they are labelled "descriptive (post-treatment)" and never read as pre-specified groups.
     """
     frames = []
-    for path in paths.results_dir("row_benefit", phase="rq2").glob("*.json"):
+    from src.evaluation.benchmark_export import cohort_record
+
+    scope = cohort_record(cohort, main=load_yaml("experiment_1/main"))
+    for path in report_folder("row_benefit", cohort).glob("*.json"):
         data = json.loads(path.read_text(encoding="utf-8"))
+        if any(data.get(k) != v for k, v in scope.items()):
+            raise ValueError("Row-benefit receipt disagrees with the selected decision-model cohort")
         for fold in data["folds"]:
             frame = pd.DataFrame(fold["cohorts"])
             frame["dataset"], frame["arm"] = data["dataset"], fold["arm"]
+            frame["split_id"] = data["split_id"]
+            frame["data_identity"] = data["data_identity"]
             frame["phase"] = fold["phase"]
             frame["task"] = data["task"]
             frame["checkpoint"] = fold["checkpoint"]
@@ -523,7 +554,7 @@ def summaries():
     keys = ["task", "phase", "model", "checkpoint", "features", "representation", "axis", "cohort"]
     by = (
         pd.concat(frames)
-        .groupby(["dataset", "arm", *keys], as_index=False)[
+        .groupby(["dataset", "data_identity", "split_id", "arm", *keys], as_index=False, dropna=False)[
             ["rows", "defined", "baseline_loss_sum", "augmented_loss_sum"]
         ]
         .sum()
@@ -543,4 +574,6 @@ def summaries():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
-    print(run(parser.parse_args().dataset))
+    parser.add_argument("--cohort", metavar="COHORT")
+    args = parser.parse_args()
+    print(run(args.dataset, cohort=args.cohort))

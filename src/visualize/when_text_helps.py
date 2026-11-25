@@ -30,14 +30,15 @@ PROPERTY_LABELS = {
     "missing_text_share": "empty-text share", "repeated_text_share": "repeated-text share",
     "unseen_text_share": "unique row-text share", "free_text_share": "free-text column share",
     "decision_redundancy_r2": "decision redundancy (all rows)",
-    "pilot_redundancy_r2": "decision redundancy (200-row pilot)",
+    "pilot_redundancy_r2": "decision redundancy (200 rows/model)",
 }
-DIAGNOSTIC_LABELS = {"standalone_quality": "Stand-alone skill (AUC / Spearman)",
-                     "calibration_ece": "Calibration error (ECE)",
-                     "consensus_distance": "Distance to consensus",
-                     "stability_excess_tv": "Excess change over replay"}
+DIAGNOSTIC_LABELS = {"standalone_classification_auc": "Classification\nAUC",
+                     "standalone_regression_spearman": "Regression\nSpearman ρ",
+                     "calibration_ece": "Calibration error\n(ECE)",
+                     "consensus_distance": "Distance to\nconsensus",
+                     "stability_excess_tv": "Excess change\nover replay"}
 INPUT_SETS = {"pre_extraction": "Pre-extraction\n(text length)",
-              "pilot": "200-row pilot\n(+ pilot redundancy)",
+              "pilot": "200 rows per model\n(+ pilot redundancy)",
               "post_extraction": "Post-extraction\n(+ redundancy)"}
 
 
@@ -47,8 +48,10 @@ def headroom_and_associations(headroom, associations, *, name, what,
     (b) Spearman rho of each label-free property with that gain, per predictor (BH asterisks)."""
     if headroom is None or headroom.empty:
         return
-    assoc = (associations[associations.representation.eq(representation)]
-             if associations is not None and not associations.empty else None)
+    assoc = (associations[associations.representation.eq(representation) & associations.task_family.eq("all")
+                          & associations.outcome.eq("headroom_share")]
+             if associations is not None and not associations.empty and {"outcome", "task_family"} <= set(associations)
+             else None)
     has_b = assoc is not None and not assoc.empty and assoc.spearman_rho.notna().any()
     fig = plt.figure(figsize=(style.WIDTH_FULL, style.MAX_HEIGHT if has_b else 2.5), layout="constrained")
     grid = fig.add_gridspec(2 if has_b else 1, 2, height_ratios=[1, 1.25] if has_b else [1])
@@ -96,10 +99,10 @@ def headroom_and_associations(headroom, associations, *, name, what,
         "median over the seven predictors (line: predictors' range of the gain); the dashed diagonal "
         "is the ceiling where the gain closes all headroom. Classification and regression on separate "
         "axes."
-        + (" Bottom: Spearman rank correlation over datasets between each label-free property and "
-           "that gain, per predictor; an asterisk marks a Benjamini-Hochberg q of at most 0.10 across all "
-           "properties and predictors (permutation p-values, 5,000 permutations). Associations, not "
-           "causal effects." if has_b else ""))
+        + (" The lower panel shows each property's Spearman correlation with the share of headroom gained "
+           "across datasets for each predictor. Asterisks mark Benjamini–Hochberg q ≤ 0.10 across the "
+           "dataset-property grid, including the raw-gain correlations within each task family "
+           "(5,000 permutations)." if has_b else ""))
 
 
 def diagnostics_vs_usefulness(table, relations, *, name, what):
@@ -160,7 +163,7 @@ def column_refits(table, *, name, what):
         f"{what}: per dataset with at least two text columns ({table.dataset_id.nunique()} datasets, "
         f"{len(table)} columns), one dot per text column: the per-column decision arm's five-fold mean "
         "headline score minus that of the same arm refitted without the column's decision block "
-        "(fold-paired; positive = the column's block helps), median over the seventeen decision models "
+        "(fold-paired; positive = the column's block helps), median over the selected decision models "
         "and then over the seven predictors (small vertical jitter). Colour gives the label-free field "
         "type. No permutation importance, shuffling or SHAP.")
 
@@ -223,6 +226,10 @@ def lodo(predictions, summary, *, name, what):
     """(a) LODO predicted against actual gain per input set; (b) regret against always/never."""
     if predictions is None or predictions.empty:
         return
+    for table in (predictions, summary):
+        if table is not None and not table.empty and (
+                "outcome" not in table or not table.outcome.eq("headroom_share").fillna(False).all()):
+            raise ValueError("B3 LODO figures require headroom-share predictions and regret")
     sets = [s for s in INPUT_SETS if s in set(predictions.input_set)]
     fig = plt.figure(figsize=(style.WIDTH_FULL, 4.2), layout="constrained")
     grid = fig.add_gridspec(2, len(sets), height_ratios=[1.25, 1])
@@ -239,9 +246,9 @@ def lodo(predictions, summary, *, name, what):
         _zero(ax, "y")
         ax.tick_params(labelsize=6.5)
         ax.set_title(INPUT_SETS[input_set].split("\n")[0], loc="left", fontsize=7)
-        ax.set_xlabel("Predicted gain (held out)", fontsize=7)
+        ax.set_xlabel("Predicted headroom share", fontsize=7)
         if j == 0:
-            ax.set_ylabel("Actual gain", fontsize=7)
+            ax.set_ylabel("Observed headroom share", fontsize=7)
         layout.light_grid(ax, axis="both")
     if summary is not None and not summary.empty:
         ax = fig.add_subplot(grid[1, :])
@@ -269,8 +276,8 @@ def lodo(predictions, summary, *, name, what):
         f"{what}. Top: leave-one-dataset-out prediction of each dataset's gain from the median decision "
         "model's both-view features (ridge, alpha 1, on standardised label-free properties fitted on the "
         "other datasets) against the actual gain, for three nested input sets; one marker shape per "
-        "predictor; upper-right and lower-left quadrants are correct use/don't-use decisions. Gains are "
-        "in each dataset's own headline metric (ROC-AUC, macro AUC or R²). Bottom: regret of each rule "
+        "predictor; upper-right and lower-left quadrants are correct use/don't-use decisions. Gains and "
+        "regrets are fractions of the headroom above the same predictor's no-text score. Bottom: regret of each rule "
         "(use when the prediction exceeds 0) against always and never using the features; the range of "
         "the shuffle-null p-value of the rank correlation over predictors is printed (2,000 shuffles "
         "that refit the whole rule).")

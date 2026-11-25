@@ -46,16 +46,22 @@ def selected_records(path, input_set_id, numbers):
         )
 
 
-def ledger_total(path):
-    """Read cumulative charges plus reservations across all model versions."""
+def ledger_balances(path):
+    """Read cumulative charges and outstanding reservations across all model versions."""
     if not path.exists():
-        return 0.0
+        return 0.0, 0.0
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
-        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='extraction_jobs'").fetchone():
-            return 0.0
-        return db.execute(
-            "SELECT COALESCE(SUM(spent_usd+reserved_usd),0) FROM extraction_jobs"
-        ).fetchone()[0]
+        from src.jev.spending import ledger_jobs
+
+        spent = reserved = 0.0
+        for job in ledger_jobs(db):
+            spent += job.spent
+            reserved += job.reserved
+        return spent, reserved
+
+
+def ledger_total(path):
+    return sum(ledger_balances(path))
 
 
 def subset(dataset, rows):

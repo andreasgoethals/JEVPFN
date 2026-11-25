@@ -189,7 +189,7 @@ def cd_diagram(omnibus: dict, table: pd.DataFrame, *, labels=None, title: str | 
             ax.text(edge - 0.006 if align == "right" else edge + 0.006, y, text, ha=align, va="center",
                     fontsize=style.CD_FONT, color=style.TEXT_COLOR,
                     fontweight="bold" if learner == control else "normal")
-            if control is not None:
+            if control is not None and not table.empty:
                 if learner == control:
                     ax.plot(x(rank), axis_y, marker="D", ms=4.5, color=style.CD_INK, zorder=3)
                 else:
@@ -199,7 +199,9 @@ def cd_diagram(omnibus: dict, table: pd.DataFrame, *, labels=None, title: str | 
                             markeredgecolor=style.CD_SIGNIFICANT_COLOR if hit else style.CD_INK,
                             markeredgewidth=0.8)
     n = omnibus.get("datasets")
-    if control is not None:
+    if table.empty:
+        note = "Descriptive mean ranks and Nemenyi critical difference."
+    elif control is not None:
         note = (f"Filled circle: Holm-adjusted two-sided Wilcoxon p < {alpha:g} versus "
                 f"{names[control]} (diamond); open: not significant.")
     else:
@@ -223,12 +225,17 @@ def cd_figures(result: dict, *, labels=None):
         if group.get("status") != "compared":
             continue
         omnibus, table = group["omnibus"], group["table"]
-        fig = cd_diagram(omnibus, table, labels=labels)
+        group_labels = labels
+        if group["group"].endswith("/average_vs_mean_single"):
+            group_labels = {"reference": "Mean single-presentation score", **(labels or {})}
+        fig = cd_diagram(omnibus, table, labels=group_labels)
         control = control_of(table)
         how = (f"filled circles mark a Holm-adjusted two-sided Wilcoxon signed-rank difference from "
                f"{learner_label(control)} (alpha {omnibus['alpha']:g})" if control else
                "bars join adjacent learners for which no pair has a Holm-adjusted two-sided "
                f"Wilcoxon signed-rank difference (alpha {omnibus['alpha']:g})")
+        if table.empty:
+            how = "ranks are descriptive"
         caption = (f"{result['application']}, {group['group']}: mean rank of {omnibus['learners']} "
                    f"learners over {omnibus['datasets']} datasets ({result['score_type'].replace('_', ' ')}"
                    f"; rank 1 is best). The bar above the axis is the descriptive Nemenyi critical "

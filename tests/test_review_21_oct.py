@@ -49,9 +49,10 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
         return cfg
 
     monkeypatch.setattr(campaign, "load_yaml", config)
+    monkeypatch.setattr("src.cluster.freeze.check_if_present", lambda: {"frozen": True})
     monkeypatch.setattr("src.evaluation.qualification.benchmark_evidence", lambda *a: ())
     monkeypatch.setattr("src.evaluation.qualification.verify_inputs", lambda *a, **kw: None)
-    monkeypatch.setattr("src.evaluation.qualification.save_profile", lambda *a: None)
+    monkeypatch.setattr("src.evaluation.qualification.save_profile", lambda *a, **kwargs: None)
     monkeypatch.setattr(campaign, "benchmark_plan", lambda **kw: [base])
     monkeypatch.setattr(campaign, "load_catalog", lambda: {"datasets": [{"id": "fixture"}]})
     monkeypatch.setattr(campaign, "load_dataset", lambda *a, **kw: data)

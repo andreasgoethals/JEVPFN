@@ -309,7 +309,10 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
         durable = durable_project_override()
         if durable is None:
             raise ValueError("Research study results require an allocated durable PROJECT root")
-        return _under(durable, OUTPUT_DIR_NAME, str(result_relative(selected, *parts)), *parts)
+        # The B3/C predictors write folds in the same working set as the other benchmark
+        # arms. Their analysis exports and producer assets are shared directly from PROJECT.
+        if selected == "rq1" or not parts or parts[0] not in {"evaluation", "splits", "cv_locks"}:
+            return _under(durable, OUTPUT_DIR_NAME, str(result_relative(selected, *parts)), *parts)
     return large_outputs_dir().joinpath(result_relative(selected, *parts), *parts)
 
 

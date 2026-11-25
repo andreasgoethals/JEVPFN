@@ -62,3 +62,18 @@ def test_numeric_official_text_and_empty_column_lengths_are_supported():
     tables, details = audit_dataset(dataset, cfg)
     assert "empty" not in details["longest_text_examples"]
     assert tables["text"][1]["nonempty_tokens_p99"] is None
+
+
+def test_encoder_workload_matches_native_input_keys_across_named_columns():
+    from src.data.text_embeddings import input_rows
+
+    frame = pd.DataFrame({"a": pd.Series([1, 1.0, "same", "x", None], dtype=object),
+                          "b": ["1", "same", np.inf, " x", "  "], "y": [0, 1, 0, 1, 0]})
+    official = {"target": "y", "task_type": "cls", "num_classes": 2}
+    metadata = extract_metadata(frame, official, dataset_id="TEST_TEXT", dataset_name="Test",
+                                text_columns=["a", "b"])
+    dataset = LoadedDataset(frame, metadata, official, {}, [])
+    inputs, _ = input_rows(dataset)
+    tables, _ = audit_dataset(dataset, load_config())
+    assert set(inputs.values()) == {"1", "1.0", "same", "x", " x"}
+    assert tables["summary"]["encoder_unique_texts"] == len(inputs)

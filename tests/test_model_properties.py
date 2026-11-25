@@ -22,10 +22,9 @@ def extractors():
     return load_yaml("feature_creation/extractors")
 
 
-def test_all_seventeen_providers_present_in_extractor_order(raw, extractors):
+def test_all_registered_providers_present_in_extractor_order(raw, extractors):
     mp.validate(raw, extractors)
     assert list(raw["providers"]) == list(extractors["candidates"])
-    assert len(raw["providers"]) == 17
 
 
 def test_missing_values_are_never_guessed(raw):

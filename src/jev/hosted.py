@@ -198,7 +198,13 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
     # One local campaign owns the account rate gate; merges wait for dataset writers.
     try:
         with file_lock(paths.jev_cache_path() / ".jev_campaign.lock", timeout=1):
-            total_usage = sum(ledger_total(paths.dataset_cache_path(i["dataset_id"])) for i in selected_inputs())
+            from src.jev.spending import JEV_CEILING_USD, campaign_committed
+
+            cache_folder = paths.jev_cache_path()
+            total_usage = campaign_committed(cache_folder, replay_folder=paths.results_dir("hosted_ledgers", phase="rq1"))
+            ceiling = min(JEV_CEILING_USD, review["campaign_spending_limit_usd"])
+            if prefix_policy:
+                ceiling = min(ceiling, prefix_policy["cumulative_dataset_cost_limit_usd"])
             with timings.measure("client_setup", items=0):
                 client = transport_factory(cfg, allow_network=True)
             for item in items:
@@ -207,6 +213,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                     paths.dataset_cache_path(dataset_id).with_suffix(".extraction.lock"), timeout=1
                 ):
                     cache = ResponseCache.for_dataset(dataset_id)
+                    other_usage = total_usage - ledger_total(cache.path)
                     extractor = DatasetExtractor(
                         cache,
                         client,
@@ -215,6 +222,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         validate_context=validator,
                         phase=phase,
                         policy_revision_manifest=review.get("spending_policy_revision_manifest"),
+                        campaign_available_usd=ceiling - other_usage,
                         timings=timings,
                     )
                     records = (
@@ -230,22 +238,15 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                         )
                         for record in records
                     )
-                    before_usage = ledger_total(cache.path)
-                    other_usage = total_usage - before_usage
-                    budget_stopped = []
-                    if prefix_policy:
-                        requests = budgeted_requests(requests, cache, other_usage,
-                            prefix_policy["cumulative_dataset_cost_limit_usd"], limits[dataset_id], budget_stopped)
                     counts = extractor.run(requests)
                     total_usage = other_usage + ledger_total(cache.path)
-                    if budget_stopped:
-                        counts["budget_stop"] = 1
                     report["datasets"].append(
                         {
                             "dataset_id": dataset_id,
                             "input_set_id": item["input_set_id"],
                             "spending_policy_sha256": extractor.policy_sha256,
                             "counts": counts,
+                            "observed_response_models": extractor.observed_response_models(),
                         }
                     )
                     write_json(manifest, report)

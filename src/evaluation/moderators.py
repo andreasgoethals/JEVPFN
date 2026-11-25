@@ -43,7 +43,7 @@ DECISION_PROPERTIES = (
     "decision_mean_pairwise_agreement",
 )
 ASSOCIATION_COLUMNS = [
-    "model_id", "checkpoint_id", "family", "aggregation", "representation", "outcome",
+    "model_id", "checkpoint_id", "family", "aggregation", "representation", "outcome", "task_family",
     "moderator",
     "n_datasets", "spearman_rho", "ci_low", "ci_high", "n_boot", "defined_boot", "seed",
     "status", "dataset_ids",
@@ -105,28 +105,28 @@ def dataset_covariates(dataset) -> dict:
     return row
 
 
-def decision_properties(tables: Path | None = None):
-    """Per dataset and provider from RQ1A ``distributions.csv`` and ``pairs.csv``.
+def decision_properties(tables: Path | None = None, *, cohort=None):
+    """Per dataset and provider from the verified A1 export or an explicit legacy CSV folder.
 
-    Row-weighted joint-text summaries only. Returns ``(table, status)``; an absent or
-    unreadable folder gives an empty table and a ``pending`` status, never an error.
+    Row-weighted joint-text summaries only. Missing or superseded archives give a pending
+    status. Archive integrity failures propagate, including for an explicitly supplied ZIP.
     """
     columns = ["dataset_id", "provider", *DECISION_PROPERTIES]
-    if tables is None:
-        from src.utils import paths
+    if tables is None or Path(tables).suffix.lower() == ".zip":
+        from src.evaluation import comparison_report
 
-        root = paths.notebook_outputs_dir()  # <folder>/results/notebook/[<stem>/]tables/
-        found = sorted(root.glob("*/results/notebook/**/tables/distributions.csv")) if root.is_dir() else []
-        if len(found) != 1:
-            reason = "no RQ1A comparison tables" if not found else "several RQ1A table folders"
-            return pd.DataFrame(columns=columns), f"pending: {reason}"
-        tables = found[0].parent
-    tables = Path(tables)
-    try:
-        distributions = pd.read_csv(tables / "distributions.csv")
-        pairs = pd.read_csv(tables / "pairs.csv")
-    except (FileNotFoundError, pd.errors.EmptyDataError):
-        return pd.DataFrame(columns=columns), f"pending: incomplete tables in {tables}"
+        frames, receipt = comparison_report.read_tables(comparison_report.report_config(cohort), tables, cohort=cohort)
+        tables = receipt["path"]
+        if receipt["status"] != "verified_snapshot":
+            return pd.DataFrame(columns=columns), f"pending: {receipt['status']} ({tables})"
+        distributions, pairs = frames["distributions"], frames["pairs"]
+    else:
+        tables = Path(tables)
+        try:
+            distributions = pd.read_csv(tables / "distributions.csv")
+            pairs = pd.read_csv(tables / "pairs.csv")
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            return pd.DataFrame(columns=columns), f"pending: incomplete tables in {tables}"
     needed = {"dataset_id", "provider", "representation", "weighting", "variable", "mean"}
     if not needed <= set(distributions) or not {
         "dataset_id", "model_a", "model_b", "representation", "weighting", "agreement"
@@ -150,7 +150,7 @@ def decision_properties(tables: Path | None = None):
     return table[columns], f"available: {tables}"
 
 
-def dataset_moderators(datasets=None, *, gains=None, decision_tables=None):
+def dataset_moderators(datasets=None, *, gains=None, decision_tables=None, cohort=None):
     """One row per dataset (or dataset × predictor when ``gains`` supplies headroom).
 
     ``datasets`` are loaded datasets (default: the Experiment 1 selection, read locally).
@@ -166,7 +166,7 @@ def dataset_moderators(datasets=None, *, gains=None, decision_tables=None):
         entries = selected_entries(load_catalog(), load_yaml("experiment_1/main"))
         datasets = (load_dataset(e, allow_download=False) for e in entries)
     table = pd.DataFrame([dataset_covariates(d) for d in datasets])
-    properties, status = decision_properties(decision_tables)
+    properties, status = decision_properties(decision_tables, cohort=cohort)
     if properties.empty:
         for column in DECISION_PROPERTIES:
             table[column] = np.nan
@@ -214,7 +214,7 @@ def moderator_data(gains, moderators):
     per_dataset = per_dataset.drop_duplicates("dataset_id")
     names = [c for c in per_dataset if c not in {"dataset_id", "task_type"}
              and pd.api.types.is_numeric_dtype(per_dataset[c])]
-    data = gains.merge(per_dataset, on="dataset_id", how="left", validate="many_to_one")
+    data = gains.merge(per_dataset, on="dataset_id", how="left", validate="many_to_one", suffixes=("", "_dataset"))
     data["baseline_headroom"] = 1.0 - data.baseline
     if "raw_gain" not in data:
         data["raw_gain"] = data.augmented - data.baseline
@@ -227,6 +227,18 @@ def moderator_data(gains, moderators):
             data[column] = np.where(data.provider.notna(), specific[column].to_numpy(), shared)
             names = names if column in names else [*names, column]
     return data, [*names, "baseline_headroom"]
+
+
+def moderator_outcomes(group, outcomes):
+    """Raw gains share units within classification or regression. Headroom shares can span both."""
+    from src.evaluation.group_b import task_family
+
+    for outcome in outcomes:
+        if outcome == "raw_gain":
+            for family, rows in group.groupby(group.task_type.map(task_family), sort=True):
+                yield outcome, family, rows
+        else:
+            yield outcome, "all", group
 
 
 def bootstrap_spearman(x, y, *, n_boot, seed):
@@ -260,8 +272,8 @@ def moderator_associations(gains, moderators, *, n_boot=2000, seed=0, min_datase
         return pd.DataFrame(columns=ASSOCIATION_COLUMNS)
     data, names = moderator_data(gains, moderators)
     records = []
-    for key, group in data.groupby(_REPRESENTATION_KEYS, dropna=False, sort=True):
-        for outcome in outcomes:
+    for key, representation in data.groupby(_REPRESENTATION_KEYS, dropna=False, sort=True):
+        for outcome, family, group in moderator_outcomes(representation, outcomes):
             for moderator in names:
                 pair = group[["dataset_id", outcome, moderator]].dropna()
                 x, y = pair[moderator].to_numpy(float), pair[outcome].to_numpy(float)
@@ -273,7 +285,7 @@ def moderator_associations(gains, moderators, *, n_boot=2000, seed=0, min_datase
                 )
                 ok = status == "descriptive"
                 records.append(dict(zip(_REPRESENTATION_KEYS, key)) | {
-                    "outcome": outcome, "moderator": moderator, "n_datasets": len(x),
+                    "outcome": outcome, "task_family": family, "moderator": moderator, "n_datasets": len(x),
                     "spearman_rho": rho if ok else np.nan,
                     "ci_low": low if ok else np.nan, "ci_high": high if ok else np.nan,
                     "n_boot": n_boot, "defined_boot": defined, "seed": seed, "status": status,
@@ -347,9 +359,11 @@ def model_gain_table(gains):
     """Per predictor × decision feature set × decision model: equal-dataset mean gains.
 
     Only datasets observed for every decision model of the cell enter, so all models are
-    ranked on the same datasets. ``mean_raw_gain`` is the unnormalised headline difference.
+    ranked on the same datasets. ``mean_raw_gain`` is defined for a single headline metric family.
     Rank 1 is the largest mean normalised gain. Descriptive; no model is selected.
     """
+    from src.evaluation.group_b import task_family
+
     if gains.empty:
         return pd.DataFrame(columns=MODEL_GAIN_COLUMNS)
     per_model = gains[gains.family.eq("decision") & gains.provider.notna()]
@@ -365,7 +379,10 @@ def model_gain_table(gains):
         providers = cell.provider.nunique()
         observed = cell.groupby("dataset_id").provider.nunique()
         shared = sorted(observed.index[observed.eq(providers)])
-        table = (cell[cell.dataset_id.isin(shared)].groupby("provider")
+        rows = cell[cell.dataset_id.isin(shared)]
+        if "task_type" not in rows or rows.task_type.map(task_family).nunique() != 1:
+            rows = rows.assign(raw_gain=np.nan)
+        table = (rows.groupby("provider")
                  .agg(mean_gain=("gain", "mean"), mean_raw_gain=("raw_gain", "mean"),
                       n_datasets=("dataset_id", "nunique")).reset_index())
         table = table.assign(**dict(zip(keys, key)), dataset_ids=", ".join(shared))

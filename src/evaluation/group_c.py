@@ -28,8 +28,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.evaluation import group_b, study_export
-from src.evaluation.endpoints import HEADLINES
 from src.evaluation.features import (
     ADAPTED,
     HIDDEN,
@@ -114,6 +112,16 @@ def hidden_control(estimator, groups, arm, seed):
                             scope="per_column", encoded_missing=True)
 
 
+def decision_model_for_fit(sources):
+    """Check the producer recorded by the hidden store or by every fold's adaptation bundle."""
+    from src.evaluation.design import decision_versions
+
+    registered, = decision_versions([PROVIDER])
+    if not sources or any(source != registered for source in sources):
+        raise ValueError("Group C features lack the registered Strands model and revision")
+    return registered
+
+
 def expected_artifacts(arm, dataset, specification=None) -> list[str]:
     """Group C artifact IDs: the verified hidden-state store or the five fold bundles."""
     if arm["feature_set"] == ADAPTED:
@@ -121,9 +129,9 @@ def expected_artifacts(arm, dataset, specification=None) -> list[str]:
 
         return [read_bundle(dataset, specification, i, arm["adaptation_cell"])["artifact_id"]
                 for i in range(5)]
-    from src.jev.strands_hidden import read_manifest
+    from src.jev.strands_hidden import active_artifact_id
 
-    return [read_manifest(dataset.metadata.dataset_id, verify=False)["artifact_id"]]
+    return [active_artifact_id(dataset.metadata.dataset_id)]
 
 
 # ------------------------------------------------------------------------- comparisons
@@ -171,8 +179,11 @@ def c2_contrasts() -> list[dict]:
 def contrast_gains(head: pd.DataFrame, contrasts) -> pd.DataFrame:
     """Per dataset x predictor x comparison: fold-paired five-fold mean of A - B (headline
     metric) and its share of B's headroom. Datasets lacking either arm are left out."""
+    from src.evaluation import group_b
+
     rows = []
     keys = group_b.PAIR_KEYS
+    group_b.validate_fold_identities(head)
     for spec in contrasts:
         a = head[head.representation.eq(spec["a"])][keys + ["value"]]
         b = head[head.representation.eq(spec["b"])][keys + ["value"]]
@@ -194,7 +205,7 @@ def contrast_gains(head: pd.DataFrame, contrasts) -> pd.DataFrame:
         name = "/".join(str(spec[k]) for k in ("comparison", "view", "layer", "position", "context")
                         if spec.get(k) is not None)
         grouped["representation"] = name
-        grouped["headroom_share"] = grouped.raw_gain / np.maximum(1 - grouped.b, group_b.HEADROOM_FLOOR)
+        grouped["headroom_share"] = grouped.raw_gain / (1 - grouped.b).where(grouped.b < 1)
         for k in ("comparison", "view", "layer", "position", "context", "a", "b"):
             grouped[f"contrast_{k}"] = spec.get(k)
         rows.append(grouped)
@@ -210,12 +221,18 @@ def export_path(study) -> Path:
 
 
 def analysis_identity(study) -> str:
+    from src.evaluation.benchmark_export import scientific_configs
+    from src.evaluation.design import decision_versions
     from src.utils.provenance import code_identity
 
-    configs = {name: load_yaml(name) for name in (
-        "experiment_1/main", "representations/representations", "rq3/adaptation")}
+    configs = scientific_configs(("experiment_1/main", "experiment_1/protocol", "representations/representations",
+                                  "experiment_3/tar", "rq3/adaptation"), roster=(PROVIDER,))
+    modules = ["group_c", "group_b", "benchmark_export", "study_export", "records", "endpoints",
+               "strands_adaptation", "campaign", "design"]
     return digest({"schema": SCHEMA, "study": study, "configs": configs,
-                   "analysis": code_identity(["src/evaluation/group_c.py", "src/evaluation/group_b.py"])})
+                   "decision_model_versions": decision_versions([PROVIDER]),
+                   "analysis": code_identity([f"src/evaluation/{name}.py" for name in modules]
+                                             + ["src/jev/strands_hidden.py"])})
 
 
 def _keep(head: pd.DataFrame, study: str) -> pd.DataFrame:
@@ -274,7 +291,7 @@ def fits_table() -> pd.DataFrame:
 
 
 def build_tables(study, folds) -> dict[str, pd.DataFrame]:
-    from src.evaluation import benchmark_export
+    from src.evaluation import benchmark_export, group_b
 
     head = _keep(group_b.headline(folds), study)
     paired = group_b.fold_gains(head)
@@ -282,7 +299,7 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
     contrasts = contrast_gains(head, c1_contrasts() if study == "C1" else c2_contrasts())
     group_c_phase = STUDIES[study]["phase"]
     tables = {
-        "coverage": benchmark_export.coverage(folds[folds.phase.eq(group_c_phase)], (group_c_phase,)),
+        "coverage": benchmark_export.coverage(folds[folds.phase.eq(group_c_phase)], (group_c_phase,), cohort="all"),
         "folds": folds, "dataset_gains": gains,
         "summary": group_b.summarize(gains) if not gains.empty else pd.DataFrame(),
         "contrasts": contrasts,
@@ -294,22 +311,26 @@ def build_tables(study, folds) -> dict[str, pd.DataFrame]:
 
 def read(study, target=None):
     """Verified tables and receipt, or an explicit waiting state (absent/superseded ZIP)."""
+    from src.evaluation import study_export
+
     return study_export.read_export(target or export_path(study), schema=SCHEMA, tables=TABLES[study],
                                     identity=analysis_identity(study))
 
 
 def build(study):
-    from src.evaluation import benchmark_export
+    from src.evaluation import benchmark_export, study_export
+    from src.evaluation.design import decision_versions
+    from src.evaluation.endpoints import HEADLINES
 
     study_export.require_mindwell_cpu(f"Group C {study}")
-    folds = benchmark_export.collect_folds(STUDIES[study]["phases"], metrics=METRICS)
+    folds = benchmark_export.collect_folds(STUDIES[study]["phases"], metrics=METRICS, providers=[PROVIDER])
     if folds.empty or not folds.phase.eq(STUDIES[study]["phase"]).any():
         raise ValueError(f"No complete five-fold arm exists for {study}")
     tables = {name: benchmark_export._parquet_safe(frame) for name, frame in build_tables(study, folds).items()}
     target = study_export.write_export(
         export_path(study), {name: tables[name] for name in TABLES[study]}, schema=SCHEMA,
         identity=analysis_identity(study), origin=study_export.job_origin(),
-        extra={"study": study, "headlines": HEADLINES})
+        extra={"study": study, "headlines": HEADLINES, "decision_model_versions": decision_versions([PROVIDER])})
     print(f"{target}  SHA256 {file_sha256(target)}", flush=True)
 
 

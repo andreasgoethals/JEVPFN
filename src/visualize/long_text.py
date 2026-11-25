@@ -58,12 +58,14 @@ def context_windows():
 
     encoders = load_yaml("feature_creation/embedding_models")["models"]
     candidates = load_yaml("extractors")["candidates"]
-    smallest = min(candidates.values(), key=lambda item: item["context_tokens"])
+    smallest = min(candidates, key=lambda provider: candidates[provider]["context_tokens"])
+    encoder = style.MODE_COLORS["per_column"]
+    decision = style.WINDOW_COLOR
     return [
-        (encoders["e5_small_v2"]["max_tokens"], "E5 window"),
-        (encoders["qwen3_embedding_0_6b"]["max_tokens"], "Qwen chunk"),
-        (smallest["context_tokens"], "smallest decision window"),
-        (candidates["jev"]["context_tokens"], "Jev window"),
+        (encoders["e5_small_v2"]["max_tokens"], "E5 chunk", encoder, ":"),
+        (encoders["qwen3_embedding_0_6b"]["max_tokens"], "Qwen chunk", encoder, ":"),
+        (candidates[smallest]["context_tokens"], f"{style.DECISION_SHORT.get(smallest, smallest)} request", decision, "--"),
+        (candidates["jev"]["context_tokens"], "Jev request", decision, "--"),
     ]
 
 
@@ -94,25 +96,28 @@ def long_text_figures(datasets, columns, *, all_columns=False):
             if dataset_id in removed:
                 tick.set_fontstyle("italic")
         ax.set_xlim(0.7, xmax)
-        for value, label in windows:
-            ax.axvline(value, color=style.WINDOW_COLOR, linestyle=(0, (3, 2)), linewidth=0.8,
+        for value, label, color, pattern in windows:
+            ax.axvline(value, color=color, linestyle=pattern, linewidth=0.8,
                        zorder=0)
             # Inside the empty lower-right region, along the line, so labels never collide.
             ax.text(value * 1.08, 0.02, f"{label} · {value:,}", transform=ax.get_xaxis_transform(),
-                    ha="left", va="bottom", rotation=90, fontsize=7, color=style.WINDOW_COLOR)
+                    ha="left", va="bottom", rotation=90, fontsize=7, color=color)
         layout.light_grid(ax)
-        ax.set_xlabel("Nonempty cell length (approximate tokens, log scale)")
+        ax.set_xlabel("Estimated tokens per nonempty cell (log scale)")
+        if not all_columns:
+            ax.set_title(f"Longest {len(part)} of {len(columns)} text columns by 99th percentile", fontsize=9)
         ax.legend(loc="upper right", bbox_to_anchor=(1, 0.93), fontsize=7)
         yield (
             fig,
             f"long_text_columns_page_{page}" if all_columns else "longest_column_tails",
-            ("All official text columns, ordered by descending p99 length. " if all_columns else
-             "The twelve official text columns with the largest nonempty p99 length, selected "
-             "without targets. ") +
-            "Boxes span p25–p75 with the median; whiskers span p01–p99; diamonds mark maxima. "
-            "Dashed lines mark the E5 window, the configured Qwen chunk, the smallest "
-            "decision-model request window (Strands) and the Jev window. Lengths are "
-            "ceil(characters/4) for the text alone, whereas decision windows must also hold the "
-            "question. Longer encoder inputs are chunked; decision requests are never truncated. Grey "
-            "italic labels belong to the two excluded datasets.",
+            ("All official text columns, ordered by their 99th percentile. " if all_columns else
+             f"Of {len(columns)} official text columns across {len(datasets)} datasets, the {len(part)} with "
+             "the largest 99th percentiles are shown to make long inputs visible. ") +
+            "One row represents a column. Boxes show the middle 50% of nonempty cells, with the median "
+            "marked. Whiskers reach the 1st and 99th percentiles. Diamonds mark individual maxima. "
+            "Lengths use one token per four characters, rounded up. Blue dotted lines mark encoder "
+            "chunk sizes. Longer text is split and all chunks contribute to its embedding. "
+            "Red dashed lines mark decision-model limits for complete requests, including the question "
+            "and options. Experiment 0A checks the actual token counts. Grey italic labels mark "
+            "datasets outside the benchmark.",
         )

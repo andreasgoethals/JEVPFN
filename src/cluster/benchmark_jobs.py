@@ -1,6 +1,6 @@
 """Write bounded, bundled Slurm array plans; never submit jobs or enable experiments.
 
-One array task runs every supported arm of one dataset for one predictor and phase
+One array task runs a time-bounded group of supported arms of one dataset for one predictor and phase
 (each arm: five folds, resumed by the evaluation store). Group B phases (experiment_1-4,
 rq2 text-column refits, data_efficiency training-size curves) use the same bundling. Inputs are loaded once per
 process; every arm and fit is evaluated exactly as a single-arm task would evaluate
@@ -18,6 +18,7 @@ import os
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 from src.cluster import benchmark_sizing as sizing
 from src.evaluation.campaign import benchmark_plan, run_arm, task_cache
@@ -42,11 +43,16 @@ def _dataset_rows():
 
 
 def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, workers=None,
-         profile_summary=None):
+         profile_summary=None, cohort="all", profile_runtime=None):
     from src.cluster.scheduling import gpu_profile
+    from src.evaluation.design import cohort_record
 
     if type(concurrency) is not int or concurrency < 1:
         raise ValueError("Positive array concurrency required")
+    if profile_runtime is not None and (
+        model != "linear" or not profile_fold or profile_runtime not in {"JEVPFN", "linear"}
+    ):
+        raise ValueError("Only linear fold profiling can select the controller or linear predictor image")
     runtime = load_yaml("experiment_1/models")["models"][model]["runtime"]
     gpu = runtime["device"].startswith("cuda")
     if model in CPU_ONLY_MODELS and gpu:
@@ -58,7 +64,7 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
         # staging dependency and must not receive an uncreated GPU working set.
         route = {**route, "staging_root": route["durable_root"], "partition": "batch_graniterapids"}
         route.pop("storage_mode")
-    candidates = [a for a in benchmark_plan() if a["phase"] == phase and a["model"] == model]
+    candidates = [a for a in benchmark_plan(cohort=cohort) if a["phase"] == phase and a["model"] == model]
     arms = [a for a in candidates if a["width_status"] != "unsupported_width"]
     if profile_fold:
         from src.evaluation.qualification import profile_plan
@@ -68,12 +74,12 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
     if not arms:
         raise ValueError("No supported arms for this phase/model")
     if profile_summary is None and not profile_fold and paths.on_vsc():
-        from src.evaluation.qualification import PHASE_CONFIGS
+        from src.evaluation.qualification import PHASE_CONFIGS, acceptance_for
 
         acceptance = load_yaml(PHASE_CONFIGS[phase]).get("experiment_0_acceptance")
-        profile_summary = sizing.summarize(sizing.profile_records(
-            model, phase=phase, cluster=route["cluster"], acceptance=acceptance,
-        ))
+        receipts = {acceptance_for(acceptance, provider) for provider in {a.get("provider") for a in arms}}
+        profile_summary = sizing.summarize([row for path in receipts for row in sizing.profile_records(
+            model, phase=phase, cluster=route["cluster"], acceptance=path)])
     sizes = _dataset_rows()
     groups = {}
     for index, arm in enumerate(arms):
@@ -85,22 +91,25 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
             profile_summary, gpu=gpu, threads=threads, arms=len(indices),
             requested=1 if profile_fold or (gpu and route["cluster"] != "mindwell") else workers,
         )
-        tasks.append({
-            "dataset_id": dataset_id,
-            "arms": indices,
-            "workers": count,
-            # B4 arms train on an explicit sample: size them by it (estimates use 0.8 x rows).
-            "resources": sizing.resources(
-                profile_summary, gpu=gpu, threads=threads, workers_per_task=count,
-                arm_rows=[arms[i]["training_size"] / 0.8 if arms[i].get("training_size") else rows
-                          for i in indices]),
-            "size": [rows, width],
-        })
+        workloads = {i: (arms[i]["training_size"], (rows + 4) // 5) if arms[i].get("training_size")
+                     else rows for i in indices}
+        for batch in sizing.task_batches(profile_summary, indices, workloads, count):
+            nworkers = min(count, len(batch))
+            tasks.append({
+                "dataset_id": dataset_id, "arms": batch, "workers": nworkers,
+                "resources": sizing.resources(profile_summary, gpu=gpu, threads=threads,
+                                              workers_per_task=nworkers, arm_rows=[workloads[i] for i in batch]),
+                "size": [rows, width],
+            })
     # Small and cheap first: failures surface before the expensive tasks start.
     tasks.sort(key=lambda t: (t["size"][0] * max(1, t["size"][1]), str(t["dataset_id"])))
+    roster = cohort_record(cohort)
     return {
         "version": 2,
         "phase": phase,
+        "cohort": cohort,
+        "decision_model_versions": roster["decision_model_versions"],
+        "roster_sha256": roster["roster_sha256"],
         "model": model,
         "route": route,
         "concurrency": concurrency,
@@ -110,6 +119,7 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
         "tasks": tasks,
         "excluded_arms": excluded,
         "profile_fold": profile_fold,
+        **({"profile_runtime": profile_runtime} if profile_runtime is not None else {}),
         "sizing": profile_summary,
     }
 
@@ -130,6 +140,33 @@ def write_plan(body):
     frozen = check_if_present()
     if not frozen["frozen"]:
         raise ValueError("Freeze the reviewed source before creating execution manifests")
+    environment = body["model"]
+    control_id = None
+    if body["model"] == "linear":
+        # A linear 0B contract can run inside the sealed CPU controller (same reviewed sklearn).
+        active = Path(body["route"]["staging_root"]) / paths.PROJECT_NAME / "containers/control.active.json"
+        if active.is_file():
+            control_id = json.loads(active.read_text(encoding="utf-8"))["container_id"]
+        if body["profile_fold"]:
+            environment = body.get("profile_runtime") or ("JEVPFN" if control_id else "linear")
+            if environment == "JEVPFN" and not control_id:
+                raise ValueError("Linear profiling requires the active sealed CPU controller")
+    if not body["profile_fold"]:
+        from src.evaluation.qualification import PHASE_CONFIGS, acceptance_for, benchmark_evidence
+
+        setting = load_yaml(PHASE_CONFIGS[body["phase"]]).get("experiment_0_acceptance")
+        reviews = {}
+        for arm in body["arms"]:
+            reviews.setdefault(arm.get("provider"), arm)
+        linear_ids = set()
+        for provider, arm in reviews.items():
+            evidence = benchmark_evidence(acceptance_for(setting, provider), arm)
+            if body["model"] == "linear":
+                linear_ids.add(evidence[1]["container_id"])
+        if len(linear_ids) > 1:
+            raise ValueError("The selected 0B reviews qualify different linear predictor images")
+        if control_id and linear_ids == {control_id}:
+            environment = "JEVPFN"
     output_phase = "experiment_0" if body["profile_fold"] else body["phase"]
     logs = paths.logs_dir(output_phase)
     logs.mkdir(parents=True, exist_ok=True)
@@ -142,6 +179,9 @@ def write_plan(body):
     submissions = []
     for tier in _tiers(body["tasks"]):
         manifest = {**body, "tasks": tier, "frozen": frozen}
+        if environment != body["model"]:
+            manifest["predictor_environment"] = environment
+            manifest["control_container_id"] = control_id
         target = paths.manifests_dir(output_phase) / "arrays" / f"{digest(manifest)}.json"
         write_json(target, manifest)
         request = tier[0]["resources"]
@@ -170,7 +210,7 @@ def write_plan(body):
             "scripts/slurm/benchmark_array.slurm",
             str(target),
             digest(manifest),
-            body["model"],
+            environment,
             route["staging_root"],
             output_phase,
         ]
@@ -186,8 +226,6 @@ def write_plan(body):
 
 
 def array_item(path, expected, index):
-    from pathlib import Path
-
     from src.cluster.freeze import check_if_present
 
     if not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
@@ -197,6 +235,13 @@ def array_item(path, expected, index):
         raise ValueError("Array manifest or frozen source changed")
     if os.environ.get("SLURM_CLUSTER_NAME") != body["route"]["cluster"]:
         raise ValueError("Array launched on a different cluster")
+    if body.get("predictor_environment") == "JEVPFN":
+        from src.cluster.control_runtime import MARKER
+
+        image = os.environ.get("JEVPFN_CONTROL_IMAGE")
+        if (not image or not body.get("control_container_id") or
+                json.loads((Path(image) / MARKER).read_text(encoding="utf-8"))["container_id"] != body["control_container_id"]):
+            raise ValueError("Linear array must run in its recorded sealed CPU controller")
     if body.get("version") != 2 or not 0 <= index < len(body["tasks"]):
         raise ValueError("Invalid array item")
     task = body["tasks"][index]
@@ -274,12 +319,15 @@ def execute(path, expected, index, worker=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase")
+    parser.add_argument("--cohort", metavar="COHORT", default="open_weight")
     parser.add_argument("--model")
     parser.add_argument("--profile", default=None)
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--workers", type=int, default=None,
                         help="Cap workers per task below the resource-based limit")
     parser.add_argument("--profile-fold", action="store_true")
+    parser.add_argument("--profile-runtime", choices=("JEVPFN", "linear"),
+                        help="Select the sealed controller or model image for a linear fold profile")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--run-manifest")
     parser.add_argument("--sha256")
@@ -300,7 +348,9 @@ def main():
         profile=args.profile,
         concurrency=args.concurrency,
         profile_fold=args.profile_fold,
+        profile_runtime=args.profile_runtime,
         workers=args.workers,
+        cohort=args.cohort,
     )
     print(
         json.dumps(

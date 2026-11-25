@@ -85,6 +85,30 @@ def test_normalised_gain_is_undefined_without_headroom():
     assert gain[2] == pytest.approx(-0.25)
 
 
+def test_b5_compares_native_systems_with_structured_references_in_the_export():
+    datasets = {"toy-a": "binary_classification", "toy-b": "regression"}
+    systems = ("tabstar", "contexttab", "ag_mm")
+    plan = pd.DataFrame([{"phase": "experiment_4", "model_id": model, "representation": f"native/{model}"}
+                         for model in systems])
+    rows = []
+    for dataset, task in datasets.items():
+        for model in MODELS:
+            rows.extend(fold_rows(dataset, task, model, "non_text", 0.5))
+        for i, model in enumerate(systems):
+            rows.extend({**r, "phase": "experiment_4"} for r in
+                        fold_rows(dataset, task, model, "original_features", 0.7 + 0.01 * i))
+    folds = pd.DataFrame(rows)
+    study = design(datasets=datasets, plan=plan)
+    result = learner_scores.run_application("B5_native_text_systems", {"folds": folds},
+                                            analysis=approved_analysis(), design=study)
+    group = result["groups"][0]
+    assert group["status"] == "compared" and group["table"].empty
+    assert group["omnibus"]["mean_ranks"] == {f"native/{model}": 3 - i for i, model in enumerate(systems)}
+    native_row = folds[folds.phase.eq("experiment_4")].iloc[[0]]
+    with pytest.raises(ValueError, match="Several fold records"):
+        learner_scores.b5_groups({"folds": pd.concat([folds, native_row])}, study)
+
+
 def test_application_names_match_the_framework_entries():
     entries = set(load_yaml("synthesis/analysis")["framework"]["application"])
     assert set(learner_scores.APPLICATIONS) == entries - {"A3_geometry"}
@@ -347,8 +371,13 @@ def test_b3_regret_matches_the_lodo_evaluation_policy_regret():
             predicted = actual + rng.normal(0, 0.01, len(DATASETS))
             rows += [dict(dataset_id=d, actual=a, predicted=p, input_set=name, model_id=model)
                      for d, a, p in zip(DATASETS, actual, predicted)]
-    table = pd.DataFrame(rows)
+    table = pd.DataFrame(rows).assign(outcome="headroom_share")
     groups = learner_scores.application_groups("B3_when_text_helps", {"lodo_predictions": table}, design())
+    for incompatible in (table.drop(columns="outcome"), table.assign(outcome="raw_gain")):
+        with pytest.raises(ValueError, match="headroom-share outcomes"):
+            learner_scores.application_groups("B3_when_text_helps", {"lodo_predictions": incompatible}, design())
+    assert learner_scores.rope_for(learner_scores.REGRET, {"rope": {learner_scores.NORMALISED_GAIN: 0.02,
+        "roc_auc": 0.1, "roc_auc_ovr_macro": 0.1, "r2": 0.1}}) == 0.02
     scores = groups[0].scores.set_index("learner")
     part = table[table.model_id.eq("catboost") & table.input_set.eq("pilot")]
     expected = group_b.lodo_evaluation(part[["dataset_id", "actual", "predicted"]], n_shuffles=0)
@@ -477,7 +506,8 @@ def test_cd_diagram_draws_all_pairwise_and_control_modes_at_full_width():
 
 def test_planned_design_reads_the_configuration_only():
     real = learner_scores.planned_design()
-    assert len(real.datasets) == 18 and len(real.roster) == 17
+    assert len(real.datasets) == 18 and len(real.roster) == 16 and "jev" not in real.roster
+    assert len(learner_scores.planned_design("with_jev").roster) == 17
     assert sum(t == "regression" for t in real.datasets.values()) == 9
     assert set(real.plan.phase) >= {"experiment_1", "experiment_2", "experiment_3", "experiment_4",
                                     "representations", "rq3", "data_efficiency"}

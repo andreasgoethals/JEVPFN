@@ -2,8 +2,10 @@
 
 Reads only already-collected responses: every completed, non-pilot `robustness.run` store
 under `results/robustness/<dataset>/<provider>/` on PROJECT. No model is called. The Mindwell
-CPU job (`scripts/slurm/rq1_robustness_export.slurm`) writes `results/robustness/robustness.zip`:
+CPU job (`scripts/slurm/rq1_robustness_export.slurm`) writes a ZIP keyed by the selected decision-model roster:
 
+* ``release_evidence`` identifies the completed receipts examined for each selected
+  provider and records the outcome of checking its release and settings.
 * ``effects`` / ``coverage``: each run's own summary (one factor at a time; changes and their
   excess over the unchanged replays).
 * ``mode_effects``: the same per request mode (per-column or joint request), with the paired
@@ -51,7 +53,7 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, file_sha256
 
-SCHEMA = "jevpfn.rq1b.export.v3"  # v3: mean_single presentation and ranked probability score
+SCHEMA = "jevpfn.rq1b.export.v4"  # v4 includes per-campaign model release evidence.
 #: Ordered regression levels (lowest first) that the decision answers distribute over.
 REGRESSION_LEVELS = 9
 #: Scoring roles: lower_is_better, and convex in the probabilities (averaging gain guaranteed).
@@ -67,7 +69,7 @@ METRIC_ROLES = {
 #: (contrast, presentation, reference): ``average`` minus reference, per dataset.
 CONTRASTS = (("average_vs_original", "average", "original"),
              ("average_vs_mean_single", "average", "mean_single"))
-COLLECTED = ("sources", "effects", "coverage", "mode_effects", "wording_averaging", "averaging_quality")
+COLLECTED = ("sources", "release_evidence", "effects", "coverage", "mode_effects", "wording_averaging", "averaging_quality")
 #: The dated 0A sensitivity receipts (DATA manifests), so the notebook reads only this ZIP.
 HISTORICAL = ("historical_0a", "historical_0a_sources")
 TABLES = COLLECTED + HISTORICAL
@@ -75,23 +77,74 @@ WORDINGS = ("original", "paraphrase_1", "paraphrase_2", "paraphrase_3")
 REPEATS = ("repeat_1", "repeat_2")
 
 
-def export_path() -> Path:
-    return paths.results_dir("robustness", "robustness.zip", phase="rq1")
+def export_path(cohort=None) -> Path:
+    from src.evaluation.benchmark_export import cohort_key
+
+    return paths.results_dir("robustness", f"robustness.{cohort_key(cohort)}.zip", phase="rq1")
 
 
-def completed_runs(root: Path):
-    """One completed scientific (non-pilot) campaign per dataset and provider."""
+def _release_selectors(roster=None):
+    from src.evaluation.benchmark_export import cohort_record
+    from src.evaluation.design import decision_versions
+    from src.evaluation.qualification import decision_selector
+
+    members = cohort_record()["decision_roster"] if roster is None else roster
+    main = load_yaml("experiment_1/main")
+    out = {}
+    for release in decision_versions(members):
+        provider = release["provider"]
+        selector = decision_selector(main, provider) if main["feature_selectors"].get(provider) else {}
+        out[provider] = {**release, "settings_sha256": selector.get("settings_sha256")}
+    return out
+
+
+def completed_runs(root: Path, *, roster=None, release_evidence=None):
+    for file, body, _, _ in _selected_runs(root, roster=roster, release_evidence=release_evidence):
+        yield file, body
+
+
+def _selected_runs(root, *, roster, release_evidence):
+    """Select one campaign for each exact release and retain the basis for selection."""
+    expected = _release_selectors(roster)
     seen = set()
     for file in sorted(Path(root).glob("*/*/*.json")):
         body = json.loads(file.read_text(encoding="utf-8"))
         design = body["design"]
         if design["pilot"] or body.get("completed") is not True:
             continue
-        identity = design["dataset"], design["provider"]
+        provider = design["provider"]
+        if provider not in expected:
+            continue
+        pin = expected[provider]
+        settings = body.get("decision_settings")
+        fingerprint = design.get("settings")
+        known_hash = pin["settings_sha256"]
+        if settings is None:
+            status = ("matched_legacy_settings" if known_hash and fingerprint == known_hash
+                      else "unidentified_release")
+        elif not isinstance(settings, dict) or digest(settings) != fingerprint or settings.get("provider") != provider:
+            status = "inconsistent_settings"
+        elif any(settings.get(k) != pin[k] for k in ("model", "version")):
+            status = "other_release"
+        elif known_hash and known_hash != fingerprint:
+            status = "different_settings"
+        else:
+            status = "recorded_settings"
+        if release_evidence is not None:
+            named = settings if isinstance(settings, dict) else {}
+            release_evidence.append({
+                "dataset": design["dataset"], "provider": provider, "file": file.name, "status": status,
+                "settings_sha256": fingerprint, "recorded_model": named.get("model"),
+                "recorded_version": named.get("version"), "selected_model": pin["model"],
+                "selected_version": pin["version"],
+            })
+        if status not in {"recorded_settings", "matched_legacy_settings"}:
+            continue
+        identity = design["dataset"], provider
         if identity in seen:
             raise ValueError("Select one robustness campaign for each dataset and provider")
         seen.add(identity)
-        yield file, body
+        yield file, body, pin, status
 
 
 def stored_results(store: Path) -> dict[int, dict[str, dict]]:
@@ -240,7 +293,7 @@ def _mode_effects(trials, links, base):
     return rows
 
 
-def collect(root: Path, cfg: dict, *, load_targets=None, question_path=None) -> dict[str, pd.DataFrame]:
+def collect(root: Path, cfg: dict, *, roster=None, load_targets=None, question_path=None) -> dict[str, pd.DataFrame]:
     """All export tables from completed campaigns (labels only for the quality scores)."""
     from src.evaluation.zero_shot import target_values
 
@@ -249,19 +302,34 @@ def collect(root: Path, cfg: dict, *, load_targets=None, question_path=None) -> 
     bins = cfg["averaging"]["calibration_bins"]
     tables = {name: [] for name in COLLECTED}
     targets_cache = {}
-    for file, body in completed_runs(root):
+    for file, body, pin, release_status in _selected_runs(root, roster=roster, release_evidence=tables["release_evidence"]):
         design = body["design"]
         dataset, provider = design["dataset"], design["provider"]
         base = {"dataset": dataset, "provider": provider}
         trials = stored_results(file.with_suffix(".sqlite3"))
         if set(map(int, body["sample"])) != set(trials):
             raise ValueError(f"{dataset}/{provider}: stored results differ from the frozen sample")
+        reported = set()
+        for variants in trials.values():
+            for trial in variants.values():
+                if trial.get("status") != "measured":
+                    continue
+                model, version = trial.get("reported_model"), trial.get("reported_version")
+                if ((model is not None and model != pin["model"]) or (version is not None and version != pin["version"])
+                        or (release_status == "recorded_settings" and
+                            (not model or (pin.get("delivery") == "self_hosted" and not version)))):
+                    raise ValueError(f"{dataset}/{provider}: stored reply differs from its requested decision release")
+                if model:
+                    reported.add(model)
         if dataset not in targets_cache:
             targets_cache[dataset] = load_targets(dataset, target_values)
         task, targets = targets_cache[dataset]
         links = request_links(question_path(dataset), design["source"], trials)
         tables["sources"].append({**base, "file": file.name, "json_sha256": file_sha256(file),
                                   "design_sha256": digest(design), "requests": len(trials),
+                                  "model": pin["model"], "version": pin["version"],
+                                  "settings_sha256": design.get("settings"), "release_evidence": release_status,
+                                  "reported_model": next(iter(reported), None),
                                   "task": task})
         tables["coverage"] += [{**base, **row} for row in body["counts"]]
         tables["effects"] += [{**base, "variant": variant, **item,
@@ -324,29 +392,44 @@ def _dataset_targets(dataset_id, target_values):
     return dataset.metadata.task_type, target_values(dataset)
 
 
-def analysis_identity(cfg: dict) -> str:
-    return digest({"behavior": cfg, "schema": SCHEMA})
+def analysis_identity(cfg: dict, cohort=None) -> str:
+    from src.evaluation.acceptance import EXECUTION_FIELDS
+    from src.evaluation.benchmark_export import cohort_record
+    from src.utils.provenance import code_identity
+
+    settings = {k: v for k, v in cfg.items() if k not in EXECUTION_FIELDS and k != "scientific_dispatch"}
+    record = cohort_record(cohort)
+    return digest({"behavior": settings, "schema": SCHEMA, "cohort": record,
+                   "selectors": _release_selectors(record["decision_roster"]),
+                   "analysis": code_identity(["src/evaluation/robustness_export.py", "src/evaluation/robustness.py",
+                                              "src/evaluation/decision_comparison.py", "src/evaluation/zero_shot.py",
+                                              "src/evaluation/notebook_evidence.py", "src/evaluation/study_export.py"])})
 
 
-def read_export(target=None):
+def read_export(target=None, *, cohort=None):
     cfg = load_yaml("rq1/behavior")
-    return study_export.read_export(target or export_path(), schema=SCHEMA, tables=TABLES,
-                                    identity=analysis_identity(cfg))
+    return study_export.read_export(target or export_path(cohort), schema=SCHEMA, tables=TABLES,
+                                    identity=analysis_identity(cfg, cohort))
 
 
-def build():
+def build(*, cohort=None):
+    from src.evaluation.benchmark_export import cohort_record
+
     study_export.require_mindwell_cpu("A2 stability")
     cfg = load_yaml("rq1/behavior")
+    record = cohort_record(cohort)
     root = paths.results_dir("robustness", phase="rq1")
-    tables = collect(root, cfg)
+    tables = collect(root, cfg, roster=record["decision_roster"])
     if tables["sources"].empty:
-        raise ValueError("No completed scientific robustness campaign to export")
+        raise ValueError("No completed scientific robustness campaign matches the selected releases")
     tables.update(historical_tables())
-    target = study_export.write_export(export_path(), tables, schema=SCHEMA,
-                                       identity=analysis_identity(cfg), origin=study_export.job_origin())
+    target = study_export.write_export(export_path(cohort), tables, schema=SCHEMA,
+                                       identity=analysis_identity(cfg, cohort), origin=study_export.job_origin(),
+                                       extra=record)
     print(f"{target}  SHA256 {file_sha256(target)}", flush=True)
 
 
 if __name__ == "__main__":
-    argparse.ArgumentParser(description=__doc__).parse_args()
-    build()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cohort", metavar="COHORT")
+    build(cohort=parser.parse_args().cohort)

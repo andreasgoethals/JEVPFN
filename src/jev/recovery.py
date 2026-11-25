@@ -30,7 +30,10 @@ def _job(db, key):
     row = cursor.fetchone()
     if row is None:
         raise ValueError("Unknown extraction request")
-    return dict(zip([c[0] for c in cursor.description], row))
+    job = dict(zip([c[0] for c in cursor.description], row))
+    if job.get("release_evidence_json") is None:
+        job.pop("release_evidence_json", None)  # Preserve reviews signed before the optional catalog evidence.
+    return job
 
 
 def inspect(path):

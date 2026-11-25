@@ -211,9 +211,11 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
     path = paths.dataset_question_path(dataset)
     identity, wording, trials = sample(path, dataset, limit)
     if not pilot:
-        from src.evaluation.qualification import benchmark_evidence, profile_plan
+        from src.evaluation.qualification import benchmark_evidence
 
-        benchmark_evidence(acceptance, profile_plan()[0])
+        benchmark_evidence(acceptance, {"phase": "experiment_1", "dataset_id": dataset,
+                                        "model": "linear", "feature_set": "non_text_plus_joint",
+                                        "provider": provider})
     client = client or SelfHostedClient(provider, allow_model_runs=True)
     native_signature = (
         client.input_signature if hosted else lambda payload: model_input(client.counter, payload)
@@ -337,6 +339,8 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
                                 native=native,
                                 probabilities=probs,
                                 response_sha256=digest(response),
+                                reported_model=response.get("model"),
+                                reported_version=response.get("version"),
                             )
                             if variant != "original":
                                 result["effect"] = effect(
@@ -392,6 +396,7 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
             store.with_suffix(".json"),
             dict(
                 design=design,
+                decision_settings=client.settings,
                 completed=True,
                 sample=trials,
                 counts=[dict(variant=v, status=s, count=n) for (v, s), n in counts.items()],

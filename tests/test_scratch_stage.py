@@ -918,7 +918,8 @@ def test_restage_unions_active_dataset_db_on_native_root_and_preserves_its_queue
 
 
 @pytest.mark.parametrize(
-    "phase", ["experiment_0", "experiment_1", "experiment_2", "experiment_3", "experiment_4"]
+    "phase", ["experiment_0", "experiment_1", "experiment_2", "experiment_3", "experiment_4",
+              "rq2", "data_efficiency", "representations", "rq3"]
 )
 def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results(
     roots, monkeypatch, tmp_path, phase
@@ -932,7 +933,7 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
     from src.data.loaders import LoadedDataset
     from src.data.metadata import extract_metadata
     from src.evaluation.protocol import evaluate_cv, shared_splits
-    from src.evaluation.store import read_predictions, recipes
+    from src.evaluation.store import database, read_predictions, recipes
 
     durable, _ = roots
     monkeypatch.setattr(stage, "roots", lambda runtime: (durable, roots[1].parent.parent / runtime / "JEVPFN"))
@@ -972,16 +973,41 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
     def no_refit():
         pytest.fail("A durable completed fold must be reused, not fitted again")
 
-    with stage.staging_environment(durable):
-        original = evaluate_cv(dataset, matrix, factory, fold_numbers=[0], **options)
+    # The first workspace has no durable prediction database to warm from.
+    with monkeypatch.context() as initial:
+        initial.setattr(stage, "roots", lambda runtime: (durable, tmp_path / "initial" / "JEVPFN"))
+        cold = Path(stage.stage("linear")["working_root"])
+        with stage.staging_environment(cold):
+            assert not database("fixture", phase).exists()
+            original = evaluate_cv(dataset, matrix, factory, fold_numbers=[0], **options)
+        with stage.staging_environment(durable):
+            assert not database("fixture", phase).exists()
+        stage._publish(durable, cold, periodic=True, dataset_id="fixture")
     work = Path(stage.stage("linear")["working_root"])
     with stage.staging_environment(work):
         reused = evaluate_cv(dataset, matrix, no_refit, fold_numbers=[0], **options)
+        assert reused[0].database.is_relative_to(work)
+        assert paths.results_dir("splits", phase=phase).is_relative_to(work)
+        assert paths.results_dir("cv_locks", phase=phase).is_relative_to(work)
+        if phase in {"rq2", "representations", "rq3"}:
+            export = "group_b" if phase == "rq2" else "group_c"
+            assert paths.results_dir(export, phase=phase).is_relative_to(durable)
         assert [r.key for r in reused] == [r.key for r in original]
+        meta = json.loads(reused[0].read_text())["metadata"]
+        assert (meta["data_identity"], meta["split_id"], meta["checkpoint_id"], meta["prediction_role"]) == (
+            "fixed", options["specification"]["split_id"], "synthetic", "outer_test"
+        )
         pd.testing.assert_frame_equal(read_predictions(original[0]), read_predictions(reused[0]))
-        evaluate_cv(dataset, matrix, factory, fold_numbers=[1], **options)
+        new = evaluate_cv(dataset, matrix, factory, fold_numbers=[1], **options)
+    with stage.staging_environment(durable):
+        assert {recipe["outer_fold"] for recipe in recipes(phase)} == {0}
+    for _ in range(2):
+        stage._publish(durable, work, periodic=True, dataset_id="fixture")
     # Another completed durable fold must be unioned, not replace scratch progress.
     with stage.staging_environment(durable):
+        published = evaluate_cv(dataset, matrix, no_refit, fold_numbers=[1], **options)
+        assert published[0].key == new[0].key
+        pd.testing.assert_frame_equal(read_predictions(new[0]), read_predictions(published[0]))
         evaluate_cv(dataset, matrix, factory, fold_numbers=[2], **options)
     stage.stage("linear")
     with stage.staging_environment(work):

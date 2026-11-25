@@ -308,6 +308,41 @@ def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatc
     scope, table = token_audit.saved_exact_token_tables()
     assert scope["status"] == "historical_inputs_changed" and table.empty
 
+    def missing():
+        raise FileNotFoundError("prepared input unavailable in this snapshot")
+
+    monkeypatch.setattr(token_audit, "selected_inputs", missing)
+    unavailable = token_audit.saved_request_audit()
+    assert unavailable["status"] == "prepared_inputs_unavailable" and not unavailable["self_hosted"]
+
+
+def test_notebook_includes_a_separately_signed_token_audit(inputs, monkeypatch):
+    counter = SimpleNamespace(identity={"counter_id": "synthetic"}, limit=10, count_many=lambda rows: [2] * len(rows))
+    report = token_audit.audit_provider("liquid", inputs, counter=counter)
+    folder = paths.manifests_dir("experiment_0") / "before_extraction"
+    write_json(folder / "token_audit.json", {"self_hosted": [report], "created_utc": "fixture"})
+    extra = folder / "tokens_glide_reviewed.json"
+    write_json(extra, {**report, "provider": "glide", "audit_id": "separate"})
+    write_json(folder / "accepted_glide.json", {"provider": "glide", "accepted": True, "token_audit_id": "separate",
+                                               "evidence": [{"path": extra.name, "sha256": file_sha256(extra)}]})
+    monkeypatch.setattr(token_audit, "selected_inputs", lambda: inputs)
+    scope, table = token_audit.saved_exact_token_tables()
+    assert set(table.provider) == {"liquid", "glide"} and "glide" not in scope["pending_self_hosted"]
+    dataset = inputs[0]["dataset_id"]
+    assert scope["dataset_ids"] == [dataset]
+    assert scope["evidence_files"]["glide"] == [str(folder / "accepted_glide.json"), str(extra)]
+    from src.evaluation.comparison_report import model_profile
+
+    write_json(paths.outputs_dir() / "compute_ledger.json", {"jobs": [
+        {"stage": "decision_feature_creation", "decision_model": "glide", "state": "COMPLETED",
+         "gpu_hours": 1.5, "dataset_id": dataset}]})
+    profile = model_profile({"comparison": {"providers": ["glide"], "compute_ledger": "compute_ledger.json"}}).iloc[0]
+    assert profile.request_audit_id == "separate" and profile.compute_status == "measured"
+    assert profile.gpu_hours_per_1000_requests == pytest.approx(1500. / report["unique_inputs"])
+    write_json(extra, {**report, "provider": "glide", "audit_id": "other"})
+    with pytest.raises(ValueError, match="checksum"):
+        token_audit.saved_exact_token_tables()
+
 
 def test_missing_chat_template_dependency_fails_before_counting(isolated_output, monkeypatch):
     from unittest.mock import Mock

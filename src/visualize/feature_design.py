@@ -16,28 +16,27 @@ def predictor_width_figure(plan, summary):
     order = layout.ordered(summary[["dataset_id", "dataset", "task_type"]])
     rows = plan[plan.model.eq("catboost")]
     decision = rows[rows.phase.eq("experiment_1")]
-    decision = decision[decision.provider.isna() | decision.provider.eq("jev")]
+    columns = ["dataset_id", "feature_set", "predictor_columns"]
+    width = decision[columns].drop_duplicates().pivot(
+        index="dataset_id", columns="feature_set", values="predictor_columns")
+    width = width.reindex(columns=["non_text", "non_text_plus_joint", "non_text_plus_per_column", "non_text_plus_both"])
     embedding = rows[rows.phase.eq("experiment_2") & rows.encoder.eq("e5_small_v2")
                      & rows.feature_set.eq("non_text_plus_frozen_e5")]
-    combined = rows[rows.phase.eq("experiment_2") & rows.feature_set.eq("non_text_plus_both_plus_frozen_e5")
-                    & rows.provider.eq("jev")].set_index("dataset_id").predictor_columns
-    width = {key: frame.set_index("dataset_id").predictor_columns
-             for key, frame in decision.groupby("feature_set")}
+    combined = rows.loc[rows.phase.eq("experiment_2") & rows.feature_set.eq("non_text_plus_both_plus_frozen_e5"),
+                        ["dataset_id", "predictor_columns"]].drop_duplicates().set_index("dataset_id").predictor_columns
     joint = embedding[embedding.pca_scope.eq("joint")].set_index("dataset_id").predictor_columns
-    separate = embedding[embedding.pca_scope.eq("per_column")].set_index("dataset_id")         .predictor_columns
+    separate = embedding[embedding.pca_scope.eq("per_column")].set_index("dataset_id").predictor_columns
     fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 4.0))
     y = np.arange(len(order))
     ids = order.dataset_id
     family = style.FAMILY_COLORS["experiment_2"]
-    ax.scatter(joint.reindex(ids), y, marker="|", s=36, color=family, zorder=4)
+    ax.scatter(joint.reindex(ids), y - 0.22, marker="|", s=36, color=family, zorder=4)
     ax.scatter(separate.reindex(ids), y, marker="s", s=16, color=family, zorder=3)
-    ax.scatter(combined.reindex(ids), y, marker="s", s=16, facecolors="none",
+    ax.scatter(combined.reindex(ids), y + 0.22, marker="s", s=16, facecolors="none",
                edgecolors=style.MODE_COLORS["both"], linewidths=0.9, zorder=3)
     ax.scatter(width["non_text"].reindex(ids), y, s=16, color=style.NON_TEXT_COLOR, zorder=4)
-    offsets = {"non_text_plus_joint": "joint", "non_text_plus_per_column": "per_column",
-               "non_text_plus_both": "both"}
-    for feature_set, mode in offsets.items():
-        ax.scatter(width[feature_set].reindex(ids), y, s=16, marker="D",
+    for mode, offset in (("joint", -0.22), ("per_column", 0), ("both", 0.22)):
+        ax.scatter(width[f"non_text_plus_{mode}"].reindex(ids), y + offset, s=16, marker="D",
                    color=style.MODE_COLORS[mode], zorder=5, linewidths=0)
     ax.set_xscale("log")
     ax.set_xticks([1, 3, 10, 30, 100, 300, 1000], ["1", "3", "10", "30", "100", "300", "1,000"])
@@ -63,13 +62,15 @@ def predictor_width_figure(plan, summary):
         fig,
         "predictor_input_widths",
         "Planned number of predictor input columns for each B1 (decision features) and B2a (frozen "
-        "embedding) arm, per dataset. Every arm includes one missing-text flag per text column. "
-        "Decision widths are the same for all 17 decision models (1 feature per request for binary, "
+        "embedding) arm, per dataset. Symbols are staggered vertically to show equal widths. "
+        "Joint, per-column and combined decision inputs have the same width on single-text-column "
+        "datasets. Every arm includes one missing-text flag per text column. "
+        f"Decision widths are the same for the {decision.provider.nunique()} selected decision models (1 feature per request for binary, "
         "9 for regression, K for multiclass) and embedding widths the same for all three encoders. "
-        "Per-column PCA adds 32 coordinates per text column; joint PCA adds 64 in total. The "
-        "label-trained classifier has the decision widths and TAR the embedding widths. All arms "
-        "run on all seven predictors; Kumo's 500-column default recipe is widened where an arm is "
-        "wider (owner-approved 23-11-2026), so no arm is excluded by width.",
+        "Per-column PCA adds 32 coordinates per text column and joint PCA adds 64 in total. The "
+        "label-trained classifier has the corresponding joint or per-column decision width and TAR "
+        "the corresponding embedding width. All arms are planned for seven predictors. Kumo's "
+        "default 500-column limit is raised when an arm requires more input columns.",
     )
 
 
@@ -142,7 +143,7 @@ def input_design_figure():
         ("+ per-column", [*base, ("A · f", 0.08, per), ("B · f", 0.08, per)], "B1"),
         ("+ both", [*base, ("A · f", 0.08, per), ("B · f", 0.08, per), ("joint · f", 0.08, joint)], "B1"),
         ("+ both + E5 PCA", [*base, ("A · f", 0.08, per), ("B · f", 0.08, per), ("joint · f", 0.08, joint),
-                             ("E5 PCA 2 × 32", 0.16, frozen)], "B2a"),
+                             ("E5 PCA 2 × 32", 0.13, frozen)], "B2a"),
         ("+ frozen embedding", [*base, ("PCA of frozen E5 / Qwen vectors", 0.26, frozen)], "B2a"),
         ("+ label-trained classifier", [*base, ("A · f", 0.08, probe), ("B · f", 0.08, probe)], "B2b"),
         ("+ TAR embedding", [*base, ("PCA of label-tuned E5 vectors", 0.26, tar)], "B2b"),

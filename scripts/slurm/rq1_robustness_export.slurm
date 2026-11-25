@@ -17,4 +17,4 @@ export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:?}"
 export JEVPFN_CONDA_ENV=JEVPFN PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 source scripts/activate_conda.sh
-"${JEVPFN_PYTHON:?}" -m src.evaluation.robustness_export
+"${JEVPFN_PYTHON:?}" -m src.evaluation.robustness_export "$@"

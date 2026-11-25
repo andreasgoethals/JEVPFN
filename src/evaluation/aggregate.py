@@ -3,7 +3,7 @@
 Within each fixed predictor, every complete representation arm (five defined outer folds)
 is compared with the same predictor's ``non_text`` arm on the same dataset and folds:
 
-    gain = (mean augmented − mean baseline) / max(1 − mean baseline, eps)
+    gain = (mean augmented − mean baseline) / (1 − mean baseline)
 
 for the prespecified headline metric (ROC-AUC, macro one-vs-rest ROC-AUC or R², each with a
 ceiling of 1). The gain is the share of the remaining headroom that is closed, so datasets
@@ -53,12 +53,18 @@ def catalog_text_columns():
 
 
 def _representation(row):
-    if row.family == "decision":
-        return f"decision/{DECISION_MODES[row.feature_set]}/{row.provider}"
-    return f"{row.family}/{row.encoder}/{row.pca_scope}{int(row.pca_components)}"
+    from src.evaluation.group_b import representation
+
+    name = representation(row._asdict())
+    return name.replace("frozen/", "embedding/", 1) if name.startswith("frozen/") else name
 
 
-def dataset_gains(paired, *, eps=1e-3):
+def _headroom(baseline, eps):
+    room = 1.0 - baseline
+    return room.where(room > 0) if eps is None else room.clip(lower=eps)
+
+
+def dataset_gains(paired, *, eps=None, roster=None):
     """One normalised gain per predictor, representation and dataset with five paired folds.
 
     ``raw_gain`` is the unnormalised five-fold mean difference (augmented − baseline).
@@ -84,8 +90,12 @@ def dataset_gains(paired, *, eps=1e-3):
         raise ValueError("Select one checkpoint per predictor before aggregating gains")
     keys = ["phase", "model_id", "checkpoint_id", "dataset_id", "task_type", "split_id",
             "feature_set", "provider", "encoder", "pca_scope", "pca_components", "arm_id"]
-    keys += [k for k in ("view",) if k in data]
+    keys += [k for k in ("view", "probe_view") if k in data]
+    from src.evaluation.group_b import validate_fold_identities
+
+    validate_fold_identities(data)
     data = data.assign(_fold_difference=data.value - data.non_text_value)
+    data = data[np.isfinite(data._fold_difference)]
     arms = data.groupby(keys, dropna=False).agg(
         augmented=("value", "mean"), baseline=("non_text_value", "mean"),
         defined=("value", "count"), defined_baseline=("non_text_value", "count"),
@@ -95,32 +105,33 @@ def dataset_gains(paired, *, eps=1e-3):
     arms = arms[arms.defined.eq(5) & arms.defined_baseline.eq(5) & arms.folds.eq(5)].copy()
     if arms.empty:
         return pd.DataFrame(columns=DATASET_COLUMNS)
-    arms["family"] = arms.phase.map(FAMILIES)
-    arms["aggregation"] = np.where(arms.family.eq("decision"), PER_MODEL, RECIPE)
     arms["representation"] = [_representation(r) for r in arms.itertuples()]
+    arms["family"] = arms.representation.str.split("/").str[0]
+    arms["aggregation"] = np.where(arms.family.eq("decision"), PER_MODEL, RECIPE)
     if arms.duplicated(["model_id", "representation", "dataset_id"]).any():
         raise ValueError("Multiple arms/splits/views for one dataset and representation; select one campaign")
-    headroom = np.maximum(1.0 - arms.baseline, eps)
+    headroom = _headroom(arms.baseline, eps)
     arms["gain"] = (arms.augmented - arms.baseline) / headroom
     arms["raw_gain"] = arms.augmented - arms.baseline
     arms["gain_variance"] = arms.fold_difference_var / 5 / headroom**2
     arms["decision_models"] = np.where(arms.family.eq("decision"), 1, np.nan)
     rows = arms[DATASET_COLUMNS].copy()
-    per_model = rows[rows.family.eq("decision")]
+    if roster is None:
+        from src.evaluation.benchmark_export import decision_roster
+
+        roster = decision_roster()
+    per_model = rows[rows.family.eq("decision") & rows.provider.isin(roster)]
     if not per_model.empty:
-        # A model-agnostic decision gain needs every observed decision model on that dataset;
-        # otherwise the median would describe a different model set per dataset.
-        required = per_model.groupby(["model_id", "feature_set"]).provider.nunique().rename("required")
         median = per_model.groupby(["model_id", "checkpoint_id", "feature_set", "dataset_id",
                                     "task_type"], dropna=False).agg(
             gain=("gain", "median"), baseline=("baseline", "first"),
             augmented=("augmented", "median"), decision_models=("provider", "nunique"),
             raw_gain=("raw_gain", "median"),
-        ).reset_index().join(required, on=["model_id", "feature_set"])
-        median = median[median.decision_models.eq(median.required)].drop(columns="required")
+        ).reset_index()
+        median = median[median.decision_models.eq(len(roster))].copy()
         # Fold-level medians over decision models give the median arm's own fold variance.
         ident = ["model_id", "dataset_id", "split_id", "arm_id"]
-        complete = pd.MultiIndex.from_frame(arms.loc[arms.family.eq("decision"), ident])
+        complete = pd.MultiIndex.from_frame(arms.loc[arms.family.eq("decision") & arms.provider.isin(roster), ident])
         fold_rows = data[pd.MultiIndex.from_frame(data[ident]).isin(complete)]
         per_fold = (fold_rows.groupby(["model_id", "checkpoint_id", "feature_set", "dataset_id",
                                        "outer_fold"], dropna=False)._fold_difference.median()
@@ -129,7 +140,7 @@ def dataset_gains(paired, *, eps=1e-3):
         median = median.merge(per_fold, on=["model_id", "checkpoint_id", "feature_set",
                                             "dataset_id"], how="left")
         median["gain_variance"] = (median.fold_difference_var / 5
-                                   / np.maximum(1.0 - median.baseline, eps) ** 2)
+                                   / _headroom(median.baseline, eps) ** 2)
         median = median.assign(family="decision", aggregation=MEDIAN, provider=None, encoder=None,
                                pca_scope=None, pca_components=np.nan)
         median["representation"] = "decision/" + median.feature_set.map(DECISION_MODES) + "/median"
@@ -147,7 +158,7 @@ def _bootstrap(values, n_boot, seed):
     return float(low), float(high)
 
 
-def normalized_gain_summary(paired, *, n_boot=2000, seed=0, eps=1e-3, text_columns=None):
+def normalized_gain_summary(paired, *, n_boot=2000, seed=0, eps=None, text_columns=None, roster=None):
     """Equal-dataset mean headroom-normalised gain with a dataset bootstrap 95% interval.
 
     ``dataset_scope='all'`` compares each representation with the no-text baseline on every
@@ -155,7 +166,7 @@ def normalized_gain_summary(paired, *, n_boot=2000, seed=0, eps=1e-3, text_colum
     joint versus both contrasts: those modes are identical by construction on one-text-column
     datasets (``single_text_rule``), which are therefore excluded only from that scope.
     """
-    gains = dataset_gains(paired, eps=eps)
+    gains = dataset_gains(paired, eps=eps, roster=roster)
     if gains.empty:
         return pd.DataFrame(columns=SUMMARY_COLUMNS)
     counts = catalog_text_columns() if text_columns is None else text_columns
@@ -200,7 +211,7 @@ def kendall_tau_b(a, b):
     return float(kendalltau(a, b, variant="b").statistic)
 
 
-def ranking_stability(paired, *, summary=None, n_boot=0, seed=0, eps=1e-3, text_columns=None):
+def ranking_stability(paired, *, summary=None, n_boot=0, seed=0, eps=None, text_columns=None, roster=None):
     """Kendall tau-b between predictors' rankings of the headline representations.
 
     Rankings use the equal-dataset mean normalised gain over the representations both
@@ -208,7 +219,7 @@ def ranking_stability(paired, *, summary=None, n_boot=0, seed=0, eps=1e-3, text_
     """
     if summary is None:
         summary = normalized_gain_summary(paired, n_boot=n_boot, seed=seed, eps=eps,
-                                          text_columns=text_columns)
+                                          text_columns=text_columns, roster=roster)
     rows = headline_rows(summary)
     if rows.empty:
         return pd.DataFrame(columns=RANKING_COLUMNS), np.nan

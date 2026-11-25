@@ -1,4 +1,4 @@
-"""Group A synthesis: one map of the 17 decision models from the A1 and A2 summaries.
+"""Group A synthesis: one map of the selected decision models from the A1 and A2 summaries.
 
 Marker = architecture family (`style.ARCHITECTURE_MARKERS`), area = verified parameter count
 (open small marker when not stated), label = `style.DECISION_SHORT`. Nothing is redrawn from the

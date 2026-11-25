@@ -37,20 +37,27 @@ FACTORIAL = {"zero_shot": (False, False), "head_only": (False, True), "lora_only
              "lora_head": (True, True)}
 
 
-def predictor_average(gains: pd.DataFrame) -> pd.DataFrame:
+def predictor_average(gains: pd.DataFrame, *, predictors=None) -> pd.DataFrame:
     """Per dataset x arm: the mean over predictors of the five-fold raw gain and headroom share.
 
-    Only dataset x arm cells holding every predictor seen for that arm enter, so a missing
+    Only dataset x arm cells holding every configured predictor enter, so a missing
     predictor never changes the average silently; the result has ``model_id = PREDICTOR_MEAN``.
     """
     if gains is None or gains.empty:
         return pd.DataFrame()
     keys = ["dataset_id", "task_type", "representation"]
-    expected = gains.groupby("representation").model_id.nunique()
+    from src.evaluation.models import MAIN_MODELS
+
+    expected = set(MAIN_MODELS if predictors is None else predictors)
+    gains = gains[gains.model_id.isin(expected)]
+    if gains.duplicated([*keys, "model_id"]).any():
+        raise ValueError("Several gains for one predictor in a Group C cell")
     out = gains.groupby(keys, as_index=False).agg(
         raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
-        predictors=("model_id", "nunique"))
-    out = out[out.predictors.eq(out.representation.map(expected))].copy()
+        predictors=("model_id", "nunique"), defined_shares=("headroom_share", "count"))
+    out = out[out.predictors.eq(len(expected))].copy()
+    out.loc[out.defined_shares.ne(len(expected)), "headroom_share"] = np.nan
+    out = out.drop(columns="defined_shares")
     out["model_id"] = PREDICTOR_MEAN
     return out.reset_index(drop=True)
 
@@ -81,16 +88,15 @@ def predictor_range(summary: pd.DataFrame, column: str = "mean_raw_gain") -> pd.
 
 
 def combined_gains(c1: dict, c2: dict) -> pd.DataFrame:
-    """C1 and C2 per-dataset gains in one table; the shared zero-shot arm is kept once (C2)."""
-    parts = []
-    if c2 and not c2["dataset_gains"].empty:
-        parts.append(c2["dataset_gains"])
-    if c1 and not c1["dataset_gains"].empty:
-        c1_gains = c1["dataset_gains"]
-        if parts:
-            c1_gains = c1_gains[~c1_gains.representation.isin(set(parts[0].representation))]
-        parts.append(c1_gains)
-    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    """Union shared gains by dataset and predictor, requiring identical overlapping measurements."""
+    parts = [frames["dataset_gains"] for frames in (c1, c2) if frames and not frames["dataset_gains"].empty]
+    if not parts:
+        return pd.DataFrame()
+    combined = pd.concat(parts, ignore_index=True).drop_duplicates()
+    keys = ["dataset_id", "task_type", "model_id", "representation"]
+    if combined.duplicated(keys).any():
+        raise ValueError("Overlapping C1/C2 exports disagree on a matched gain")
+    return combined.reset_index(drop=True)
 
 
 def dataset_names() -> dict[str, str]:

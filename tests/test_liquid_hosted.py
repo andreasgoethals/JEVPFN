@@ -118,8 +118,9 @@ def test_request_mapping_is_the_shared_semantic_question(kind):
 
 def test_unpinned_aliases_and_empty_text_are_refused():
     original = _request(*TASKS["binary"])
-    with pytest.raises(ValueError, match="Pin"):
-        liquid.api_preview(liquid.bind(original, _candidate(version=None)))
+    for version in (None, "d1.2-ultra@latest", "d1.2-ultra@2026-02-31", "d1.2-ultra@20261101"):
+        with pytest.raises(ValueError, match="Pin"):
+            liquid.api_preview(liquid.bind(original, _candidate(version=version)))
     with pytest.raises(ValueError, match="aliases"):
         liquid.api_preview(liquid.bind(original, _candidate(model="d1.2-ultra:latest")))
     payload = json.loads(original.payload_json)
@@ -253,7 +254,8 @@ def test_dispatch_records_version_usage_and_raw_responses(tmp_path, monkeypatch)
     assert client.release == "2026-11-01"
     extractor = _extractor(tmp_path, client)
     assert extractor.run([request]) == {"completed": 1}
-    method, url, headers, body = http.calls[-1]
+    assert [c[0] for c in http.calls] == ["GET", "GET", "POST", "GET"]
+    method, url, headers, body = http.calls[2]
     assert (method, url) == ("POST", "https://api.liquid.ai/decisions/v1/systemone")
     assert headers["Authorization"] == "Bearer liquid_fake" and json.loads(body) == liquid.api_preview(request)
     assert extractor.cache.get(request, kind="verified_response")["model"] == "d1.2-ultra"
@@ -262,7 +264,95 @@ def test_dispatch_records_version_usage_and_raw_responses(tmp_path, monkeypatch)
     assert tokens == 120 and spent == pytest.approx(120 * 0.042 / 1e6)
     ledger = prov.version_ledger(tmp_path, provider="liquid_ultra")
     assert ledger.requested_version.tolist() == [PINNED] and not ledger.version_mismatch.any()
+    assert ledger.version_status.tolist() == ["model_matches_release_unreported"]
+    evidence, = ledger.catalog_release_evidence
+    assert evidence["before_release"] == evidence["after_release"] == client.release
+    assert evidence["matches_pin"] and evidence["source"] == "models_endpoint_release_date"
+    assert extractor.evaluate(request) == "cache_hit" and len(http.calls) == 4
     assert prov.version_ledger(tmp_path).empty  # Jev ledger ignores Liquid rows.
+
+
+def test_changed_catalog_before_decision_releases_unspent_reservation(tmp_path, monkeypatch):
+    monkeypatch.setenv("LIQUID_API_KEY", "liquid_fake")
+    http = FakeHttp(post=lambda body: pytest.fail("decision was dispatched"))
+    client = liquid.LiquidTransport(_ready_candidate(), allow_network=True, http=http)
+    http.release = "2026-12-01"
+    extractor = _extractor(tmp_path, client)
+    assert extractor.run([_bound("binary")]) == {"release_unverified": 1}
+    with extractor.cache._connect() as db:
+        assert db.execute("SELECT status,attempts,reserved_usd,spent_usd FROM extraction_jobs").fetchone() == (
+            "pending", 0, 0, 0)
+    assert [c[0] for c in http.calls] == ["GET", "GET"]
+
+
+def test_unbilled_retry_rechecks_release_before_another_decision(tmp_path, monkeypatch):
+    monkeypatch.setenv("LIQUID_API_KEY", "liquid_fake")
+    cand, http = _ready_candidate(), FakeHttp()
+    cand["live_extraction"]["overload_rejections_unbilled_verified"] = True
+
+    def reject(body):
+        http.release = "2026-12-01"
+        return 429, {}, b'{"error":{"code":"rate_limit_exceeded"}}'
+
+    http.post = reject
+    extractor = _extractor(tmp_path, liquid.LiquidTransport(cand, allow_network=True, http=http))
+    extractor.sleep = lambda _: None
+    assert extractor.run([_bound("binary")]) == {"release_unverified": 1}
+    with extractor.cache._connect() as db:
+        assert db.execute("SELECT status,attempts,reserved_usd,spent_usd FROM extraction_jobs").fetchone() == (
+            "pending", 1, 0, 0)
+    assert [c[0] for c in http.calls] == ["GET", "GET", "POST", "GET"]
+
+
+@pytest.mark.parametrize("after", ["2026-12-01", None])
+def test_paid_decision_with_changed_or_unavailable_catalog_keeps_raw_without_replay(tmp_path, monkeypatch, after):
+    monkeypatch.setenv("LIQUID_API_KEY", "liquid_fake")
+    request = _bound("binary")
+    raw = _response(request)
+    http = FakeHttp()
+
+    def decision(body):
+        http.release = after
+        return 200, {}, json.dumps(raw).encode()
+
+    http.post = decision
+    client = liquid.LiquidTransport(_ready_candidate(), allow_network=True, http=http)
+    extractor = _extractor(tmp_path, client)
+    assert extractor.run([request]) == {"release_unverified": 1}
+    assert _extractor(tmp_path, client).evaluate(request) == "release_unverified"
+    assert extractor.cache.get(request, kind="verified_response") is None
+    assert [c[0] for c in http.calls] == ["GET", "GET", "POST", "GET"]
+    with extractor.cache._connect() as db:
+        saved, spent, reserved, evidence = db.execute(
+            "SELECT raw_response_json,spent_usd,reserved_usd,release_evidence_json FROM extraction_jobs"
+        ).fetchone()
+    assert json.loads(saved) == raw and spent == pytest.approx(120 * 0.042 / 1e6) and reserved == 0
+    evidence = json.loads(evidence)
+    assert evidence["before_release"] == "2026-11-01" and evidence["after_release"] == after
+    assert evidence["matches_pin"] is False
+    ledger = prov.version_ledger(tmp_path, provider="liquid_ultra")
+    assert ledger.kind.tolist() == ["saved_release_unverified"]
+    assert ledger.catalog_release_evidence.tolist() == [evidence]
+    # A separately reconciled usage hold may restore the raw reply to 'received'.
+    with extractor.cache._connect() as db:
+        db.execute("UPDATE extraction_jobs SET status='received'")
+    assert extractor.evaluate(request) == "release_unverified"
+    assert extractor.cache.get(request, kind="verified_response") is None and len(http.calls) == 4
+
+
+def test_old_mapping_remains_decodable_and_cannot_satisfy_or_dispatch_new_work(tmp_path, monkeypatch):
+    monkeypatch.setenv("LIQUID_API_KEY", "liquid_fake")
+    current = _bound("binary")
+    settings = json.loads(current.settings_json) | {"api_mapping_version": liquid.LEGACY_MAPPING_VERSION}
+    old = IntendedRequest(current.payload_json, canonical_json(settings), current.provenance_json)
+    raw = _response(current)
+    assert response_features(old, raw) == {"p_positive": 0.73}
+    http = FakeHttp(post=lambda _: pytest.fail("decision was dispatched"))
+    extractor = _extractor(tmp_path, liquid.LiquidTransport(_ready_candidate(), allow_network=True, http=http))
+    assert extractor.evaluate(old) == "release_unverified"
+    extractor.cache.put(old, raw, kind="verified_response")
+    assert extractor.cache.get(current, kind="verified_response") is None
+    assert [c[0] for c in http.calls] == ["GET"]
 
 
 def test_ambiguous_usage_keeps_raw_response_and_stops(tmp_path, monkeypatch):

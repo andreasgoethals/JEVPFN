@@ -13,6 +13,7 @@ from src.utils.config import load_yaml
 def test_complete_open_weight_grid_and_workspace_lifetimes():
     steps = plan()
     settings = load_yaml("experiment_0/scheduling")
+    assert run()["decision_gpu_jobs_per_runtime"] == settings["feature_jobs_per_provider"]
     settings["test_pool_limits"].update(dict.fromkeys(SELF_HOSTED, 2))
     validate(steps, settings)
     for provider in SELF_HOSTED:

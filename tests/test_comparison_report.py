@@ -24,6 +24,11 @@ def test_local_report_is_snapshot_only_and_detects_tampering(tmp_path, monkeypat
     assert reports.read_report({**cfg, "cost": {"price": 100}}, target)[1] == receipt
     with pytest.raises(ValueError, match="configuration"):
         reports.read_report({"comparison": {}}, target)
+    monkeypatch.setattr(reports, "report_path", lambda *args: target)
+    changed = {**cfg, "comparison": {**cfg["comparison"], "random_seed": -1}}
+    pending, info = reports.read_report(changed, allow_previous_roster=True)
+    assert pending.table("inventory").empty and info["status"] == "superseded_configuration"
+    assert "Waiting for a matching A1 export" in reports.describe_receipt(info)
     with ZipFile(target) as archive:
         members = {name: archive.read(name) for name in archive.namelist()}
     members["pairs.parquet"] += b"wrong"
@@ -32,6 +37,8 @@ def test_local_report_is_snapshot_only_and_detects_tampering(tmp_path, monkeypat
             archive.writestr(name, data)
     with pytest.raises(ValueError, match="checksum"):
         reports.read_report(cfg, target)
+    with pytest.raises(ValueError, match="checksum"):
+        reports.read_report(changed)
 
 
 def test_rq1a_shares_production_recovery_selection_and_refuses_login_execution(monkeypatch):
@@ -91,6 +98,51 @@ def test_historical_roster_requires_exact_original_settings(tmp_path):
     _, info = reports.read_report(expanded, target, allow_previous_roster=True)
     assert info["unassessed_additions"] == ["sieve"]
     assert info["status"] == "verified_previous_roster"
+    assert [p["provider"] for p in info["decision_model_versions"]] == ["nimble"]
+    repinned = deepcopy(expanded)
+    for row in repinned["decision_model_versions"]:
+        if row["provider"] == "nimble":
+            row["version"] = "1" * 40
+    with pytest.raises(ValueError, match="configuration"):
+        reports.read_report(repinned, target, allow_previous_roster=True)
     expanded["comparison"]["random_seed"] += 1
     with pytest.raises(ValueError, match="configuration"):
         reports.read_report(expanded, target, allow_previous_roster=True)
+
+
+def test_a1_identity_uses_only_the_selected_model_versions(tmp_path, monkeypatch):
+    from copy import deepcopy
+
+    from src.evaluation import design
+    from src.utils.serialization import digest
+
+    configuration = design.load_yaml
+    candidates = deepcopy(configuration("extractors"))
+    main = deepcopy(configuration("experiment_1/main"))
+    def modified(name):
+        if name == "extractors":
+            return candidates
+        return main if name == "experiment_1/main" else configuration(name)
+
+    monkeypatch.setattr(design, "load_yaml", modified)
+    monkeypatch.setattr(reports, "load_yaml", modified)
+    first = reports.report_config("open_weight")
+    expanded = reports.report_config("with_jev")
+    first_id = reports.analysis_identity(first)
+    first_path = reports.report_path("open_weight")
+    expanded_path = reports.report_path("with_jev")
+    candidates["candidates"]["jev"]["version"] = "99.0"
+    candidates["candidates"]["future"] = {**candidates["candidates"]["jev"], "model": "future-1"}
+    main["candidate_extractors"].append("future")
+    main["decision_extensions"]["later"] = {"parent": "with_jev", "add": ["future"]}
+    main["dataset_feature_artifacts"]["new-dataset"] = {"future": {"joint": "future-artifact"}}
+    assert reports.analysis_identity(reports.report_config("open_weight")) == first_id
+    assert reports.report_path("open_weight") == first_path
+    assert reports.analysis_identity(reports.report_config("with_jev")) != reports.analysis_identity(expanded)
+    assert reports.report_path("with_jev") != expanded_path
+
+    target = tmp_path / first_path.name
+    reports.write_report(Comparison(), first, target, origin="fixture", joint_rows={})
+    _, meta = reports.read_report(first, target)
+    assert meta["decision_model_versions"] == first["decision_model_versions"]
+    assert meta["roster_sha256"] == digest(first["decision_model_versions"])

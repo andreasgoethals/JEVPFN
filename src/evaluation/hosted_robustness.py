@@ -3,15 +3,18 @@
 import argparse
 import hashlib
 import json
-from contextlib import contextmanager
+import sqlite3
+from contextlib import closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
 
 from src.jev.cache import ResponseCache
 from src.jev.extraction import DatasetExtractor, TypeSafeTransport, campaign_limits
 from src.jev.hosted import ReviewedContextEnvelope, rate_gate
-from src.jev.provider import MAPPING_VERSION, api_preview
+from src.jev.prefix_pilot import ledger_total
+from src.jev.provider import MAPPING_VERSION, api_preview, pinned_jev_model
 from src.jev.requests import IntendedRequest
+from src.jev.spending import JEV_CEILING_USD, campaign_committed
 from src.jev.templates import TEMPLATE_VERSION
 from src.utils import paths
 from src.utils.config import load_yaml
@@ -58,6 +61,7 @@ class HostedReplay:
             api_mapping_version=MAPPING_VERSION,
             request_configuration=cfg["jev"]["request_configuration"],
         )
+        pinned_jev_model(self.settings)
         self.factory, self.transport, self.workers = transport_factory, None, {}
         self.design_verified = False
         self.directory = paths.results_dir(
@@ -74,6 +78,7 @@ class HostedReplay:
     def start(self, design):
         from src.utils.acceptance import reviewed_acceptance
 
+        self.design_verified = False
         pilot_review = reviewed_acceptance(
             self.cfg["live_extraction"]["accepted_pilot_manifest"],
             stage="jev_pilot",
@@ -84,6 +89,8 @@ class HostedReplay:
         )
         if pilot_review.get("input_sets", {}).get(self.dataset) != design["source"]:
             raise ValueError("Frozen input set differs from the signed Jev pilot")
+        if design.get("settings") != digest(self.settings):
+            raise ValueError("Hosted replay design differs from the pinned Jev settings")
         budget = self.cfg["live_extraction"]
         contract = {
             "limit": budget["campaign_spending_limit_usd"],
@@ -95,7 +102,14 @@ class HostedReplay:
                 "RQ1B spending allocations changed; review the cumulative ledger before continuing"
             )
         write_json(budget_path, contract)
-        pinned = self.directory / "design.json"
+        # Retain all versions in the existing per-variant spending ledger. Its request
+        # keys already include the exact settings, and its allocation is cumulative.
+        pinned = self.directory / f"design.{self.settings['model']}.json"
+        legacy = self.directory / "design.json"
+        if not pinned.exists() and legacy.is_file():
+            old = json.loads(legacy.read_text(encoding="utf-8"))
+            if old != design and not self._different_legacy_release(old):
+                raise ValueError("Hosted replay design changed or the legacy release is unidentified")
         if pinned.exists() and json.loads(pinned.read_text(encoding="utf-8")) != design:
             raise ValueError(
                 "Hosted replay design changed; preserve existing spending and review before resuming"
@@ -103,11 +117,32 @@ class HostedReplay:
         write_json(pinned, design)
         self.design_verified = True
 
+    def _different_legacy_release(self, design):
+        """Identify the legacy marker through the request settings its digest binds."""
+        prior_hash = design.get("settings")
+        if not prior_hash or prior_hash == digest(self.settings):
+            return False
+        for store in sorted(self.directory.glob("*.sqlite3")):
+            with closing(sqlite3.connect(store.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+                if not db.execute("SELECT 1 FROM sqlite_master WHERE name='extraction_jobs'").fetchone():
+                    continue
+                for (raw,) in db.execute("SELECT DISTINCT json_extract(request_json,'$.settings') FROM extraction_jobs"):
+                    settings = json.loads(raw)
+                    if settings.get("provider") == "jev" and digest(settings) == prior_hash:
+                        return pinned_jev_model(settings) != self.settings["model"]
+        return False
+
     def evaluate_trial(self, request, variant):
         if not self.design_verified or json.loads(request.settings_json) != self.settings:
             raise ValueError("Verify the approved study design and Jev settings before dispatch")
         if variant not in VARIANTS:
             raise ValueError("Unknown hosted replay")
+        cache_folder = paths.jev_cache_path()
+        with file_lock(cache_folder / ".jev_campaign.lock", timeout=1):
+            committed = campaign_committed(cache_folder, replay_folder=self.directory.parent.parent)
+            return self._evaluate_locked(request, variant, committed)
+
+    def _evaluate_locked(self, request, variant, committed):
         if self.transport is None:
             self.transport = self.factory(self.cfg, allow_network=True)
         if variant not in self.workers:
@@ -121,6 +156,9 @@ class HostedReplay:
                 phase="rq1",
             )
         worker = self.workers[variant]
+        # The atomic reservation includes this ledger's previous usage itself.
+        other_usage = committed - ledger_total(worker.cache.path)
+        worker.available_usd = min(self.limit.dataset_budget_usd, JEV_CEILING_USD - other_usage)
         tagged = IntendedRequest(
             request.payload_json,
             request.settings_json,

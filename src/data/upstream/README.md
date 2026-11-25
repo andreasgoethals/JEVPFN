@@ -1,7 +1,7 @@
 # Frozen upstream reference files
 
 These immutable reference files come from the MulTaBench commit recorded in
-`config/0. exploration/datasets.yaml`. They are retained byte-for-byte for provenance and
+`config/00_data/datasets.yaml`. They are retained byte-for-byte for provenance and
 AST-only metadata extraction, not imported or executed. `summary.csv` contains public
 benchmark-level metadata, not raw dataset rows. The catalog holds source URLs and SHA-256
 hashes; [Data sources](../../../docs/DATA_SOURCES.md) explains their role. This directory is

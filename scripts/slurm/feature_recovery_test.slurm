@@ -43,18 +43,23 @@ unchanged = [
     'src/jev/question_bank.py', 'src/jev/merge.py',
     'src/data/text_embeddings.py',
 ]
-for name in unchanged:
-    old = subprocess.check_output(['git', 'show', '3f84d7e:' + name])
-    assert old.replace(b'\r\n', b'\n') == Path(name).read_bytes().replace(b'\r\n', b'\n'), name
-# The only feature-module change closes read-only SQLite handles explicitly.
-import ast
-before = ast.parse(subprocess.check_output(['git', 'show', '3f84d7e:src/jev/features.py']))
-after = ast.parse(Path('src/jev/features.py').read_text())
-def construction(tree):
-    return [ast.dump(node, include_attributes=False) for node in tree.body
-            if not isinstance(node, (ast.Import, ast.ImportFrom))
-            and getattr(node, 'name', None) not in {'load_block', 'feature_inventory'}]
-assert construction(before) == construction(after), 'Feature construction changed'
+reference = os.environ.get("JEVPFN_RECOVERY_COMPARE_REF")
+if reference:
+    reference = subprocess.check_output(
+        ['git', 'rev-parse', '--verify', '--end-of-options', reference + '^{commit}'], text=True
+    ).strip()
+    for name in unchanged:
+        old = subprocess.check_output(['git', 'show', reference + ':' + name])
+        assert old.replace(b'\r\n', b'\n') == Path(name).read_bytes().replace(b'\r\n', b'\n'), name
+    # The only feature-module change closes read-only SQLite handles explicitly.
+    import ast
+    before = ast.parse(subprocess.check_output(['git', 'show', reference + ':src/jev/features.py']))
+    after = ast.parse(Path('src/jev/features.py').read_text())
+    def construction(tree):
+        return [ast.dump(node, include_attributes=False) for node in tree.body
+                if not isinstance(node, (ast.Import, ast.ImportFrom))
+                and getattr(node, 'name', None) not in {'load_block', 'feature_inventory'}]
+    assert construction(before) == construction(after), 'Feature construction changed'
 
 project = paths.results_dir('recovery_qa', phase='feature_creation')
 project.mkdir(parents=True, exist_ok=True)
@@ -77,7 +82,7 @@ with (
         assert db.execute('SELECT COUNT(*) FROM responses').fetchone()[0] == 1
     assert source.path.exists()
 report = {'status': 'operational_recovery_checks_passed', 'job_id': os.environ['SLURM_JOB_ID'],
-          'source': source_snapshot(), 'unchanged_scientific_files': unchanged,
+          'source': source_snapshot(), 'comparison_revision': reference, 'unchanged_scientific_files': unchanged if reference else [],
           'native_publication': first, 'idempotent_publication': again,
           'warm_cache_integrity': True, 'production_caches_modified': False,
           'meaning': 'Synthetic GPFS recovery QA; no new inference or new 0A acceptance'}

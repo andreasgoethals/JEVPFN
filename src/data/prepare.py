@@ -150,7 +150,7 @@ def main() -> int:
             encoding="utf-8",
             newline="\n",
         )
-    write_json(paths.manifest_path("dataset_preparation"), status)
+    write_json(paths.manifest_path("dataset_preparation", phase="question_preparation"), status)
     print(f"{sum(s['status'] == 'ok' for s in status)}/20 datasets loaded")
     return int(any(s["status"] != "ok" for s in status))
 

@@ -15,7 +15,7 @@ abstract: >-
   embeddings, supervised target-aware E5 embeddings and native-text prediction
   systems on 18 selected MulTaBench datasets. Decision requests use fixed task
   definitions and row text without fitting to dataset labels. Decision and embedding
-  comparisons share six tabular predictors and five outer cross-validation folds;
+  comparisons share seven tabular predictors and five outer cross-validation folds;
   supervised adaptation and fitted preprocessing remain within training partitions.
   The software retains predictions, feature provenance, timings and validation evidence.
 keywords:

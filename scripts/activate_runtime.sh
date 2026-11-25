@@ -56,7 +56,7 @@ case "$JEVPFN_RUNTIME_NAME" in
             return
         fi
         if [[ "$JEVPFN_RUNTIME_PROFILE" == blackwell-cu130 ]]; then
-            echo "No sealed Blackwell runtime: $JEVPFN_PACKED_ENV. Build/stage it before GPU submission." >&2
+            echo "No sealed Blackwell runtime: $JEVPFN_PACKED_ENV. Build or stage it before submission." >&2
             return 2
         fi
         ;;

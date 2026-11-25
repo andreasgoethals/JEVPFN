@@ -16,4 +16,4 @@ export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/slurm/_activate_env.sh
-python -m src.cluster.preflight --stage after_extraction --verify-data --tests
+python -m src.cluster.preflight --stage after_extraction --verify-data --tests --cohort "${2:-open_weight}"

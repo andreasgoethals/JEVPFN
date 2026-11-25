@@ -13,7 +13,7 @@ from contextlib import closing, contextmanager, suppress
 from pathlib import Path
 
 from src.cluster.maintenance import reject_links
-from src.utils import paths
+from src.utils import paths, structure
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import write_json
@@ -76,7 +76,9 @@ def disposable_paths(work):
 
 def provider_cache_bound(source, provider):
     """Read capacity under the same lease used by durable publication/copying."""
-    with file_lock(source.with_suffix(".extraction.lock"), timeout=3600):
+    from src.cluster.scratch_stage import LOCK_WAIT_SECONDS
+
+    with file_lock(source.with_suffix(".extraction.lock"), timeout=LOCK_WAIT_SECONDS):
         return _provider_cache_bound_locked(source, provider)
 
 
@@ -405,8 +407,9 @@ def retire_published_mutable(work):
         dataset = (len(relative.parts) == 3 and relative.parts[:2] in {
             ("data", "jev_cache"), ("data", "text_embeddings")}
             and (p.suffix in {".sqlite3", ".lock"} or p.name.endswith(("-wal", "-shm", "-journal"))))
-        result = (len(relative.parts) >= 4 and relative.parts[0] == "output_JEVPFN"
-                  and relative.parts[2] == "results")
+        parts = relative.parts
+        owner = structure.registry().owner_of(parts[1:-1]) if parts[0] == paths.OUTPUT_DIR_NAME else None
+        result = owner is not None and parts[owner[1] + 1:-1][:1] == ("results",)
         if not dataset and not result:
             raise ValueError("Unpublished working file prevents retirement: " + str(relative))
         candidates.append(p)

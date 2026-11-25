@@ -79,7 +79,8 @@ class FoldInput:
     def transform(self, x, *, strings=False, categories=False):
         """Numeric columns as float (datetime -> seconds, +/-inf -> NaN); categorical columns as
         float codes (default), typed-JSON strings (`strings`) or pandas `category` dtype whose
-        categories are the training vocabulary (`categories`). Unseen values become missing."""
+        categories are the training vocabulary (`categories`). Unseen values become missing in
+        the coded and category modes. String mode retains their typed values."""
         if strings and categories:
             raise ValueError("Choose one categorical representation")
         if list(x.columns) != self.columns_:
@@ -91,7 +92,7 @@ class FoldInput:
                 out[c] = parsed.dt.as_unit("ns").astype("int64").astype(float) / 1e9
                 out.loc[parsed.isna(), c] = np.nan
             elif c in self.numeric_:
-                out[c] = pd.to_numeric(x[c]).to_numpy(dtype=float, na_value=np.nan)
+                out[c] = pd.to_numeric(x[c], errors="coerce").to_numpy(dtype=float, na_value=np.nan)
                 out[c] = out[c].replace([np.inf, -np.inf], np.nan)
             elif strings:
                 # Typed JSON preserves the distinction between literal strings and missingness.
@@ -490,7 +491,10 @@ class KumoBackend:
         return self._predict(x)
 
     def predict(self, x):
-        return self._predict(x).mean(axis=1)
+        values = self._predict(x)
+        if self.task == "regression":
+            return values.mean(axis=1)
+        return self.classes_[values.argmax(axis=1)]
 
 
 class PredictorAdapter:

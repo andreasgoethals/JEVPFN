@@ -6,9 +6,9 @@ import pandas as pd
 from src.evaluation import geometry_export, robustness_export
 
 
-def robustness_export_tables():
+def robustness_export_tables(*, cohort=None):
     """All A2 tables and the export receipt (waiting state when the ZIP is absent)."""
-    return robustness_export.read_export()
+    return robustness_export.read_export(cohort=cohort)
 
 
 def robustness_tables():

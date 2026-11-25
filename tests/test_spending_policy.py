@@ -243,3 +243,25 @@ def test_cache_merge_preserves_policy_history_without_adopting_remote_budget(ext
             "SELECT 1 FROM sqlite_master WHERE name='extraction_policy'"
         ).fetchone()
     assert merge_cache(extraction.cache.path, local.path)["ledger_records_added"] == 0
+    from src.jev.prefix_pilot import ledger_total
+    from src.jev.spending import register_policy
+
+    assert ledger_total(local.path) == pytest.approx(ledger_total(extraction.cache.path))
+    with pytest.raises(ValueError, match="authoritative spending ledger"):
+        register_policy(local, revised)
+
+
+def test_legacy_dataset_and_diagnostic_charges_reduce_available_money(extraction, tmp_path):
+    from src.jev.spending import campaign_committed
+
+    start = extraction.start()
+    start.evaluate(request())
+    permanent = tmp_path / "_control/jev_robustness/rounds/round1/state.json"
+    write_json(permanent, {"attempts": [{"charged_usd": 0.2, "reserved_usd": 0},
+                                         {"reserved_usd": 0.1}], "historical_reserved_usd": 0.03})
+    assert campaign_committed(tmp_path) == pytest.approx(0.33001)
+    limited = DatasetExtractor(extraction.cache, extraction.client, extraction.limits,
+                               validate_context=lambda _: None, campaign_available_usd=0)
+    assert limited.evaluate(request()) == "cache_hit"
+    assert limited.evaluate(request("new")) == "budget_stop"
+    assert extraction.client.calls == 1

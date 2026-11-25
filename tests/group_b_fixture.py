@@ -54,7 +54,7 @@ def datasets() -> pd.DataFrame:
 
 
 def roster() -> list[str]:
-    return benchmark_export.decision_roster()
+    return benchmark_export.decision_roster("all")
 
 
 class _Generator:
@@ -63,6 +63,7 @@ class _Generator:
     def __init__(self, seed=SEED):
         rng = np.random.default_rng(seed)
         self.rng = rng
+        self.seed = seed
         self.data = datasets().set_index("dataset_id")
         n = len(self.data)
         cls = self.data.task_type.ne("regression").to_numpy()
@@ -107,8 +108,10 @@ def _record(dataset, task, phase, model, feature_set, *, fold, metric, value, **
 
 def _arm(rows, gen, dataset, model, phase, feature_set, gain, width, *, seconds=1.0, **fields):
     task = gen.data.loc[dataset, "task_type"]
+    identity = repr((gen.seed, dataset, model, phase, feature_set, sorted(fields.items()))).encode()
+    rng = np.random.default_rng(int.from_bytes(hashlib.sha256(identity).digest()[:8], "big"))
     for fold in range(5):
-        noise = gen.rng.normal(0, gen.noise[dataset])
+        noise = rng.normal(0, gen.noise[dataset])
         value = gen.baseline(dataset, model) + gain + noise
         value = float(min(value, 0.999)) if task != "regression" else float(value)
         for metric, number in ((HEADLINES[task], value), ("columns.representation", width),
@@ -188,7 +191,10 @@ def folds(phases=("experiment_1",), *, predictors=MAIN_MODELS, seed=SEED) -> pd.
                               for r in rows[-15:]]
     frame = _categorise(rows)
     if "experiment_4" in phases:  # recipe ids of renamed native rows stay unique per system
-        frame["recipe_id"] = (frame.recipe_id.astype(str) + "-" + frame.model_id.astype(str)).astype("category")
+        native = frame.phase.eq("experiment_4")
+        recipe_id = frame.recipe_id.astype(str)
+        recipe_id.loc[native] = recipe_id[native] + "-" + frame.loc[native, "model_id"].astype(str)
+        frame["recipe_id"] = recipe_id.astype("category")
     return frame
 
 
@@ -277,7 +283,8 @@ def b3_model_diagnostics(seed=SEED) -> pd.DataFrame:
     rng = np.random.default_rng(seed + 4)
     models = roster()
     return pd.DataFrame({
-        "provider": models, "standalone_quality": rng.uniform(0.55, 0.85, len(models)),
+        "provider": models, "standalone_classification_auc": rng.uniform(0.55, 0.85, len(models)),
+        "standalone_regression_spearman": rng.uniform(0.2, 0.7, len(models)),
         "calibration_ece": rng.uniform(0.02, 0.25, len(models)),
         "mean_top_probability": rng.uniform(0.5, 0.95, len(models)),
         "consensus_distance": rng.uniform(0.05, 0.4, len(models)),
@@ -287,24 +294,24 @@ def b3_model_diagnostics(seed=SEED) -> pd.DataFrame:
 
 
 def b3_row_cohorts(seed=SEED) -> pd.DataFrame:
-    """The `row_benefit.summaries()` equal-dataset table (``balanced``)."""
+    """B3 per-dataset, per-predictor row benefits over the complete model roster."""
     rng = np.random.default_rng(seed + 5)
     axes = {"availability": ["present", "absent"], "length": [f"bin_{i}" for i in range(4)] + ["missing"],
             "baseline_entropy": ["0", "1", "2", "3"],
             "decision_confidence": ["lt_0.5", "0.5_to_0.7", "0.7_to_0.9", "ge_0.9"],
             "decision_agreement": ["lt_0.5", "0.5_to_0.75", "0.75_to_1", "unanimous"]}
     rows = []
-    for task in ("binary_classification", "multiclass_classification", "regression"):
+    for dataset, info in datasets().set_index("dataset_id").iterrows():
+        task = info.task_type
         for model in MAIN_MODELS:
             for mode in ("per_column", "joint", "both"):
                 for axis, cohorts in {"all": ["all"], **axes}.items():
                     for i, cohort in enumerate(cohorts):
-                        rows.append({"task": task, "phase": "experiment_1", "model": model,
+                        rows.append({"dataset": dataset, "task": task, "phase": "experiment_1", "model": model,
                                      "checkpoint": f"{model}-checkpoint", "features": FEATURE_SET[mode],
                                      "representation": f'{{"mode": "{mode}"}}', "axis": axis,
                                      "cohort": cohort, "interpretation": "pre-specified",
-                                     "mean_benefit": float(rng.normal(0.01 * (i + 1) - 0.01, 0.01)),
-                                     "datasets": 3 if task != "regression" else 9})
+                                     "benefit": float(rng.normal(0.01 * (i + 1) - 0.01, 0.01))})
     return pd.DataFrame(rows)
 
 
@@ -323,11 +330,11 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
     for model, group in outcome.groupby("model_id"):
         predictions, summary = group_b.lodo_input_sets(
             group, properties, input_sets=rule["input_sets"], alpha=rule["alpha"],
-            threshold=rule["use_threshold"], n_shuffles=n_shuffles)
+            threshold=rule["use_threshold"], n_shuffles=n_shuffles, value=rule["outcome"])
         lodo_rows.append(predictions.assign(model_id=model))
         lodo.append(summary.assign(model_id=model))
     diagnostics = b3_model_diagnostics()
-    usefulness = group_b.per_model_usefulness(gains)
+    usefulness = group_b.per_model_usefulness(gains, datasets=properties)
     relations = group_b.model_relations(usefulness, diagnostics, n_permutations=n_permutations, min_units=5)
     redundancy = pd.DataFrame([{"dataset_id": d, "provider": p, "status": "computed", "rows": 1000,
                                 "r2": r, "top_agreement": 0.8}
@@ -337,8 +344,7 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
         "coverage": benchmark_export.coverage(e1_folds, benchmark_export.STUDIES["B3"]["phases"]),
         "folds": e1_folds, "dataset_gains": gains, "summary": group_b.summarize(gains),
         "properties": properties, "redundancy": redundancy,
-        "associations": group_b.associations(medians, properties, by=("model_id", "representation"),
-                                             n_permutations=n_permutations),
+        "associations": group_b.dataset_associations(medians, properties, n_permutations=n_permutations),
         "model_diagnostics": diagnostics, "model_usefulness": usefulness, "model_relations": relations,
         "column_importance": group_b.text_column_importance(head), "row_cohorts": b3_row_cohorts(),
         "lodo_predictions": pd.concat(lodo_rows, ignore_index=True),
@@ -349,19 +355,19 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
 def tables(study: str) -> dict[str, pd.DataFrame]:
     """Every table of one study's export, in memory."""
     if study == "B1":
-        return benchmark_export.build_tables("B1", folds(("experiment_1",)))
+        return benchmark_export.build_tables("B1", folds(("experiment_1",)), cohort="all")
     if study == "B2":
-        built = benchmark_export.build_tables("B2", folds(("experiment_1", "experiment_2", "experiment_3")))
+        built = benchmark_export.build_tables("B2", folds(("experiment_1", "experiment_2", "experiment_3")), cohort="all")
         pairs = complementarity_pairs(built["dataset_gains"])
         built.update(complementarity_pairs=pairs,
-                     complementarity_summary=complementarity.complementarity_summary(pairs, n_boot=200))
+                     complementarity_summary=complementarity.complementarity_summary(pairs, roster=roster(), n_boot=200))
         return built
     if study == "B3":
         return b3_tables(folds(("experiment_1", "rq2")))
     if study == "B4":
-        return benchmark_export.build_tables("B4", size_folds())
+        return benchmark_export.build_tables("B4", size_folds(), cohort="all")
     if study == "B5":
-        return benchmark_export.build_tables("B5", folds(("experiment_1", "experiment_4")))
+        return benchmark_export.build_tables("B5", folds(("experiment_1", "experiment_4")), cohort="all")
     raise KeyError(study)
 
 
@@ -375,6 +381,6 @@ def export(study: str, folder) -> tuple[dict, dict]:
     target = Path(folder) / benchmark_export.STUDIES[study]["file"]
     study_export.write_export(target, {n: built[n] for n in benchmark_export.tables_for(study)},
                               schema=benchmark_export.SCHEMA,
-                              identity=benchmark_export.analysis_identity(study),
+                              identity=benchmark_export.analysis_identity(study, "all"),
                               origin="fixture:synthetic", extra={"study": study, "headlines": HEADLINES})
-    return benchmark_export.read(study, target=target)
+    return benchmark_export.read(study, target=target, cohort="all")

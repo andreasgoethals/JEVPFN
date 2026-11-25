@@ -19,8 +19,8 @@ from src.utils.config import load_yaml
 def test_active_rosters_and_provider_pins_agree():
     catalog = load_yaml("extractors")["candidates"]
     roster = set(catalog)
-    assert roster == {"jev", *SELF_HOSTED}
-    assert set(HOSTED_UNAVAILABLE) == {"jev"}
+    assert set(SELF_HOSTED) == {p for p, cfg in catalog.items() if cfg["delivery"] == "self_hosted"}
+    assert {"jev"} <= set(HOSTED_UNAVAILABLE) <= roster - set(SELF_HOSTED)
     for providers in (
         load_yaml("decision_pilot")["providers"],
         load_yaml("feature_comparison")["comparison"]["providers"],

@@ -28,10 +28,6 @@ def validate_root(root):
 
 def main():
     root = configured_root()
-    # Explicit legacy working roots remain valid for setup/tests, but a scratch
-    # mirror must never promote its execution root into durable authority.
-    if root is None and os.environ.get("JEVPFN_STORAGE_MODE") != "scratch_mirror":
-        root = Path(os.environ["JEVPFN_STAGING_ROOT"]) if os.environ.get("JEVPFN_STAGING_ROOT") else None
     if root is None:
         raise ValueError("Configure .vsc-storage.local.json or an explicit durable PROJECT root")
     print("export JEVPFN_DURABLE_ROOT=" + shlex.quote(str(root)))

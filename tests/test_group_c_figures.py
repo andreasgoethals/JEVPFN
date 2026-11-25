@@ -44,7 +44,8 @@ def test_predictor_average_requires_every_predictor():
     rows = [dict(dataset_id=d, task_type="regression", model_id=m, representation="adapted/joint/lora_head",
                  raw_gain=0.1 * i, headroom_share=0.2) for d in ("A", "B") for i, m in enumerate(("x", "y"))]
     gains = pd.DataFrame(rows[:-1])  # dataset B lacks predictor y
-    out = views.predictor_average(gains)
+    out = views.predictor_average(gains, predictors=("x", "y"))
+    assert views.predictor_average(gains).empty
     assert out.dataset_id.tolist() == ["A"] and out.raw_gain.iloc[0] == pytest.approx(0.05)
     assert views.predictor_average(pd.DataFrame()).empty and views.overview(pd.DataFrame()).empty
 

@@ -103,7 +103,7 @@ class _SelectColumns:
         self.max_columns = max_columns
 
 
-def _kumo(calls, *, selectors=(500,)):
+def _kumo(calls, *, selectors=(500,), values=None, column_names=()):
     """KumoBackend with publisher-shaped fakes: default_recipe() holds SelectColumns(500)."""
     from contextlib import nullcontext
 
@@ -115,6 +115,7 @@ def _kumo(calls, *, selectors=(500,)):
         def __init__(self, rows):
             self.numerical = self
             self.rows = rows
+            self.columns = {"numerical": column_names}
 
         def float(self):
             return self
@@ -123,7 +124,7 @@ def _kumo(calls, *, selectors=(500,)):
             return self
 
         def numpy(self):
-            return np.zeros((self.rows, 3))
+            return np.zeros((self.rows, 3)) if values is None else values[:self.rows]
 
     def call(**kwargs):
         calls.append(kwargs)
@@ -133,7 +134,8 @@ def _kumo(calls, *, selectors=(500,)):
     backend.categorical_columns = {"category"}
     backend.task = "regression"
     backend.settings = {"device": "cpu", "seed": 1}
-    backend.sdm = SimpleNamespace(processing=SimpleNamespace(SelectColumns=_SelectColumns))
+    backend.sdm = SimpleNamespace(processing=SimpleNamespace(SelectColumns=_SelectColumns),
+                                  Stype=SimpleNamespace(numerical="numerical"))
     backend.torch = SimpleNamespace(
         Generator=lambda device: SimpleNamespace(manual_seed=lambda seed: "generator"),
         inference_mode=nullcontext, autocast=lambda **kw: nullcontext(), float16="float16",
@@ -148,6 +150,22 @@ def _wide(columns, *, categories):
     values = pd.DataFrame(np.zeros((51, columns)))
     values["category"] = [f"value_{i % categories}" for i in range(51)]
     return values
+
+
+def test_kumo_class_predictions_follow_reordered_probabilities_and_regression_averages_quantiles():
+    x = pd.DataFrame({"category": ["a", "b", "c"]})
+    # The publisher can return the class columns in a different order from np.unique(y).
+    scores = np.array([[.1, .2, .7], [.8, .1, .1], [.05, .9, .05]])
+    classifier = _kumo([], values=scores, column_names=["7", "2", "5"])
+    classifier.task = "multiclass_classification"
+    classifier.fit(x, [5, 7, 2])
+    np.testing.assert_array_equal(classifier.classes_, [2, 5, 7])
+    np.testing.assert_allclose(classifier.predict_proba(x), scores[:, [1, 2, 0]])
+    np.testing.assert_array_equal(classifier.predict(x), [5, 7, 2])
+
+    quantiles = np.array([[2., 4., 9.], [-4., 0., 7.], [0., 2., 4.]])
+    regressor = _kumo([], values=quantiles).fit(x, [1., 2., 3.])
+    np.testing.assert_allclose(regressor.predict(x), [5., 1., 2.])
 
 
 def test_kumo_within_500_expanded_columns_passes_nothing_new(recwarn):

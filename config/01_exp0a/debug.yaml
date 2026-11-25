@@ -8,7 +8,7 @@ local_preparation_command: python -m src.cluster.preflight --local --verify-data
 feature_config: feature_creation
 cluster:
   account: lp_verbekelab  # Same account as CreditPFN; verify current association on VSC.
-  cpu: {name: wice, partition: interactive}
+  cpu: {name: mindwell, partition: batch_graniterapids}
   gpu: {name: mindwell, partition: gpu_b200, gpus: 1}
 environment: JEVPFN
 feature_artifacts: []  # Optional exact cross-check of the benchmark's immutable feature selectors.
@@ -22,7 +22,7 @@ stages:
     embedding_contract_command: python -m src.cluster.embedding_contracts --encoder ENCODER --execute
     acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
   after_extraction:
-    requires: [complete_selected_provider_features, complete_all_three_encoder_features, complete_frozen_PCA, complete_90_outer_fold_TAR_bundles_and_PCA]
+    requires: [complete_selected_provider_features, complete_all_three_encoder_features, complete_frozen_PCA, complete_90_outer_fold_TAR_bundles_and_PCA, both_supervised_probe_views_every_outer_fold_and_encoder]
     acceptance_ids: [feature_campaign_coverage, consistent_transfer_and_backup, predictor_task_compatibility, predictive_pipeline_boundaries, full_fold_resource_profile, real_run_output_and_resume]
 checks:
   - python_and_dependency_versions
@@ -78,7 +78,7 @@ acceptance_checks:
     evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.
   - id: predictor_task_compatibility
     site: vsc_compute_node
-    evidence: All six main engines fit non-text, per-column PCA32 and joint PCA64 on two text fields at both encoder widths (384 and 1,024) and separate decision-only fixtures for binary, multiclass, 30-class and regression tasks; TabSTAR/ConTextTab/AG-MM fit original-text fixtures. Missing values, class order and cache reuse pass. Synthetic vectors test the downstream interface; separate real-encoder contracts and cache checks validate real embeddings.
+    evidence: All seven structured predictors fit the baseline, decision features and both PCA recipes across the registered encoder widths. TabSTAR, ConTextTab and AG-MM fit original-text fixtures. Four fixtures cover binary, multiclass, 30-class and regression tasks. The reviewer reopens their published predictions and verifies their fold, role, target and row identities.
   - id: predictive_pipeline_boundaries
     site: local_and_vsc
     evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds (fixed 0.5 for TAR), fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.

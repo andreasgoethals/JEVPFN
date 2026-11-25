@@ -5,6 +5,7 @@ not establish checkpoint, GPU or real-provider behaviour.
 """
 
 from copy import deepcopy
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,7 @@ from src.jev.features import materialize_cached_block, save_block
 from src.jev.requests import build_requests
 from src.utils import paths
 from src.utils.config import load_config
+from src.utils.serialization import canonical_json, digest
 from tests.test_benchmark_qualification import reports, write_approval  # noqa: F401 (fixture)
 
 # ------------------------------------------------------------- decision stores in 0B preflight
@@ -39,26 +41,37 @@ def _sparse_dataset(rows=40):
     return LoadedDataset(frame, meta, {}, {"data_identity": "sparse-raw"}, [])
 
 
-def _publish_store(dataset):
+def _publish_store(dataset, request_configuration=None):
     """Both decision modes through the real request builder, cache and store writer."""
     path = paths.dataset_cache_path(dataset.metadata.dataset_id)
     cache = ResponseCache(path, dataset_id=dataset.metadata.dataset_id)
     for mode in ("per_column", "joint"):
         cfg = load_config("feature_creation")
         cfg["jev"]["representation"] = mode
+        settings = None
+        response = {"model": "jev-1.14.0", "answers": {"semantic": {"type": "noul", "noul": 0.25}}}
+        if request_configuration is not None:
+            from src.evaluation.design import decision_versions
+
+            registered, = decision_versions(["strands"])
+            settings = {key: registered[key] for key in ("provider", "model", "version")}
+            settings.update(template_version=cfg["jev"]["template_version"], request_configuration=request_configuration,
+                            api_mapping_version="strands-self-hosted-v1")
+            response.update(provider="strands", model=settings["model"], version=settings["version"],
+                            settings_sha256=digest(settings))
         for position in range(len(dataset.frame)):
             for request in build_requests(dataset.features, dataset.metadata, position, cfg):
-                cache.put(request, {"model": "jev-1.14.0",
-                                    "answers": {"semantic": {"type": "noul", "noul": 0.25}}},
-                          kind="verified_response")
-        save_block(materialize_cached_block(dataset, cfg, cache), path)
+                if settings is not None:
+                    request = replace(request, settings_json=canonical_json(settings))
+                cache.put(request, response, kind="verified_response")
+        save_block(materialize_cached_block(dataset, cfg, cache, provider_settings=settings), path)
     return path
 
 
 @pytest.fixture
-def decision_store(isolated_output, monkeypatch):
+def decision_store(isolated_output, monkeypatch, request):
     dataset = _sparse_dataset()
-    _publish_store(dataset)
+    _publish_store(dataset, getattr(request, "param", None))
     entry = {"id": dataset.metadata.dataset_id}
     monkeypatch.setattr(preflight, "selected_entries", lambda catalog, cfg: [entry])
     monkeypatch.setattr(preflight, "load_catalog", lambda: {"datasets": [entry]})
@@ -72,6 +85,7 @@ def test_sparse_text_store_passes_and_missing_provider_store_fails_closed(decisi
     results = {r["provider"]: r for r in preflight.decision_feature_checks(cfg)}
     assert results["jev"]["status"] == "passed", results["jev"]
     assert set(results["jev"]["artifact_ids"]) == {"joint", "per_column"}
+    assert (results["jev"]["model"], results["jev"]["version"]) == ("jev-1.14.0", "1.14.0")
     assert results["jev"]["rows"] == len(decision_store.frame)
     # A provider whose store has not been published yet (partial campaign) is a failure.
     assert results["glide"]["status"] == "failed" and "exactly one" in results["glide"]["error"]
@@ -86,6 +100,50 @@ def test_store_of_another_dataset_version_is_rejected(decision_store, monkeypatc
     monkeypatch.setattr(preflight, "load_dataset", lambda e, allow_download=False: changed)
     (result,) = preflight.decision_feature_checks({"candidate_extractors": ["jev"]})
     assert result["status"] == "failed" and "different dataset version" in result["error"]
+
+
+def test_preflight_rejects_a_real_store_from_another_registered_release(decision_store, monkeypatch):
+    from src.evaluation import design
+    from src.evaluation.features import load_feature_selection
+
+    registered, = design.decision_versions(["jev"])
+    monkeypatch.setattr(design, "decision_versions", lambda providers: [registered | {"version": "new"}])
+    (result,) = preflight.decision_feature_checks({"candidate_extractors": ["jev"]})
+    assert result["status"] == "failed" and "registered provider, model or version" in result["error"]
+    historical = load_feature_selection(paths.dataset_cache_path(decision_store.metadata.dataset_id),
+                                        {"provider": "jev", "version": registered["version"]})
+    assert {block.manifest["identity"]["representation"] for block in historical} == {"per_column", "joint"}
+
+
+@pytest.mark.parametrize(("decision_store", "recorded"), [
+    ({}, None), ({"runtime_revision": "published", "checkpoint_sha256": "sealed_checkpoint"}, "published")
+], indirect=["decision_store"])
+def test_0b_checks_observed_runtime_pins_and_preserves_historical_absence(decision_store, monkeypatch, recorded):
+    from src.evaluation import design
+
+    registered, = design.decision_versions(["strands"])
+    registered["runtime_revision"] = "published"
+    monkeypatch.setattr(design, "decision_versions", lambda providers: [registered])
+    cfg = {"candidate_extractors": ["strands"]}
+    (result,) = preflight.decision_feature_checks(cfg)
+    assert result["status"] == "passed" and result["runtime_revision"] == recorded
+    assert result.get("checkpoint_sha256") == ("sealed_checkpoint" if recorded else None)
+    registered["runtime_revision"] = "different"
+    (result,) = preflight.decision_feature_checks(cfg)
+    if recorded:
+        assert result["status"] == "failed" and "registered runtime revision" in result["error"]
+    else:
+        assert result["status"] == "passed" and result["runtime_revision"] is None
+
+
+@pytest.mark.parametrize("field", ["model", "version"])
+def test_production_selector_rejects_a_pinned_but_unregistered_model_release(field):
+    registered = {"provider": "jev", "model": "jev-1.14.0", "version": "1.14.0",
+                  "question_bank_id": "bank", "question_variant": "variant", "settings_sha256": "settings"}
+    assert q.decision_selector({"feature_selectors": {"jev": registered}}, "jev") == registered
+    different = registered | {field: "other-model-or-version"}
+    with pytest.raises(ValueError, match="registered model or version"):
+        q.decision_selector({"feature_selectors": {"jev": different}}, "jev")
 
 
 @pytest.mark.parametrize(("task", "classes"), [("binary_classification", ()),

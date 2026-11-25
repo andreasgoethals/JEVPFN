@@ -7,10 +7,10 @@ import shutil
 import subprocess
 import sys
 from contextlib import contextmanager
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from shell_support import bash_executable
 
 from src.cluster import containers
 from src.cluster import runtime_profiles as rp
@@ -241,11 +241,7 @@ bash Miniforge_inst.sh -b
 
 @pytest.mark.parametrize("failure", ["http", "wrong_checksum"])
 def test_bad_miniforge_download_never_executes_installer(tmp_path, failure):
-    bash = shutil.which("bash")
-    if not bash and (git := shutil.which("git")):
-        bash = str(Path(git).parent.parent / "bin/bash.exe")
-    if not bash:
-        pytest.skip("Bash unavailable")
+    bash = bash_executable()
     template = """[ "$CW_CONDA_VERSION" = "latest" ] && CW_CONDA_VERSION=$(curl -s https://github.com/conda-forge/miniforge/releases/latest)
 curl -sL "$url" --output Miniforge_inst.sh &>/dev/null
 bash Miniforge_inst.sh
@@ -256,12 +252,13 @@ bash Miniforge_inst.sh
     script = tmp_path / "check.sh"
     script.write_text(
         "set -euo pipefail\nCW_CONDA_ARCH=Linux-x86_64\n"
-        f"curl() {{ {fake_download}; }}\n" + pinned_miniforge(template) + "touch must_not_exist\n",
+        f"curl() {{ echo 'fixture download attempted' >&2; {fake_download}; }}\n"
+        + pinned_miniforge(template) + "touch must_not_exist\n",
         encoding="utf-8",
         newline="\n",
     )
     result = subprocess.run(
         [bash, str(script)], cwd=tmp_path, capture_output=True, text=True, timeout=15
     )
-    assert result.returncode != 0
+    assert result.returncode != 0 and "fixture download attempted" in result.stderr
     assert not (tmp_path / "must_not_exist").exists()

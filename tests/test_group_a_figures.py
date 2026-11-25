@@ -51,7 +51,7 @@ def test_a1_values_keep_task_families_apart(a1_values):
     assert counts["classification_auc"] == 9 and counts["regression_spearman"] == 9
     auc = a1_values[a1_values.metric.eq("classification_auc")]
     assert set(auc.task) <= set(group_a.CLASSIFICATION)
-    assert a1_values.provider.nunique() == len(providers) == 17
+    assert set(a1_values.provider) == set(providers)
     # Per-column fields are averaged within a dataset: one value per dataset, model and metric.
     assert not a1_values.duplicated(["dataset_id", "provider", "metric"]).any()
 
@@ -61,7 +61,7 @@ def test_model_order_groups_families_then_size(properties):
     families = [group_a.family_of(p, properties) for p in order]
     known = list(style.ARCHITECTURE_MARKERS)
     ranks = [known.index(f) if f in known else len(known) for f in families]
-    assert ranks == sorted(ranks) and len(order) == 17
+    assert ranks == sorted(ranks) and set(order) == set(properties.provider)
     assert group_a.family_of("liquid_lfm3", properties) == "not stated"
 
 
@@ -155,7 +155,7 @@ def test_a3_and_synthesis_figures_render(a1_values, properties):
            ["geometry_distance_correlation", "geometry_neighbour_overlap"])
     excess = group_a.excess_summary(a2_tables()["mode_effects"])
     table = group_a.model_map_table(a1_values, excess, properties)
-    assert len(table) == 17 and table.classification_auc.notna().all()
+    assert set(table.provider) == set(properties.provider) and table.classification_auc.notna().all()
     _check(list(model_map.decision_model_map(table)), ["decision_model_map"])
     waiting = group_a.model_map_table(a1_values.iloc[:0], excess.iloc[:0], properties)
     assert list(model_map.decision_model_map(waiting)) == []

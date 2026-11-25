@@ -136,21 +136,50 @@ COMPUTE_STAGE = "decision_feature_creation"
 def compute_per_thousand(ledger: dict | None, token_audit: dict | None, providers) -> pd.DataFrame:
     """Successful decision-feature GPU-hours per 1,000 distinct decision requests, per provider.
 
-    ``ledger`` is `src.cluster.compute_ledger` output; ``token_audit`` the 0A token audit, whose
-    ``unique_inputs`` is the provider's number of distinct requests. A provider without a
-    successful GPU job or without an audited request count stays missing, never estimated.
+    Only successful jobs on the audited datasets enter a whole-workload rate. A recorded
+    feature job without a dataset argument runs the full selection. Historical ledgers
+    lacking the job's dataset field retain their observed hours with coverage unidentified.
     """
     hours = {}
     for row in (ledger or {}).get("summary", []):
-        if row.get("stage") == COMPUTE_STAGE and row.get("decision_model") and row.get("successful_jobs"):
+        if (row.get("stage") == COMPUTE_STAGE and row.get("decision_model")
+                and row.get("successful_jobs") and row["successful_gpu_hours"] > 0):
             hours[row["decision_model"]] = row["successful_gpu_hours"]
-    requests = {r["provider"]: r["unique_inputs"] for r in (token_audit or {}).get("self_hosted", [])}
+    completed = {}
+    for job in (ledger or {}).get("jobs", []):
+        if job.get("stage") == COMPUTE_STAGE and job.get("state") == "COMPLETED" and job["gpu_hours"] > 0:
+            completed.setdefault(job["decision_model"], []).append(job)
+    audit = token_audit or {}
+    reports = {r["provider"]: r for r in audit.get("self_hosted", [])}
     rows = []
     for provider in providers:
-        h, n = hours.get(provider), requests.get(provider)
-        status = ("no compute ledger" if ledger is None else "no successful GPU job in the ledger"
-                  if h is None else "no audited request count" if not n else "measured")
+        report = reports.get(provider, {})
+        n = report.get("unique_inputs")
+        datasets = (set(audit.get("dataset_ids") or (d["dataset_id"] for d in report.get("datasets", [])))
+                    if report else set())
+        jobs = completed.get(provider, [])
+        h = hours.get(provider) if not jobs else sum(job["gpu_hours"] for job in jobs)
+        covered = None
+        if datasets and jobs and all("dataset_id" in job for job in jobs):
+            matched = [job for job in jobs if job["dataset_id"] is None or job["dataset_id"] in datasets]
+            ids = {job["dataset_id"] for job in matched}
+            covered = len(datasets) if None in ids else len(ids)
+            h = sum(job["gpu_hours"] for job in matched)
+        if ledger is None:
+            status = "no compute ledger"
+        elif h is None:
+            status = "no successful GPU job in the ledger"
+        elif not n:
+            status = "no audited request count"
+        elif covered is None:
+            status = "successful-job dataset coverage unknown"
+        elif covered < len(datasets):
+            status = f"incomplete successful-job coverage ({covered}/{len(datasets)} datasets)"
+        else:
+            status = "measured"
         rows.append({"provider": provider, "successful_gpu_hours": h, "distinct_requests": n,
+                     "successful_datasets": covered, "audited_datasets": len(datasets) if datasets else None,
+                     "request_audit_id": report.get("audit_id"),
                      "gpu_hours_per_1000_requests": h / n * 1000 if status == "measured" else None,
                      "compute_status": status})
     frame = pd.DataFrame(rows)

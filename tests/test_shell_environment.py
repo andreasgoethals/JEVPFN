@@ -4,25 +4,31 @@ import hashlib
 import json
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from shell_support import bash_executable
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def bash_executable():
-    bash = shutil.which("bash")
-    if not bash and (git := shutil.which("git")):
-        candidate = Path(git).parent.parent / "bin" / "bash.exe"
-        if candidate.is_file():
-            bash = str(candidate)
-    if not bash:
-        pytest.skip("Bash is required for shell environment integration checks")
-    return bash
+@pytest.mark.parametrize(("code", "error", "denied"), [
+    (1, b"fatal error - NtCreateDirectoryObject failed, 0xC0000022", True),
+    (1, b"permission denied running a script", False),
+    (1, b"NtCreateDirectoryObject failed, 0xC0000033", False),
+    (0, b"", False),
+])
+def test_git_bash_skip_recognizes_only_the_blocked_startup_probe(monkeypatch, code, error, denied):
+    from shell_support import _msys_access_denied
+
+    def probe(argv, **kwargs):
+        assert argv[1:] == ["--noprofile", "--norc", "-c", ":"]
+        return subprocess.CompletedProcess(argv, code, stderr=error)
+
+    monkeypatch.setattr(subprocess, "run", probe)
+    assert _msys_access_denied.__wrapped__("bash") is denied
 
 
 @pytest.mark.parametrize("allocation,passed", [
@@ -114,7 +120,7 @@ def test_compact_runtime_selection_is_verified_before_activation(tmp_path, selec
         '  TEST_REPO="$(cygpath -u "$TEST_REPO")"\n'
         '  TEST_HOST="$(cygpath -u "$TEST_HOST")"\n'
         '  JEVPFN_STAGING_ROOT="$(cygpath -u "$JEVPFN_STAGING_ROOT")"\nfi\n'
-        'export TEST_HOST JEVPFN_STAGING_ROOT\ncd "$TEST_REPO"\n'
+        'export TEST_HOST JEVPFN_STAGING_ROOT JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"\ncd "$TEST_REPO"\n'
         'export JEVPFN_CONDA_ENV="$JEVPFN_STAGING_ROOT/JEVPFN/environments/cloudflare"\n'
         "export CONDA_SHLVL=2 CONDA_PREFIX=/host/env CONDA_PREFIX_1=/host/base\n"
         "export CONDA_DEFAULT_ENV=JEVPFN CONDA_EXE=/host/conda _CONDA_ROOT=/host/base\n"

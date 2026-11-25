@@ -73,6 +73,10 @@ def classify(relative):
 def phase_of(relative):
     from src.utils import structure
 
+    if relative.parts[:1] == ("figures",) and len(relative.parts) >= 4:
+        notebook = structure.registry().notebook("/".join(relative.parts[1:3]))
+        if notebook:
+            return notebook.phase
     # Current registry folders (phase trees and figure/notebook-record folders), including
     # routed sub-trees (03_exp0b -> experiment_0) and letter groups (B/exp04_... -> experiment_1).
     for start in range(len(relative.parts) - 1):
@@ -111,6 +115,14 @@ def plan(*, tier="auto", phases=(), kinds=(), pattern="*", older_than_days=None,
             if not file.is_file():
                 continue
             relative = file.relative_to(root)
+            # Shared PROJECT and laptop copies include durable, expensive inputs alongside
+            # generated results. GPFS_<runtime> entries are disposable staging mirrors.
+            if not label.startswith("GPFS_") and any(
+                left == "results" and right in {"strands_hidden", "adaptation", "tar", "tar_pca",
+                                                "supervised_probe", "pca", "token_audit", "hosted_ledgers"}
+                for left, right in zip(relative.parts, relative.parts[1:])
+            ):
+                continue
             if selected and phase_of(relative) not in selected:
                 continue
             if kinds and classify(relative) not in kinds:
@@ -254,7 +266,8 @@ def main(argv=None):
     parser.add_argument("--kind", action="append", choices=KINDS, default=[])
     parser.add_argument("--match", default="*", help="Glob matched against output-relative paths")
     parser.add_argument("--older-than-days", type=float)
-    parser.add_argument("--include-archives", action="store_true")
+    parser.add_argument("--include-archives", action="store_true",
+                        help="Include the legacy archived_output_JEVPFN directory")
     parser.add_argument("--apply", "--clean", dest="apply", action="store_true")
     parser.add_argument("--writers-stopped", action="store_true")
     args = parser.parse_args(argv)

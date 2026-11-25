@@ -1,9 +1,10 @@
 #!/bin/bash -l
 # Group C, C2: Strands learning from labels on ONE dataset x outer fold x trained cell
 # (head_only | lora_only | lora_head): three cross-fitted fits, then the fold bundle.
-# `sbatch c2_adaptation.slurm pilot` times one LoRA fit on the smallest dataset instead.
+# C0: `sbatch --job-name=jevpfn-c0-pilot c2_adaptation.slurm pilot TASK_TYPE CELL` qualifies three bounded cross-fits,
+# scoring, fold assembly and durable readback on the smallest dataset of that task type.
 # Size --time from the pilot: python -m src.evaluation.strands_adaptation --size-from PILOT.json
-# Requires rq3/adaptation training_enabled: true (and, for head_only, the C1 store).
+# Production requires training_enabled: true and reviewed pilot_acceptance. Head-only uses the complete C1 store.
 #SBATCH --job-name=jevpfn-c2-adaptation
 #SBATCH --account=lp_verbekelab
 #SBATCH --clusters=mindwell
@@ -27,6 +28,8 @@ source scripts/slurm/_provider_memory.sh
 source scripts/slurm/_activate_env.sh
 if [[ "$MODE" == pilot ]]; then
     ARGS=(--pilot --execute)
+    if [[ -n "${2:-}" ]]; then ARGS+=(--task-type "$2"); fi
+    if [[ -n "${3:-}" ]]; then ARGS+=(--cell "$3"); fi
 else
     FOLD="${2:?Outer fold 0-4}"
     CELL="${3:?Cell head_only | lora_only | lora_head}"

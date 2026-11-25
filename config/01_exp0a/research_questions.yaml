@@ -25,6 +25,8 @@ rq2:
 - training_defined_subgroups
 - full_fold_profiles_for_each_task_and_largest_class_vocabulary
 - kumo_max_columns_override_b200_profile
+- both_supervised_probe_views_every_encoder_and_outer_fold
+- real_dropped_field_and_size_draw_profiles
 rq2_regression_features:
 - nine_probability_order
 - primary_probability_view_identity
@@ -37,15 +39,15 @@ rq3_adaptation:
 - checkpoint_load_matches_pinned_base_adapter_and_head
 - head_only_freeze
 - lora_gradient_flow
-- disjoint_optimizer_validation_calibration_test
+- disjoint_optimizer_validation_crossfit_and_test_rows
 - held_out_label_invariance
 - no_silent_truncation
 - save_reload_and_resume
 - real_b200_pilot
-- source_row_split_before_field_expansion
-- shared_adapter_across_fields_and_predictors
+- three_crossfit_parts_of_joint_questions_per_outer_fold
+- shared_fold_bundles_across_predictors
 - five_outer_folds_no_inner_threshold_refits
-- full_backbone_gradient_and_reload_checks
+- head_only_lora_only_lora_plus_head_prediction_and_reload_checks
 native_rq1b_qualification:
   script: scripts/slurm/experiment_0_robustness.slurm
   scope: each_qualified_open_weight_provider

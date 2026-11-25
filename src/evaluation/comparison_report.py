@@ -1,4 +1,4 @@
-"""A1 (exp01_outputs): publish the CPU analysis once as `comparison.zip`; render it locally.
+"""A1 (exp01_outputs): publish the CPU analysis as a ZIP keyed by the selected decision-model roster; render it locally.
 
 The Mindwell CPU job (`scripts/slurm/rq1_outputs.slurm`) reads every complete published
 feature store on GPFS PROJECT and writes one compact ZIP with the label-free comparison
@@ -8,7 +8,6 @@ stand-alone quality/calibration tables (labels used for scoring only) and the mo
 """
 
 import argparse
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -45,11 +44,22 @@ TABLES = (
 SCHEMA = "jevpfn.rq1a.report.v2"
 
 
-def report_config():
+def report_config(cohort=None):
+    from src.evaluation.benchmark_export import cohort_record
+
     cfg = load_config("feature_comparison")
+    selected = cohort_record(cohort)
+    configured = cfg["comparison"]["providers"]
+    if set(selected["decision_roster"]) - set(configured):
+        raise ValueError("A1 and the selected decision-model roster disagree")
+    cfg["comparison"]["providers"] = selected["decision_roster"]
+    cfg["decision_cohort"] = selected["decision_cohort"]
+    cfg["decision_model_versions"] = selected["decision_model_versions"]
     pins = load_yaml("experiment_1/main")["dataset_feature_artifacts"]
     for dataset, providers in pins.items():
         for provider, modes in providers.items():
+            if provider not in selected["decision_roster"]:
+                continue
             specific = (
                 cfg["comparison"]["artifacts"].setdefault(dataset, {}).setdefault(provider, {})
             )
@@ -59,68 +69,122 @@ def report_config():
     return cfg
 
 
+def _cohort_metadata(cfg):
+    """Recorded roster and producer versions for the scientific scope, including historical subsets."""
+    providers = (cfg.get("comparison") or {}).get("providers", [])
+    versions = cfg.get("decision_model_versions")
+    if versions is None:
+        from src.evaluation.design import decision_versions
+
+        versions = decision_versions(providers)
+    else:
+        by_provider = {v["provider"]: v for v in versions}
+        if len(by_provider) != len(versions) or set(providers) - by_provider.keys():
+            raise ValueError("A1 configuration lacks an unambiguous recorded version for each selected provider")
+        versions = [by_provider[p] for p in providers]
+    if len(set(providers)) != len(providers):
+        raise ValueError("A1 configuration repeats a decision model")
+    return {"decision_cohort": cfg.get("decision_cohort"), "decision_roster": list(providers),
+            "decision_models": len(versions), "decision_model_versions": versions, "roster_sha256": digest(versions)}
+
+
 def analysis_identity(cfg):
     # API prices and notebook-only settings do not change label-free comparisons.
-    return digest({key: cfg.get(key) for key in ("catalog", "dataset_selection", "comparison")})
+    from src.utils.provenance import code_identity
+
+    comparison = dict(cfg.get("comparison") or {})
+    if "artifacts" in comparison and "providers" in comparison:
+        included = set(comparison["providers"])
+        chosen = {d: {p: v for p, v in pins.items() if p in included} for d, pins in comparison["artifacts"].items()}
+        comparison["artifacts"] = {d: v for d, v in chosen.items() if v}
+    return digest({"catalog": cfg.get("catalog"), "dataset_selection": cfg.get("dataset_selection"),
+                   "comparison": comparison, "cohort": _cohort_metadata(cfg), "analysis": code_identity([
+                       "src/evaluation/comparison_report.py", "src/evaluation/decision_comparison.py",
+                       "src/evaluation/decision_diagnostics.py", "src/evaluation/zero_shot.py",
+                       "src/evaluation/model_properties.py", "src/evaluation/study_export.py"])})
 
 
-def report_path():
-    return paths.results_dir("outputs", "comparison.zip", phase="rq1")
+def report_path(cohort=None):
+    from src.evaluation.benchmark_export import cohort_key
+
+    return paths.results_dir("outputs", f"comparison.{cohort_key(cohort)}.zip", phase="rq1")
 
 
 def write_report(result, cfg, target, *, origin, joint_rows):
     """Atomically publish a complete report. Member hashes also bind scientific scope."""
     return study_export.write_export(
         target, {name: result.table(name) for name in TABLES}, schema=SCHEMA,
-        identity=analysis_identity(cfg), origin=origin, extra={"joint_rows": joint_rows})
+        identity=analysis_identity(cfg), origin=origin, extra={"joint_rows": joint_rows, **_cohort_metadata(cfg)})
 
 
-def read_report(cfg, target=None, *, allow_previous_roster=False):
-    """Verified tables, or an explicit waiting state (absent or superseded-schema ZIP)."""
-    target = report_path() if target is None else Path(target)
-    result = Comparison()
+def read_tables(cfg, target=None, *, allow_previous_roster=False, cohort=None):
+    """Read the current or legacy filename. A valid but stale archive supplies no measurements."""
+    if target is None:
+        from src.evaluation.benchmark_export import cohort_name
+
+        selected = cfg.get("decision_cohort")
+        if cohort is not None:
+            target = report_path(cohort)
+        else:
+            target = report_path() if not selected or selected == cohort_name() else report_path(selected)
+        legacy = target.with_name("comparison.zip")
+        if not target.exists() and legacy.is_file():
+            target = legacy
     frames, meta = study_export.read_export(target, schema=SCHEMA, tables=TABLES)
     if meta["status"] != "verified_export":
-        result.frames["inventory"] = [pd.DataFrame(columns=["provider", "status"])]
-        return result, {**meta, "status": "awaiting_cpu_report" if meta["status"] == study_export.AWAITING
-                        else meta["status"]}
-    result.frames.update({name: [frame] for name, frame in frames.items()})
+        return {}, {**meta, "status": "awaiting_cpu_report" if meta["status"] == study_export.AWAITING else meta["status"]}
     status = "verified_snapshot"
     pending = []
+    selected_cfg = cfg
     if meta.get("config_sha256") != analysis_identity(cfg):
         from copy import deepcopy
 
         if not allow_previous_roster:
-            raise ValueError("Comparison report configuration differs")
-        previous = set(result.table("inventory").provider)
+            return {}, {**meta, "status": "superseded_configuration"}
+        previous = set(frames["inventory"].get("provider", []))
         configured = cfg["comparison"]["providers"]
         historical = deepcopy(cfg)
         historical["comparison"]["providers"] = [p for p in configured if p in previous]
+        historical["decision_cohort"] = meta.get("decision_cohort")
         if (not previous < set(configured)
                 or analysis_identity(historical) != meta.get("config_sha256")):
-            raise ValueError("Comparison report configuration differs")
+            return {}, {**meta, "status": "superseded_configuration"}
         pending = [p for p in configured if p not in previous]
+        selected_cfg = historical
         status = "verified_previous_roster"
-    return result, {**meta, "status": status, "unassessed_additions": pending}
+    if any(meta.get(k) != v for k, v in _cohort_metadata(selected_cfg).items()):
+        raise ValueError("A1 archive cohort metadata differs from its scientific configuration")
+    return frames, {**meta, "status": status, "unassessed_additions": pending}
+
+
+def read_report(cfg, target=None, *, allow_previous_roster=False, cohort=None):
+    """Show discovery status to notebooks and require an explicitly selected file to match."""
+    frames, meta = read_tables(cfg, target, cohort=cohort, allow_previous_roster=allow_previous_roster)
+    if target is not None and meta["status"] == "superseded_configuration":
+        raise ValueError("Comparison report configuration differs")
+    result = Comparison()
+    result.frames["inventory"] = [pd.DataFrame(columns=["provider", "status"])]
+    result.frames.update({name: [frame] for name, frame in frames.items()})
+    return result, meta
 
 
 def model_profile(cfg):
     """Model properties plus successful GPU-hours per 1,000 distinct requests (compute only)."""
+    from src.cluster.token_audit import saved_request_audit
     from src.evaluation import model_properties
+    from src.evaluation.study_audit import read_compute_ledger
 
-    def read(path):
-        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
-
-    ledger = read(paths.outputs_dir() / cfg["comparison"]["compute_ledger"])
-    audit = read(paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json")
+    ledger = read_compute_ledger(paths.outputs_dir() / cfg["comparison"]["compute_ledger"])
+    audit = saved_request_audit()
     compute = model_properties.compute_per_thousand(ledger, audit, cfg["comparison"]["providers"])
-    return model_properties.profile_table(compute)
+    profile = model_properties.profile_table(compute)
+    return profile[profile.provider.isin(cfg["comparison"]["providers"])].reset_index(drop=True)
 
 
-def build():
+def build(*, cohort=None):
     study_export.require_mindwell_cpu("A1 outputs")
-    cfg = report_config()
-    target = report_path()
+    cfg = report_config(cohort)
+    target = report_path() if cohort is None else report_path(cohort)
     target.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(target.with_suffix(".lock")):
         result = compare_saved_features(cfg, workers=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)))
@@ -151,8 +215,8 @@ def build():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
-    build()
+    parser.add_argument("--cohort", metavar="COHORT")
+    build(cohort=parser.parse_args().cohort)
 
 
 # ---- Notebook views of the verified export (compact tables only; nothing is recomputed) ----
@@ -202,4 +266,6 @@ def describe_receipt(receipt):
     if receipt["status"] == "awaiting_cpu_report":
         return study_export.describe({"status": study_export.AWAITING,
                                       "path": receipt.get("path", str(report_path()))})
+    if receipt["status"] == "superseded_configuration":
+        return f"Waiting for a matching A1 export. The archive at {receipt['path']} uses earlier settings."
     return study_export.describe(receipt)

@@ -97,12 +97,17 @@ def test_windows_linux_source_endings_match_but_content_changes_do_not(
     source.write_bytes(b"x = 1\n# same source\n")
     monkeypatch.setattr(paths, "REPO_ROOT", repo)
     original = freeze.source_snapshot()
+    from src.utils.provenance import code_identity
+
+    analysis_identity = code_identity(["src/example.py"])
     expected = tmp_path / "local_receipt.json"
     expected.write_text(json.dumps(original))
     source.write_bytes(b"x = 1\r\n# same source\r\n")
     assert freeze.source_snapshot() == original
+    assert code_identity(["src/example.py"]) == analysis_identity
     assert freeze.record(expected_file=expected)["frozen"]
     source.write_bytes(b"x = 2\r\n# changed source\r\n")
+    assert code_identity(["src/example.py"]) != analysis_identity
     with pytest.raises(ValueError, match="src/example.py"):
         freeze.check_if_present()
 

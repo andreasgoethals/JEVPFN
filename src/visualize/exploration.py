@@ -105,8 +105,6 @@ def overview_figures(table, characters_per_token=4.0):
         ("per_column_missing_or_empty_pct", "Empty text\ncells (%)", "{:.1f}", False),
         ("mean_tokens_per_nonempty_text", "Tokens per\ntext cell", "{:,.1f}", True),
         ("distinct_text_pct", "Distinct\ntexts (%)", "{:.0f}", False),
-        ("combined_unique_inputs", "Unique\nrequests", "{:,.0f}", True),
-        ("combined_reuse_savings_pct", "Slots\nreused (%)", "{:.0f}", False),
     ]
     table = table.reset_index(drop=True)
     removed = table.experiment_status.eq("REMOVED").to_numpy()
@@ -142,15 +140,12 @@ def overview_figures(table, characters_per_token=4.0):
     fig.legend(handles=layout.task_handles(), loc="outside lower center", ncols=3, fontsize=7,
                frameon=False)
     yield fig, "dataset_overview", (
-        "The 20 core MulTaBench text datasets, grouped by task; the 18 retained datasets are 3 binary, "
-        "6 multiclass and 9 regression tasks. Empty cells are null, nonfinite "
-        "or whitespace-only. Tokens per text cell exclude empty cells and use "
-        f"ceil(characters/{characters_per_token:g}). Distinct texts count exact duplicates within "
-        "a column. Unique requests (per decision model) and reused slots combine per-column and joint "
-        "inputs. Each "
-        "column is shaded on its own min–max scale over the 18 retained datasets (log scale for "
-        "counts and tokens). "
-        "Grey rows (Spotify, Zomato) are audited but excluded from extraction and benchmarks."
+        "The 20 core MulTaBench text datasets include 18 used in the benchmark (3 binary, "
+        "6 multiclass and 9 regression). Grey rows mark the two exclusions, Spotify and Zomato. "
+        "Tokens per cell is the mean over nonempty cells, estimating each length as characters "
+        f"divided by {characters_per_token:g} and rounded up. Distinct texts are counted within each column "
+        "and divided by all nonempty text cells in the dataset. Darker shading indicates larger "
+        "values relative to the retained datasets, on a log scale for rows and tokens per cell."
     )
 
 
@@ -186,13 +181,12 @@ def text_column_figures(audit):
     layout.dataset_axis(axes[0], list(order.dataset), order.task_type,
                         removed={d for i, d in zip(order.dataset_id, order.dataset) if i in removed},
                         fontsize=7, separators=False)
-    yield fig, "text_field_profile", (
-        f"Each point is one of the {len(data)} official text columns; columns of a dataset are "
-        "offset vertically. Left: mean character count of nonempty cells (logarithmic). Middle: "
-        "share of rows whose cell is null, nonfinite or whitespace-only; such cells produce no "
-        "request and missing features. Right: exact distinct values as a share of nonempty "
-        "cells; low values mean a field behaves like a categorical string and most requests are "
-        "reused. Grey points belong to the two excluded datasets."
+    yield fig, "text_column_profile", (
+        f"Each point represents one of {len(data)} official text columns. Points from the same dataset "
+        "are offset vertically. From left to right, the panels show mean nonempty cell length in "
+        "characters, the percentage of empty cells, and the percentage of nonempty cells with "
+        "distinct values (number of distinct texts divided by number of nonempty cells). "
+        "Empty cells are null, nonfinite or whitespace-only. Grey points mark excluded datasets."
     )
 
 
@@ -214,31 +208,33 @@ def reuse_figure(summary, long_datasets):
                                    row.joint_tokens_p75 - row.joint_tokens_p25, 0.56,
                                    facecolor=style.FAINT_COLOR, edgecolor=ink[i], linewidth=0.8))
     ax.vlines(order.joint_tokens_median, y - 0.28, y + 0.28, color=ink, linewidth=1.4)
-    ax.scatter(order.joint_tokens_max, y, marker="D", s=9, color=style.P95_COLOR, zorder=3)
+    ax.scatter(order.joint_tokens_max, y, marker="D", s=9,
+               c=np.where(is_removed, style.REMOVED_COLOR, style.P95_COLOR), zorder=3)
     ax.set_xscale("log")
-    ax.set_xlabel("Text tokens per row, all fields\n(box p25–p75, line p01–p99)")
+    ax.set_xlabel("Estimated tokens per row\n(box p25–p75, line p01–p99)")
     per_column = order.per_column_unique_inputs.to_numpy(dtype=float)
     joint_extra = (order.combined_unique_inputs - order.per_column_unique_inputs).to_numpy(dtype=float)
-    kept = ~is_removed
-    axes[1].barh(y[kept], per_column[kept], height=0.62, color=style.MODE_COLORS["per_column"])
-    axes[1].barh(y[kept], joint_extra[kept], left=per_column[kept], height=0.62,
-                 color=style.MODE_COLORS["joint"])
-    axes[1].barh(y[~kept], (per_column + joint_extra)[~kept], height=0.62, color=style.MISSING_COLOR)
+    axes[1].barh(y, per_column, height=0.62,
+                 color=np.where(is_removed, style.REMOVED_COLOR, style.MODE_COLORS["per_column"]))
+    axes[1].barh(y, joint_extra, left=per_column, height=0.62,
+                 color=np.where(is_removed, style.MISSING_COLOR, style.MODE_COLORS["joint"]))
     axes[1].xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value / 1000:g}k"))
     axes[1].set_xlabel("Unique requests per decision\nmodel after exact reuse")
     ax = axes[2]
-    for mode, column in (("per_column", "per_column_reuse_savings_pct"),
-                         ("joint", "joint_reuse_savings_pct")):
-        ax.scatter(order[column], y, s=14, color=style.MODE_COLORS[mode], zorder=3,
-                   label={"per_column": "Per-column request",
-                          "joint": "Joint request (not already per-column)"}[mode])
-    ax.hlines(y, order.joint_reuse_savings_pct, order.per_column_reuse_savings_pct,
-              color=style.GRID_COLOR, linewidth=1.2)
+    # Two offsets keep both views visible when they have the same rate, e.g. a single text column.
+    ax.plot([order.per_column_reuse_savings_pct, order.joint_reuse_savings_pct],
+            [y - 0.13, y + 0.13], color=style.GRID_COLOR, linewidth=1.0, zorder=1)
+    handles = []
+    for mode, label, marker, offset in (("per_column", "Per-column", "o", -0.13),
+                                         ("joint", "Joint", "^", 0.13)):
+        ax.scatter(order[f"{mode}_reuse_savings_pct"], y + offset, s=14, marker=marker,
+                   c=np.where(is_removed, style.REMOVED_COLOR, style.MODE_COLORS[mode]), zorder=3)
+        handles.append(plt.Line2D([], [], linestyle="none", marker=marker, markersize=4,
+                                  color=style.MODE_COLORS[mode], label=label))
     ax.set_xlim(-3, 103)
     ax.set_xlabel("Nonempty request slots\nserved by exact reuse (%)")
-    handles = [*ax.get_legend_handles_labels()[0],
-               plt.Line2D([], [], linestyle="none", marker="D", markersize=3.5,
-                          color=style.P95_COLOR, label="Longest row")]
+    handles.append(plt.Line2D([], [], linestyle="none", marker="D", markersize=3.5,
+                              color=style.P95_COLOR, label="Longest row"))
     fig.legend(handles=handles, loc="outside upper center", ncols=3, fontsize=7, frameon=False)
     for axis in axes:
         layout.light_grid(axis)
@@ -246,11 +242,12 @@ def reuse_figure(summary, long_datasets):
     layout.dataset_axis(axes[0], list(order.dataset), order.task_type,
                         removed=set(order.dataset[is_removed]), fontsize=7, separators=False)
     return fig, "text_volume_and_reuse", (
-        "Left: distribution of the combined text length of each row (all named fields, empty "
-        "fields omitted; tokens approximated as ceil(characters/4)). Middle: distinct requests one "
-        "decision model must answer after exact reuse, per-column requests plus joint requests that "
-        "do not equal a single-field request; every decision model receives the same requests. "
-        "Right: share of nonempty request slots that repeat an earlier identical request and "
-        "therefore need no new inference, separately for per-column and joint inputs. Grey rows are "
-        "the two excluded datasets (audited, never extracted)."
+        "For each dataset, the left panel summarizes rows with at least one nonempty text column. "
+        "Lengths are the total characters across those columns divided by four and rounded up. Boxes "
+        "span the 25th to 75th percentiles, with a median line, whiskers at the 1st and 99th "
+        "percentiles, and a diamond at the maximum. The middle panel stacks the distinct per-column "
+        "requests and the additional joint requests after reusing identical inputs across views. "
+        "The right panel measures repetition within each view separately. Its denominator is all "
+        "nonempty per-column slots for circles and all nonempty joint slots for triangles, "
+        "including rows with one available text column. Grey rows show the two excluded datasets."
     )

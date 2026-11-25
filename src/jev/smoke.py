@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from src.cluster.semantic_contracts import probes
 from src.jev.auth import api_key, credentials_available, error_hint
 from src.jev.provider import MAPPING_VERSION, api_preview, response_features
+from src.jev.spending import JEV_CEILING_USD, campaign_committed
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.locking import file_lock
@@ -199,7 +200,9 @@ def run(
         write_json(state_path, report)
         write_json(report_path, report)
 
-    with file_lock(state_path.with_suffix(".lock"), timeout=1):
+    cache_folder = paths.jev_cache_path()
+    with (file_lock(cache_folder / ".jev_campaign.lock", timeout=1),
+          file_lock(state_path.with_suffix(".lock"), timeout=1)):
         if state_path.exists():
             report = json.loads(state_path.read_text(encoding="utf-8"))
             if report.get("request_identity") != identity:
@@ -258,6 +261,9 @@ def run(
                         )
                     if len(report["attempts"]) >= maximum:
                         raise RuntimeError("Synthetic-test attempt ceiling reached")
+                    committed = campaign_committed(cache_folder, replay_folder=paths.results_dir("hosted_ledgers", phase="rq1"))
+                    if committed + TOKEN_BOUND * PRICE / 1e6 > JEV_CEILING_USD + 1e-12:
+                        raise RuntimeError("Cumulative Jev spending ceiling reached")
                     if client is None:
                         if client_factory is None:
                             from typesafe_sdk import RetryPolicy, TypeSafeClient
@@ -291,7 +297,14 @@ def run(
                     persist()
                 write_json(output_directory / f"{name}.json", raw)
                 usage = raw.get("usage", {}).get("input_tokens")
-                if type(usage) is not int or not 0 <= usage <= TOKEN_BOUND:
+                prior.update(reported_model=raw.get("model"), response_path=str(response_file))
+                if type(usage) is not int or usage < 0:
+                    raise ValueError("Provider usage differs from the documented billing envelope")
+                # A billed reply can fail the model or answer checks. Retain its actual
+                # identity and settle this attempt exactly once, including on offline replay.
+                prior.update(input_tokens=usage, charged_usd=usage * PRICE / 1e6, reserved_usd=0)
+                persist()
+                if usage > TOKEN_BOUND:
                     raise ValueError("Provider usage differs from the documented billing envelope")
                 features = response_features(request, raw)
                 prior["canonical_probability_order"] = json.loads(request.provenance_json).get(
@@ -331,10 +344,6 @@ def run(
                     if passed
                     else "semantic_review_required",
                     features=features,
-                    input_tokens=usage,
-                    charged_usd=usage * PRICE / 1e6,
-                    reserved_usd=0,
-                    response_path=str(response_file),
                 )
                 prior.pop("failure", None)
                 persist()

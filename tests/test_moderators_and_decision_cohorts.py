@@ -171,6 +171,9 @@ def test_decision_inputs_average_blocks_and_mark_missing_rows():
     assert np.isnan(agreement[2]) and agreement[3] == 0
     assert inputs.status["nim/joint"] == "missing:artifact_not_found"
     assert np.isnan(inputs.confidence("nim", ("joint",))).all()
+    fixed = rb.DecisionInputs(dataset, {"candidate_extractors": ["jev", "kev", "nim"]},
+                              loader=loader, require_complete_artifacts=True)
+    assert np.isnan(fixed.agreement(("joint",))).all()
     assert rb.decision_modes({"provider": "jev"}, "non_text_plus_both", "experiment_1") == (
         "per_column", "joint")
     assert rb.decision_modes({"provider": None}, "non_text", "experiment_1") is None
@@ -197,6 +200,7 @@ def test_saved_decision_arm_joins_decision_inputs_by_row(isolated_output, monkey
     from sklearn.dummy import DummyClassifier
 
     from src.cluster.predictor_contracts import feature_cases, fixtures
+    from src.evaluation.design import decision_versions
     from src.evaluation.protocol import evaluate_cv, shared_splits
 
     ds = next(d for d in fixtures() if d.metadata.task_type == "binary_classification")
@@ -204,15 +208,22 @@ def test_saved_decision_arm_joins_decision_inputs_by_row(isolated_output, monkey
     name = ds.metadata.dataset_id
     monkeypatch.setattr(rb, "load_catalog", lambda: {"datasets": [{"id": name}]})
     monkeypatch.setattr(rb, "load_dataset", lambda *a, **kw: ds)
-    monkeypatch.setattr(rb, "load_yaml", lambda name: {"random_seed": 20260929,
-                                                       "candidate_extractors": ["jev", "kev"]})
+    version, = decision_versions(["jev"])
+    selected = {k: version[k] for k in ("provider", "model", "version")}
+    selected.update(question_bank_id="bank", question_variant="fixture", settings_sha256="settings")
+    main = {"random_seed": 20260929, "candidate_extractors": ["jev", "kev"],
+            "feature_selectors": {"jev": selected}, "dataset_feature_artifacts": {name: {"jev": {"joint": "current"}}}}
+    monkeypatch.setattr(rb, "load_yaml", lambda name: main)
     spec = shared_splits(ds, seed=20260929, folds=5)
-    for feature_set, provider in [("non_text", None), ("non_text_plus_joint", "jev")]:
+    for provider, selector, artifacts in [(None, None, []), ("jev", selected, ["current"]),
+                                         ("jev", selected, ["old-publication"]),
+                                         ("jev", {**selected, "settings_sha256": "other"}, ["current"])]:
+        feature_set = "non_text_plus_joint" if provider else "non_text"
         evaluate_cv(ds, features, DummyClassifier, specification=spec, model_id="linear",
                     checkpoint_id="fixture", feature_set=feature_set, phase="experiment_1",
                     allow_model_runs=True, estimator_settings={"seed": 1},
-                    representation_recipe={"provider": provider, "feature_set": feature_set},
-                    feature_artifact_ids=[])
+                    representation_recipe={"provider": provider, "selector": selector, "feature_set": feature_set},
+                    feature_artifact_ids=artifacts)
     rows = len(ds.frame)
     values = np.where(np.arange(rows) % 3 == 0, 0.95, 0.6)
     values[ds.frame.text.isna().to_numpy() & ds.frame.notes.isna().to_numpy()] = np.nan
@@ -223,12 +234,16 @@ def test_saved_decision_arm_joins_decision_inputs_by_row(isolated_output, monkey
         return _block(provider, "joint", rows, values if provider == "jev" else 1 - values), "x"
 
     monkeypatch.setattr(rb.paths, "durable_project_override", rb.paths.staging_override)
-    body = json.loads(rb.run(name, decision_loader=loader).read_text())
+    body = json.loads(rb.run(name, decision_loader=loader, cohort="all").read_text())
+    assert len(body["folds"]) == 5
     assert body["decision_inputs"] == {"jev/joint": "x", "kev/joint": "x"}
-    by, _ = rb.summaries()
+    by, _ = rb.summaries(cohort="all")
     confidence = by[by.axis.eq("decision_confidence")].set_index("cohort").rows
     assert confidence["ge_0.9"] == int((values > 0.9).sum())
     assert confidence.sum() == rows
     agreement = by[by.axis.eq("decision_agreement")].set_index("cohort").rows
     # jev and kev always disagree, so each available row has a 1-of-2 plurality.
     assert set(agreement.index) <= {"0.5_to_0.75", "missing"} and agreement.sum() == rows
+    del main["dataset_feature_artifacts"][name]
+    with pytest.raises(ValueError, match="several complete recipes"):
+        rb.Pairing(name, decision_loader=loader, cohort="all")

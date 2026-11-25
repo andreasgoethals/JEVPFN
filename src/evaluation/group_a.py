@@ -35,6 +35,7 @@ A1_METRICS = {
 #: A2 factors: the variants of each factor in `robustness_export` stores.
 A2_FACTORS = {"wording": ("paraphrase_1", "paraphrase_2", "paraphrase_3"),
               "field_order": ("field_order",), "option_order": ("option_order",)}
+A2_VARIANT_FACTOR = {variant: factor for factor, variants in A2_FACTORS.items() for variant in variants}
 
 
 def bootstrap_ci(values, statistic=np.mean, *, n_boot: int = N_BOOT, seed: int = SEED):
@@ -143,14 +144,16 @@ def excess_by_dataset(mode_effects: pd.DataFrame) -> pd.DataFrame:
     variation distance of the full probability vectors (nine levels for regression); the excess
     subtracts the mean change of the two unchanged replays on the same requests.
     """
-    columns = ["dataset", "provider", "mode", "factor", "mean_tv", "excess_tv", "flip_rate", "matched_requests"]
+    columns = ["dataset", "provider", "mode", "factor", "mean_tv", "excess_tv", "flip_rate",
+               "min_matched_requests_per_variant", "max_matched_requests_per_variant", "matched_presentations"]
     if mode_effects.empty:
         return pd.DataFrame(columns=columns)
-    variant_factor = {v: f for f, variants in A2_FACTORS.items() for v in variants}
-    frame = mode_effects.assign(factor=mode_effects.variant.map(variant_factor)).dropna(subset=["factor"])
+    frame = mode_effects.assign(factor=mode_effects.variant.map(A2_VARIANT_FACTOR)).dropna(subset=["factor"])
     return (frame.groupby(["dataset", "provider", "mode", "factor"], sort=False)
             .agg(mean_tv=("mean_tv", "mean"), excess_tv=("excess_tv", "mean"),
-                 flip_rate=("flip_rate", "mean"), matched_requests=("matched_requests", "sum"))
+                 flip_rate=("flip_rate", "mean"), min_matched_requests_per_variant=("matched_requests", "min"),
+                 max_matched_requests_per_variant=("matched_requests", "max"),
+                 matched_presentations=("matched_requests", "sum"))
             .reset_index()[columns])
 
 
@@ -283,3 +286,9 @@ def a2_margin_tests(framework: dict, contrast: str = "average_vs_original") -> p
         parts.append(table.assign(provider=table.learner, factor=factor)[
             ["provider", "factor", "p_holm", "bayes_p_worse", "bayes_p_equivalent", "bayes_p_better"]])
     return pd.concat(parts, ignore_index=True) if parts else None
+
+
+def cohort_frames(frames, roster):
+    """Select per-provider A2/A3 rows for the named cohort, retaining their measured coverage."""
+    return {key: table[table.provider.isin(roster)].copy() if "provider" in table else table
+            for key, table in frames.items()}

@@ -12,10 +12,11 @@ correction: holm_across_all_predeclared_contrasts
 # The confirmatory family (Holm over all 21): the proposal's three primary contrasts, each per
 # predictor (7), on the pooled headroom-normalised gain of all 18 datasets, run by
 # `inference.pooled_confirmatory_tests` on `learner_scores.pooled_scores`. Decision features are
-# the median over all 17 models of the both view (the view every other B/C comparison uses);
+# the both-view median over the complete, explicitly recorded cohort of decision models;
 # the frozen and TAR references are the prespecified matched recipes (E5-small, per-column
-# PCA32; the decision + embedding arm and the B synthesis main arms use the same). Per-column
-# and joint views, other encoders and the label-trained classifier stay descriptive.
+# PCA32; the decision + embedding arm and the B synthesis main arms use the same). Additional
+# views, encoders and the label-trained classifier are descriptive for the primary analysis.
+# The application tables retain their prespecified comparisons within each predictor.
 # The 18 benchmark datasets (selection order); every pooled contrast uses all of them.
 confirmatory_datasets: &all_18_datasets
 - BIN_TEXT_FAKE_JOB_POSTING
@@ -129,11 +130,14 @@ proposal:
 framework:
   status: approved
   unit: per_dataset_mean_of_five_outer_folds_all_18_datasets
-  confirmatory_scores: {B: headroom_normalised_gain, A2: proper_score_skill}  # both tasks, N = 18
+  confirmatory_scores: {B: headroom_normalised_gain, A2: proper_score_skill}
+  # The initial release uses open_weight. The optional expanded release uses all.
+  # Each release applies Holm to its own complete 21 contrasts on the same 18 datasets.
+  primary_holm_family: all_declared_contrasts_for_one_recorded_complete_decision_cohort
   omnibus_several_learners: friedman_with_iman_davenport_f_tie_corrected
   ranks_and_cd_diagram: descriptive_nemenyi_critical_difference
   confirmatory_pairwise: two_sided_wilcoxon_signed_rank_on_dataset_differences
-  family_correction: holm_across_all_confirmatory_contrasts  # one family, as `correction` above
+  family_correction: holm_across_all_primary_contrasts_within_release
   omnibus_gate: none  # Holm controls the family itself; a Friedman gate is not required
   bayesian: {test: bayesian_signed_rank_dirichlet_process, prior_strength: 0.5, decision: largest_posterior_region}
   rope: {headroom_normalised_gain: 0.01, proper_score_skill: 0.01, roc_auc: 0.01, roc_auc_ovr_macro: 0.01, r2: 0.01, log_loss: 0.01}  # log_loss: A1, descriptive
@@ -142,11 +146,11 @@ framework:
   pama: fold_level  # Fernandez-Delgado et al. 2014; ties at the top credit each tied learner; dataset-cluster bootstrap CI
   population: the_18_benchmark_datasets_not_a_random_sample_of_all_tabular_text_tasks
   application:
-    A1_outputs: {comparison: 17_decision_models, procedure: friedman_ranks_cd_diagram, metric: log_loss_joint_requests, inference: descriptive}
-    A2_stability: {comparison: averaged_presentations_vs_canonical_per_model, procedure: wilcoxon_holm_over_17_models_plus_bayesian, metric: proper_score_skill, descriptive_metrics: [log_loss, ranked_probability_score, brier, roc_auc], inference: confirmatory}
+    A1_outputs: {comparison: selected_decision_model_cohort, procedure: friedman_ranks_cd_diagram, metric: log_loss_joint_requests, inference: descriptive}
+    A2_stability: {comparison: averaged_presentations_vs_canonical_per_model, procedure: wilcoxon_holm_within_factor_over_selected_models_plus_bayesian, metric: proper_score_skill, descriptive_metrics: [log_loss, ranked_probability_score, brier, roc_auc], inference: confirmatory, holm_family: selected_models_vs_original_within_each_factor}
     A3_geometry: {inference: descriptive_only}
-    B1_decision_features: {comparison: decision_modes_vs_non_text_control_per_predictor, procedure: wilcoxon_holm_plus_bayesian, ranking: friedman_cd_over_arms, inference: confirmatory}
-    B2_representations: {comparison: decision_vs_frozen_embeddings_tar_label_classifier, procedure: wilcoxon_holm_plus_bayesian, inference: confirmatory}
+    B1_decision_features: {comparison: decision_modes_vs_non_text_control_per_predictor, procedure: wilcoxon_holm_plus_bayesian, ranking: friedman_cd_over_arms, inference: confirmatory, holm_family: decision_modes_vs_non_text_within_each_predictor}
+    B2_representations: {comparison: decision_vs_frozen_embeddings_tar_label_classifier, procedure: wilcoxon_holm_plus_bayesian, inference: confirmatory, holm_family: representations_vs_decision_control_within_each_predictor}
     B3_when_text_helps: {comparison: three_lodo_rules_vs_always_and_never, procedure: wilcoxon_on_regret_plus_bayesian, inference: exploratory}
     B4_data_efficiency: {comparison: arms_vs_baseline_per_size, procedure: wilcoxon_holm_vs_control, inference: exploratory}
     B5_native_text_systems: {comparison: native_text_systems, procedure: friedman_cd_diagram, inference: descriptive}

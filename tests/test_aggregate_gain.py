@@ -28,7 +28,7 @@ def frame(*arms):
 
 
 def summary_of(paired, **kwargs):
-    return aggregate.normalized_gain_summary(paired, text_columns=TEXT, **kwargs)
+    return aggregate.normalized_gain_summary(paired, text_columns=TEXT, roster=["jev"], **kwargs)
 
 
 def pick(table, representation, model="catboost", scope="all"):
@@ -98,7 +98,7 @@ def test_single_text_datasets_leave_mode_contrasts_but_stay_against_baseline():
 def test_median_over_decision_models_requires_every_model_per_dataset():
     paired = frame(arm("BIN_A", provider="jev", augmented=0.82), arm("BIN_A", provider="kev", augmented=0.9),
                    arm("BIN_A", provider="sii", augmented=0.84), arm("BIN_B", provider="jev"))
-    gains = aggregate.dataset_gains(paired)
+    gains = aggregate.dataset_gains(paired, roster=("jev", "kev", "sii"))
     median = gains[gains.aggregation.eq(aggregate.MEDIAN)]
     assert list(median.dataset_id) == ["BIN_A"]
     assert median.gain.iloc[0] == pytest.approx(0.2)

@@ -22,7 +22,12 @@ def two_datasets(monkeypatch):
 
 
 def test_one_task_per_dataset_with_smaller_datasets_first(two_datasets):
+    from src.evaluation.benchmark_export import cohort_record
+
     body = benchmark_jobs.plan("experiment_1", "catboost")
+    roster = cohort_record(body["cohort"])
+    assert body["decision_model_versions"] == roster["decision_model_versions"]
+    assert body["roster_sha256"] == roster["roster_sha256"]
     assert body["arms"] == two_datasets  # Arm definitions are unchanged.
     assert [t["dataset_id"] for t in body["tasks"]] == ["small", "big"]
     assert sorted(i for t in body["tasks"] for i in t["arms"]) == [0, 1, 2, 3]
@@ -45,6 +50,77 @@ def test_linear_covers_logistic_regression_on_cpu():
     runtime = load_yaml("experiment_1/models")["models"]["linear"]["runtime"]
     assert runtime["device"] == "cpu"
     assert set(benchmark_jobs.CPU_ONLY_MODELS) == {"catboost", "linear", "lightgbm"}
+
+
+def test_linear_array_uses_the_qualified_sealed_image(two_datasets, tmp_path, monkeypatch):
+    import json
+    import shlex
+
+    from src.cluster import freeze, scheduling
+    from src.evaluation import qualification
+
+    monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": True})
+    monkeypatch.setattr(scheduling, "project_export", lambda root: "--export=ALL")
+    monkeypatch.setattr(qualification, "acceptance_for", lambda *args: "approved")
+    body = benchmark_jobs.plan("experiment_1", "linear")
+    body["route"]["staging_root"] = str(tmp_path)
+    marker = tmp_path / "JEVPFN/containers/control.active.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({"container_id": "controller-seal"}))
+
+    def environment():
+        command = benchmark_jobs.write_plan(body)["submissions"][0]["submission_command"]
+        return shlex.split(command)[-3]
+
+    for approved, expected in [("controller-seal", "JEVPFN"), ("predictor-seal", "linear")]:
+        monkeypatch.setattr(qualification, "benchmark_evidence",
+                            lambda *args, seal=approved: (None, {"container_id": seal}))
+        assert environment() == expected
+    body["profile_fold"] = True
+    assert environment() == "JEVPFN"
+    submission = benchmark_jobs.write_plan(body)["submissions"][0]
+    args = shlex.split(submission["submission_command"])
+    expected_hash = args[-4]
+    monkeypatch.setattr(benchmark_jobs.paths, "on_vsc", lambda: True)
+    monkeypatch.setenv("SLURM_JOB_ID", "1")
+    monkeypatch.setenv("SLURM_CLUSTER_NAME", "mindwell")
+    with pytest.raises(ValueError, match="recorded sealed"):
+        benchmark_jobs.array_item(submission["manifest"], expected_hash, 0)
+    image = tmp_path / "controller"
+    image.mkdir()
+    (image / "_JEVPFN_CONTAINER.json").write_text(json.dumps({"container_id": "controller-seal"}))
+    monkeypatch.setenv("JEVPFN_CONTROL_IMAGE", str(image))
+    manifest, _ = benchmark_jobs.array_item(submission["manifest"], expected_hash, 0)
+    assert manifest["control_container_id"] == "controller-seal"
+    monkeypatch.setattr(benchmark_jobs.paths, "on_vsc", lambda: False)
+    body["profile_runtime"] = "linear"
+    assert environment() == "linear"
+    marker.unlink()
+    body["profile_runtime"] = "JEVPFN"
+    with pytest.raises(ValueError, match="active sealed"):
+        environment()
+
+
+def test_every_provider_assigned_to_one_review_is_checked(two_datasets, monkeypatch):
+    from src.cluster import freeze
+    from src.evaluation import qualification
+
+    body = benchmark_jobs.plan("experiment_1", "catboost")
+    body["arms"].append({**body["arms"][-1], "provider": "missing-from-review"})
+    monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": True})
+    monkeypatch.setattr(qualification, "acceptance_for", lambda *args: "one-review")
+    checked = []
+
+    def evidence(path, selected):
+        assert path == "one-review"
+        checked.append(selected["provider"])
+        if selected["provider"] == "missing-from-review":
+            raise ValueError("Provider absent from review")
+
+    monkeypatch.setattr(qualification, "benchmark_evidence", evidence)
+    with pytest.raises(ValueError, match="absent from review"):
+        benchmark_jobs.write_plan(body)
+    assert checked == [None, "intern", "missing-from-review"]
 
 
 def test_unmeasured_gpu_work_is_never_shared():
@@ -92,6 +168,29 @@ def test_array_walltime_accounts_for_the_longest_worker():
     assert resources["time_hours"] == 6
 
 
+def test_over_limit_tasks_split_without_repeating_arms_or_clipping_walltime(two_datasets, monkeypatch):
+    summary = {"seconds_per_training_row": 0.3, "peak_rss_bytes": 0}
+    many = [arm("big", str(i)) for i in range(5)]
+    monkeypatch.setattr(benchmark_jobs, "benchmark_plan", lambda **kwargs: many)
+    body = benchmark_jobs.plan("experiment_1", "catboost", workers=2, profile_summary=summary)
+    assert [t["arms"] for t in body["tasks"]] == [[0, 1], [2, 3], [4]]
+    assert [t["workers"] for t in body["tasks"]] == [2, 2, 1]
+    with pytest.raises(ValueError, match="exceeds"):
+        benchmark_sizing.resources(summary, gpu=False, threads=8, workers_per_task=2,
+                                   arm_rows=[100_000] * 5)
+    with pytest.raises(ValueError, match="One five-fold arm"):
+        benchmark_jobs.plan("experiment_1", "catboost", profile_summary=summary | {"seconds_per_training_row": 1})
+
+
+def test_b4_estimates_account_for_full_held_out_fold_at_fixed_training_size():
+    p = dict(n_train=128, n_test=60_000, wall_seconds=10_000, fit_seconds=50, test_seconds=9900,
+             device_workers=1, peak_rss_bytes=1_000_000, peak_gpu_reserved_bytes=0)
+    summary = benchmark_sizing.summarize([p])
+    observed = benchmark_sizing.estimated_arm_seconds(summary, (128, 60_000))
+    assert observed == 5 * p["wall_seconds"]
+    assert benchmark_sizing.estimated_arm_seconds(summary, (128, 600)) < observed / 10
+
+
 def test_sizing_reads_only_the_current_reviewed_profile_on_its_cluster(tmp_path, monkeypatch):
     import json
 
@@ -102,7 +201,8 @@ def test_sizing_reads_only_the_current_reviewed_profile_on_its_cluster(tmp_path,
     meta = dict(model_id="catboost", dataset_id="d", prediction_role="outer_test", split_id="s",
                 outer_fold=0, n_train=8000, representation_feature_count=4)
     body = dict(metadata=meta, predictions={"sha256": "prediction"},
-                timing={"measured_wall_seconds": 100}, resources={"peak_rss_bytes": 12345})
+                timing={"measured_wall_seconds": 100},
+                resources={"peak_rss_bytes": 12345, "fit_job_id": "1", "fit_cluster": "mindwell"})
     evidence = []
     for i, (phase, cluster, identity) in enumerate([
         ("experiment_1", "mindwell", "current"),
@@ -111,11 +211,16 @@ def test_sizing_reads_only_the_current_reviewed_profile_on_its_cluster(tmp_path,
         ("experiment_1", "mindwell", "previous"),
     ]):
         file = tmp_path / f"report{i}.json"
+        evidence_name = file.name
+        if i == 0:
+            directory = tmp_path / "output_JEVPFN"
+            file = directory / "03_exp0b/manifests/after_extraction" / file.name
+            evidence_name = str(directory / "3. experiment_0/manifests/after_extraction" / file.name)
         write_json(file, dict(status="full_fold_profile_passed", evaluation_identity=identity,
                               cluster=cluster, job_id="1", split_id="s", training_rows=8000,
                               predictor_columns=4, arm={"phase": phase, "model": "catboost", "dataset_id": "d"},
                               roles=[{"role": "outer_test", "record_id": str(i), "prediction_sha256": "prediction"}]))
-        evidence.append({"path": file.name, "sha256": file_sha256(file)})
+        evidence.append({"path": evidence_name, "sha256": file_sha256(file)})
     review = tmp_path / "review.json"
     write_json(review, dict(accepted=True, stage="after_extraction", reviewed_by="owner",
                             evaluation_identity="current", evidence=evidence))

@@ -3,7 +3,7 @@
 JEVPFN studies **how decision models represent real text, when their representations help
 prediction, and whether supervised adaptation improves them**.
 Eighteen text-rich tabular datasets provide linked outcomes and a shared test bed.
-A decision model reads a named text field or a group of fields and answers a fixed question about the task. We follow its answer probabilities from the original text to a held-out prediction. This lets us test whether two models that describe the same text differently also give a tabular learner different predictive information.
+A decision model reads one named text column or several columns together and answers a fixed question about the task. We follow its answer probabilities from the original text to a held-out prediction. This lets us test whether two models that describe the same text differently also give a tabular learner different predictive information.
 
 Prior studies compare direct decisions on whole table rows, and existing software already feeds Jev probabilities into a tabular predictor. We give the decision models the same questions and text. We then compare their probabilities with frozen and supervised text embeddings using the same tabular predictors and held-out rows. [Typed Decision Models on Tabular Data](https://arxiv.org/abs/2610.19536) · [tab-jev](https://github.com/edamame-labs/tab-jev) · [MulTaBench](https://arxiv.org/abs/2605.10616)
 
@@ -13,28 +13,21 @@ Prior studies compare direct decisions on whole table rows, and existing softwar
 |---|---|---|
 | RQ1: behaviour | Outputs/context, controlled robustness, decision–encoder geometry | Local reports; controlled GPU calls and geometry CPU analysis on VSC |
 | RQ2: predictive usefulness | Decisions, frozen embeddings, supervised TAR, native-text systems; when decision features help | Predictor fits on VSC; paired analysis locally |
-| RQ3: adaptation | Strands 2B calibration, head-only, LoRA and full adaptation | Fold-local training on VSC; held-out analysis locally |
+| RQ3: Strands v1 | C0 qualifies training. C1 measures hidden representations. C2 compares zero-shot, head-only, LoRA-only and LoRA + head. | C1 extraction and C0/C2 training on VSC, held-out analysis locally |
 
-RQ2 has **6,534 configurations / 32,670 outer fits** across four comparisons; historical
-Experiments 1–4 retain their machine identifiers. RQ3 is a design proposal awaiting review. Its notebooks describe candidate comparisons.
-The [study configuration](config/) defines the comparisons and qualification checks.
+The first release contains 16 open-weight decision models. Its 77,397 Group B configurations and 2,142 Strands configurations in Group C require 397,695 outer fits. Jev 1.14.0 is optional. Adding it would require 3,843 new Group B configurations (19,215 outer fits), bringing the total to 416,910 fits. Shared controls and existing predictions carry forward. Each complete release compares decision features against three references (structured inputs alone, frozen E5-small, label-trained E5-small TAR) for each of seven predictors. These 21 paired comparisons use the saved predictions on the same 18 datasets. Adding a model can change the median over decision models and its uncertainty.
 
-Six tabular predictors use a shared structured baseline and features from 17 decision models: hosted Jev and 16 open-weight releases. For regression, each question produces nine probabilities over a signed evidence scale. These describe the text; the tabular predictor estimates the numeric target.
+Later releases can add open-weight models, hosted models or both. Each release names its parent. The job planner schedules only the added models' fits and reuses earlier predictions and shared controls. Each release records the hosted model versions and open-weight checkpoint revisions it uses. Any release can extend the original sixteen directly, whether or not Jev has run. [Decision-model releases](config/B/main.yaml)
+
+Seven tabular predictors use the same structured baseline and five outer folds. For regression, each decision question produces nine ordered probabilities describing the text. The tabular predictor estimates the numeric target.
 The comparisons use three frozen encoders
 (E5-small-v2, E5-large-v2, Qwen3-Embedding-0.6B) and supervised E5-small TAR. Both embedding
-tracks retain joint PCA64 and separate PCA32 per text field. TabSTAR v1.1, ConTextTab and
+tracks retain joint PCA64 and separate PCA32 per text column. TabSTAR v1.1, ConTextTab and
 AutoGluon-Multimodal are descriptive native-text system references.
 
-## Current evidence
+## Campaign evidence
 
-**18 November 2026.** The VSC has published all eighteen datasets for each of the eleven
-original open-weight decision models. All 54 frozen encoder and 54 fold-PCA stores are
-also verified locally. Mammoth, Drex Max and GLiDE passed the production GPU checks and
-eighteen-dataset pilots. Review 11819179 accepted all three and the extraction dispatcher
-started on 18 November. KnowLine-31B and Sieve-31B-v3 have verified weights and sealed Mindwell containers. Both passed cross-node storage checks and exact token audits on all 18 datasets. Each B200 contract is followed by a dataset pilot. Full Jev remains incomplete.
-
-One real TAR pilot and the linear/CatBoost checks passed. Full 0B and the benchmark
-remain ahead.
+**25 November 2026, 12:12 Brussels snapshot.** The desktop holds both feature views for 259 of 288 open-weight dataset–model pairs, plus both Jev 1.14.0 views for Product Sentiment. All 520 views match their registered model revisions. The 54 frozen encoder stores, 54 PCA stores and one real TAR pilot are also available locally. All five additional open-weight providers have signed native 0A reviews. Every remaining extraction has a Slurm job ID. The repaired jobs can checkpoint during inference and KnowLine's 100,000-row Jigsaw retry completed. The current benchmark still needs a full native 0B review. C0 qualifies Strands v1 training on the VSC before production C2.
 
 ## Repository navigation
 
@@ -55,7 +48,9 @@ A, B and C, with their configuration flat in `config/<group>/`:
 | `C/exp10_representations` | `C/exp10_representations` | Inside the decision model: Strands hidden states (C1) | `representations` |
 | `C/exp11_adaptation` | `C/exp11_adaptation`, `C/C_synthesis` | Learning from labels with Strands (C2) | `rq3` |
 
-Each experiment has one notebook, with its statistics inside, at
+The [study audit](notebooks/general/4_study_audit.ipynb) lists the nine C0 pilots and their local receipts. The C0 head-only cases use C1 vectors. C0 qualifies the three C2 training configurations for each task type.
+
+Each scientific experiment has one notebook, with its statistics inside, at
 `notebooks/<group>/<name>.ipynb`; each group has one `<letter>_synthesis` notebook and
 `notebooks/paper/` is reserved. Group B4 and C were renumbered on 23 November 2026
 (`exp11_data_efficiency` → `B/exp09_data_efficiency`, `exp09_representations` →
@@ -68,10 +63,10 @@ the checksum-verified [layout migration](src/utils/layout_migration.py).
 
 ## Local setup
 
-From the repository root in Windows PowerShell, create a Python 3.12 environment once.
-These dependencies support local inspection and tests; model runtimes are separate.
+From the local repository root in Windows PowerShell, initialize the pinned submodules and create a Python 3.12 environment. The editable install reads configuration from the checkout. The Strands recipe tests also read publisher source from the pinned DM library. Model runtimes are separate.
 
 ```powershell
+git submodule update --init
 py -3.12 -m venv --prompt JEVPFN .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev,notebooks,control]"
 .\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name jevpfn --display-name "Python 3.12 (JEVPFN)"
@@ -135,7 +130,7 @@ The RQ1 Outputs notebook examines row-level vote splits, matching-class
 correlations, full probability differences, confidence, text grouping and exact reuse.
 Mindwell CPU checks the published inputs and writes the joint-row Parquet and a compact report.
 The local notebook renders that report, including hash-verified examples, and identifies its model coverage.
-Only extractors with both feature blocks on all 18 datasets enter the comparisons.
+Primary results require both feature blocks for every prespecified model on all 18 datasets. Missing coverage is reported for that release.
 
 | Stage | Notebooks |
 |---|---|
@@ -144,8 +139,12 @@ Only extractors with both feature blocks on all 18 datasets enter the comparison
 | Group B, Exp 4–9 (RQ2) | [Decisions](notebooks/B/exp04_decision_features.ipynb), [Embeddings](notebooks/B/exp05_frozen_embeddings.ipynb), [TAR](notebooks/B/exp06_tar.ipynb), [Native text](notebooks/B/exp07_native_text.ipynb), [When decision features help](notebooks/B/exp08_when_text_helps.ipynb), [Amount of labelled data](notebooks/B/exp09_data_efficiency.ipynb), [B synthesis](notebooks/B/B_synthesis.ipynb) |
 | Group C, Exp 10–11 (C2: RQ3) | [Inside the decision model](notebooks/C/exp10_representations.ipynb): Strands hidden states; [Learning from labels](notebooks/C/exp11_adaptation.ipynb): head-only, LoRA only, LoRA + head; [C synthesis](notebooks/C/C_synthesis.ipynb) |
 
-Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 texts per dataset/field.
+Regression uses **nine probabilities per text input**, without a mean-readout ablation. RQ1B uses 500 random semantic requests per dataset and one-factor changes; RQ1C compares all pairs of up to 500 distinct texts within each dataset and text column.
 The RQ3 notebook currently shows plans and pending gates, not trained-model results.
+
+## Research sources
+
+The pinned [decision-model synthesis](dm-library/SYNTHESIS.md) and [tabular-model synthesis](tfm-library/SYNTHESIS.md) include paper summaries, source versions and implementation records. MulTaBench selected tasks on which supervised text adaptation added signal. The 18-task analysis therefore describes a selected benchmark population. Figure 3 of the source paper compares its curated text subset with the broader candidate pool. [MulTaBench, v3](https://arxiv.org/abs/2605.10616v3)
 
 ## Citation and licensing
 

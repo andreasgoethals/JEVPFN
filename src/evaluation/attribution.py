@@ -331,17 +331,22 @@ def record_body(identity, settings, result=None):
 # ---------------------------------------------------------------- collection and summaries
 
 def _representation(recipe, feature_set, phase):
-    from src.evaluation.aggregate import DECISION_MODES, FAMILIES
+    from src.evaluation.group_b import family, representation
 
     recipe = recipe or {}
-    family = FAMILIES.get(phase)
-    if family == "decision":
-        if feature_set == "non_text":
-            return "decision", "non_text"
-        return family, f"decision/{DECISION_MODES.get(feature_set, feature_set)}/{recipe.get('provider')}"
+    if feature_set == "non_text":
+        return "decision", "non_text"
     embedding = recipe.get("embedding") or {}
-    return family, (f"{family}/{embedding.get('encoder_id')}/"
-                    f"{embedding.get('pca_scope')}{embedding.get('pca_components_per_column')}")
+    label = representation({
+        "feature_set": feature_set, "provider": recipe.get("provider"),
+        "encoder": embedding.get("encoder_id"), "pca_scope": embedding.get("pca_scope"),
+        "pca_components": embedding.get("pca_components_per_column"),
+        "probe_view": (recipe.get("probe") or {}).get("view"),
+        "dropped_text_column": recipe.get("dropped_text_column"),
+    })
+    # Attribution has historically named pure frozen embeddings "embedding".
+    label = label.replace("frozen/", "embedding/", 1) if label.startswith("frozen/") else label
+    return family(label), label
 
 
 def attribution_status(phases=STRUCTURED_PHASES + ("experiment_4",)):

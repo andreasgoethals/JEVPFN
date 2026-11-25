@@ -17,8 +17,8 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from threading import Event, Lock
 
-from src.jev.provider import api_preview, response_features
-from src.jev.spending import register_policy
+from src.jev.provider import LIQUID_ULTRA, api_preview, pinned_jev_model, response_features
+from src.jev.spending import committed_for_admission, register_policy
 from src.utils import paths
 from src.utils.events import append_event
 from src.utils.serialization import canonical_json, digest
@@ -31,6 +31,10 @@ class RejectedRetryable(RuntimeError):
     def __init__(self, message="Rate-limit rejection", retry_after_seconds=None):
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+
+
+class ReleaseNotDispatched(RuntimeError):
+    """The unbilled catalog check failed before a decision request was sent."""
 
 
 class AccountCreditError(RuntimeError):
@@ -179,13 +183,11 @@ class TypeSafeTransport:
         if not all(review.get(k) is True for k in required):
             raise ValueError("Live extraction readiness checks are incomplete")
         campaign_limits(cfg)
-        if cfg["jev"]["model"] != f"jev-{cfg['jev']['version']}":
-            raise ValueError("A fixed matching Jev model/version is required")
+        self.model = pinned_jev_model(cfg["jev"])
         from typesafe_sdk import RetryPolicy, TypeSafeClient
 
         from src.jev.auth import api_key
 
-        self.model = cfg["jev"]["model"]
         self.client = TypeSafeClient(
             api_key=api_key(),
             base_url="https://api.typesafe.ai",
@@ -234,6 +236,7 @@ class DatasetExtractor:
         sleep=time.sleep,
         phase="feature_creation",
         policy_revision_manifest=None,
+        campaign_available_usd=None,
         timings=None,
         log=None,
     ):
@@ -242,12 +245,16 @@ class DatasetExtractor:
         if validate_context is None:
             raise ValueError("Supply a reviewed context validator; no silent truncation")
         self.cache, self.client, self.limits = cache, client, limits
+        self.available_usd = (limits.dataset_budget_usd if campaign_available_usd is None else
+                              min(limits.dataset_budget_usd, campaign_available_usd))
         self.gate = gate or RateGate(limits)
         self.validate_context = validate_context
         self.sleep = sleep
         self.account_stopped = Event()
         self.stop_details = None
         self._stop_lock = Lock()
+        self._response_models = {}
+        self._response_models_lock = Lock()
         self.session_id = uuid.uuid4().hex
         self.timings = timings or TimingJournal("jev", phase=phase, run_id=self.session_id)
         # Another hosted provider passes its own log so the Jev dataset log stays Jev-only.
@@ -255,6 +262,21 @@ class DatasetExtractor:
         self.policy_sha256 = register_policy(
             cache, limits, revision_manifest=policy_revision_manifest, stage=phase
         )
+
+    def _observe_model(self, source, response):
+        model = response.get("model")
+        key = (source, model if isinstance(model, str) and model else None)
+        with self._response_models_lock:
+            self._response_models[key] = self._response_models.get(key, 0) + 1
+
+    def observed_response_models(self):
+        """Count actual server model IDs separately for newly received and reused replies."""
+        with self._response_models_lock:
+            return [
+                {"source": source, "reported_model": model, "count": count}
+                for (source, model), count in sorted(self._response_models.items(),
+                                                      key=lambda item: (item[0][0], item[0][1] or ""))
+            ]
 
     def _stop_account(self, request, error=None):
         self.account_stopped.set()
@@ -270,8 +292,8 @@ class DatasetExtractor:
                 }
                 append_event(self.log, "account_stopped", **self.stop_details)
 
-    def _release_unsent(self, request):
-        """A sibling hit the account stop while this worker waited; no call was made."""
+    def _release_unsent(self, request, reason="account_stopped"):
+        """Release only this worker's reservation for a call that never reached dispatch."""
         with self.cache._connect() as db:
             cursor = db.execute(
                 "UPDATE extraction_jobs SET status='pending',reserved_usd=0,"
@@ -281,8 +303,8 @@ class DatasetExtractor:
             )
             if cursor.rowcount != 1:
                 raise RuntimeError("Cannot release an unsent reservation no longer owned by this worker")
-        append_event(self.log, "account_stopped_before_dispatch", request_key=request.cache_key)
-        return "account_stopped"
+        append_event(self.log, reason + "_before_dispatch", request_key=request.cache_key)
+        return reason
 
     def _reserve(self, request):
         reservation = (
@@ -308,10 +330,7 @@ class DatasetExtractor:
                 return status
             if attempts >= self.limits.max_attempts:
                 return "attempt_limit"
-            total = db.execute(
-                "SELECT COALESCE(SUM(reserved_usd+spent_usd),0) FROM extraction_jobs"
-            ).fetchone()[0]
-            if total + reservation > self.limits.dataset_budget_usd + 1e-12:
+            if committed_for_admission(db) + reservation > self.available_usd + 1e-12:
                 return "budget_stop"
             db.execute(
                 "UPDATE extraction_jobs SET status='sending',attempts=attempts+1,reserved_usd=?,owner_session=?,policy_sha256=? WHERE request_key=?",
@@ -319,7 +338,7 @@ class DatasetExtractor:
             )
         return "claimed"
 
-    def _update(self, request, status, *, response=None, error=None, rejected=False):
+    def _update(self, request, status, *, response=None, error=None, rejected=False, release_evidence=None):
         tokens = None
         if response is not None:
             tokens = response.get("usage", {}).get("input_tokens")
@@ -338,10 +357,12 @@ class DatasetExtractor:
                     (request.cache_key,),
                 )
             db.execute(
-                "UPDATE extraction_jobs SET status=?,raw_response_json=COALESCE(?,raw_response_json),error_type=? WHERE request_key=?",
+                "UPDATE extraction_jobs SET status=?,raw_response_json=COALESCE(?,raw_response_json),"
+                "release_evidence_json=COALESCE(?,release_evidence_json),error_type=? WHERE request_key=?",
                 (
                     status,
                     canonical_json(response) if response is not None else None,
+                    canonical_json(release_evidence) if release_evidence is not None else None,
                     error,
                     request.cache_key,
                 ),
@@ -357,8 +378,21 @@ class DatasetExtractor:
         return status
 
     def evaluate(self, request):
+        settings = json.loads(request.settings_json)
+        needs_catalog = False
+        if settings.get("provider") == LIQUID_ULTRA:
+            from src.jev.liquid_hosted import MAPPING_VERSION, catalog_matches
+
+            needs_catalog = settings.get("api_mapping_version") == MAPPING_VERSION
         cached = self.cache.get(request, kind="verified_response")
         if cached is not None:
+            if needs_catalog:
+                with self.cache._connect() as db:
+                    row = db.execute("SELECT release_evidence_json FROM extraction_jobs WHERE request_key=?",
+                                     (request.cache_key,)).fetchone()
+                if not catalog_matches(settings, json.loads(row[0]) if row and row[0] else None):
+                    return "release_unverified"
+            self._observe_model("cache_hit", cached)
             response_features(request, cached)
             append_event(self.log, "cache_hit", request_key=request.cache_key)
             self.timings.record("cache_reuse", dataset_id=self.cache.dataset_id,
@@ -366,7 +400,7 @@ class DatasetExtractor:
             return "cache_hit"
         with self.cache._connect() as db:
             saved = db.execute(
-                "SELECT status,raw_response_json,error_type FROM extraction_jobs WHERE request_key=?",
+                "SELECT status,raw_response_json,error_type,release_evidence_json FROM extraction_jobs WHERE request_key=?",
                 (request.cache_key,),
             ).fetchone()
         if saved and saved[0] == "ambiguous" and saved[2] == "AccountCreditError":
@@ -376,6 +410,9 @@ class DatasetExtractor:
             # A crash after recording usage/raw response must not require another paid call.
             # Revalidate a paid response after a decoder fix; never dispatch it again.
             response = json.loads(saved[1])
+            self._observe_model("saved_reply", response)
+            if needs_catalog and not catalog_matches(settings, json.loads(saved[3]) if saved[3] else None):
+                return self._update(request, "release_unverified")
             try:
                 response_features(request, response)
             except Exception as exc:
@@ -411,6 +448,8 @@ class DatasetExtractor:
                 started = time.perf_counter()
                 response = self.client.evaluate(request)
                 seconds = time.perf_counter() - started
+            except ReleaseNotDispatched:
+                return self._release_unsent(request, "release_unverified")
             except AccountCreditError as exc:
                 self._stop_account(request, exc)
                 # A top-up alone must never silently repay an uncertain attempt.
@@ -442,6 +481,9 @@ class DatasetExtractor:
                         self.sleep(delay)
                 continue
             except Exception as exc:
+                if started is None:
+                    self._release_unsent(request, "failed")
+                    raise
                 status = self._update(request, "ambiguous", error=type(exc).__name__)
                 http_status = getattr(exc, "status", None)
                 if type(http_status) is int:
@@ -454,7 +496,10 @@ class DatasetExtractor:
                         error_type=type(exc).__name__,
                     )
                 return status
-            status = self._update(request, "received", response=response)
+            release_evidence = getattr(response, "release_evidence", None)
+            status = "release_unverified" if needs_catalog and not catalog_matches(settings, release_evidence) else "received"
+            status = self._update(request, status, response=response, release_evidence=release_evidence)
+            self._observe_model("api_reply", response)
             # Preserve the paid raw response/accounting BEFORE writing optional timing evidence.
             self.timings.record("api_request", dataset_id=self.cache.dataset_id,
                                 item_keys=[request.cache_key], seconds=seconds)
@@ -463,6 +508,8 @@ class DatasetExtractor:
             if response["usage"]["input_tokens"] > self.limits.max_billed_input_tokens:
                 self._update(request, "billing_bound_exceeded", error="BillingBoundViolation")
                 raise RuntimeError("Verified billing-token bound was exceeded; stop extraction")
+            if status == "release_unverified":
+                return status
             try:
                 response_features(request, response)
             except Exception as exc:
@@ -499,6 +546,7 @@ class DatasetExtractor:
                         "ambiguous_usage",
                         "billing_bound_exceeded",
                         "invalid_response",
+                        "release_unverified",
                         "sending",
                         "attempt_limit",
                         "resolved_no_response",

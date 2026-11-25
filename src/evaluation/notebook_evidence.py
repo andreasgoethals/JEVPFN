@@ -28,7 +28,8 @@ def study_grid(plan):
         binary = sum(semantics[d]["task_type"] == "binary_classification" for d in part.dataset_id)
         rows.append({"experiment": phase, "datasets": part.dataset_id.nunique(),
                      "predictors": part.model.nunique(), "configurations": len(part),
-                     "outer_fits": 5 * len(part), "binary_inner_fits": 0 if phase == "experiment_3" else 15 * binary})
+                     "outer_fits": 5 * len(part), "binary_inner_fits":
+                     0 if phase in {"experiment_3", "data_efficiency", "rq3"} else 15 * binary})
     return pd.DataFrame(rows)
 
 
@@ -101,17 +102,24 @@ def local_runtime_evidence(inventory=None):
                                f"accepted_{model_id}.json")
         accepted = _read(acceptance) if acceptance.is_file() else {}
         robust = (report.get("real_prompt_robustness") or {}).get("structurally_valid")
+        robust_status = ("observed" if robust else "failed" if robust is False
+                         else "not_applicable" if embedding else "unknown")
         hosted_probes = folder / "jev_dataset_robustness.json"
         if model_id == "jev" and hosted_probes.is_file():
-            robust = _read(hosted_probes).get("status") == "jev_dataset_robustness_requires_review"
+            hosted = _read(hosted_probes)
+            if hosted.get("model") != config["model"]:
+                robust_status = "review"
+            elif hosted.get("status") == "jev_dataset_robustness_requires_review":
+                robust_status = "observed"
+            else:
+                robust_status = "failed" if hosted.get("status") == "failed" else "unknown"
         semantic = (report.get("semantic_diagnostics") or {}).get("passed")
         gpu = report.get("gpu") if isinstance(report.get("gpu"), dict) else {}
         rows.append({"model_id": model_id, "model": config["model"], "pin": expected_pin,
                      "kind": "encoder" if embedding else "hosted" if model_id == "jev" else "open",
                      "known_answer": "observed" if semantic else "failed" if semantic is False
                      else "not_applicable" if embedding or model_id == "jev" else "unknown",
-                     "robustness": "observed" if robust else "failed" if robust is False
-                     else "not_applicable" if embedding else "unknown",
+                     "robustness": robust_status,
                      "token_audit": "observed" if accepted.get("token_audit_id")
                      else "not_applicable" if embedding or model_id == "jev" else "unknown",
                      "accepted": "observed" if accepted.get("accepted") is True else "unknown",

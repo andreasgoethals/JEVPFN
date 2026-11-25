@@ -57,7 +57,8 @@ def study_at_a_glance(table):
             ax.set_xlim(-0.02, 1.02)
         else:
             ax.axvline(0, color=style.NON_TEXT_COLOR, linewidth=0.8, zorder=0)
-        n = int(part.datasets.max()) if len(part) else 0
+        n_min, n_max = int(part.datasets.min()), int(part.datasets.max())
+        n = str(n_max) if n_min == n_max else f"{n_min}–{n_max}"
         ax.set_xlabel(f"{label}\n(N = {n} datasets)", fontsize=7)
         layout.light_grid(ax)
     axes[0].set_yticks(y, arms, fontsize=7)
@@ -69,11 +70,14 @@ def study_at_a_glance(table):
                       label="median (CI on the pooled panels)"),
                Line2D([], [], color=style.NON_TEXT_COLOR, label="no text (same predictor)")]
     fig.legend(handles=handles, loc="outside lower center", ncols=3, fontsize=7, frameon=False)
-    predictors = int(table.predictors.min())
+    p_min = int(table.predictors.min())
+    p_max = int(table.get("predictors_max", table.predictors).max())
+    predictors = str(p_max) if p_min == p_max else f"{p_min}–{p_max}"
     normalized = ("normalized" in set(table.scope))
     return fig, "study_at_a_glance", (
         "Gain of each prespecified arm over the same predictor without text. Per dataset, the "
-        f"five-fold mean gain is averaged over the {predictors} predictors; circles give the "
+        f"five-fold mean gain is averaged over the available predictors ({predictors}). The panel "
+        "counts give the datasets contributing to each arm, with a range when coverage differs. Circles give the "
         "equal-dataset mean with a dataset-bootstrap 95% percentile interval (2,000 resamples), "
         "diamonds the median (interval on the pooled panels only). Left: headroom-normalised gain "
         "(gain divided by 1 − baseline score), pooled over all datasets. "
@@ -82,7 +86,7 @@ def study_at_a_glance(table):
            "no-text baseline (grey line: its mean), averaged over predictors; relative to this "
            "comparison set. " if normalized else "")
         + "Right: raw gains within each task family (binary and multiclass ROC-AUC; regression R²), "
-        "never averaged across families. Decision rows use the per-dataset median over all 17 decision "
+        "never averaged across families. Decision rows use the per-dataset median over the selected decision "
         "models; the Strands row is the prespecified LoRA + head cell, not a selected best arm."
     )
 
@@ -104,14 +108,19 @@ def confirmatory_forest(results):
     for i, row in data.iterrows():
         color = style.CD_SIGNIFICANT_COLOR if significant[i] else style.MEDIAN_COLOR
         ax.hlines(i, row.low, row.high, color=color, linewidth=1)
-        ax.scatter(row.estimate, i, s=18, color=color, zorder=3)
+        ax.scatter(row.estimate, i, s=18, color=color, marker="D" if significant[i] else "o", zorder=3)
         ax.text(1.0, i, f" p(Holm) = {row.p_holm:.3f}", transform=ax.get_yaxis_transform(), fontsize=6.5,
                 va="center", ha="left", color=color)
     ax.axvline(0, color=style.NON_TEXT_COLOR, linewidth=0.8)
-    ax.set_yticks(y, data.contrast, fontsize=7)
+    labels = []
+    for contrast in data.contrast:
+        predictor, sep, comparison = contrast.partition(": ")
+        labels.append(f"{style.PREDICTOR_LABELS.get(predictor, predictor)} · {comparison}" if sep else contrast)
+    ax.set_yticks(y, labels, fontsize=7)
     ax.set_ylim(len(data) - 0.5, -0.5)
     ax.tick_params(axis="y", length=0)
-    ax.set_xlabel("Paired effect (positive favours the first arm)", fontsize=7)
+    headroom = "score_type" in data and data.score_type.eq("headroom_normalised_gain").all()
+    ax.set_xlabel("Difference in headroom-normalised gain" if headroom else "Paired effect", fontsize=7)
     layout.light_grid(ax)
     bar = axes[1]
     # The two ends of EFFECT_CMAP (BrBG): brown = second arm better, teal = first arm better.
@@ -126,10 +135,13 @@ def confirmatory_forest(results):
     fig.legend(handles=[Patch(color=colors[0], label="second arm better"), Patch(color=colors[1], label="ROPE"),
                         Patch(color=colors[2], label="first arm better")],
                loc="outside lower center", ncols=3, fontsize=7, frameon=False)
+    ropes = data["rope"].dropna().unique() if "rope" in data else []
+    rope = f" (±{ropes[0]:g})" if len(ropes) == 1 else ""
+    count = f" across {int(data.datasets.iloc[0])} datasets" if "datasets" in data and data.datasets.nunique() == 1 else ""
     return fig, "confirmatory_family", (
-        f"All {len(data)} declared confirmatory contrasts. Left: median paired per-dataset effect with "
-        "dataset-bootstrap "
-        "95% interval; red marks Holm-adjusted two-sided Wilcoxon p < 0.05 over the whole family. "
-        "Right: Bayesian signed-rank posterior probabilities that the second arm is better, that the "
-        "difference lies within the region of practical equivalence (ROPE), or that the first arm is better."
+        f"All {len(data)} prespecified comparisons{count}. Each point is the median paired dataset "
+        "difference, oriented so that a positive value favours the first arm. Lines are 95% "
+        "dataset-bootstrap percentile intervals. Red diamonds mark two-sided Wilcoxon tests with "
+        "Holm-adjusted p < 0.05 across the full family. The bars give Bayesian signed-rank posterior "
+        f"probabilities below, within and above the region of practical equivalence{rope}."
     )

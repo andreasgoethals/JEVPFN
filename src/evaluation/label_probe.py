@@ -8,8 +8,8 @@ probabilities over equal-frequency target bins defined on the training rows.
 
 Everything uses training rows only:
 
-* the regularisation strength is chosen from five fixed values by inner stratified CV
-  (log loss);
+* inner CV selects regularisation strength by log loss, with stratification when feasible
+  for classification and training-only quantiles in each regression split;
 * each training row receives the prediction of a model fitted on the other four of five
   cross-fitting parts (unstratified, so neither the model nor the partition depends on the
   row's own label); that model's regression bin edges and C use only its own four parts;
@@ -18,8 +18,8 @@ Everything uses training rows only:
 
 Missing text stays missing (all probe outputs NaN for that block); the joint view imputes an
 absent column with its training mean when at least one text column of the row is present.
-A partition that cannot support a classifier (fewer rows than parts, or one class only)
-receives the training class frequencies, recorded in the diagnostics.
+Blocks too small for cross-fitting receive a fixed uniform distribution on present text.
+Within a cross-fit part with a single training class, its training prior is sufficient.
 
 Full-size arms read features prepared once per dataset/encoder/outer fold on a CPU allocation
 (`python -m src.evaluation.label_probe --dataset D --encoder E`); B4 small-sample arms fit the
@@ -34,7 +34,6 @@ import io
 import json
 import os
 import sqlite3
-import warnings
 from contextlib import closing
 
 import numpy as np
@@ -47,7 +46,7 @@ from sklearn.preprocessing import StandardScaler
 
 from src.utils.serialization import canonical_json, digest, scalar
 
-VERSION = "supervised-probe-v2"  # v2: bins and C selected inside each cross-fit part
+VERSION = "supervised-probe-v3"  # Label-independent sparse fallback and fold-local tuning bins.
 C_GRID = (0.001, 0.01, 0.1, 1.0, 10.0)
 INNER_FOLDS = 3
 CROSSFIT_FOLDS = 5
@@ -106,10 +105,7 @@ class _Prior:
 def _fit(x, labels, n_outputs, c, seed):
     if len(np.unique(labels)) < 2:
         return _Prior(labels, n_outputs)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # convergence warnings are recorded via n_iter_.
-        model = _pipeline(c, seed).fit(x, labels)
-    return model
+    return _pipeline(c, seed).fit(x, labels)
 
 
 def _predict(model, x, n_outputs):
@@ -151,16 +147,27 @@ class SupervisedProbe:
             p = p[:, -1:]
         return {f"probe__{name}__p_{j:02d}": p[:, j] for j in range(p.shape[1])}
 
-    def _choose_c(self, matrix, labels, stream):
+    def _choose_c(self, matrix, labels, targets, stream):
         """C with the lowest mean inner log loss on these rows; a tie keeps the stronger
         regularisation."""
         losses = {}
-        inner = _splitter(labels, self.inner_folds, stream)
+        regression = self.task_type == "regression"
+        inner = (KFold(self.inner_folds, shuffle=True, random_state=stream) if regression
+                 else _splitter(labels, self.inner_folds, stream))
+        partitions = []
+        for a, t in inner.split(matrix, labels):
+            if regression:
+                edges = regression_bins(targets[a])
+                fit_labels = encode_target(targets[a], self.task_type, self.classes, edges)
+                validation_labels = encode_target(targets[t], self.task_type, self.classes, edges)
+            else:
+                fit_labels, validation_labels = labels[a], labels[t]
+            partitions.append((a, t, fit_labels, validation_labels))
         for c in self.c_grid:
             scores = []
-            for a, t in inner.split(matrix, labels):
-                model = _fit(matrix[a], labels[a], self.n_outputs, c, self.seed)
-                scores.append(_log_loss(labels[t], _predict(model, matrix[t], self.n_outputs)))
+            for a, t, fit_labels, validation_labels in partitions:
+                model = _fit(matrix[a], fit_labels, self.n_outputs, c, self.seed)
+                scores.append(_log_loss(validation_labels, _predict(model, matrix[t], self.n_outputs)))
             losses[c] = float(np.mean(scores))
         return min(self.c_grid, key=lambda c: (losses[c], c)), losses
 
@@ -178,18 +185,18 @@ class SupervisedProbe:
             values = np.full((len(x), self.n_outputs), np.nan)
             n = len(labels)
             diagnostic = {"block": name, "training_rows": int(n), "fallback": None}
-            if n < max(self.crossfit_folds, self.inner_folds) * 2 or len(np.unique(labels)) < 2:
-                model = _Prior(labels, self.n_outputs) if n else None
-                diagnostic["fallback"] = "training_class_frequencies" if n else "no_training_text"
+            if n < max(self.crossfit_folds, self.inner_folds) * 2:
+                model = _Prior(np.arange(self.n_outputs), self.n_outputs) if n else None
+                diagnostic["fallback"] = "uniform_label_independent" if n else "no_training_text"
                 if n:
                     values[present] = model.predict(matrix)
                 self.models_.append(model)
                 diagnostic["selected_C"] = None
             else:
                 stream = self.seed + 7919 * b
-                chosen, losses = self._choose_c(matrix, labels, stream)
-                crossfit = np.full((n, self.n_outputs), np.nan)
                 targets = np.asarray(y, dtype=object)[present]
+                chosen, losses = self._choose_c(matrix, labels, targets, stream)
+                crossfit = np.full((n, self.n_outputs), np.nan)
                 part_c = []
                 # Unstratified parts: which rows share a part never depends on a row's own label.
                 # Fully cross-fitted: each part's regression bins and C use only the rows that
@@ -201,7 +208,7 @@ class SupervisedProbe:
                     if len(np.unique(part_labels)) < 2:
                         model, c = _Prior(part_labels, self.n_outputs), None
                     else:
-                        c, _ = self._choose_c(matrix[a], part_labels, stream + 101 * (k + 1))
+                        c, _ = self._choose_c(matrix[a], part_labels, targets[a], stream + 101 * (k + 1))
                         model = _fit(matrix[a], part_labels, self.n_outputs, c, self.seed)
                     part_c.append(c)
                     crossfit[t] = _predict(model, matrix[t], self.n_outputs)
@@ -377,6 +384,55 @@ def run(dataset_id, encoder):
                          embedding_artifacts=vectors.attrs["feature_artifact_ids"], prepare=True,
                          ).fit(train, target.iloc[fold["train"]], all_rows=vectors)
         print(f"{dataset_id}/{encoder}: outer fold {number} prepared", flush=True)
+
+
+def verify_prepared(dataset, encoder, artifact_id):
+    """Read both probe views for every exact outer fold and verify their rows and probabilities."""
+    from src.evaluation.protocol import shared_splits
+    from src.utils.config import load_yaml
+    from src.utils.serialization import text_value
+
+    seed = load_yaml("experiment_3/tar")["random_seed"]
+    split = shared_splits(dataset, seed=seed)
+    rows = pd.Index([f"csv:{i}" for i in range(len(dataset.frame))])
+    task = dataset.metadata.task_type
+    targets = dataset.frame[dataset.metadata.target]
+    columns = list(dataset.metadata.text_columns)
+    groups = [[f"frozen_e5__text_{i:03d}__{j:03d}" for j in range(encoder["dimensions"])]
+              for i in range(len(columns))]
+    present = [dataset.frame[col].map(text_value).notna().to_numpy() for col in columns]
+    width = output_width(task, dataset.metadata.classes)
+    path = cache_path(dataset.metadata.dataset_id, encoder["encoder_id"])
+    keys = []
+    for fold in split["folds"]:
+        train = fold["train"]
+        for view in VIEWS:
+            key = identity(rows[train], targets.iloc[train], groups, view, task, seed, [artifact_id])
+            cached = read(path, key)
+            if cached is None:
+                raise ValueError(f"Missing prepared {view} supervised probe partition")
+            table, _ = cached
+            blocks = ([(f"text_{i:03d}", mask) for i, mask in enumerate(present)]
+                      if view == "per_column" else [("all_text", np.any(present, axis=0))])
+            names = [f"probe__{name}__p_{j:02d}" for name, _ in blocks for j in range(width)]
+            if (not table.index.is_unique or set(table.index) != set(rows)
+                    or list(table.columns) != names):
+                raise ValueError("Prepared probe rows or probability columns differ")
+            values = table.loc[rows].to_numpy(dtype=float)
+            for i, (_, mask) in enumerate(blocks):
+                block = values[:, i * width:(i + 1) * width]
+                if not mask[train].any():
+                    # A field absent from every training row has no fitted probe.
+                    if not np.isnan(block).all():
+                        raise ValueError("Prepared probe supplies predictions without training text")
+                    continue
+                observed = block[mask]
+                if (not np.isnan(block[~mask]).all() or not np.isfinite(observed).all()
+                        or np.any((observed < 0) | (observed > 1))
+                        or (width > 1 and not np.allclose(observed.sum(axis=1), 1, atol=1e-6, rtol=0))):
+                    raise ValueError("Prepared probe probabilities or missingness differ")
+            keys.append(key)
+    return keys
 
 
 def main():

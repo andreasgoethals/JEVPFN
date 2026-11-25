@@ -6,8 +6,7 @@ source "$jevpfn_script_dir/storage_environment.sh" || return 2 2>/dev/null || ex
 # Run:     bash scripts/test_all.sh --execute --watch
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}"
-export JEVPFN_DURABLE_ROOT="$JEVPFN_STAGING_ROOT"
+export JEVPFN_STAGING_ROOT="${JEVPFN_STAGING_ROOT:-${JEVPFN_DURABLE_ROOT:?Select the allocated durable PROJECT root}}"
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 export JEVPFN_CONDA_ENV=JEVPFN
 source scripts/activate_conda.sh

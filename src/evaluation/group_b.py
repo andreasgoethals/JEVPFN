@@ -9,7 +9,7 @@ bootstrap interval over datasets, and win/tie/loss counts use a fixed tie band. 
 metrics are fixed (binary ROC-AUC, multiclass macro one-vs-rest ROC-AUC, regression R2).
 
 B3 adds label-free dataset properties (including decision redundancy), exploratory
-model-level relations (n = 17 decision models), text-column refit importance and a
+model-level relations (n = selected decision models), text-column refit importance and a
 leave-one-dataset-out (LODO) rule that predicts each dataset's gain in advance. The rule runs
 on three nested input sets (owner decision 23-11-2026): label-free properties only ("should I
 acquire?"), plus redundancy on a fixed 200-row label-free pilot ("should I acquire after a
@@ -29,7 +29,6 @@ from src.evaluation.endpoints import HEADLINES
 TIE_TOLERANCE = 0.001
 N_BOOT = 2000
 SEED = 20261120
-HEADROOM_FLOOR = 1e-3
 
 MODE_LABELS = {"non_text_plus_joint": "joint", "non_text_plus_per_column": "per_column",
                "non_text_plus_both": "both"}
@@ -90,41 +89,59 @@ def headline(folds: pd.DataFrame) -> pd.DataFrame:
 PAIR_KEYS = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id", "outer_fold"]
 
 
-def fold_gains(rows: pd.DataFrame, baseline: pd.DataFrame | None = None) -> pd.DataFrame:
+def validate_fold_identities(head: pd.DataFrame, *, extra=()) -> None:
+    """Require one split per dataset and one checkpoint per predictor at a given size/draw."""
+    if head.empty:
+        return
+    keys = ["dataset_id", *extra]
+    identities = [("split_id", keys), ("checkpoint_id", [*keys, "model_id"])]
+    if "pairing_identity" in head:
+        identities.append(("pairing_identity", [*keys, "model_id"]))
+    for column, by in identities:
+        if head[column].isna().any() or head.groupby(by, dropna=False)[column].nunique().gt(1).any():
+            raise ValueError(f"Cannot compare folds with missing or different {column} identities")
+    if not head.outer_fold.isin(range(5)).all():
+        raise ValueError("Expected outer folds numbered 0 to 4")
+
+
+def fold_gains(rows: pd.DataFrame, baseline: pd.DataFrame | None = None, *, extra_keys=()) -> pd.DataFrame:
     """Fold-level gain of every arm over the same predictor/split/fold baseline."""
     if rows.empty:
-        return pd.DataFrame()
+        return rows.assign(baseline=pd.Series(dtype=float), raw_gain=pd.Series(dtype=float))
+    keys = [*PAIR_KEYS, *extra_keys]
     base = rows if baseline is None else baseline
-    base = base[base.representation.eq("baseline")][PAIR_KEYS + ["value"]]
-    if base.duplicated(PAIR_KEYS).any():
+    base = base[base.representation.eq("baseline")][keys + ["value"]]
+    if base.duplicated(keys).any():
         raise ValueError("Several baselines match one predictor, split and fold")
     arms = rows[~rows.representation.eq("baseline")]
-    paired = arms.merge(base.rename(columns={"value": "baseline"}), on=PAIR_KEYS, how="inner")
+    paired = arms.merge(base.rename(columns={"value": "baseline"}), on=keys, how="inner")
     paired["raw_gain"] = paired.value - paired.baseline
     return paired
 
 
 def dataset_gains(paired: pd.DataFrame, extra_keys=()) -> pd.DataFrame:
     """Per dataset x predictor x arm: five-fold mean raw gain and share of headroom."""
-    if paired.empty:
-        return pd.DataFrame()
     keys = ["dataset_id", "task_type", "model_id", "representation", *extra_keys]
-    identity = [c for c in ("split_id", "checkpoint_id") if c in paired]
+    if paired.empty:
+        return pd.DataFrame(columns=[*keys, "augmented", "baseline", "raw_gain", "fold_variance",
+                                     "folds", "headroom", "headroom_share", "family"])
+    identity = [c for c in ("split_id", "checkpoint_id", "pairing_identity") if c in paired]
     mixed = paired.groupby(keys, dropna=False)[identity].nunique(dropna=False).gt(1).any(axis=1)
     if mixed.any():
         raise ValueError("A dataset gain must pair five folds of one split and checkpoint: "
                          f"{list(mixed[mixed].index[:3])}")
+    paired = paired.assign(_finite=np.isfinite(paired.raw_gain.to_numpy(float)))
     out = paired.groupby(keys, as_index=False, dropna=False).agg(
         augmented=("value", "mean"), baseline=("baseline", "mean"),
         raw_gain=("raw_gain", "mean"), fold_variance=("raw_gain", "var"),
         folds=("outer_fold", "nunique"), pairs=("outer_fold", "size"),
-        finite=("raw_gain", lambda v: int(np.isfinite(v.to_numpy(float)).sum())))
+        finite=("_finite", "sum"), **{c: (c, "first") for c in identity})
     if out.pairs.gt(out.folds).any():
         raise ValueError("Several fold records of one arm entered one dataset gain")
     # Exactly five finite paired differences; an undefined fold leaves the dataset incomplete.
     out = out[out.folds.eq(5) & out.finite.eq(5)].drop(columns=["pairs", "finite"]).copy()
     out["headroom"] = 1 - out.baseline
-    out["headroom_share"] = out.raw_gain / np.maximum(out.headroom, HEADROOM_FLOOR)
+    out["headroom_share"] = out.raw_gain / out.headroom.where(out.headroom > 0)
     out["family"] = out.representation.map(family)
     return out.reset_index(drop=True)
 
@@ -145,9 +162,13 @@ def median_over_decision_models(gains: pd.DataFrame, *, roster) -> pd.DataFrame:
     data = _decision_modes(gains)
     roster = sorted(set(roster))
     if data.empty or not roster:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["dataset_id", "task_type", "model_id", "raw_gain", "headroom_share",
+                                     "baseline", "decision_models", "representation", "family"])
     data = data[data.provider.isin(roster)]
-    out = data.groupby(["dataset_id", "task_type", "model_id", "mode"], as_index=False).agg(
+    keys = ["dataset_id", "task_type", "model_id", "mode"]
+    if data.duplicated([*keys, "provider"]).any():
+        raise ValueError("Several gains for one member of the decision-model cohort")
+    out = data.groupby(keys, as_index=False).agg(
         raw_gain=("raw_gain", "median"), headroom_share=("headroom_share", "median"),
         baseline=("baseline", "first"), decision_models=("provider", "nunique"))
     out = out[out.decision_models.eq(len(roster))].copy()
@@ -190,17 +211,18 @@ def summarize(gains: pd.DataFrame, *, keys=("model_id", "representation"), n_boo
     rows = []
     for key, group in gains.groupby(list(keys), sort=True):
         raw, share = group.raw_gain.to_numpy(float), group.headroom_share.to_numpy(float)
-        low, high = _bootstrap_mean(raw, rng, n_boot)
+        same_units = group.task_type.map(task_family).nunique() == 1
+        low, high = _bootstrap_mean(raw, rng, n_boot) if same_units else (np.nan, np.nan)
         share_low, share_high = _bootstrap_mean(share, rng, n_boot)
         # The median sits next to the mean: a near-perfect baseline makes the headroom share
         # very large on one dataset, which moves the mean but not the median.
         median_low, median_high = _bootstrap_mean(share, rng, n_boot, np.median)
         rows.append(dict(zip(keys, key if isinstance(key, tuple) else (key,))) | dict(
-            datasets=len(group), mean_raw_gain=float(raw.mean()), raw_ci_low=low, raw_ci_high=high,
+            datasets=len(group), mean_raw_gain=float(raw.mean()) if same_units else np.nan, raw_ci_low=low, raw_ci_high=high,
             mean_headroom_share=float(share.mean()), share_ci_low=share_low,
             share_ci_high=share_high, median_headroom_share=float(np.median(share)),
             median_share_ci_low=median_low, median_share_ci_high=median_high,
-            median_raw_gain=float(np.median(raw)), wins=int((raw > tie).sum()),
+            median_raw_gain=float(np.median(raw)) if same_units else np.nan, wins=int((raw > tie).sum()),
             ties=int((np.abs(raw) <= tie).sum()), losses=int((raw < -tie).sum()),
             family=family(group.representation.iloc[0]) if "representation" in group else None))
     return pd.DataFrame(rows)
@@ -251,7 +273,7 @@ def normalized_scores(scores: pd.DataFrame, *, keys=("model_id", "representation
     exist, ``outer_fold`` (otherwise each dataset is one cell). Rules, fixed before results:
 
     * negative R^2 is clipped at 0 before normalising (MulTaBench Tables 11/12): worse than the
-      training mean counts as "no skill", so one failed configuration cannot stretch the scale;
+      mean of the evaluated targets counts as "no skill", so one failed configuration cannot stretch the scale;
       AUC is never clipped;
     * the comparison set is every configuration present anywhere in the input for that set; a
       cell lacking a finite score for any of them is excluded for all (no configuration is
@@ -278,6 +300,8 @@ def normalized_scores(scores: pd.DataFrame, *, keys=("model_id", "representation
                           if isinstance(scores[c].dtype, pd.CategoricalDtype)})
     if "outer_fold" not in data:
         data = data.assign(outer_fold=0)
+    if "split_id" in data or "checkpoint_id" in data:
+        validate_fold_identities(data)
     cell = ["dataset_id", *within, "outer_fold"]
     if data.duplicated([*cell, *keys]).any():
         raise ValueError("Several scores for one configuration in one dataset and fold")
@@ -285,7 +309,7 @@ def normalized_scores(scores: pd.DataFrame, *, keys=("model_id", "representation
         raise ValueError("A dataset has several task types")
     value = data["value"].astype(float).to_numpy()
     if clip_negative_r2:
-        value = np.where(data.task_type.eq("regression").to_numpy() & (value < 0), 0.0, value)
+        value = np.where(data.task_type.eq("regression").to_numpy() & np.isfinite(value) & (value < 0), 0.0, value)
     data = data.assign(clipped=value)
     rows, excluded = [], []
     sets = data.groupby(within, dropna=False) if within else [((), data)]
@@ -447,10 +471,12 @@ def model_diagnostics(quality=None, output_shape=None, consensus=None, profile=N
     consensus = None if consensus is None else distinct(consensus)
     if quality is not None and not quality.empty:
         q = quality.dropna(subset=["value"])
-        headline_q = q[q.metric.isin(["roc_auc", "roc_auc_ovr_macro", "spearman_expected_level",
-                                      "spearman"]) | q.metric.str.startswith("spearman")]
-        parts.append(headline_q.groupby(["provider", "dataset_id"]).value.mean()
-                     .groupby("provider").mean().rename("standalone_quality"))
+        for name, metrics in (("standalone_classification_auc", ("roc_auc", "roc_auc_ovr_macro")),
+                              ("standalone_regression_spearman", ("spearman_expected_level", "spearman"))):
+            scores = q[q.metric.isin(metrics)]
+            if not scores.empty:
+                parts.append(scores.groupby(["provider", "dataset_id"]).value.mean()
+                             .groupby("provider").mean().rename(name))
         ece = q[q.metric.eq("ece")]
         if not ece.empty:
             parts.append(ece.groupby(["provider", "dataset_id"]).value.mean()
@@ -464,6 +490,11 @@ def model_diagnostics(quality=None, output_shape=None, consensus=None, profile=N
     if stability is not None and "mode" in stability:  # A2 mode_effects: joint requests only
         stability = stability[stability["mode"].eq("joint")]
     if stability is not None and not stability.empty and "excess_tv" in stability:
+        if "variant" in stability:
+            from src.evaluation.group_a import A2_VARIANT_FACTOR
+
+            stability = (stability.assign(factor=stability.variant.map(A2_VARIANT_FACTOR))
+                         .groupby(["provider", "dataset", "factor"], as_index=False).excess_tv.mean())
         parts.append(stability.groupby(["provider", "dataset"]).excess_tv.mean()
                      .groupby("provider").mean().rename("stability_excess_tv"))
     if profile is not None and not profile.empty and "parameters_billion" in profile:
@@ -474,56 +505,88 @@ def model_diagnostics(quality=None, output_shape=None, consensus=None, profile=N
     return pd.concat(parts, axis=1).rename_axis("provider").reset_index()
 
 
-def per_model_usefulness(gains: pd.DataFrame) -> pd.DataFrame:
-    """Equal-dataset mean gain of each decision model, per predictor and mode.
+def per_model_usefulness(gains: pd.DataFrame, *, datasets=None) -> pd.DataFrame:
+    """Equal-dataset mean gain on the declared dataset roster, per provider, predictor and mode.
 
     Raw gain is in task-specific units (AUC or R^2), so it is averaged only within a task
     family (``task_family`` classification/regression). Rows with ``task_family == "all"``
     average the unit-free headroom share over all datasets and leave ``raw_gain`` empty.
+    Incomplete outcomes keep their coverage counts and have no comparable mean.
     """
     data = gains[gains.family.eq("decision")].copy()
     if data.empty:
         return pd.DataFrame()
+    if datasets is None:
+        from src.data.loaders import load_catalog
+        from src.data.selection import selected_entries
+        from src.utils.config import load_yaml
+
+        semantics = load_yaml("dataset_semantics")["datasets"]
+        entries = selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+        datasets = pd.DataFrame([{"dataset_id": e["id"], "task_type": semantics[e["id"]]["task_type"]}
+                                 for e in entries])
+    tasks = datasets.set_index("dataset_id", verify_integrity=True).task_type
+    data = data[data.dataset_id.isin(tasks.index)].copy()
+    if not data.task_type.eq(data.dataset_id.map(tasks)).all():
+        raise ValueError("Decision gains disagree with the declared dataset task types")
     parts = data.representation.str.split("/")
     data["mode"], data["provider"] = parts.str[1], parts.str[2]
     data["task_family"] = data.task_type.map(task_family)
     keys = ["model_id", "mode", "provider"]
-    by_family = data.groupby([*keys, "task_family"], as_index=False).agg(
+    if data.duplicated([*keys, "dataset_id"]).any():
+        raise ValueError("Several usefulness scores for one decision model, predictor, mode and dataset")
+    values = ["raw_gain", "headroom_share"]
+    data[values] = data[values].replace([np.inf, -np.inf], np.nan)
+    scoped = pd.concat([data, data.assign(task_family="all", raw_gain=np.nan)], ignore_index=True)
+    out = scoped.groupby([*keys, "task_family"], as_index=False).agg(
         raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
-        datasets=("dataset_id", "nunique"))
-    pooled = data.groupby(keys, as_index=False).agg(
-        headroom_share=("headroom_share", "mean"), datasets=("dataset_id", "nunique")).assign(
-        task_family="all", raw_gain=np.nan)
-    return pd.concat([by_family, pooled[by_family.columns]], ignore_index=True)
+        datasets=("dataset_id", "nunique"), raw_gain_datasets=("raw_gain", "count"),
+        headroom_share_datasets=("headroom_share", "count"))
+    expected = tasks.map(task_family).value_counts().to_dict() | {"all": len(tasks)}
+    out["expected_datasets"] = out.task_family.map(expected)
+    for value in ("raw_gain", "headroom_share"):
+        out[value] = out[value].where(out[f"{value}_datasets"].eq(out.expected_datasets))
+    return out
 
 
-def model_relations(usefulness: pd.DataFrame, diagnostics: pd.DataFrame, *,
-                    n_permutations=5000, seed=SEED, min_units=5) -> pd.DataFrame:
-    """Spearman associations of model usefulness with Group A diagnostics (n = models).
-
-    Raw gain is related within each task family; headroom share over all datasets. One
-    Benjamini-Hochberg adjustment spans every row, as in `associations`.
-    """
+def _gain_associations(units, properties, *, unit, by, n_permutations, seed, min_units):
+    """Raw gain within each family and headroom share across families, with one BH adjustment."""
     from src.evaluation.moderator_statistics import benjamini_hochberg
 
-    if usefulness.empty or diagnostics is None or len(diagnostics.columns) <= 1:
-        return pd.DataFrame()
-    units = usefulness.rename(columns={"provider": "unit"})
-    props = diagnostics.rename(columns={"provider": "unit"})
     parts = []
     for outcome, rows in (("raw_gain", units[units.task_family.ne("all")]),
                           ("headroom_share", units[units.task_family.eq("all")])):
         if rows.empty:
             continue
-        out = associations(rows, props, by=("model_id", "mode", "task_family"), unit="unit",
+        out = associations(rows, properties, by=by, unit=unit,
                            outcome=outcome, n_permutations=n_permutations, seed=seed,
                            min_units=min_units)
-        parts.append(out.assign(outcome=outcome))
+        if not out.empty:
+            parts.append(out.assign(outcome=outcome))
     if not parts:
         return pd.DataFrame()
     out = pd.concat(parts, ignore_index=True)
     out["q_value_bh"] = benjamini_hochberg(out.p_value)
     return out
+
+
+def dataset_associations(medians, properties, *, n_permutations=5000, seed=SEED, min_units=5):
+    """Relate each dataset property to comparable gains for each predictor and representation."""
+    if medians.empty:
+        return pd.DataFrame()
+    units = pd.concat([medians.assign(task_family=medians.task_type.map(task_family)),
+                       medians.assign(task_family="all")], ignore_index=True)
+    return _gain_associations(units, properties, unit="dataset_id", by=("model_id", "representation", "task_family"),
+                              n_permutations=n_permutations, seed=seed, min_units=min_units)
+
+
+def model_relations(usefulness: pd.DataFrame, diagnostics: pd.DataFrame, *,
+                    n_permutations=5000, seed=SEED, min_units=5) -> pd.DataFrame:
+    """Relate comparable per-model usefulness to Group A diagnostics, with one BH adjustment."""
+    if usefulness.empty or diagnostics is None or len(diagnostics.columns) <= 1:
+        return pd.DataFrame()
+    return _gain_associations(usefulness, diagnostics, unit="provider", by=("model_id", "mode", "task_family"),
+                              n_permutations=n_permutations, seed=seed, min_units=min_units)
 
 
 # ------------------------------------------------------------------ B3: predict in advance
@@ -544,7 +607,10 @@ def lodo_predictions(outcome: pd.DataFrame, properties: pd.DataFrame, *, feature
     """Leave-one-dataset-out predicted gain from <= 2 prespecified label-free properties."""
     if len(features) > 2:
         raise ValueError("The prespecified LODO rule uses at most two properties")
-    data = outcome[[unit, value]].merge(properties[[unit, *features]], on=unit).dropna()
+    if value == "raw_gain" and "task_type" in outcome and outcome.task_type.map(task_family).nunique() > 1:
+        raise ValueError("Raw AUC and R² gains cannot be pooled by a LODO rule")
+    data = (outcome[[unit, value]].merge(properties[[unit, *features]], on=unit, validate="one_to_one")
+            .replace([np.inf, -np.inf], np.nan).dropna())
     rows = []
     for i in range(len(data)):
         train = data.drop(index=data.index[i])
@@ -555,11 +621,11 @@ def lodo_predictions(outcome: pd.DataFrame, properties: pd.DataFrame, *, feature
                                        test[features].to_numpy(float), alpha)[0]
         rows.append({unit: test[unit].iloc[0], "actual": float(test[value].iloc[0]),
                      "predicted": float(predicted)})
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=[unit, "actual", "predicted"])
 
 
 def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000, seed=SEED,
-                    outcome=None, properties=None, features=None, alpha=1.0) -> dict:
+                    outcome=None, properties=None, features=None, alpha=1.0, unit="dataset_id", value="raw_gain") -> dict:
     """Rank correlation, use/don't-use accuracy, regret against always/never and a shuffle null.
 
     Use the decision features when the predicted gain exceeds `threshold`. Realised gain of a
@@ -574,7 +640,8 @@ def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000
     def score(table):
         use = table.predicted > threshold
         helpful = table.actual > threshold
-        rho = spearmanr(table.predicted, table.actual).statistic
+        rho = (spearmanr(table.predicted, table.actual).statistic
+               if table.predicted.nunique() > 1 and table.actual.nunique() > 1 else np.nan)
         return float(rho), float((use == helpful).mean()), float(np.where(use, table.actual, 0).mean())
 
     rho, accuracy, realised = score(predictions)
@@ -587,10 +654,11 @@ def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000
                   status="estimated" if np.isfinite(rho) else "rank_correlation_undefined")
     if outcome is not None and properties is not None and n_shuffles:
         rng = np.random.default_rng(seed)
+        outcome = outcome.sort_values(unit, kind="stable")
         null_rho, null_acc = [], []
         for _ in range(n_shuffles):
-            shuffled = outcome.assign(raw_gain=rng.permutation(outcome.raw_gain.to_numpy()))
-            table = lodo_predictions(shuffled, properties, features=features, alpha=alpha)
+            shuffled = outcome.assign(**{value: rng.permutation(outcome[value].to_numpy())})
+            table = lodo_predictions(shuffled, properties, features=features, alpha=alpha, unit=unit, value=value)
             if len(table) >= 3:
                 r, a, _ = score(table)
                 null_rho.append(r)
@@ -605,7 +673,7 @@ def lodo_evaluation(predictions: pd.DataFrame, *, threshold=0.0, n_shuffles=2000
 
 
 def lodo_input_sets(outcome: pd.DataFrame, properties: pd.DataFrame, *, input_sets, alpha=1.0,
-                    threshold=0.0, n_shuffles=2000, seed=SEED, unit="dataset_id"):
+                    threshold=0.0, n_shuffles=2000, seed=SEED, unit="dataset_id", value="raw_gain"):
     """The same LODO rule, outcome and shuffle null on several prespecified input sets.
 
     All sets use one common dataset cohort: datasets with the outcome and every property of
@@ -616,8 +684,8 @@ def lodo_input_sets(outcome: pd.DataFrame, properties: pd.DataFrame, *, input_se
     missing = [f for f in needed if f not in properties]
     if missing:
         raise ValueError(f"Prespecified LODO properties are absent: {missing}")
-    data = outcome[[unit, "raw_gain"]].merge(properties[[unit, *needed]], on=unit, how="left")
-    complete = data.notna().all(axis=1)
+    data = outcome[[unit, value]].merge(properties[[unit, *needed]], on=unit, how="outer", validate="one_to_one")
+    complete = np.isfinite(data[[value, *needed]].to_numpy(dtype=float)).all(axis=1)
     cohort = set(data.loc[complete, unit])
     excluded = sorted(set(data[unit]) - cohort)
     outcome = outcome[outcome[unit].isin(cohort)]
@@ -625,14 +693,14 @@ def lodo_input_sets(outcome: pd.DataFrame, properties: pd.DataFrame, *, input_se
     rows, summary = [], []
     for name, spec in input_sets.items():
         predictions = lodo_predictions(outcome, properties, features=spec["properties"], alpha=alpha,
-                                       unit=unit)
-        rows.append(predictions.assign(input_set=name, claim=spec["claim"]))
-        summary.append({"input_set": name, "claim": spec["claim"],
+                                       unit=unit, value=value)
+        rows.append(predictions.assign(input_set=name, claim=spec["claim"], outcome=value))
+        summary.append({"input_set": name, "claim": spec["claim"], "outcome": value,
                         "properties": ",".join(spec["properties"]),
                         "excluded_datasets": ",".join(excluded),
                         **lodo_evaluation(predictions, threshold=threshold, n_shuffles=n_shuffles,
                                           seed=seed, outcome=outcome, properties=properties,
-                                          features=spec["properties"], alpha=alpha)})
+                                          features=spec["properties"], alpha=alpha, unit=unit, value=value)})
     return pd.concat(rows, ignore_index=True), pd.DataFrame(summary)
 
 
@@ -678,7 +746,7 @@ def decision_redundancy(non_text: pd.DataFrame, decision: np.ndarray, splits, *,
     """How well the non-text columns predict a decision output (label-free).
 
     A ridge regression (training-fold imputation, scaling and one-hot encoding; alpha fixed)
-    is fitted on the training rows of each shared outer fold and predicts the decision
+    is fitted on the training rows of each label-independent fold and predicts the decision
     probabilities of its test rows. Only rows with a decision output enter. Returns the
     pooled out-of-fold R2 (variance-weighted over probability columns) and, for
     classification, the share of rows whose predicted top class equals the decision's.

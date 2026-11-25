@@ -6,33 +6,44 @@
 # produce them yet. Read by src.utils.paper_figures.
 schema: jevpfn.paper_figures.v1
 proposed: 19-11-2026
-revised: 23-11-2026  # stems follow the 23-11-2026 notebook rebuild; B stems are planned names
+revised: 24-11-2026
 figures:
 - id: fig1_headline_gain
   title: What decision models add - per-dataset gains and model ranks
   notebook: B/exp04_decision_features
   section: summary
-  figures: [gain_landscape, model_rank_heatmap]
+  figures: [b1_gain_landscape, b1_model_ranks]
+  note: The per-dataset effect is the headline view. Ranks add context about heterogeneity across extractors.
   placement: undecided
   status: planned
 - id: fig2_representation_ladder_and_compute
   title: Decision features against embedding, label-trained and native alternatives, and compute
   notebook: B/B_synthesis
-  figures: [representation_ladder*, quality_vs_compute*]
+  figures: [b_ladder_*, b_quality_vs_compute]
+  note: Select the ladder that answers the comparison in the text. Extraction time has its own request denominator.
   placement: undecided
   status: planned
 - id: fig3_dataset_and_model_explanations
   title: When do decision features help - dataset moderators and decision models
   notebook: B/exp08_when_text_helps
-  figures: [raw_gain_vs_headroom*, model_diagnostics_vs_usefulness*]
+  figures: [b3_headroom_and_properties, b3_model_diagnostics_vs_usefulness]
+  note: Exploratory associations use datasets or models as indicated. Their sampling units differ.
   placement: undecided
   status: planned
 - id: fig4_fields_and_prediction_in_advance
   title: Which text columns help, and predicting usefulness in advance
   notebook: B/exp08_when_text_helps
-  figures: [column_refits*, lodo*]
+  figures: [b3_text_column_refits, b3_lodo_rule]
+  note: Refitting after removing one text column measures its contribution. The rule is evaluated on held-out datasets.
   placement: undecided
   status: planned
+- id: fig_primary_contrasts
+  title: Paired utility against no text, frozen E5-small and supervised TAR
+  notebook: general/5_synthesis
+  figures: [confirmatory_family]
+  placement: undecided
+  status: available_when_results_exist
+  note: All 21 prespecified comparisons, with the dataset-level effect and uncertainty for the recorded cohort.
 - id: fig_study_at_a_glance
   title: Study at a glance - every prespecified arm against no text
   notebook: general/5_synthesis
@@ -49,7 +60,7 @@ figures:
 - id: tab_rq3_adaptation
   title: Learning from labels with Strands (Group C2)
   notebook: C/exp11_adaptation
-  kind: table
+  kind: figure
   figures: [c2_factorial, c2_cells, c2_context, c2_datasets, c2_gains]
   placement: undecided
   status: available_when_results_exist

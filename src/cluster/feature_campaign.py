@@ -1,8 +1,8 @@
 """Bounded open-weight feature creation after reviewed 0A; preview by default.
 
-Each GPU allocation handles one dataset, with `feature_jobs_per_provider` (scheduling
-config) concurrent allocations per resident decision runtime. The existing two-workspace lease/quota/publication
-protocol bounds storage. Jev and all predictive benchmarks are excluded.
+Each GPU allocation handles one dataset. The scheduling configuration sets both the
+per-provider job limit and the number of resident workspaces. Workspace leases, quota
+checks and publication protect the cached responses. Jev and predictive benchmarks are excluded.
 Explicit --provider selections use their own receipt and exclude encoder jobs;
 they never extend or overwrite the historical full-campaign receipt.
 """
@@ -139,14 +139,15 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
     steps = plan() if providers is None else plan(selected)
     receipt = campaign_receipt(providers)
     if not execute:
+        settings = load_yaml("experiment_0/scheduling")
         return dict(
             status="preview",
             providers=list(selected),
             receipt=str(receipt),
             decision_datasets=sum(s.get("pool") in selected for s in steps),
             encoders=sum(s["name"].startswith("embeddings_") for s in steps),
-            max_resident_workspaces=load_yaml("experiment_0/scheduling")["max_resident_workspaces"],
-            decision_gpu_jobs_per_runtime=2,
+            max_resident_workspaces=settings["max_resident_workspaces"],
+            decision_gpu_jobs_per_runtime=settings.get("feature_jobs_per_provider", 2),
             steps=steps,
         )
     if not paths.on_vsc() or os.environ.get("SLURM_JOB_ID"):

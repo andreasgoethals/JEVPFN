@@ -24,11 +24,17 @@ import json
 import math
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from src.jev.auth import credential_present, read_api_key
-from src.jev.extraction import AccountCreditError, RateGate, RejectedRetryable, campaign_limits
+from src.jev.extraction import (
+    AccountCreditError,
+    RateGate,
+    RejectedRetryable,
+    ReleaseNotDispatched,
+    campaign_limits,
+)
 from src.jev.provider import LIQUID_ULTRA, QUESTION_ID, semantic_question
 from src.jev.requests import IntendedRequest, require_nonempty_text
 from src.jev.templates import TEMPLATE_VERSION
@@ -37,7 +43,8 @@ from src.utils.config import load_yaml
 from src.utils.serialization import canonical_json, digest, write_json
 
 PROVIDER = LIQUID_ULTRA
-MAPPING_VERSION = "liquid-decisions-systemone-v1"
+MAPPING_VERSION = "liquid-decisions-systemone-v2"
+LEGACY_MAPPING_VERSION = "liquid-decisions-systemone-v1"
 DOCUMENTED_MODELS = frozenset({"d1.2-ultra"})
 CREDENTIAL_ENV = "LIQUID_API_KEY"
 LOCAL_CREDENTIAL_PATH = paths.REPO_ROOT / "secrets/liquid.local.json"
@@ -97,12 +104,22 @@ def bind(request, cand):
 
 
 def pinned_version_ok(model, version):
-    return (
-        isinstance(version, str)
-        and version.startswith(f"{model}@")
-        and len(version) > len(model) + 1
-        and ":" not in version
-    )
+    if not isinstance(model, str) or not isinstance(version, str) or not version.startswith(f"{model}@"):
+        return False
+    release = version[len(model) + 1:]
+    try:
+        return date.fromisoformat(release).isoformat() == release
+    except ValueError:
+        return False
+
+
+def catalog_matches(settings, evidence):
+    if not isinstance(evidence, dict) or not pinned_version_ok(settings.get("model"), settings.get("version")):
+        return False
+    release = settings["version"].removeprefix(settings["model"] + "@")
+    return (evidence.get("source") == "models_endpoint_release_date" and
+            evidence.get("model") == settings["model"] and evidence.get("requested_version") == settings["version"] and
+            evidence.get("before_release") == evidence.get("after_release") == release)
 
 
 def api_preview(request):
@@ -116,7 +133,7 @@ def api_preview(request):
         raise ValueError("Only the documented exact hosted model id is allowed; no aliases")
     if not pinned_version_ok(s["model"], s.get("version")):
         raise ValueError("Pin '<model>@<release_date>' at campaign start; no moving version")
-    if s.get("api_mapping_version") != MAPPING_VERSION:
+    if s.get("api_mapping_version") not in {MAPPING_VERSION, LEGACY_MAPPING_VERSION}:
         raise ValueError("Unknown provider mapping version.")
     if s.get("request_configuration"):
         raise ValueError("Additional provider parameters have not been verified.")
@@ -221,11 +238,19 @@ def _retry_after(headers):
     return delay if math.isfinite(delay) and delay >= 0 else None
 
 
+class CatalogCheckedReply(dict):
+    """The unmodified decision response with separately retained model-list observations."""
+
+    def __init__(self, response, release_evidence):
+        super().__init__(response)
+        self.release_evidence = release_evidence
+
+
 class LiquidTransport:
     """Refuses before reading a key unless every gate passes; never retries internally.
 
-    Setup reads GET /decisions/v1/models (documented, unbilled per Liquid's rate-limit
-    page) and refuses unless the served release equals the pinned '<model>@<date>'.
+    Unbilled model-list reads bracket each new decision. The decision response names
+    the model but does not identify a release or immutable weights.
     """
 
     def __init__(self, cand, *, allow_network=False, http=None):
@@ -258,14 +283,33 @@ class LiquidTransport:
 
     def evaluate(self, request):
         body = api_preview(request)
-        if body["model"] != self.model or json.loads(request.settings_json)["version"] != self.version:
-            raise ValueError("Transport and request model pins differ")
+        pinned = json.loads(request.settings_json)
+        if (body["model"] != self.model or pinned["version"] != self.version
+                or pinned.get("api_mapping_version") != MAPPING_VERSION):
+            raise ReleaseNotDispatched("Transport and request release policy differ")
+        try:
+            before = self._served_release()
+        except Exception as exc:
+            raise ReleaseNotDispatched("Could not verify the catalog release before dispatch") from exc
+        if before != self.release:
+            raise ReleaseNotDispatched("Catalog release changed before dispatch")
         status, headers, raw = self.http.request(
             "POST", self.endpoint, dict(self._headers), canonical_json(body).encode("utf-8")
         )
         if status == 200:
             # Parse errors propagate as ambiguous: the call may have been billed.
-            return json.loads(raw)
+            response = json.loads(raw)
+            try:
+                after = self._served_release()
+                failure = None
+            except Exception as exc:
+                # Keep the original paid reply and usage even if the catalog is unavailable.
+                after, failure = None, type(exc).__name__
+            return CatalogCheckedReply(response, {
+                "source": "models_endpoint_release_date", "model": self.model, "requested_version": self.version,
+                "before_release": before, "after_release": after, "after_error": failure,
+                "matches_pin": before == after == self.release,
+            })
         code = _error_code(raw)
         if status == 402 or code in CREDIT_CODES:
             raise AccountCreditError(http_status=status)
@@ -377,6 +421,7 @@ def run(catalog=None, *, execute=False, full=False, dataset_ids=None, transport_
                         "dataset_id": dataset_id, "input_set_id": item["input_set_id"],
                         "spending_policy_sha256": extractor.policy_sha256, "counts": counts,
                         "ledger_usd": ledger_total(cache.path),
+                        "observed_response_models": extractor.observed_response_models(),
                     })
                     write_json(manifest, report)
                     if set(counts) - {"completed", "cache_hit", "recovered_response"}:

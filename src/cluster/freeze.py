@@ -6,7 +6,6 @@ No Git operation modifies the checkout. A mismatch stops jobs, never edits files
 """
 
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -15,6 +14,7 @@ from pathlib import Path
 
 from src.utils import paths
 from src.utils.locking import file_lock
+from src.utils.provenance import source_hash
 from src.utils.serialization import digest, file_sha256, write_json
 
 
@@ -48,14 +48,6 @@ def runtime_pins():
     if paths.on_vsc() and paths.durable_project_override():
         result["deployment/durable_root"] = str(paths.durable_project_override())
     return result
-
-
-def source_hash(path):
-    """Treat CRLF/LF as equal in text source; shell scripts must actually use LF."""
-    content = path.read_bytes()
-    if path.suffix in {".sh", ".slurm"} and b"\r" in content:
-        raise ValueError(f"Shell source must use LF line endings: {path.name}")
-    return hashlib.sha256(content.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def source_snapshot():

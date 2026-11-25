@@ -54,6 +54,11 @@ class ResourceMonitor:
     def snapshot(self):
         self._sample()
         return {
+            "fit_job_id": os.environ.get("SLURM_JOB_ID"),
+            "fit_cluster": os.environ.get("SLURM_CLUSTER_NAME"),
+            "gpu_name": self.torch.cuda.get_device_name(self.device) if self.torch else None,
+            "gpu_total_bytes": int(self.torch.cuda.get_device_properties(self.device).total_memory)
+            if self.torch else None,
             "peak_rss_bytes": self.peak,
             "rss_scope": "sampled_current_process_including_preexisting_allocations_excluding_children",
             "rss_sampling_interval_seconds": 0.05,

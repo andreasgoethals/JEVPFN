@@ -5,7 +5,7 @@ from contextlib import closing
 
 import pytest
 
-from src.evaluation import portable_features
+from src.evaluation import portable_features, study_audit
 from src.jev.features import feature_inventory
 from src.jev.merge import ARTIFACT_SQL
 from src.utils.serialization import digest, file_sha256
@@ -51,7 +51,15 @@ def test_portable_import_can_add_a_verified_provider_without_dropping_or_mixing_
     for _ in range(2):
         portable_features.import_bundle(second, file_sha256(second), add_providers=True)
     installed = root / "fixture.sqlite3"
-    assert feature_inventory(installed).provider.value_counts().to_dict() == {"decision3": 2, "liquid": 2}
+    inventory = feature_inventory(installed)
+    assert inventory.provider.value_counts().to_dict() == {"decision3": 2, "liquid": 2}
+    canonical = tmp_path / "missing.sqlite3"
+    monkeypatch.setattr(portable_features.paths, "dataset_cache_path", lambda _: canonical)
+    coverage = study_audit.feature_store_status(
+        manifests=inventory.iloc[:0], datasets=["fixture"], providers=["decision3", "liquid"],
+    )
+    assert len(coverage) == 4 and coverage.source.eq("local store").all()
+    assert not canonical.exists()
     assert portable_features.verified_payload_hashes(installed, ["decision3", "liquid"]) == {
         "decision3": "00" * 32, "liquid": "00" * 32,
     }

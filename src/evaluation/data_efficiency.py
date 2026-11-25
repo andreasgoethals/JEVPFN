@@ -162,35 +162,40 @@ def data_efficiency_arms(entries, models, providers, cfg=None):
 # --------------------------------------------------------------------------- analysis
 
 
-def size_gains(headline):
-    """Per dataset x predictor x arm x size: raw gain and share of headroom over the
-    same-size, same-draw baseline, averaged over folds then draws (draws are not datasets).
+def draw_gains(head):
+    """Pair the identical sampled rows and predictor; reduce five finite folds before dividing by headroom."""
+    from src.evaluation import group_b
 
-    `headline`: one row per arm x fold with columns dataset_id, task_type, model_id,
-    representation, training_size, draw, outer_fold, value (headline metric).
-    """
-    if headline.empty:
-        return pd.DataFrame()
-    keys = ["dataset_id", "task_type", "model_id", "training_size", "draw", "outer_fold"]
-    base = headline[headline.representation.eq("baseline")][keys + ["value"]].rename(
-        columns={"value": "baseline"})
-    if base.duplicated(keys).any():
-        raise ValueError("Several baselines for one dataset, predictor, size, draw and fold")
-    data = headline[~headline.representation.eq("baseline")].merge(base, on=keys, how="inner")
-    data["raw_gain"] = data.value - data.baseline
-    data["headroom_share"] = data.raw_gain / np.maximum(1 - data.baseline, 1e-3)
-    per_draw = data.groupby(["dataset_id", "task_type", "model_id", "representation",
-                             "training_size", "draw"], as_index=False).agg(
+    extra = ("training_size", "draw")
+    head = head.dropna(subset=list(extra))
+    group_b.validate_fold_identities(head, extra=extra)
+    return group_b.dataset_gains(group_b.fold_gains(head, extra_keys=extra), extra_keys=extra)
+
+
+def over_draws(per_draw, cfg=None):
+    """Keep only complete planned draw sets; retain their variance in each outcome's units."""
+    cfg = cfg or config()
+    keys = ["dataset_id", "task_type", "model_id", "representation", "training_size"]
+    draw_ids = per_draw["draw"].to_numpy(dtype=float)
+    if not (np.isfinite(draw_ids) & (draw_ids >= 0) & (draw_ids == np.floor(draw_ids))).all():
+        raise ValueError("B4 draw identities must be nonnegative integers")
+    if per_draw.duplicated([*keys, "draw"]).any():
+        raise ValueError("Several records for one B4 draw")
+    out = per_draw.groupby(keys, as_index=False).agg(
         raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
-        baseline=("baseline", "mean"), folds=("outer_fold", "nunique"))
-    per_draw = per_draw[per_draw.folds.eq(5)]
-    out = per_draw.groupby(["dataset_id", "task_type", "model_id", "representation",
-                            "training_size"], as_index=False).agg(
-        raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
-        baseline=("baseline", "mean"), draws=("draw", "nunique"),
+        baseline=("baseline", "mean"), draws=("draw", "size"),
+        draw_min=("draw", "min"), draw_max=("draw", "max"), share_draws=("headroom_share", "count"),
         draw_variance=("raw_gain", "var"), headroom_share_draw_variance=("headroom_share", "var"))
-    out["log2_size"] = np.log2(out.training_size)
-    return out
+    planned = {s: draws_for(s, cfg) for s in out.training_size.unique()}
+    full = out.draws.eq(out.training_size.map(planned)) & out.draw_min.eq(0) & out.draw_max.eq(out.draws - 1)
+    out = out.loc[full].copy()
+    out.loc[out.share_draws.ne(out.draws), ["headroom_share", "headroom_share_draw_variance"]] = np.nan
+    out["log2_size"] = np.log2(out.training_size.astype(float))
+    return out.drop(columns=["draw_min", "draw_max", "share_draws"])
+
+
+def size_gains(headline, *, cfg=None):
+    return over_draws(draw_gains(headline), cfg)
 
 
 #: Across-draw variance column in the units of each pooled outcome.
@@ -208,9 +213,18 @@ def cohort_gains(gains, curves):
     for name in ("main", "extended"):
         spec = curves[name]
         rows = gains[gains.training_size.isin(spec["sizes"])]
-        if isinstance(spec.get("datasets"), list):
-            rows = rows[rows.dataset_id.isin(spec["datasets"])]
-        parts.append(rows.assign(curve=name))
+        expected = spec["datasets"]
+        if expected == "all_selected":
+            from src.data.loaders import load_catalog
+            from src.data.selection import selected_entries
+
+            expected = [e["id"] for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))]
+        rows = rows[rows.dataset_id.isin(expected)]
+        cell = ["model_id", "representation", "training_size"]
+        if rows.duplicated([*cell, "dataset_id"]).any():
+            raise ValueError("Several gains for one dataset of a fixed curve")
+        counts = rows.groupby(cell).dataset_id.transform("nunique")
+        parts.append(rows[counts.eq(len(expected))].assign(curve=name))
     return pd.concat(parts, ignore_index=True)
 
 
@@ -227,6 +241,10 @@ def pooled_curve(gains, *, outcome="raw_gain"):
     rows = []
     if gains.empty:
         return pd.DataFrame()
+    from src.evaluation.group_b import task_family
+
+    if outcome == "raw_gain" and "task_type" in gains and gains.task_type.map(task_family).nunique() > 1:
+        raise ValueError("Pool raw headline gains within a task family")
     cohort = ["curve"] if "curve" in gains else []
     for key, group in gains.groupby([*cohort, "model_id", "representation", "training_size"], sort=True):
         *curve, model, representation, size = key
@@ -235,7 +253,10 @@ def pooled_curve(gains, *, outcome="raw_gain"):
         row = dict(zip(cohort, curve)) | dict(
             model_id=model, representation=representation, training_size=size,
             log2_size=math.log2(size), datasets=len(group), mean=float(np.mean(values)))
-        if np.isfinite(variances).all() and (variances > 0).all():
+        if not np.isfinite(values).all():
+            row.update(pooled=np.nan, ci_low=np.nan, ci_high=np.nan, tau2=np.nan,
+                       status="undefined_outcome_in_fixed_cohort")
+        elif np.isfinite(variances).all() and (variances > 0).all():
             result = dersimonian_laird(values, variances)
             row.update(pooled=result["pooled"], ci_low=result["ci_low"], ci_high=result["ci_high"],
                        tau2=result["tau2"], status=result["status"])
@@ -243,7 +264,8 @@ def pooled_curve(gains, *, outcome="raw_gain"):
             se = float(np.std(values, ddof=1) / math.sqrt(len(values))) if len(values) > 1 else np.nan
             row.update(pooled=row["mean"], ci_low=row["mean"] - 1.96 * se,
                        ci_high=row["mean"] + 1.96 * se, tau2=np.nan,
-                       status="single_draw_equal_weight_normal_interval")
+                       status=("single_draw_equal_weight_normal_interval" if group.draws.eq(1).all()
+                               else "undefined_or_zero_draw_variance_equal_weight_normal_interval"))
         rows.append(row)
     return pd.DataFrame(rows)
 

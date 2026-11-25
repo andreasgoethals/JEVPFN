@@ -51,17 +51,19 @@ def test_fixture_has_the_real_shape_and_reads_back_verified(exports):
     b1 = exports["B1"]
     gains = b1["dataset_gains"]
     assert gains.dataset_id.nunique() == 18 and gains.model_id.nunique() == 7
+    combinations = 7 * 3 * len(ROSTER)
     assert gains.task_type.value_counts().to_dict() == {
-        "regression": 9 * 7 * 51, "multiclass_classification": 6 * 7 * 51, "binary_classification": 3 * 7 * 51}
-    assert set(b1["median_gains"].decision_models) == {17}
+        "regression": 9 * combinations, "multiclass_classification": 6 * combinations,
+        "binary_classification": 3 * combinations}
+    assert set(b1["median_gains"].decision_models) == {len(ROSTER)}
 
 
 def test_b1_model_tables_rank_every_model_and_never_mix_units(exports):
     gains = exports["B1"]["dataset_gains"]
     per, summary = views.model_ranks(gains, roster=ROSTER, n_boot=100)
-    assert len(summary) == 17 and per.dataset_id.nunique() == 18
-    assert per["rank"].between(1, 17).all()
-    assert summary.mean_rank.mean() == pytest.approx(9.0)  # ranks 1..17 average to 9
+    assert len(summary) == len(ROSTER) and per.dataset_id.nunique() == 18
+    assert per["rank"].between(1, len(ROSTER)).all()
+    assert summary.mean_rank.mean() == pytest.approx((len(ROSTER) + 1) / 2)
     family = views.family_summaries(exports["B1"]["median_gains"], ["decision/both/median"], n_boot=50)
     assert set(family.task_family) == {"classification", "regression", "all"}
     assert set(family[family.task_family.ne("all")].datasets) == {9}
@@ -137,12 +139,27 @@ def test_synthesis_ladder_win_matrix_and_compute(exports):
     a, b = views.MAIN_ARMS[:2]
     assert one.loc[(a, b), "wins"] == one.loc[(b, a), "losses"]
     _check(synthesis.win_rate_matrix(pairwise, name="c", what="Test"), width=style.WIDTH_HALF)
-    extraction = pd.DataFrame({"provider": ROSTER, "gpu_hours_per_1000_requests": np.linspace(0.01, 0.5, 17)})
+    extraction = pd.DataFrame({"provider": ROSTER, "gpu_hours_per_1000_requests": np.linspace(0.01, 0.5, len(ROSTER))})
     costs = views.compute_costs(b1["folds"], rows=views.dataset_rows(), extraction=extraction, roster=ROSTER)
     single = b1["summary"][b1["summary"].representation.str.startswith("decision/both/")]
     _check(synthesis.quality_vs_compute(views.pareto_points([ladder, single], costs), name="d", what="Test"))
     no_cost = views.compute_costs(b1["folds"], rows=views.dataset_rows(), roster=ROSTER)
     assert list(synthesis.quality_vs_compute(views.pareto_points([ladder], no_cost), name="x", what="x")) == []
+
+
+def test_extraction_and_fit_costs_preserve_their_units_and_roster():
+    folds = fx.folds(("experiment_1",))
+    fit = folds[folds.metric.eq("seconds.fit") & folds.provider.eq(ROSTER[0])].copy()
+    fit["n_train"] = 200
+    fit["value"] = 360
+    extraction = pd.DataFrame({"provider": [ROSTER[0]], "gpu_hours_per_1000_requests": [0.02]})
+    costs = views.compute_costs(fit, extraction=extraction, roster=ROSTER).set_index("representation")
+    both = costs.loc[f"decision/both/{ROSTER[0]}"]
+    assert both.fit_hours_per_1000_rows == pytest.approx(0.5)
+    assert both.gpu_hours_per_1000_requests == pytest.approx(0.02)
+    assert pd.isna(costs.loc[f"decision/joint/{ROSTER[0]}", "gpu_hours_per_1000_requests"])
+    assert pd.isna(costs.loc["decision/both/median", "gpu_hours_per_1000_requests"])
+    assert "total_hours_per_1000_rows" not in costs
 
 
 def test_b3_tables_and_figures_render():
@@ -153,11 +170,11 @@ def test_b3_tables_and_figures_render():
     _check(b3.headroom_and_associations(headroom, tables["associations"], name="a", what="Test"))
     usefulness, relations = views.model_usefulness_relations(tables["dataset_gains"], tables["model_diagnostics"],
                                                             roster=ROSTER, n_permutations=50)
-    assert len(usefulness) == 17 and relations.q_value_bh.between(0, 1).all()
+    assert len(usefulness) == len(ROSTER) and relations.q_value_bh.between(0, 1).all()
     _check(b3.diagnostics_vs_usefulness(usefulness, relations, name="b", what="Test"))
     types = pd.DataFrame([{"dataset_id": d, "field": f"c{i}", "field_type": "short_text"}
                           for d, n in views.text_column_counts().items() for i in range(n)])
-    columns = views.column_refits(tables["column_importance"], field_types=types)
+    columns = views.column_refits(tables["column_importance"], field_types=types, roster=ROSTER)
     assert len(columns) == 78 and columns.dataset_id.nunique() == 16
     _check(b3.column_refits(columns, name="c", what="Test"))
     cohorts = views.cohort_benefits(tables["row_cohorts"])
@@ -167,7 +184,7 @@ def test_b3_tables_and_figures_render():
 
 
 def test_b4_curves_pool_per_task_family_with_fixed_cohorts():
-    tables = benchmark_export.build_tables("B4", fx.size_folds())
+    tables = benchmark_export.build_tables("B4", fx.size_folds(), cohort="all")
     head = views.fold_long(tables["folds"])
     curves = views.size_curves(head, roster=ROSTER, curves=data_efficiency.config()["curves"],
                                representations=figures.SIZE_ARMS)
@@ -236,6 +253,15 @@ def test_glance_adds_the_normalized_scope_when_fold_tables_exist(exports):
     assert name == "study_at_a_glance" and len(fig.axes) == 4 and "MulTaBench" in caption
     assert NO_TEXT not in [t.get_text() for t in fig.axes[0].get_yticklabels()]
     plt.close(fig)
+
+
+def test_glance_rejects_incompatible_fold_sources(exports):
+    from src.evaluation.synthesis_overview import glance_table
+
+    b2 = dict(exports["B2"])
+    b2["folds"] = b2["folds"].assign(split_id="other-split")
+    with pytest.raises(ValueError, match="disagree|different split"):
+        glance_table({"B1": exports["B1"], "B2": b2}, n_boot=5)
 
 
 def test_confirmatory_family_runs_on_the_declared_contrasts(exports):

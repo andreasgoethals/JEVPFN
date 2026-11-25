@@ -324,7 +324,8 @@ def test_thirteen_offline_mappings_share_identical_questions(intended_request):
     from src.jev.registry import ADDED
 
     catalog = load_yaml("extractors")
-    assert len(catalog["candidates"]) == 17 and catalog["enabled"] is False
+    assert set(catalog["candidates"]) == set(load_yaml("experiment_1/main")["candidate_extractors"])
+    assert catalog["enabled"] is False
     original = preview(intended_request, "jev")["body"]["questions"]
     for provider, candidate in catalog["candidates"].items():
         assert candidate["enabled"] is False

@@ -63,7 +63,7 @@ def _moderators(gains):
 
 
 def test_dataset_gains_report_raw_gain_and_fold_variance_for_median_rows():
-    gains = aggregate.dataset_gains(_paired())
+    gains = aggregate.dataset_gains(_paired(), roster=PROVIDERS)
     one = gains[gains.representation.eq("decision/joint/a") & gains.dataset_id.eq("D0")].iloc[0]
     assert one.raw_gain == pytest.approx(one.augmented - one.baseline)
     assert one.gain == pytest.approx(one.raw_gain / (1 - one.baseline))
@@ -73,7 +73,7 @@ def test_dataset_gains_report_raw_gain_and_fold_variance_for_median_rows():
 
 
 def test_model_gain_table_ranks_models_on_shared_datasets_and_robustness_joins():
-    gains = aggregate.dataset_gains(_paired())
+    gains = aggregate.dataset_gains(_paired(), roster=PROVIDERS)
     table = m.model_gain_table(gains)
     assert list(table.provider) == PROVIDERS[::-1] and table["rank"].tolist() == [1, 2, 3, 4, 5, 6]
     assert table.n_datasets.eq(8).all() and table.mean_raw_gain.gt(0).all()
@@ -98,11 +98,33 @@ def test_model_gain_table_ranks_models_on_shared_datasets_and_robustness_joins()
 
 
 def test_moderator_associations_report_raw_gain_against_headroom():
-    gains = aggregate.dataset_gains(_paired())
+    gains = aggregate.dataset_gains(_paired(), roster=PROVIDERS)
     table = m.moderator_associations(gains, _moderators(gains), n_boot=0)
     assert set(table.outcome) == {"gain", "raw_gain"}
     raw = table[table.outcome.eq("raw_gain") & table.moderator.eq("baseline_headroom")]
     assert raw.status.eq("descriptive").all()
+
+
+def test_moderator_outcomes_keep_raw_auc_and_r2_separate():
+    paired = _paired()
+    regression = paired.dataset_id.isin(["D4", "D5", "D6", "D7"])
+    paired.loc[regression, ["task_type", "metric"]] = ["regression", "r2"]
+    gains = aggregate.dataset_gains(paired, roster=PROVIDERS)
+    covariates = _moderators(gains)
+    covariates["task_type"] = covariates.dataset_id.map(gains.set_index("dataset_id").task_type.to_dict())
+    plan = {**ms.load_plan(), "min_datasets": 3, "n_boot": 0, "n_permutations": 0,
+            "primary_moderators": [{"name": "rows", "column": "n_rows"}]}
+    tables = [m.moderator_associations(gains, covariates, n_boot=0),
+              ms.moderator_tests(gains, covariates, plan), ms.partial_primary(gains, covariates, plan)]
+    for table in tables:
+        counts = set(table[["outcome", "task_family", "n_datasets"]].itertuples(index=False, name=None))
+        assert counts == {("gain", "all", 8), ("raw_gain", "classification", 4), ("raw_gain", "regression", 4)}
+    ranking = m.model_gain_table(gains)
+    assert ranking.mean_raw_gain.isna().all() and ranking.mean_gain.notna().all()
+    covariates.loc[covariates.task_type.eq("regression"), "n_rows"] = np.nan
+    partial = ms.partial_primary(gains, covariates, plan)
+    missing = partial[partial.task_family.eq("regression")]
+    assert len(missing) and missing.n_datasets.eq(0).all() and missing.status.eq("too_few_datasets").all()
 
 
 def test_unseen_and_free_text_shares_are_label_free():
@@ -157,7 +179,7 @@ def test_permutation_p_is_small_for_perfect_and_large_for_null():
 
 def test_without_primaries_every_moderator_is_fdr_adjusted():
     plan = {**ms.load_plan(), "n_permutations": 199, "n_boot": 50}
-    gains = aggregate.dataset_gains(_paired())
+    gains = aggregate.dataset_gains(_paired(), roster=PROVIDERS)
     table = ms.moderator_tests(gains, _moderators(gains), plan)
     assert set(table.role) == {"exploratory"}
     tested = table[table.p_value.notna()]
@@ -168,7 +190,7 @@ def test_moderator_tests_flag_primary_and_adjust_only_exploratory():
     plan = {**ms.load_plan(), "n_permutations": 199, "n_boot": 50,
             "primary_moderators": [{"name": n, "column": c} for n, c in (("free_text_share", "free_text_share"), ("median_text_length", "median_text_chars"),
                                                          ("unseen_text_share", "unseen_text_share"), ("baseline_headroom", "baseline_headroom"))]}
-    gains = aggregate.dataset_gains(_paired())
+    gains = aggregate.dataset_gains(_paired(), roster=PROVIDERS)
     table = ms.moderator_tests(gains, _moderators(gains), plan)
     assert set(table.role) == {"primary", "exploratory"}
     primary = table[table.role.eq("primary")]
@@ -192,7 +214,7 @@ def test_partial_spearman_removes_a_shared_driver():
     assert np.isnan(ms.partial_spearman(x[:3], y[:3], z[:3, None]))
     plan = {**ms.load_plan(), "n_boot": 20, "primary_moderators": [{"name": n, "column": c} for n, c in (("free_text_share", "free_text_share"), ("median_text_length", "median_text_chars"),
                                                          ("unseen_text_share", "unseen_text_share"), ("baseline_headroom", "baseline_headroom"))]}
-    gains = aggregate.dataset_gains(_paired())
+    gains = aggregate.dataset_gains(_paired(), roster=PROVIDERS)
     table = ms.partial_primary(gains, _moderators(gains), plan)
     assert set(table.moderator) == set(ms.primary_columns(plan))
     assert table.controls.str.count(",").eq(2).all()
@@ -213,7 +235,7 @@ def test_dersimonian_laird_matches_hand_computation():
     homogeneous = ms.dersimonian_laird([0.2, 0.2, 0.2], [0.01, 0.02, 0.03])
     assert homogeneous["tau2"] == 0 and homogeneous["i2"] == 0
     assert ms.dersimonian_laird([0.2, 0.3], [0.0, np.nan])["status"] == "too_few_datasets"
-    table = ms.random_effects(aggregate.dataset_gains(_paired()))
+    table = ms.random_effects(aggregate.dataset_gains(_paired(), roster=PROVIDERS))
     assert table.status.eq("estimated").all() and table.variance_note.str.contains("approximate").all()
     assert (table.ci_low <= table.pooled_gain).all() and table.k.eq(8).all()
 
@@ -256,7 +278,9 @@ def test_pair_statistics_rank_correlation_and_top_overlap():
     same = comp.pair_statistics(a, a * 2)
     assert same["spearman_rho"] == pytest.approx(1.0) and same["jaccard_top"] == 1.0
     assert same["top_k"] == 10
-    assert same["jaccard_chance"] == pytest.approx(1 / (20 - 1))
+    expected = sum(math.comb(10, i) * math.comb(90, 10 - i) / math.comb(100, 10) * i / (20 - i)
+                   for i in range(11))
+    assert same["jaccard_chance"] == pytest.approx(expected)
     opposite = comp.pair_statistics(a, -a)
     assert opposite["spearman_rho"] == pytest.approx(-1.0) and opposite["jaccard_top"] == 0.0
     with_nan = comp.pair_statistics(np.r_[a, np.nan], np.r_[a, 1.0])
@@ -284,7 +308,7 @@ def test_complementarity_pairs_and_equal_dataset_summary():
     close = pairs[pairs.decision_representation.eq("decision/joint/a")
                   & pairs.other_family.eq("embedding")]
     assert close.spearman_rho.gt(0.9).all() and close.jaccard_top.gt(close.jaccard_chance).all()
-    summary = comp.complementarity_summary(pairs, n_boot=100, seed=1)
+    summary = comp.complementarity_summary(pairs, roster=("a", "b"), n_boot=100, seed=1)
     assert set(summary.aggregation) == {"per_pair", "mode_by_family"}
     family = summary[summary.aggregation.eq("mode_by_family")].set_index("other")
     assert family.n_datasets.eq(4).all()
@@ -310,20 +334,26 @@ def test_saved_predictions_to_complementarity_export(isolated_output, monkeypatc
     from sklearn.dummy import DummyClassifier
 
     from src.cluster.predictor_contracts import feature_cases, fixtures
+    from src.evaluation import benchmark_export, group_b
+    from src.evaluation.design import decision_versions
     from src.evaluation.protocol import evaluate_cv, shared_splits
+    from src.utils.config import load_yaml
 
     ds = next(d for d in fixtures() if d.metadata.task_type == "binary_classification")
     _, features, _ = next(feature_cases(ds, "linear"))
     name = ds.metadata.dataset_id
     monkeypatch.setattr(rb, "load_catalog", lambda: {"datasets": [{"id": name}]})
     monkeypatch.setattr(rb, "load_dataset", lambda *a, **kw: ds)
-    monkeypatch.setattr(rb, "load_yaml", lambda name: {"random_seed": 20260929,
-                                                       "candidate_extractors": ["jev"]})
-    spec = shared_splits(ds, seed=20260929, folds=5)
+    spec = shared_splits(ds, seed=load_yaml("experiment_1/main")["random_seed"], folds=5)
     embedding = {"encoder_id": "e5_small_v2", "pca_scope": "per_column",
                  "pca_components_per_column": 32}
+    version, = decision_versions(["jev"])
+    selector = {k: version[k] for k in ("provider", "model", "version")}
+    selector.update(question_bank_id="bank", question_variant="fixture", settings_sha256="settings")
     for phase, feature_set, recipe in [
         ("experiment_1", "non_text", {"provider": None}),
+        ("experiment_1", "non_text_plus_joint", {"provider": "jev", "selector": selector}),
+        ("experiment_1", "non_text_plus_joint", {"provider": "jev", "selector": {**selector, "version": "older"}}),
         ("experiment_1", "non_text_plus_joint", {"provider": "jev"}),
         ("experiment_2", "non_text_plus_frozen_e5", {"provider": None, "embedding": embedding}),
     ]:
@@ -331,7 +361,8 @@ def test_saved_predictions_to_complementarity_export(isolated_output, monkeypatc
                     checkpoint_id="fixture", feature_set=feature_set, phase=phase,
                     allow_model_runs=True, estimator_settings={"seed": 1},
                     representation_recipe={**recipe, "feature_set": feature_set},
-                    feature_artifact_ids=[])
+                    feature_artifact_ids=[f"joint-{(recipe.get('selector') or {}).get('version', 'legacy')}"]
+                    if recipe.get("provider") else [])
     rows = len(ds.frame)
 
     def loader(dataset_id, provider, mode, cfg):
@@ -342,7 +373,8 @@ def test_saved_predictions_to_complementarity_export(isolated_output, monkeypatc
         return _block(provider, "joint", rows, np.linspace(0.05, 0.95, rows)), "fixture"
 
     monkeypatch.setattr(rb.paths, "durable_project_override", rb.paths.staging_override)
-    body = json.loads(comp.run(name, decision_loader=loader).read_text())
+    report_path = comp.run(name, decision_loader=loader, cohort="all")
+    body = json.loads(report_path.read_text())
     assert body["schema"] == comp.SCHEMA and not body["incomplete_or_unmatched"]
     (pair,) = body["pairs"]
     assert pair["decision_representation"] == "decision/joint/jev"
@@ -350,8 +382,39 @@ def test_saved_predictions_to_complementarity_export(isolated_output, monkeypatc
     assert pair["n_rows"] == rows
     assert {g["x_axis"] for g in body["data_map"]} == set(comp.X_AXES)
     assert all(g["rows"] == rows and g["providers"] == ["jev"] for g in body["data_map"])
-    pairs, grids = comp.summaries()
+    pairs, grids = comp.summaries(cohort="all")
     assert len(pairs) == 1 and len(grids) == 2 and grids.dataset_id.eq(name).all()
+    monkeypatch.setenv("JEVPFN_DECISION_COHORT", "all")
+    monkeypatch.setattr(benchmark_export, "coverage", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(benchmark_export.study_export, "require_mindwell_cpu", lambda study: None)
+    monkeypatch.setattr(benchmark_export.study_export, "job_origin", lambda: "synthetic")
+    monkeypatch.setattr(benchmark_export, "export_path", lambda *args: isolated_output / "b2.zip")
+    benchmark_export.build("B2")
+    tables, receipt = benchmark_export.read("B2")
+    assert receipt["decision_cohort"] == "all"
+    folds = tables["folds"]
+    assert folds.metric.eq("roc_auc").sum() == 3 * 5
+    assert rb.Pairing(name, cohort="open_weight").arms.keys() == {
+        ("experiment_2", folds.loc[folds.phase.eq("experiment_2"), "recipe_id"].iloc[0])}
+    result = tables["complementarity_pairs"]
+    assert result.iloc[0].decision_recipe_id == pair["decision_recipe_id"]
+    head = group_b.headline(folds)
+    missing, _ = comp.summaries(folder=isolated_output / "no-reports", cohort="all", headline_folds=head)
+    assert missing.empty
+    with pytest.raises(ValueError, match="selected decision-model cohort"):
+        comp.summaries(folder=report_path.parent, cohort="open_weight", headline_folds=head)
+    for column in ("split_id", "checkpoint_id", "data_identity"):
+        with pytest.raises(ValueError, match="sources differ from the benchmark folds"):
+            comp.summaries(cohort="all", headline_folds=head.assign(**{column: "other"}))
+    for label in ("baseline", "decision/joint/jev", "frozen/e5_small_v2/per_column32"):
+        different = head.copy()
+        different.loc[different.representation.eq(label), "recipe_id"] = "another-recipe"
+        with pytest.raises(ValueError, match="sources differ from the benchmark folds"):
+            comp.summaries(cohort="all", headline_folds=different)
+    del body["pairs"][0]["other_recipe_id"]
+    report_path.write_text(json.dumps(body), encoding="utf-8")
+    with pytest.raises(ValueError, match="lacks source recipe identities"):
+        comp.summaries(cohort="all", headline_folds=head)
 
 
 # --------------------------------------------------------------------------------- figures
@@ -390,11 +453,11 @@ def test_paper_figure_map_validates_and_resolves_saved_files(tmp_path):
     assert all(f["placement"] == "undecided" for f in raw["figures"])
     folder = tmp_path / "B" / "exp08_when_text_helps"
     folder.mkdir(parents=True)
-    (folder / "03_raw_gain_vs_headroom.pdf").write_bytes(b"%PDF")
-    (folder / "04_model_diagnostics_vs_usefulness.pdf").write_bytes(b"%PDF")
+    (folder / "03_b3_headroom_and_properties.pdf").write_bytes(b"%PDF")
+    (folder / "04_b3_model_diagnostics_vs_usefulness.pdf").write_bytes(b"%PDF")
     table = paper_figures.resolve(raw, figures_root=tmp_path).set_index("id")
     assert table.loc["fig3_dataset_and_model_explanations", "saved_figures"] == (
-        "model_diagnostics_vs_usefulness, raw_gain_vs_headroom")
+        "b3_headroom_and_properties, b3_model_diagnostics_vs_usefulness")
     assert table.loc["fig4_fields_and_prediction_in_advance", "saved_figures"] == "pending"
     for mutate, message in [
         (lambda r: r["figures"][0].update(notebook="exp99_missing"), "unknown notebook"),

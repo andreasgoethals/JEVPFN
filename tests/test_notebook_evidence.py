@@ -65,6 +65,41 @@ def test_no_local_receipt_is_unknown_not_provider_failure(isolated_output, monke
     assert table.loc[table.model_id.eq("jev"), "complete_feature_datasets"].iloc[0] == "0/1 · 0/1"
 
 
+def test_historical_jev_probes_keep_each_observed_release_and_do_not_qualify_a_new_one(isolated_output, monkeypatch):
+    import matplotlib.pyplot as plt
+
+    from src.cluster import token_audit
+    from src.evaluation.robustness_export import historical_tables
+    from src.visualize.research import robustness_matrix_figure
+
+    monkeypatch.setattr(token_audit, "saved_exact_token_tables", lambda: ({}, pd.DataFrame()))
+    folder = evidence.paths.manifests_dir("experiment_0") / "before_extraction"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "jev_dataset_robustness.json"
+    reports = []
+    for release, probability in (("jev-1.13.0", 0.7), ("jev-1.14.0", 0.3), (None, 0.5)):
+        probes = [{"probe": f"real_BIN_TEXT_FAKE_JOB_POSTING__{variant}",
+                   "features": {"p_positive": value}} for variant, value in
+                  (("base", 0.2), ("paraphrase", probability))]
+        body = {"status": "jev_dataset_robustness_requires_review", "model": release, "attempts": probes}
+        path.write_text(json.dumps(body), encoding="utf-8")
+        status, _ = evidence.local_runtime_evidence()
+        jev = status.set_index("model_id").loc["jev"]
+        assert jev.robustness == ("observed" if release == "jev-1.14.0" else "review")
+        assert jev.accepted == "unknown"
+        dated = folder / f"receipt-{len(reports)}.json"
+        dated.write_text(json.dumps(body), encoding="utf-8")
+        reports.append(dated)
+
+    historical = historical_tables(evidence.prompt_evidence(reports))["historical_0a"]
+    fig, _, _ = next(robustness_matrix_figure(historical))
+    axis = fig.axes[0]
+    labels = [tick.get_text().split(" · ")[0] for tick in axis.get_yticklabels()]
+    values = dict(zip(labels, axis.images[0].get_array()[:, 0], strict=True))
+    assert values == pytest.approx({"Jev 1.13.0": 0.5, "Jev 1.14.0": 0.1, "Jev (release unknown)": 0.3})
+    plt.close(fig)
+
+
 @pytest.mark.notebook
 def test_compact_table_retains_all_observations_in_report(monkeypatch, capsys, isolated_output):
     from src.utils import notebook_report as report

@@ -11,10 +11,9 @@ from src.visualize import style
 def extraction_figure(workload, rates, *, jev_charges=None):
     """Measured extraction compute per decision model and frozen encoder.
 
-    Left: GPU-hours per 1,000 distinct requests (inference only), one grey dot per dataset
-    and a diamond for the pooled rate; an open circle adds the Slurm-ledger rate (whole jobs)
-    when a ledger exists. Right: recorded inference GPU-hours and the share of distinct
-    requests they cover. Models without local timing evidence are labelled, never estimated.
+    Grey dots show the inference time per 1,000 timed inputs for one dataset. A diamond
+    pools timed inputs and an open circle uses the whole-job Slurm ledger when available.
+    Percentages on recorded hours compare timed input counts with the audited workload.
     """
     from src.visualize import layout
 
@@ -39,10 +38,12 @@ def extraction_figure(workload, rates, *, jev_charges=None):
         ax.scatter(data.ledger_gpu_hours_per_1000[ledger], y[ledger], s=26, facecolors="none",
                    edgecolors=style.MEDIAN_COLOR, linewidths=0.9, zorder=3)
     ax.set_xscale("log")
-    ax.set_xlabel("GPU-hours per 1,000 distinct requests (log)")
-    axes[1].barh(y, data.inference_gpu_hours.fillna(0), height=0.6, color=style.QUANTITY_COLOR)
-    top = float(np.nanmax(data.inference_gpu_hours)) if measured.any() else 1.0
-    axes[1].set_xlim(0, top * 1.55)
+    ax.set_xlabel("GPU-hours per 1,000 inputs (log)")
+    has_hours = data.inference_gpu_hours.notna()
+    axes[1].barh(y[has_hours], data.inference_gpu_hours[has_hours], height=0.6,
+                 color=style.QUANTITY_COLOR)
+    top = float(data.inference_gpu_hours[has_hours].max()) if has_hours.any() else 1.0
+    axes[1].set_xlim(0, max(top * 1.3, 1e-9))
     axes[1].set_xlabel("Recorded inference GPU-hours")
     for i, row in data.iterrows():
         if row.kind == "hosted":
@@ -50,14 +51,16 @@ def extraction_figure(workload, rates, *, jev_charges=None):
         elif pd.isna(row.inference_gpu_hours):
             note = "no local timing manifest"
         else:
-            share = row.timed_requests / row.distinct_requests if row.distinct_requests else np.nan
-            note = f"{share:.0%} of requests timed" if np.isfinite(share) else ""
-            axes[1].text(row.inference_gpu_hours + top * 0.03, i, note, va="center", fontsize=6.5,
-                         color=style.MEDIAN_COLOR)
+            if pd.notna(row.distinct_requests) and row.distinct_requests > 0:
+                percent = 100 * row.timed_requests / row.distinct_requests
+                label = f"{percent:.2f}".rstrip("0").rstrip(".") + "%"
+                if label == "100%" and row.timed_requests != row.distinct_requests:
+                    label = "<100%" if row.timed_requests < row.distinct_requests else ">100%"
+                axes[1].text(row.inference_gpu_hours + top * 0.02, i, label, va="center", fontsize=7,
+                             color=style.MEDIAN_COLOR)
             continue
-        for axis in axes:
-            axis.text(0.02, i, note, va="center", fontsize=6.5, color=style.REMOVED_COLOR,
-                      transform=axis.get_yaxis_transform())
+        axes[1].text(0.02, i, note, va="center", fontsize=7, color=style.REMOVED_COLOR,
+                     transform=axes[1].get_yaxis_transform())
     axes[0].set_yticks(y, [labels.get(m, m) for m in data.model_id], fontsize=7)
     axes[0].set_ylim(len(data) - 0.5, -0.5)
     for tick, model in zip(axes[0].get_yticklabels(), data.model_id):
@@ -76,23 +79,26 @@ def extraction_figure(workload, rates, *, jev_charges=None):
         handles.append(Line2D([], [], linestyle="none", marker="o", markersize=5, markerfacecolor="none",
                               color=style.MEDIAN_COLOR, label="Slurm ledger (whole jobs)"))
     fig.legend(handles=handles, loc="outside upper center", ncols=len(handles), fontsize=7, frameon=False)
-    requests = data.loc[data.kind.eq("decision"), "distinct_requests"].dropna()
-    texts = data.loc[data.kind.eq("encoder"), "distinct_requests"].dropna()
+    requests = data.loc[data.kind.eq("decision"), "distinct_requests"].dropna().unique()
+    texts = data.loc[data.kind.eq("encoder"), "distinct_requests"].dropna().unique()
+    caption = [
+        "Recorded extraction time for open-weight decision models and frozen encoders on one B200. "
+        "The left panel shows inference GPU-hours per 1,000 timed inputs. Grey dots represent datasets. "
+        "Each diamond divides total recorded inference time by the pooled input count.",
+    ]
+    if ledger.any():
+        caption.append("Open circles divide successful Slurm job time, including overhead, by the "
+                       "audited workload in thousands of inputs.")
+    caption.append("The right panel shows total recorded inference GPU-hours. Percentages compare "
+                   "the number of input items in local timing records with the audited number of "
+                   "distinct inputs. Completion is tracked separately in the feature inventory.")
+    if len(requests) == 1:
+        caption.append(f"The decision-model workload is {int(requests[0]):,} distinct requests per model.")
+    if len(texts) == 1:
+        caption.append(f"The encoder workload is {int(texts[0]):,} distinct texts per encoder.")
+    caption.append("Jev uses a hosted API.")
     return (
-        fig,
-        "extraction_compute",
-        "Measured extraction compute per decision model (top) and frozen encoder (bottom). Left: GPU-hours "
-        "per 1,000 distinct requests from the timing manifests of the feature-creation jobs (inference "
-        "wall time on one B200; model loading, staging and publication excluded); grey dots are datasets, "
-        "the diamond pools all timed requests"
-        + ("; open circles use successful Slurm job time over audited distinct requests" if ledger.any() else "")
-        + ". Right: total recorded inference GPU-hours and the share of distinct requests they cover; "
-        "the remainder was served from earlier runs whose timings are not held locally. "
-        + (f"Each open-weight decision model answers {int(requests.iloc[0]):,} distinct requests "
-           if len(requests) and requests.nunique() == 1 else "")
-        + (f"and each encoder embeds {int(texts.iloc[0]):,} distinct texts. " if len(texts) and texts.nunique() == 1 else ". ")
-        + "Models without a local timing manifest are labelled, not estimated; Jev is a hosted API "
-        "charged per token.",
+        fig, "extraction_compute", " ".join(caption),
     )
 
 

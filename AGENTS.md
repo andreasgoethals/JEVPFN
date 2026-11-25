@@ -31,7 +31,7 @@ Start with the [README](README.md) and [study configuration](config/). When work
   Experiments 1–4) and RQ3 Strands adaptation, with general preparation and 0A/0B.
   Production extraction requires a signed native 0A review for each added provider.
   Compute full-store RQ1A reports on native Mindwell CPU and render their compact tables locally.
-  Strands 2B is the RQ3 candidate; the adaptation design and training budget await owner approval. Do not add grouped sensitivity,
+  The 20 November Strands 2B adaptation design is approved. C0 qualifies the pinned Strands v1 training recipes on B200. Production C2 requires reviewed C0 evidence. Do not add grouped sensitivity,
   lexical baselines or selected-winner combinations. Microsoft remains excluded.
 - Decision requests are deterministic and label-free: no generated questions, non-text
   row values, true row targets, class frequencies, target statistics or model feedback.

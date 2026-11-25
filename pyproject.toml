@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The template's health checks and the kernel used by thin notebook clients.
+# Development checks. The notebooks extra provides the kernel.
 # Model/API packages remain optional so data inspection stays lightweight.
 dev = [
     "pytest>=9.1",
@@ -52,7 +52,7 @@ control = [
     "tqdm==4.70.1", "pyarrow==25.0.1", "psutil==7.2.2", "scipy==1.18.1",
     "scikit-learn==1.9.1", "pytest==9.1.1", "ruff==0.17.0", "packaging==26.3",
 ]
-staging = ["huggingface-hub>=1.5,<2"]  # Explicit, separately authorized checkpoint staging.
+staging = ["huggingface-hub>=1.5,<2", "httpx>=0.23,<1"]  # Explicit, separately authorized checkpoint staging.
 embeddings = ["transformers==5.17.0", "torch==2.12.1", "scikit-learn==1.9.1"]
 tar = ["transformers==5.17.0", "torch==2.12.1", "peft==0.21.0", "accelerate==1.15.0", "python-dotenv==1.2.1"]
 token-audit = ["transformers==5.17.0", "tokenizers==0.23.3", "jinja2==3.1.6"]  # CPU rendering, including publisher chat templates; no weights.
@@ -84,7 +84,7 @@ drex-max = ["torch==2.14.0", "transformers==5.17.0", "tokenizers==0.23.3", "acce
 
 [project.urls]
 Repository = "https://github.com/andreasgoethals/JEVPFN"
-Documentation = "https://github.com/andreasgoethals/JEVPFN#documentation"
+Documentation = "https://github.com/andreasgoethals/JEVPFN#repository-navigation"
 Template = "https://github.com/andreasgoethals/0.-Template"
 
 # src/ is the importable package. Exclude libraries, data and reference snapshots.

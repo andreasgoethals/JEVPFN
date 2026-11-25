@@ -268,6 +268,7 @@ def validate_decision_group(values, missing, width, labels=None):
 def decision_feature_checks(cfg):
     """Exercise the production selectors and feature modes for each dataset and provider."""
 
+    from src.evaluation.design import decision_versions
     from src.evaluation.features import assemble_feature_set, load_feature_selection, missing_column
     from src.evaluation.qualification import decision_artifact_pins, decision_selector
     from src.jev.features import feature_view
@@ -287,9 +288,21 @@ def decision_feature_checks(cfg):
                 for feature_set in ("non_text_plus_per_column", "non_text_plus_joint", "non_text_plus_both"):
                     assemble_feature_set(dataset, blocks, feature_set, selector=selector)
                 ids, checksums = {}, {}
+                registered, = decision_versions([provider])
                 for block in blocks:
                     manifest = block.manifest
-                    mode = manifest["identity"]["representation"]
+                    identity = manifest["identity"]
+                    if any(identity.get(key) != registered[key] for key in ("provider", "model", "version")):
+                        raise ValueError("Decision artifact differs from its registered provider, model or version")
+                    settings = identity.get("request_configuration", {})
+                    runtime = settings.get("runtime_revision")
+                    if runtime is not None and registered.get("runtime_revision") not in (None, runtime):
+                        raise ValueError("Decision artifact differs from its registered runtime revision")
+                    if "runtime_revision" in settings or "runtime_revision" in registered:
+                        item["runtime_revision"] = runtime
+                    if settings.get("checkpoint_sha256"):
+                        item["checkpoint_sha256"] = settings["checkpoint_sha256"]
+                    mode = identity["representation"]
                     if manifest["text_columns"] != list(meta.text_columns) or manifest[
                         "class_labels"
                     ] != list(meta.classes):
@@ -319,6 +332,7 @@ def decision_feature_checks(cfg):
                         validate_decision_group(group_values, expected_missing, len(labels), labels)
                     ids[mode] = manifest["artifact_id"]
                     checksums[ids[mode]] = digest(manifest["sha256"])
+                    item.update(model=identity["model"], version=identity["version"])
                 item.update(
                     status="passed",
                     artifact_ids=ids,
@@ -373,6 +387,8 @@ def embedding_checks(cfg: dict, *, bind_artifact_ids=False) -> list[dict]:
                     item["prepared_pca_keys"] = verify_prepared(
                         dataset, encoder, item["artifact_id"]
                     )
+                    from src.evaluation.label_probe import verify_prepared as verify_probes
+                    item["prepared_probe_keys"] = verify_probes(dataset, encoder, item["artifact_id"])
                 item.update(
                     status="passed", rows=recipe["rows"], text_columns=recipe["text_columns"]
                 )
@@ -390,6 +406,7 @@ def run_preflight(
     verify_data: bool = False,
     tests: bool = False,
     stage: str = "before_extraction",
+    cohort: str = "all",
     predictor_imports: bool = False,
     config: str = "experiment_0/debug",
 ) -> dict:
@@ -496,6 +513,16 @@ def run_preflight(
         except (ImportError, RuntimeError, AttributeError, OSError) as exc:
             report["failures"].append(f"GPU/package preflight: {type(exc).__name__}")
     benchmark_cfg = load_yaml("experiment_1/main") if stage == "after_extraction" else cfg
+    if stage == "after_extraction":
+        from src.evaluation.acceptance import decision_input_identity
+        from src.evaluation.design import decision_providers, decision_versions
+
+        providers = list(decision_providers(cohort, main=benchmark_cfg))
+        report["decision_cohort"] = cohort
+        report["qualified_decision_providers"] = providers
+        report["decision_model_versions"] = decision_versions(providers) if providers else []
+        report["decision_input_identity"] = decision_input_identity(providers)
+        benchmark_cfg = {**benchmark_cfg, "candidate_extractors": providers}
     if verify_data or stage == "after_extraction":
         report["datasets"] = dataset_checks(
             benchmark_cfg, review_overlap=stage == "after_extraction"
@@ -528,7 +555,7 @@ def run_preflight(
             for entry in selected_entries(load_catalog(), benchmark_cfg):
                 try:
                     report["tar_artifacts"].append(validate_tar(load_dataset(entry, allow_download=False)))
-                except (OSError, ValueError, KeyError) as exc:
+                except Exception as exc:
                     report["failures"].append(f"TAR {entry['id']}: {type(exc).__name__}")
         report["feature_validation"] = "incomplete"
         try:
@@ -576,6 +603,8 @@ def run_preflight(
 
 
 def main() -> int:
+    from src.evaluation.design import decision_scopes
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--runtime-parity",
@@ -589,6 +618,7 @@ def main() -> int:
         "--verify-data", action="store_true", help="Read cached data; never download"
     )
     parser.add_argument("--tests", action="store_true", help="Run the deterministic pytest suite")
+    parser.add_argument("--cohort", choices=decision_scopes(), default="open_weight")
     parser.add_argument(
         "--stage", choices=["before_extraction", "after_extraction"], default="before_extraction"
     )
@@ -611,6 +641,7 @@ def main() -> int:
         verify_data=args.verify_data,
         tests=args.tests,
         stage=args.stage,
+        cohort=args.cohort,
         predictor_imports=args.predictor_imports,
     )
     write_json(paths.manifests_dir("experiment_0") / f"preflight_{report['run_id']}.json", report)

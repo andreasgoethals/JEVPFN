@@ -49,6 +49,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
                     "pca_components": (
                         (recipe.get("representation_recipe") or {}).get("embedding") or {}
                     ).get("pca_components_per_column"),
+                    "probe_view": ((recipe.get("representation_recipe") or {}).get("probe") or {}).get("view"),
                     "pca_scope": (
                         (recipe.get("representation_recipe") or {}).get("embedding") or {}
                     ).get("pca_scope"),
@@ -142,6 +143,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
         "encoder",
         "pca_components",
         "pca_scope",
+        "probe_view",
         "decision_recipe_id",
         "comparison_id",
         "split_id",
@@ -224,7 +226,7 @@ def collect_for_notebook(phases=("experiment_1", "experiment_2", "experiment_3",
         return files
 
     initial = inventory()
-    cache = paths.notebook_cache_dir("evaluation", digest({"phases": phases, "files": initial}))
+    cache = paths.notebook_cache_dir("evaluation", digest({"collector": 2, "phases": phases, "files": initial}))
     cache.mkdir(parents=True, exist_ok=True)
     marker = cache / "receipt.json"
     files = [cache / (name + ".parquet") for name in ("folds", "datasets", "paired")]
@@ -247,19 +249,36 @@ def collect_for_notebook(phases=("experiment_1", "experiment_2", "experiment_3",
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--save", action="store_true")
+    parser.add_argument("--cohort", metavar="COHORT")
     parser.add_argument(
         "--infer", action="store_true", help="Requires the approved pre-results analysis plan"
     )
     args = parser.parse_args()
-    report, folds, summary, paired = collect()
+    reports = None
     if args.infer:
-        from src.evaluation.inference import confirmatory_tests, dataset_differences
+        from src.evaluation.inference import (
+            POOLED_CONTRASTS,
+            confirmatory_tests,
+            dataset_differences,
+        )
+        from src.evaluation.learner_scores import publish_confirmatory, run_confirmatory_family
         from src.utils.config import load_yaml
 
-        inference = confirmatory_tests(
-            dataset_differences(paired), load_yaml("synthesis/analysis")
-        )
+        plan = load_yaml("synthesis/analysis")
+        if any(c.get("type") in POOLED_CONTRASTS for c in plan.get("contrasts", [])):
+            result = run_confirmatory_family(analysis=plan, cohort=args.cohort)
+            if result["status"] != "compared":
+                raise SystemExit(f"Confirmatory family {result['status']}: {result.get('reason') or result.get('missing') or ''}")
+            inference = result["results"]
+            if args.save:
+                print(publish_confirmatory(result, analysis=plan))
+        else:
+            reports = collect()
+            inference = confirmatory_tests(dataset_differences(reports[3]), plan)
         print(inference.to_string(index=False))
+        if not args.save:
+            return
+    report, folds, summary, paired = reports if reports is not None else collect()
     if args.save and not folds.empty:
         destination = paths.results_dir("paired_summary", phase="synthesis")
         destination.mkdir(parents=True, exist_ok=True)
@@ -271,7 +290,9 @@ def main():
         datasets.to_parquet(destination / "dataset_differences.parquet", index=False)
         across_datasets(datasets).to_parquet(destination / "across_datasets.parquet", index=False)
         if args.infer:
-            inference.to_parquet(destination / "confirmatory_tests.parquet", index=False)
+            from src.evaluation.benchmark_export import cohort_key
+
+            inference.to_parquet(destination / f"confirmatory_tests.{cohort_key(args.cohort)}.parquet", index=False)
         summary.loc[summary.feature_set.eq("original_features")].to_parquet(
             destination / "native_text_references.parquet", index=False
         )

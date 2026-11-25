@@ -117,6 +117,14 @@ def test_timeout_or_version_drift_stops_without_retry(local, wrong_model):
     assert len(client.calls) == 1 and client.closed
     with pytest.raises((RuntimeError, ValueError)):
         smoke.run(execute=True, client_factory=lambda: pytest.fail("No automatic repayment"))
+    if wrong_model:
+        import json
+
+        state = paths.jev_cache_path("jev_cache/_control/jev_smoke") / "models" / smoke.MODEL / "state.json"
+        record = json.loads(state.read_text())
+        attempt, = record["attempts"]
+        assert record["model"] == "jev-1.14.0" and attempt["reported_model"] == "jev-latest"
+        assert attempt["reserved_usd"] == 0 and attempt["charged_usd"] == pytest.approx(120 * smoke.PRICE / 1e6)
 
 
 def test_no_implicit_paid_execution_or_vsc_calls(local, monkeypatch):
@@ -125,6 +133,28 @@ def test_no_implicit_paid_execution_or_vsc_calls(local, monkeypatch):
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     with pytest.raises(RuntimeError):
         smoke.run(execute=True, client_factory=lambda: pytest.fail("Must not connect"))
+
+
+def test_reply_above_smoke_billing_bound_preserves_its_actual_charge(local):
+    import json
+
+    client = Client()
+    send = client.system_one
+
+    def over_bound(state, questions):
+        raw = send(state, questions).raw_http_response.json()
+        raw["usage"]["input_tokens"] = smoke.TOKEN_BOUND + 1
+        return SimpleNamespace(raw_http_response=SimpleNamespace(json=lambda: raw))
+
+    client.system_one = over_bound
+    with pytest.raises(ValueError, match="billing envelope"):
+        smoke.run(execute=True, client_factory=lambda: client, sleep=lambda _: None)
+    state = paths.jev_cache_path("jev_cache/_control/jev_smoke") / "models" / smoke.MODEL / "state.json"
+    attempt, = json.loads(state.read_text())["attempts"]
+    assert attempt["reported_model"] == smoke.MODEL and attempt["reserved_usd"] == 0
+    assert attempt["charged_usd"] == pytest.approx((smoke.TOKEN_BOUND + 1) * smoke.PRICE / 1e6)
+    with pytest.raises(ValueError, match="billing envelope"):
+        smoke.run(revalidate_only=True, client_factory=lambda: pytest.fail("Use the saved reply"))
 
 
 def test_client_setup_failure_has_no_attempt_and_can_resume_without_stale_error(local):

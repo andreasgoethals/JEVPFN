@@ -136,3 +136,25 @@ def test_historical_mean_folds_cannot_complete_primary_probability_plan():
     assert old.completed.sum() == 0
     current = study.planned_coverage(rows.assign(view="probabilities"), "experiment_1")
     assert current.completed.sum() == 1
+
+
+def test_c0_reports_nine_cases_and_checks_receipt_identity(tmp_path, monkeypatch):
+    from src.evaluation import strands_adaptation, study_audit
+
+    monkeypatch.setattr(paths, "manifests_dir", lambda phase: tmp_path)
+    monkeypatch.setattr(strands_adaptation, "smallest_dataset", lambda task: f"smallest_{task}")
+    cases = study_audit.strands_qualification()
+    assert len(cases) == 9
+    assert set(cases["local receipt"]) == {"pending"}
+    task, cell = "regression", "head_only"
+    dataset = f"smallest_{task}"
+    report = {"task_type": task, "dataset_id": dataset, "cell": cell, "status": "passed",
+              "examples_per_second": 20, "peak_gpu_bytes": 2**30}
+    receipt = tmp_path / "adaptation_pilot" / f"{dataset}_{cell}.json"
+    receipt.parent.mkdir()
+    receipt.write_text(json.dumps(report))
+    measured = study_audit.strands_qualification().query("`local receipt` == 'passed'")
+    assert measured[["training examples/s", "peak GPU GiB"]].values.tolist() == [[20, 1]]
+    receipt.write_text(json.dumps({**report, "cell": "lora_only"}))
+    with pytest.raises(ValueError, match="different pilot"):
+        study_audit.strands_qualification()

@@ -34,7 +34,11 @@ def analyze(reports):
                 "Use completed real-text diagnostics, not synthetic known-answer tests"
             )
         comparison = robustness_summary(records)
-        provider = report.get("provider") or report.get("settings", {}).get("provider", "jev")
+        settings = report.get("settings") or {}
+        provider = report.get("provider") or settings.get("provider", "jev")
+        model = report.get("model") or settings.get("model")
+        revision = settings.get("version") or settings.get("revision") or report.get("version")
         for item in comparison["comparisons"]:
-            rows.append({"provider": provider, "source_sha256": sha, "source": str(path), **item})
+            rows.append({"provider": provider, "recorded_model": model, "recorded_revision": revision,
+                         "source_sha256": sha, "source": str(path), **item})
     return pd.DataFrame(rows)

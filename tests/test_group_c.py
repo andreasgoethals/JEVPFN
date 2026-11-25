@@ -15,6 +15,25 @@ from src.evaluation import strands_adaptation as sa
 from src.jev import strands_hidden as sh
 from src.utils import paths
 
+
+@pytest.mark.parametrize(("feature_set", "component"), [(group_c.HIDDEN, "hidden"), (group_c.ADAPTED, "adaptation")])
+def test_group_c_fits_and_exports_require_the_observed_strands_revision(feature_set, component):
+    from src.evaluation import benchmark_export
+    from src.evaluation.design import decision_versions
+
+    registered, = decision_versions(["strands"])
+    wrong_sources = [None, {**registered, "version": "a" * 40}, {**registered, "base_model_revision": "b" * 40},
+                     {**registered, "runtime_revision": "c" * 40}]
+    assert group_c.decision_model_for_fit([registered] * 5) == registered
+    for wrong in wrong_sources:
+        with pytest.raises(ValueError, match="Strands model and revision"):
+            group_c.decision_model_for_fit([registered, wrong])
+    recipes = [{"feature_set": feature_set, "representation_recipe": {component: {"decision_model": source}}}
+               for source in [*wrong_sources, registered]]
+    baseline = {"feature_set": "non_text", "representation_recipe": {}}
+    scope = {"decision_model_versions": [registered]}
+    assert list(benchmark_export.cohort_recipes([baseline, *recipes], scope, {})) == [baseline, recipes[-1]]
+
 # ------------------------------------------------------------------ synthetic Strands prompt
 
 

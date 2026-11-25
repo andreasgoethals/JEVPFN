@@ -42,6 +42,7 @@ STAGES = (
     # Added 23-11-2026: Group B/C jobs previously fell through to "other".
     ("jevpfn-prepare-probe", "label_trained_classifier"),
     ("jevpfn-c1-hidden", "strands_hidden_states"),
+    ("jevpfn-c0-pilot", "strands_qualification"),
     ("jevpfn-c2-adaptation", "strands_adaptation"),
     ("jevpfn-group-b-export", "result_export"),
     ("jevpfn-group-c-export", "result_export"),
@@ -53,7 +54,7 @@ STAGE_STUDY = {
     "fold_pca": "B2a frozen embeddings", "tar": "B2b TAR",
     "label_trained_classifier": "B2b label-trained classifier", "benchmark": "Group B/C benchmark fits",
     "label_free_studies": "Group A", "strands_hidden_states": "C1 hidden states",
-    "strands_adaptation": "C2 adaptation", "result_export": "Result exports", "other": "Other",
+    "strands_qualification": "C0 Strands qualification", "strands_adaptation": "C2 adaptation", "result_export": "Result exports", "other": "Other",
 }
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY",
             "PREEMPTED", "BOOT_FAIL", "DEADLINE"}
@@ -70,16 +71,16 @@ def _tres(value: str, key: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _decision_model(submit_line: str) -> str | None:
-    """The provider is the first argument after the feature-creation script."""
+def _feature_job(submit_line: str) -> tuple[str | None, str | None]:
+    """The extractor script takes the provider first and an optional dataset fourth."""
     try:
         tokens = shlex.split(submit_line or "")
     except ValueError:
-        return None
+        return None, None
     for i, token in enumerate(tokens):
-        if token.endswith("feature_creation.slurm") and i + 1 < len(tokens):
-            return tokens[i + 1]
-    return None
+        if token.rsplit("/", 1)[-1] == "feature_creation.slurm" and i + 1 < len(tokens):
+            return tokens[i + 1], (tokens[i + 4] or None) if i + 4 < len(tokens) else None
+    return None, None
 
 
 def parse_sacct(text: str) -> list[dict]:
@@ -92,16 +93,25 @@ def parse_sacct(text: str) -> list[dict]:
         record = dict(zip(FIELDS[:-1], parts[: len(FIELDS) - 1], strict=True))
         record["SubmitLine"] = "|".join(parts[len(FIELDS) - 1:])
         stage = stage_of(record["JobName"])
+        if stage == "strands_adaptation":
+            try:
+                tokens = shlex.split(record["SubmitLine"])
+            except ValueError:
+                tokens = []
+            if any(Path(script).name == "c2_adaptation.slurm" and mode == "pilot"
+                   for script, mode in zip(tokens, tokens[1:])):
+                stage = "strands_qualification"
         state = record["State"].split(" ")[0]
         if stage is None or state not in TERMINAL or not record["ElapsedRaw"].isdigit():
             continue
         seconds = int(record["ElapsedRaw"])
         gpus = _tres(record["AllocTRES"], "gres/gpu")
         cpus = _tres(record["AllocTRES"], "cpu")
+        provider, dataset = _feature_job(record["SubmitLine"]) if stage == "decision_feature_creation" else (None, None)
         rows.append({
             "job_id": record["JobIDRaw"], "cluster": record["Cluster"], "job_name": record["JobName"],
             "stage": stage, "state": state, "partition": record["Partition"],
-            "decision_model": _decision_model(record["SubmitLine"]) if stage == "decision_feature_creation" else None,
+            "decision_model": provider, "dataset_id": dataset,
             "elapsed_seconds": seconds, "gpus": gpus, "cpus": cpus,
             "gpu_hours": seconds * gpus / 3600, "cpu_core_hours": seconds * cpus / 3600,
             "start": record["Start"], "end": record["End"],
@@ -146,7 +156,7 @@ def main():
     rows = collect(args.since)
     from src.utils.serialization import write_json
 
-    write_json(args.output, {"schema": "jevpfn.compute-ledger.v1", "since": args.since,
+    write_json(args.output, {"schema": "jevpfn.compute-ledger.v2", "since": args.since,
                              "units": "elapsed wall-clock x allocated GPUs or CPU cores",
                              "summary": summarize(rows), "jobs": rows})
     print(json.dumps({"jobs": len(rows), "output": str(args.output)}))

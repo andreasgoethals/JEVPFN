@@ -18,6 +18,7 @@ def local_preflight(tmp_path, monkeypatch):
     cfg = deepcopy(preflight.load_yaml("experiment_0/debug"))
     control = preflight.load_yaml("experiment_0/control_runtime")
     cfg["dataset_selection"]["exclude"] = []
+    cfg["candidate_extractors"] = []
     monkeypatch.setenv("JEVPFN_PHASE", "experiment_0")
     for variable in (
         "VSC_DATA",
@@ -39,6 +40,7 @@ def local_preflight(tmp_path, monkeypatch):
     # This fixture intentionally has no benchmark configuration/source tree.
     # The real identity's drift/activation rules are tested separately.
     monkeypatch.setattr(acceptance, "evaluation_identity", lambda: "fixture-evaluation")
+    monkeypatch.setattr(acceptance, "decision_input_identity", lambda providers: "fixture-decisions")
     return cfg
 
 
@@ -75,6 +77,39 @@ def test_exp0_before_and_after_features_have_distinct_requirements(local_preflig
     assert after["status"] == "failed"
     assert after["evaluation_identity"] == "fixture-evaluation"
     assert any("0B requires" in failure for failure in after["failures"])
+
+
+def test_preflight_records_the_versions_for_the_selected_extension(local_preflight, monkeypatch):
+    from src.evaluation import design
+
+    local_preflight.update(candidate_extractors=["jev", "strands"], initial_decision_providers=["strands"],
+                           decision_extensions={"with_jev": {"parent": "open_weight", "add": ["jev"]}})
+    registration = {"model": "frozen-hosted-model", "version": "v7", "delivery": "hosted_typesafe"}
+    monkeypatch.setattr(design, "load_yaml", lambda name: {
+        "candidates": {"jev": registration, "strands": {"delivery": "self_hosted"}}
+    })
+    after = preflight.run_preflight(local=True, stage="after_extraction", cohort="with_jev_added")
+    assert after["decision_cohort"] == "with_jev_added"
+    assert after["qualified_decision_providers"] == ["jev"]
+    assert after["decision_model_versions"] == [registration | {"provider": "jev"}]
+
+
+def test_corrupt_tar_partition_does_not_hide_other_dataset_results(local_preflight, monkeypatch):
+    entries = [{"id": "broken"}, {"id": "healthy"}]
+    monkeypatch.setattr(preflight, "load_catalog", lambda: {"datasets": entries})
+    monkeypatch.setattr(preflight, "dataset_checks", lambda *a, **kw: [{"status": "passed"} for _ in entries])
+    monkeypatch.setattr(preflight, "decision_feature_checks", lambda cfg: [])
+    monkeypatch.setattr(preflight, "embedding_checks", lambda cfg, **kw: [])
+    monkeypatch.setattr(preflight, "load_dataset", lambda entry, **kw: entry["id"])
+    def validate(dataset):
+        if dataset == "broken":
+            raise TypeError("malformed archive receipt")
+        return {"dataset_id": dataset, "status": "passed"}
+    monkeypatch.setattr("src.evaluation.tar.validate_dataset", validate)
+    report = preflight.run_preflight(local=True, stage="after_extraction")
+    assert report["status"] == "failed"
+    assert "TAR broken: TypeError" in report["failures"]
+    assert report["tar_artifacts"] == [{"dataset_id": "healthy", "status": "passed"}]
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 
 from src.utils.paths import large_outputs_dir, notebook_outputs_dir, outputs_dir, phase_folder
-from src.utils.structure import FIGURES, NOTEBOOK_RECORDS, REPORT_NAMES
+from src.utils.structure import FIGURES, NOTEBOOK_RECORDS, REPORT_NAMES, registry
 
 KEEP = frozenset({".gitkeep", ".gitignore"})
 
@@ -49,6 +49,7 @@ def candidates(root: Path):
                 continue
             relative = path.relative_to(root)
             parts = relative.parts
+            owner = registry().owner_of(parts[:-1]) if name == "_report.txt" else None
             if (
                 (
                     # `figures/<notebook>/`: `_figures.json` is pruned with its PDFs, not deleted.
@@ -61,7 +62,7 @@ def candidates(root: Path):
                 )
                 or (len(parts) <= 2 and name in REPORT_NAMES)
                 or (parts[:2] == ("results", "notebooks") and name == "_report.txt")
-                or (parts[1:3] == ("results", NOTEBOOK_RECORDS) and name == "_report.txt")
+                or (owner and parts[owner[1]:owner[1] + 2] == ("results", NOTEBOOK_RECORDS))
                 or (
                     relative.parts[:2] in {("1. question_preparation", "questions"),
                                            (phase_folder("question_preparation"), "questions")}

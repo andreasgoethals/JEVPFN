@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 from src.jev.requests import IntendedRequest, require_nonempty_text
 from src.utils.serialization import canonical_json, digest
@@ -128,6 +129,15 @@ def score_consistency(score, values, provider):
     }
 
 
+def pinned_jev_model(settings: dict) -> str:
+    """Resolve a fully specified TypeSafe release before client setup or dispatch."""
+    version = settings.get("version")
+    if (not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+            or settings.get("model") != f"jev-{version}"):
+        raise ValueError("An explicit, matching Jev model/version pin is required; no moving aliases.")
+    return settings["model"]
+
+
 def api_preview(request: IntendedRequest) -> dict:
     """Build a JSON body without sending it or reading a credential."""
     payload = json.loads(request.payload_json)
@@ -139,14 +149,13 @@ def api_preview(request: IntendedRequest) -> dict:
         return liquid_preview(request)
     if settings.get("provider") != "jev":
         raise ValueError("This response/request adapter supports Jev only")
-    if not settings["version"] or settings["model"] != f"jev-{settings['version']}":
-        raise ValueError("An explicit, matching model/version pin is required; no moving aliases.")
+    model = pinned_jev_model(settings)
     if settings.get("api_mapping_version") != MAPPING_VERSION:
         raise ValueError("Unknown provider mapping version.")
     if settings["request_configuration"]:
         raise ValueError("Additional provider parameters have not been verified.")
     return {
-        "model": settings["model"],
+        "model": model,
         "state": payload["state"],
         "questions": {QUESTION_ID: semantic_question(payload["question"])},
     }

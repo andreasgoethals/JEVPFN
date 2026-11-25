@@ -24,7 +24,7 @@ GLANCE_ARMS = (
     ("TAR E5-small, per-column PCA32", "B2", "dataset_gains", "tar/e5_small_v2_tar/per_column32"),
     ("Strands LoRA + head (C2)", "C2", "dataset_gains", "adapted/joint/lora_head"),
 )
-COLUMNS = ["arm", "scope", "statistic", "estimate", "low", "high", "datasets", "predictors"]
+COLUMNS = ["arm", "scope", "statistic", "estimate", "low", "high", "datasets", "predictors", "predictors_max"]
 #: Reference row of the normalised scope (drawn as a line, not as an arm).
 NO_TEXT = "No text (same predictor)"
 
@@ -50,17 +50,19 @@ def glance_table(frames_by_study: dict, *, arms=GLANCE_ARMS, n_boot=group_b.N_BO
         level = _dataset_level(gains).assign(representation=label)
         pooled = group_b.summarize(level, keys=("representation",), n_boot=n_boot)
         families = group_b.summarize_by_family(level, keys=("representation",), n_boot=n_boot)
-        predictors = int(level.predictors.min())
+        predictors = (int(level.predictors.min()), int(level.predictors.max()))
         for s in pooled.itertuples():
             rows.append([label, "pooled", "mean", s.mean_headroom_share, s.share_ci_low, s.share_ci_high,
-                         s.datasets, predictors])
+                         s.datasets, *predictors])
             rows.append([label, "pooled", "median", s.median_headroom_share, s.median_share_ci_low,
-                         s.median_share_ci_high, s.datasets, predictors])
+                         s.median_share_ci_high, s.datasets, *predictors])
         for s in families.itertuples():
+            counts = level.loc[level.task_type.map(group_b.task_family).eq(s.task_family), "predictors"]
+            predictors = (int(counts.min()), int(counts.max()))
             rows.append([label, s.task_family, "mean", s.mean_raw_gain, s.raw_ci_low, s.raw_ci_high,
-                         s.datasets, predictors])
+                         s.datasets, *predictors])
             rows.append([label, s.task_family, "median", s.median_raw_gain, None, None, s.datasets,
-                         predictors])
+                         *predictors])
     rows += normalized_rows(frames_by_study, arms=arms, n_boot=n_boot)
     return pd.DataFrame(rows, columns=COLUMNS)
 
@@ -82,21 +84,19 @@ def normalized_rows(frames_by_study: dict, *, arms=GLANCE_ARMS, n_boot=group_b.N
 
         roster = decision_roster()
     labels = {"baseline": NO_TEXT}
-    keep = group_b_views.FOLD_KEYS + ["value"]
-    parts = [group_b_views.fold_long(b1["folds"]).query("representation == 'baseline'")[keep]]
+    sources = {"B1": b1["folds"]}
     for label, study, _, representation in arms:
         folds = (frames_by_study.get(study) or {}).get("folds")
-        if folds is None or folds.empty:
-            continue
-        head = group_b_views.fold_long(folds)
-        family, *_ = representation.split("/")
-        if representation.endswith("/median"):
-            head = group_b_views.median_fold_scores(head, roster=roster, modes=(representation.split("/")[1],),
-                                                    family=family)
-        head = head[head.representation.eq(representation)]
-        if not head.empty:
+        if folds is not None and not folds.empty:
+            sources[study] = folds
             labels[representation] = label
-            parts.append(head[keep])
+    # Overlapping B1, B2 and C2 scores must refer to the same split, predictor and recipe.
+    head = group_b_views.merged_heads(*sources.values())
+    parts = [head[head.representation.isin(labels)]]
+    for representation in labels:
+        if representation.endswith("/median"):
+            family, mode, _ = representation.split("/")
+            parts.append(group_b_views.median_fold_scores(head, roster=roster, modes=(mode,), family=family))
     fold = pd.concat(parts, ignore_index=True)
     if fold.representation.nunique() < 2:
         return []
@@ -106,10 +106,11 @@ def normalized_rows(frames_by_study: dict, *, arms=GLANCE_ARMS, n_boot=group_b.N
     summary = group_b.summarize_normalized(level, keys=("representation",), n_boot=n_boot)
     rows = []
     for s in summary[summary.task_family.eq("all")].itertuples():
-        predictors = int(level.loc[level.representation.eq(s.representation), "predictors"].min())
+        counts = level.loc[level.representation.eq(s.representation), "predictors"]
+        predictors = (int(counts.min()), int(counts.max()))
         label = labels[s.representation]
         rows.append([label, "normalized", "mean", s.mean_normalized_score, s.normalized_ci_low,
-                     s.normalized_ci_high, s.datasets, predictors])
+                     s.normalized_ci_high, s.datasets, *predictors])
         rows.append([label, "normalized", "median", s.median_normalized_score, s.median_normalized_ci_low,
-                     s.median_normalized_ci_high, s.datasets, predictors])
+                     s.median_normalized_ci_high, s.datasets, *predictors])
     return rows

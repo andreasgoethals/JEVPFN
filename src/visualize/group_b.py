@@ -375,7 +375,7 @@ def gain_forest(summary, representations, *, name, what, share=False, separators
         f"{what}: equal-dataset mean (filled marker) and median (open marker) {quantity}; lines are "
         "95% percentile intervals of the mean from resampling datasets (2,000 draws). One marker "
         "shape per predictor; colour marks the representation. Each dataset contributes its five-fold "
-        "mean; median-model rows take the per-dataset median over all seventeen decision models.")
+        "mean; median-model rows take the per-dataset median over the complete decision-model cohort.")
 
 
 NORMALIZED_TEXT = (
@@ -698,7 +698,7 @@ def size_curves(curves, *, name, what, curve="main", representations=SIZE_ARMS, 
         "averaged over draws; draw variance as within-dataset variance) with their 95% interval "
         + ("(dark band); the faint band spans the seven predictors' own pooled curves. " if model == "all"
            else "(band). ")
-        + "The decision line uses the per-dataset median over all seventeen decision models. "
+        + "The decision line uses the per-dataset median over the complete decision-model cohort. "
         "Classification (ROC-AUC/macro AUC) and regression (R²) are separate panels.")
 
 
@@ -735,7 +735,7 @@ def size_curves_by_predictor(curves, *, name, what, family, representations=SIZE
         f"{what}, {family} datasets ({TASK_UNITS[family]}), main curve: per predictor, the DerSimonian-"
         "Laird random-effects mean gain over the same-size no-text baseline with its 95% interval, "
         "against the number of sampled labelled training rows. The decision line is the per-dataset "
-        "median over all seventeen decision models.")
+        "median over the complete decision-model cohort.")
 
 
 def size_slopes(slopes, *, name, what, representations=SIZE_ARMS):

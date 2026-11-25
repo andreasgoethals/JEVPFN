@@ -25,9 +25,9 @@ def study_grid_figure(grid):
     counts = grid.set_index("experiment")
     fig, axes = plt.subplots(2, 2, figsize=(style.WIDTH_FULL, 5.0))
     rows = [
-        ("experiment_1", "Decision features", "Selected extractors; per-column, joint or both.\nOne shared non-text reference; six predictors."),
-        ("experiment_2", "Frozen embeddings", "Three pretrained encoders; six predictors.\nPer-column PCA32 and joint PCA64."),
-        ("experiment_3", "Supervised TAR", "E5-small-v2 LoRA using training labels.\nSame six predictors and two PCA recipes."),
+        ("experiment_1", "Decision features", "Selected extractors; per-column, joint or both.\nOne shared non-text reference; seven predictors."),
+        ("experiment_2", "Frozen embeddings", "Three pretrained encoders; seven predictors.\nPer-column PCA32 and joint PCA64."),
+        ("experiment_3", "Supervised TAR", "E5-small-v2 LoRA using training labels.\nSame seven predictors and two PCA recipes."),
         ("experiment_4", "Native text systems", "TabSTAR v1.1, ConTextTab and AG-MM.\nText and structured inputs, end-to-end."),
     ]
     for ax, (phase, name, detail) in zip(axes.flat, rows):
@@ -109,14 +109,11 @@ def runtime_evidence_figure(table):
     gpus = sorted({g for g in table.gpu_name.dropna()})
     return fig, "runtime_evidence", (
         "Experiment 0A gates for the selected decision models and three frozen encoders, read from "
-        "the receipts available locally. Runtime contracts load the pinned checkpoint and answer "
-        "synthetic and real requests; known-answer probes require the expected answer on synthetic "
-        "inputs whose answer is unambiguous; robustness probes rerun real inputs under harmless "
-        "interventions; the "
-        "token audit counts every prepared request with the provider's own tokenizer; acceptance is "
-        "the signed review that enables full open-weight extraction (Jev: the bounded 1.14 pilot). "
-        f"Right panels give the contract run on {', '.join(gpus) or 'the recorded GPU'}: peak "
-        "allocated memory, checkpoint loading time and total contract duration."
+        "locally held records. The left panel covers runtime checks, questions with known answers, "
+        "controlled changes to real inputs, exact token counts for open-weight models, and the "
+        "signed extraction review. Jev has a separate hosted pilot. The three panels on the right "
+        f"give peak GPU memory, loading time and total runtime for each recorded "
+        f"contract on {', '.join(gpus) or 'the recorded GPU'}."
     )
 
 
@@ -223,26 +220,56 @@ def pilot_agreement_figure(agreement):
     )
 
 
+def _historical_label(row, configured):
+    """Use a familiar short name only for a release identified by its own receipt."""
+    provider = row.provider
+    model = row.get("recorded_model")
+    revision = row.get("recorded_revision")
+    model = model if isinstance(model, str) else ""
+    revision = revision if isinstance(revision, str) else ""
+    if provider == "jev":
+        if model.lower().startswith("jev-"):
+            return f"Jev {model[4:]}"
+        if not model or model.lower() == "jev":
+            return f"Jev {revision}" if revision else "Jev (release unknown)"
+    if model and model == configured.get("model") and revision == configured.get("revision"):
+        return LABELS.get(provider, model)
+    name = model.rsplit("/", 1)[-1] or provider
+    return f"{name} ({revision[:8] or 'release unknown'})"
+
+
 def robustness_matrix_figure(changes):
-    """Distribution change of every model under each harmless intervention, same inputs."""
+    """One row per historical receipt so a provider's different releases stay distinct."""
     if changes.empty:
         return
     from matplotlib.colors import LinearSegmentedColormap
 
     from src.data.loaders import load_catalog
+    from src.utils.config import load_yaml
 
     names = {entry["id"]: entry["name"] for entry in load_catalog()["datasets"]}
-    providers = [p for p in LABELS if p in set(changes.provider)]
+    candidates = load_yaml("extractors")["candidates"]
+    order = {provider: i for i, provider in enumerate(LABELS)}
+    receipts = sorted(changes.groupby(["provider", "source_sha256"], sort=False),
+                      key=lambda item: (order.get(item[0][0], len(order)), *item[0]))
+    per_provider = changes.groupby("provider").source_sha256.nunique()
     datasets = list(dict.fromkeys(changes.dataset_id))
     tasks = {"BIN_": "binary_classification", "MUL_": "multiclass_classification",
              "REG_": "regression"}
     columns = [(d, v) for d in datasets for v in VARIANTS
                if ((changes.dataset_id == d) & (changes.variant == v)).any()]
-    values = np.full((len(providers), len(columns)), np.nan)
+    values = np.full((len(receipts), len(columns)), np.nan)
     flipped = np.zeros_like(values, dtype=bool)
-    for record in changes[changes.variant.ne("base")].itertuples():
-        if record.provider in providers and (record.dataset_id, record.variant) in columns:
-            i, j = providers.index(record.provider), columns.index((record.dataset_id, record.variant))
+    labels = []
+    for i, ((provider, source), frame) in enumerate(receipts):
+        label = _historical_label(frame.iloc[0], candidates.get(provider, {}))
+        if per_provider[provider] > 1:
+            label += f" · {source[:8]}"
+        labels.append(label)
+        if frame.duplicated(["dataset_id", "variant"]).any():
+            raise ValueError("Duplicate dataset and variant in a historical 0A receipt")
+        for record in frame[frame.variant.isin(VARIANTS)].itertuples():
+            j = columns.index((record.dataset_id, record.variant))
             values[i, j] = record.total_variation_from_base
             flipped[i, j] = not record.same_top_option
     cmap = LinearSegmentedColormap.from_list("tv", [style.BACKGROUND_COLOR, style.WINDOW_COLOR])
@@ -256,9 +283,9 @@ def robustness_matrix_figure(changes):
     short = {"paraphrase": "Paraphrase", "irrelevant_context": "Unrelated\ncontext",
              "embedded_instruction": "Inserted\ninstruction", "option_order": "Reversed\noptions"}
     ax.set_xticks(range(len(columns)), [short[v] for _, v in columns], fontsize=7)
-    ax.set_yticks(range(len(providers)), [LABELS[p] for p in providers], fontsize=7)
-    for tick, provider in zip(ax.get_yticklabels(), providers):
-        tick.set_color(style.DECISION_COLORS[provider])
+    ax.set_yticks(range(len(receipts)), labels, fontsize=7)
+    for tick, ((provider, _), _) in zip(ax.get_yticklabels(), receipts):
+        tick.set_color(_model_color(provider))
     ax.tick_params(length=0)
     for spine in ax.spines.values():
         spine.set_visible(False)
@@ -271,15 +298,13 @@ def robustness_matrix_figure(changes):
         if start:
             ax.axvline(start - 0.5, color=style.BACKGROUND_COLOR, linewidth=3)
         start += width
-    ax.set_ylim(len(providers) - 0.5, -1.2)
+    ax.set_ylim(len(receipts) - 0.5, -1.2)
     yield fig, "historical_0a_robustness", (
-        "Historical 0A probes (before feature creation; not the A2 stability study). "
-        "Total variation between each model's probability vector for an unmodified real input "
-        "and for the same input under an intervention that should not change the answer (0 = "
-        "identical, 1 = disjoint); one deterministically selected input per task, the same for "
-        "every model. An asterisk marks a changed top answer. Reversed options apply only to "
-        "multiclass and are mapped back to the original classes. Single probes illustrate "
-        "sensitivity; they are not population failure rates."
+        "Historical 0A qualification probes on one deterministically selected input per task. "
+        "Each row identifies the model in a dated receipt. Cells give total variation between "
+        "the original and modified probability vectors (0 = identical, 1 = disjoint). An asterisk "
+        "marks a changed top answer. The reversed multiclass options are realigned to their "
+        "original identities. The separate A2 study measures sensitivity across sampled inputs."
     )
 
 

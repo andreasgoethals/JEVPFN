@@ -6,6 +6,7 @@ Run each model in its separately prepared environment and allocated compute job.
 
 import argparse
 import copy
+import json
 import os
 from uuid import uuid4
 
@@ -26,10 +27,10 @@ from src.evaluation.models import (
 from src.evaluation.protocol import evaluate_cv, shared_splits
 from src.utils import paths
 from src.utils.config import load_yaml
-from src.utils.serialization import digest, write_json
+from src.utils.serialization import digest, text_value, write_json
 
 FIXTURE_CLASSES = {"binary": 2, "multiclass": 3, "wide_multiclass": 30, "regression": 0}
-CONTRACT_VERSION = 7
+CONTRACT_VERSION = 8
 
 
 def embedding_fixture_recipes():
@@ -86,6 +87,9 @@ def fixtures():
         frame.loc[::13, "category"] = None
         frame.loc[::17, "text"] = None
         frame.loc[::19, "notes"] = None
+        frame.loc[1, "text"] = "   "
+        frame.loc[2, "notes"] = "Récit 新 – observation " * 30
+        frame.loc[3, "category"] = "appears in one row"
         official = {"target": "target", "task_type": "cls" if classes else "reg"}
         meta = extract_metadata(
             frame,
@@ -117,7 +121,7 @@ def feature_cases(dataset, model):
             names = [f"frozen_e5__text_{i:03d}__{j:03d}" for j in range(width)]
             vectors = rng.normal(size=(len(base), width)).astype("float32")
             vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
-            vectors[dataset.frame[text].isna().to_numpy()] = np.nan
+            vectors[dataset.frame[text].map(text_value).isna().to_numpy()] = np.nan
             groups.append(pd.DataFrame(vectors, index=base.index, columns=names))
         encoded = pd.concat(groups, axis=1)
         encoded.attrs.update(feature_artifact_ids=[], embedding_groups=[list(g) for g in groups])
@@ -129,7 +133,8 @@ def feature_cases(dataset, model):
                 yield case, features, count
     # Decision-only fixtures exercise the three actual Experiment 1 augmentations.
     blocks = {}
-    text_missing = dataset.frame[list(dataset.metadata.text_columns)].isna().to_numpy()
+    text_missing = np.array([dataset.frame[c].map(text_value).isna().to_numpy()
+                             for c in dataset.metadata.text_columns]).T
     task = dataset.metadata.task_type
     width = 9 if task == "regression" else len(dataset.metadata.classes) if task == "multiclass_classification" else 1
     for mode in ("per_column", "joint"):
@@ -171,6 +176,30 @@ def case_factory(base_factory, features, components):
         components=components,
         scope=features.attrs.get("pca_scope", "per_column"),
     )
+
+
+def interrupt_fixture(dataset, features, factory, args):
+    """Complete fold 0, then interrupt fold 1 immediately after its first durable write."""
+    from unittest.mock import patch
+
+    from src.evaluation import protocol
+
+    first = evaluate_cv(dataset, features, factory, fold_numbers=[0], **args)
+
+    class FixtureInterruption(Exception):
+        pass
+
+    save_record = protocol.save_evaluation
+
+    def interrupt_after_outer_record(**kwargs):
+        raise FixtureInterruption(save_record(**kwargs))
+
+    try:
+        with patch.object(protocol, "save_evaluation", interrupt_after_outer_record):
+            evaluate_cv(dataset, features, factory, fold_numbers=[1], **args)
+    except FixtureInterruption as exc:
+        return first, exc.args[0]
+    raise RuntimeError("Unfinished fixture fold was unexpectedly reused")
 
 
 def run(model, *, execute=False):
@@ -242,7 +271,17 @@ def run(model, *, execute=False):
                 device=settings["device"],
                 synchronize=sync,
             )
+            # One distinct trial per runtime tests restarting with a completed fold and an
+            # interrupted next fold. A rerun must not inherit a previously completed trial.
+            partial_trial = dataset.metadata.task_type == "binary_classification" and case in {
+                "original_text", "non_text"
+            }
+            if partial_trial:
+                args["representation_recipe"]["partial_resume_trial"] = run_id
+                first, incomplete = interrupt_fixture(dataset, features, factory, args)
             records = evaluate_cv(dataset, features, factory, **args)
+            if partial_trial and (not first or records[:len(first)] != first or incomplete in records):
+                raise RuntimeError("Interrupted fixture resume changed a completed fold or reused an incomplete record")
 
             def forbidden_factory():
                 raise AssertionError("Completed predictor fold was fitted again")
@@ -262,6 +301,8 @@ def run(model, *, execute=False):
                     else None,
                     "records": [str(p) for p in records],
                     "resume_without_refitting": True,
+                    "partial_fold_resume_verified": partial_trial,
+                    **({"interrupted_record_id": incomplete.key} if partial_trial else {}),
                 }
             )
             write_json(manifest, report)
@@ -272,6 +313,86 @@ def run(model, *, execute=False):
     finally:
         write_json(manifest, report)
     return report
+
+
+def verify_published_fixtures(report):
+    """Verify immutable fold markers, predictions and held-out identities on durable PROJECT."""
+    from src.evaluation.metrics import classification_metrics, regression_metrics
+    from src.evaluation.store import RecordRef, completed, database, read_predictions, readonly
+
+    if paths.on_vsc() and paths.staging_override() != paths.durable_project_override():
+        raise ValueError("Verify published 0B fixtures outside scratch on durable PROJECT")
+    datasets = {(d.metadata.task_type, len(d.metadata.classes)): d for d in fixtures()}
+    for case in report["fixtures"]:
+        task = case["task_type"]
+        data = datasets[task, case["classes"]]
+        split = shared_splits(data)
+        dataset_id = data.metadata.dataset_id
+        db = database(dataset_id, "experiment_0")
+        expected = {(i, role) for i in range(len(split["folds"])) for role in
+                    (("outer_test", "inner_oof_binary_threshold") if task == "binary_classification"
+                     else ("outer_test",))}
+        marker_records = {}
+        for locator in case["records"]:
+            original, sep, record_id = locator.rpartition("#")
+            if not sep or not original.replace("\\", "/").endswith("/" + db.name):
+                raise ValueError("0B fixture record locator has a different dataset")
+            ref = RecordRef(db, record_id)
+            body = json.loads(ref.read_text())
+            meta = body["metadata"]
+            fold, role = meta["outer_fold"], meta["prediction_role"]
+            if (fold, role) not in expected:
+                raise ValueError("0B fixture has duplicate or unexpected fold/role")
+            expected.remove((fold, role))
+            recipe_id = meta["fold_recipe_id"]
+            if recipe_id not in marker_records:
+                with readonly(db) as conn:
+                    marker = conn.execute("SELECT recipe FROM folds WHERE id=?", (recipe_id,)).fetchone()
+                if not marker or digest(recipe := json.loads(marker[0])) != recipe_id:
+                    raise ValueError("0B fixture lacks a current completed fold")
+                marker_records[recipe_id] = set(completed(recipe, "experiment_0"))
+            if ref not in marker_records[recipe_id]:
+                raise ValueError("0B fixture record differs from its completed fold")
+            table = read_predictions(ref)
+            positions = split["folds"][fold]["test" if role == "outer_test" else "train"]
+            spec = meta["representation_recipe"]
+            if (meta["dataset_id"] != dataset_id or meta["data_identity"] != data.source["data_identity"]
+                    or meta["split_id"] != split["split_id"] or meta["model_id"] != report["model"]
+                    or meta["checkpoint_id"] != predictor_settings_identity(report["settings"])
+                    or meta["feature_set"] != "predictor_fixture__" + case["feature_case"]
+                    or spec.get("contract_version") != CONTRACT_VERSION
+                    or spec.get("runtime_identity") != report["runtime_identity"]
+                    or spec.get("evaluation_identity") != report["evaluation_identity"]
+                    or (case.get("partial_fold_resume_verified") and not spec.get("partial_resume_trial"))
+                    or table.row_id.tolist() != [f"csv:{i}" for i in positions]
+                    or table.y_true.tolist() != data.frame[data.metadata.target].iloc[positions].tolist()):
+                raise ValueError("Published 0B fixture does not match its runtime, case or expected rows")
+            if task == "regression":
+                scores = regression_metrics(table.y_true, table.prediction)
+            else:
+                columns = [f"p_c{i:03d}" for i in range(case["classes"])]
+                if ([col for col in table if col.startswith("p_c")] != columns
+                        or meta["class_order"] != list(data.metadata.classes)):
+                    raise ValueError("Published fixture probability columns differ from its class order")
+                scores = classification_metrics(table.y_true, table[columns], classes=meta["class_order"],
+                                                positive_class=meta["positive_class"],
+                                                selected_threshold=meta.get("selected_threshold"))
+            published = body["scores"]["metrics"]
+            reproduced = scores["metrics"]
+            if (set(reproduced) != set(published)
+                    or {k for k,v in published.items() if v is None} != {k for k,v in reproduced.items() if v is None}
+                    or any(not np.isclose(value, published[k], rtol=1e-10, atol=1e-12)
+                           for k, value in reproduced.items() if value is not None)):
+                raise ValueError("Published fixture scores do not reproduce from its held-out predictions")
+        if expected or len(marker_records) != len(split["folds"]):
+            raise ValueError("0B fixture omitted a published fold/role")
+        if case.get("partial_fold_resume_verified"):
+            orphan = RecordRef(db, case["interrupted_record_id"])
+            interrupted = json.loads(orphan.read_text())["metadata"]
+            fold_records = marker_records.get(interrupted["fold_recipe_id"])
+            if (interrupted["outer_fold"] != 1 or interrupted["prediction_role"] != "outer_test"
+                    or not fold_records or orphan in fold_records or len(read_predictions(orphan)) != len(split["folds"][1]["test"])):
+                raise ValueError("Completed fixture fold reused an interrupted prediction record")
 
 
 def main():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.metadata
 import platform
 import subprocess
@@ -10,13 +11,22 @@ from src.utils import paths
 from src.utils.serialization import digest, file_sha256
 
 
+def source_hash(path):
+    """Treat CRLF/LF as equal in text source; shell scripts must actually use LF."""
+    content = path.read_bytes()
+    if path.suffix in {".sh", ".slurm"} and b"\r" in content:
+        raise ValueError(f"Shell source must use LF line endings: {path.name}")
+    return hashlib.sha256(content.replace(b"\r\n", b"\n")).hexdigest()
+
+
 def code_identity(relative_files=None) -> str:
     files = (
         sorted((paths.REPO_ROOT / "src").rglob("*.py"))
         if relative_files is None
         else sorted(paths.REPO_ROOT / name for name in relative_files)
     )
-    return digest({p.relative_to(paths.REPO_ROOT).as_posix(): file_sha256(p) for p in files})
+    return digest({p.relative_to(paths.REPO_ROOT).as_posix():
+                   (source_hash(p) if p.suffix == ".py" else file_sha256(p)) for p in files})
 
 
 def environment() -> dict:

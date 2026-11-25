@@ -24,8 +24,7 @@ def _head(rows):
 
 
 def test_probe_fallback_is_one_constant_shared_with_non_training_rows():
-    """A block too small for a classifier gets the training class frequencies: every training
-    row receives the SAME vector as every non-training row, so it carries no row-level label."""
+    """Changing a scored row's own label cannot affect the sparse fallback."""
     rng = np.random.default_rng(0)
     x = pd.DataFrame(rng.normal(size=(30, 2)), columns=["a", "b"], index=[f"csv:{i}" for i in range(30)])
     x.iloc[8:, 0] = np.nan  # column "a" present in 8 training rows only -> fallback
@@ -33,11 +32,14 @@ def test_probe_fallback_is_one_constant_shared_with_non_training_rows():
     probe = label_probe.SupervisedProbe([["a"]], view="per_column", task_type="binary_classification",
                                         classes=["n", "y"], seed=1)
     train = probe.fit_transform(x.iloc[:20], y.iloc[:20])
-    assert probe.diagnostics_[0]["fallback"] == "training_class_frequencies"
+    assert probe.diagnostics_[0]["fallback"] == "uniform_label_independent"
     present = train.iloc[:8].to_numpy()
     assert np.unique(present).size == 1  # identical for all present training rows
     other = probe.transform(x.iloc[[20]].assign(a=0.0))
     assert np.allclose(other.to_numpy(), present[0])
+    y.iloc[0] = "n"
+    assert train.equals(probe.fit_transform(x.iloc[:20], y.iloc[:20]))
+    assert present[0, 0] == 0.5
 
 
 # ------------------------------------------------------- claim 2: coherent five-fold pairs
@@ -83,7 +85,7 @@ def _recipe(artifacts, fold):
             "representation_recipe": {"provider": "p"}, "split_id": "s", "outer_fold": fold}
 
 
-def _collect(monkeypatch, tmp_path, recipes):
+def _collect(monkeypatch, tmp_path, recipes, **selection):
     from src.evaluation import benchmark_export, records, store
 
     def completed(recipe, phase):
@@ -95,7 +97,7 @@ def _collect(monkeypatch, tmp_path, recipes):
 
     monkeypatch.setattr(store, "all_recipes", lambda phase: recipes)
     monkeypatch.setattr(records, "completed_fold", completed)
-    return benchmark_export.collect_folds(("experiment_1",))
+    return benchmark_export.collect_folds(("experiment_1",), **selection)
 
 
 def test_collect_folds_never_completes_an_arm_from_two_recipes(monkeypatch, tmp_path):
@@ -107,6 +109,56 @@ def test_collect_folds_never_completes_an_arm_from_two_recipes(monkeypatch, tmp_
         _collect(monkeypatch, tmp_path, both)
     one = _collect(monkeypatch, tmp_path, [_recipe(["new"], f) for f in range(5)])
     assert len(one) == 5 * 3 and one.recipe_id.nunique() == 1
+
+
+def test_scoped_folds_match_the_recorded_version_selector_and_artifacts(monkeypatch, tmp_path):
+    from src.evaluation import benchmark_export as export
+    from src.evaluation.design import decision_versions
+    from src.utils.config import load_yaml
+
+    main = load_yaml("experiment_1/main")
+    registered, = decision_versions(["kev"])
+    selected = {k: registered[k] for k in ("provider", "model", "version")}
+    selected.update(question_bank_id="bank", question_variant="main", settings_sha256="settings")
+    main["feature_selectors"]["kev"] = selected
+    main["dataset_feature_artifacts"]["d"] = {"kev": {"per_column": "per", "joint": "joint"}}
+    monkeypatch.setattr(export, "load_yaml", lambda name: main)
+
+    def folds(selector, artifacts, *, dataset="d", feature_set="non_text_plus_both", provider="kev"):
+        return [_recipe(artifacts, fold) | {
+            "dataset_id": dataset, "feature_set": feature_set,
+            "representation_recipe": {"provider": provider, "selector": selector}
+        } for fold in range(5)]
+
+    valid = folds(selected, ["per", "joint"])
+    hybrid = folds(selected, ["per", "joint", "frozen"], feature_set="non_text_plus_both_plus_frozen_e5")
+    joint = folds(selected, ["joint"], feature_set="non_text_plus_joint")
+    stale = folds({**selected, "version": "previous"}, ["per", "joint"])
+    legacy = folds(None, ["per", "joint"])
+    wrong = [
+        *folds({**selected, "model": "another-model"}, ["per", "joint"]),
+        *folds({**selected, "question_variant": "other"}, ["per", "joint"]),
+        *folds({**selected, "settings_sha256": "other"}, ["per", "joint"]),
+        *folds({**selected, "question_bank_id": "other"}, ["per", "joint"]),
+        *folds(selected, ["joint", "per"]),
+        *folds(selected, ["per", "wrong", "joint"], feature_set="non_text_plus_both_plus_frozen_e5"),
+        *folds(selected, ["per", "joint"], provider=None),
+        *folds(None, ["p1"], provider="jev"), *folds(None, ["p2"], provider="jev"),
+    ]
+    scoped = _collect(monkeypatch, tmp_path, [*valid, *hybrid, *joint, *stale, *legacy, *wrong],
+                      metrics=["roc_auc"], cohort="open_weight")
+    assert len(scoped) == 15
+    assert set(scoped.recipe_id) == {export.arm_recipe_id(a[0]) for a in (valid, hybrid, joint)}
+    assert _collect(monkeypatch, tmp_path, [*valid[:4], *stale, *legacy], cohort="open_weight").empty
+    assert len(_collect(monkeypatch, tmp_path, legacy, metrics=["roc_auc"])) == 5
+
+    main["feature_selectors"]["kev"] = None
+    first = folds(selected, ["older-publication"], dataset="other", feature_set="non_text_plus_joint")
+    second = folds(selected, ["another-publication"], dataset="other", feature_set="non_text_plus_joint")
+    assert len(_collect(monkeypatch, tmp_path, [*first, *second[:4]], metrics=["roc_auc"],
+                        cohort="open_weight")) == 5
+    with pytest.raises(ValueError, match="several complete recipes"):
+        _collect(monkeypatch, tmp_path, [*first, *second], metrics=["roc_auc"], cohort="open_weight")
 
 
 # ----------------------------------------------------------- claim 3: fixed decision roster
@@ -240,8 +292,9 @@ def _sizes():
                     for rep, delta in (("baseline", 0), ("decision/both/m", 0.01 + 0.002 * draw * (d + 1))):
                         rows.append(dict(dataset_id=f"d{d}", task_type="regression", model_id="linear",
                                          representation=rep, training_size=size, draw=draw,
+                                         checkpoint_id="ck", split_id=f"split-{size}-{draw}",
                                          outer_fold=fold, value=base + delta))
-    return data_efficiency.size_gains(pd.DataFrame(rows))
+    return data_efficiency.size_gains(pd.DataFrame(rows), cfg={"draws": [{"max_size": 4096, "draws": 3}]})
 
 
 def test_headroom_share_pooling_uses_its_own_draw_variance():
@@ -257,13 +310,29 @@ def test_headroom_share_pooling_uses_its_own_draw_variance():
 
 
 def test_b4_curves_keep_their_fixed_dataset_cohorts():
-    cohorts = {"main": {"datasets": None, "sizes": [128, 256]},
+    cohorts = {"main": {"datasets": ["d0", "d1", "d2", "d3"], "sizes": [128, 256]},
                "extended": {"datasets": ["d3"], "sizes": [128, 256, 4096]}}
     tagged = data_efficiency.cohort_gains(_sizes(), cohorts)
     pooled = data_efficiency.pooled_curve(tagged).set_index(["curve", "training_size"])
     assert pooled.loc[("main", 128), "datasets"] == 4 and ("main", 4096) not in pooled.index
     assert pooled.loc[("extended", 128), "datasets"] == 1
     assert pooled.loc[("extended", 4096), "datasets"] == 1
+
+
+def test_paid_extension_adds_only_new_arms_to_the_open_benchmark():
+    from src.evaluation.campaign import benchmark_plan
+    from src.evaluation.design import decision_providers
+
+    def identities(cohort):
+        return {tuple(sorted(arm.items())) for arm in benchmark_plan(cohort=cohort)}
+
+    # Include every setting in each identity, including sample draws and width overrides.
+    open_arms = identities("open_weight")
+    paid = benchmark_plan(cohort="paid")
+    assert {arm["provider"] for arm in paid} == set(decision_providers("paid"))
+    paid_arms = {tuple(sorted(arm.items())) for arm in paid}
+    assert open_arms.isdisjoint(paid_arms)
+    assert open_arms | paid_arms == identities("all")
 
 
 # ----------------------------------------------------------- claim 8: reader identities

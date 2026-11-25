@@ -6,14 +6,14 @@ The plan lives in `config/B/when_text_helps.yaml` (status
 decision mode, and each embedding/TAR recipe), each predictor separately:
 
 * ``moderator_tests``: Spearman rho of normalised and raw gain with every numeric dataset
-  moderator, a dataset-bootstrap interval and a two-sided permutation p-value. The four
-  PRIMARY moderators are flagged and reported unadjusted; every other (exploratory) cell is
-  Benjamini–Hochberg adjusted across the whole exploratory grid.
+  moderator, a dataset-bootstrap interval and a two-sided permutation p-value. Raw gains
+  are analysed within task family. The current plan treats every moderator as exploratory
+  and applies Benjamini–Hochberg across the whole grid.
 * ``partial_primary``: partial Spearman rho of each primary moderator with gain, controlling
   for the other primary moderators (rank-transform, residualise on the controls, correlate).
 * ``random_effects``: DerSimonian–Laird pooling of per-dataset gains with the fold-based
-  within-dataset variance. Outer folds share training rows, so those variances are
-  approximate (too small); tau² absorbs part of the shortfall, but intervals are optimistic.
+  within-dataset variance. Overlapping training sets can make these variance estimates
+  too small and the exploratory intervals too narrow.
 
 About eighteen datasets give little power. Results are associations, never causal effects or
 a basis for selecting a representation, and nothing here replaces the confirmatory plan in
@@ -26,24 +26,30 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation.aggregate import MEDIAN, RECIPE
-from src.evaluation.moderators import bootstrap_spearman, moderator_data, spearman_rows
+from src.evaluation.moderators import (
+    bootstrap_spearman,
+    moderator_data,
+    moderator_outcomes,
+    spearman_rows,
+)
 
 CONFIG = "B/when_text_helps"
 STATUS = "proposed_before_results"
 TEST_COLUMNS = [
-    "model_id", "checkpoint_id", "family", "representation", "outcome", "moderator", "role",
+    "model_id", "checkpoint_id", "family", "representation", "outcome", "task_family", "moderator", "role",
     "n_datasets", "spearman_rho", "ci_low", "ci_high", "p_value", "q_value", "significant_fdr",
     "status",
 ]
 PARTIAL_COLUMNS = [
-    "model_id", "checkpoint_id", "family", "representation", "outcome", "moderator", "controls",
+    "model_id", "checkpoint_id", "family", "representation", "outcome", "task_family", "moderator", "controls",
     "n_datasets", "partial_spearman_rho", "ci_low", "ci_high", "status",
 ]
 META_COLUMNS = [
     "model_id", "checkpoint_id", "family", "representation", "k", "excluded_datasets",
     "pooled_gain", "se", "ci_low", "ci_high", "tau2", "i2", "q", "status", "variance_note",
 ]
-VARIANCE_NOTE = "fold-based within-dataset variance; folds overlap, so it is approximate"
+VARIANCE_NOTE = ("Within-dataset variance is approximate. Overlapping training folds can make these "
+                 "exploratory intervals too narrow.")
 _KEYS = ["model_id", "checkpoint_id", "family", "representation"]
 
 
@@ -132,8 +138,8 @@ def moderator_tests(gains, moderators, plan=None):
     seed, n_boot = int(plan["seed"]), int(plan["n_boot"])
     n_perm, minimum = int(plan["n_permutations"]), int(plan["min_datasets"])
     records = []
-    for key, group in data.groupby(_KEYS, dropna=False, sort=True):
-        for outcome in plan["outcomes"]:
+    for key, representation in data.groupby(_KEYS, dropna=False, sort=True):
+        for outcome, family, group in moderator_outcomes(representation, plan["outcomes"]):
             cells = [(n, c, "primary") for n, c in columns.items()]
             cells += [(n, n, "exploratory") for n in exploratory]
             for name, column, role in cells:
@@ -144,7 +150,7 @@ def moderator_tests(gains, moderators, plan=None):
                           else "constant_input" if not np.isfinite(rho) else "estimated")
                 ok = status == "estimated"
                 records.append(dict(zip(_KEYS, key)) | {
-                    "outcome": outcome, "moderator": name, "role": role, "n_datasets": len(x),
+                    "outcome": outcome, "task_family": family, "moderator": name, "role": role, "n_datasets": len(x),
                     "spearman_rho": rho if ok else np.nan,
                     "ci_low": low if ok else np.nan, "ci_high": high if ok else np.nan,
                     "p_value": permutation_p(x, y, n_permutations=n_perm, seed=seed) if ok else np.nan,
@@ -172,6 +178,8 @@ def partial_spearman(x, y, controls) -> float:
     from scipy.stats import rankdata
 
     x, y = np.asarray(x, float), np.asarray(y, float)
+    if len(x) < 3:
+        return np.nan
     controls = np.asarray(controls, float).reshape(len(x), -1)
     if len(x) < controls.shape[1] + 3:
         return np.nan
@@ -196,8 +204,8 @@ def partial_primary(gains, moderators, plan=None):
     primary = {n: c for n, c in primary_columns(plan).items() if c in data}
     seed, n_boot, minimum = int(plan["seed"]), int(plan["n_boot"]), int(plan["min_datasets"])
     records = []
-    for key, group in data.groupby(_KEYS, dropna=False, sort=True):
-        for outcome in plan["outcomes"]:
+    for key, representation in data.groupby(_KEYS, dropna=False, sort=True):
+        for outcome, family, group in moderator_outcomes(representation, plan["outcomes"]):
             complete = group[[outcome, *primary.values()]].dropna()
             for name, column in primary.items():
                 others = [c for n, c in primary.items() if n != name]
@@ -216,7 +224,7 @@ def partial_primary(gains, moderators, plan=None):
                           else "degenerate_input" if not np.isfinite(rho) else "estimated")
                 ok = status == "estimated"
                 records.append(dict(zip(_KEYS, key)) | {
-                    "outcome": outcome, "moderator": name,
+                    "outcome": outcome, "task_family": family, "moderator": name,
                     "controls": ", ".join(n for n in primary if n != name),
                     "n_datasets": len(x), "partial_spearman_rho": rho if ok else np.nan,
                     "ci_low": low if ok else np.nan, "ci_high": high if ok else np.nan,

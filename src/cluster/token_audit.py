@@ -3,7 +3,7 @@
 python -m src.cluster.token_audit --stage-tokenizers  # small public files, then count
 python -m src.cluster.token_audit                     # offline; resume saved counts
 
-Eleven open-weight tokenizers are available. Jev's hosted counts remain explicitly
+The open-weight tokenizers come from the registered catalogue. Jev's hosted counts remain explicitly
 unverified. This never removes rows, shortens text, loads weights or performs inference.
 """
 
@@ -93,17 +93,48 @@ def saved_exact_token_tables():
             "command": "python -m src.cluster.token_audit",
         }, pd.DataFrame()
     combined = json.loads(path.read_text(encoding="utf-8"))
-    current = {
-        i["dataset_id"]: (i["input_set_id"], i["input_file_sha256"]) for i in selected_inputs()
-    }
+    reports = list(combined["self_hosted"])
+    sources = {r["provider"]: [str(path)] for r in reports}
+    # Later providers were qualified separately. Their signed audit keeps the
+    # original combined receipt and previously reviewed token counters intact.
+    from src.utils.acceptance import evidence_path
+
+    for provider in sorted(set(SELF_HOSTED) - {r["provider"] for r in reports}):
+        approval = path.parent / f"accepted_{provider}.json"
+        if not approval.is_file():
+            continue
+        review = json.loads(approval.read_text(encoding="utf-8"))
+        if review.get("accepted") is not True or review.get("provider") != provider or not review.get("token_audit_id"):
+            continue
+        for item in review.get("evidence", []):
+            if not item["path"].replace("\\", "/").split("/")[-1].startswith(f"tokens_{provider}_"):
+                continue
+            evidence = evidence_path(approval, item)
+            if not evidence.is_file():
+                continue
+            if file_sha256(evidence) != item["sha256"]:
+                raise ValueError(f"The signed token report for {provider} differs from its checksum")
+            report = json.loads(evidence.read_text(encoding="utf-8"))
+            if report.get("provider") != provider or report.get("audit_id") != review["token_audit_id"]:
+                raise ValueError(f"The token report differs from the approved audit for {provider}")
+            reports.append(report)
+            sources[provider] = [str(approval), str(evidence)]
+            break
+    try:
+        inputs = selected_inputs()
+    except FileNotFoundError as exc:
+        return {"status": "prepared_inputs_unavailable", "detail": str(exc),
+                "evidence_files": sources}, pd.DataFrame()
+    current = {i["dataset_id"]: (i["input_set_id"], i["input_file_sha256"]) for i in inputs}
     rows = []
-    for report in combined["self_hosted"]:
+    for report in reports:
         observed = {
             i["dataset_id"]: (i["input_set_id"], i["input_file_sha256"]) for i in report["datasets"]
         }
         if observed != current or report["status"] != "counted_all_inputs":
             return {
                 "status": "historical_inputs_changed",
+                "evidence_files": sources,
                 "command": "python -m src.cluster.token_audit",
                 "note": "Saved counts are preserved, but do not validate the active prepared inputs.",
             }, pd.DataFrame()
@@ -123,15 +154,23 @@ def saved_exact_token_tables():
         "status": "recorded_exact_counts_for_current_inputs",
         "created_utc": combined["created_utc"],
         "datasets": len(current),
+        "dataset_ids": sorted(current),
+        "evidence_files": sources,
         "complete_publisher_prompt_included": True,
         "hosted_unverified": HOSTED_UNAVAILABLE,
         "pending_self_hosted": sorted(
-            set(SELF_HOSTED) - {r["provider"] for r in combined["self_hosted"]}
+            set(SELF_HOSTED) - {r["provider"] for r in reports}
         ),
         "scope": "Pinned publisher tokenizers and rendering; real GPU runtime parity still requires the pilot.",
         "rows_removed": False,
         "inference_executed": False,
     }, pd.DataFrame(rows)
+
+
+def saved_request_audit():
+    """Verified distinct requests and dataset membership for extraction-cost denominators."""
+    scope, counts = saved_exact_token_tables()
+    return {**scope, "self_hosted": counts.to_dict("records")}
 
 
 def audit_provider(

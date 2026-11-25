@@ -274,6 +274,8 @@ def nemenyi_critical_difference(learners, datasets, alpha=0.05):
 
 def holm(p_values):
     p = np.asarray(p_values, dtype=float)
+    if p.ndim != 1 or not np.isfinite(p).all() or ((p < 0) | (p > 1)).any():
+        raise ValueError("Holm requires a one-dimensional sequence of finite p-values in [0, 1]")
     adjusted, running = np.empty_like(p), 0.0
     for rank, index in enumerate(np.argsort(p, kind="stable")):
         running = min(1.0, max(running, p[index] * (len(p) - rank)))
@@ -321,7 +323,7 @@ def bayesian_signed_rank(differences, rope, *, prior_strength=0.5, samples=50_00
     }
 
 
-def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05):
+def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05, pairwise=True):
     """Full multi-learner report on per-dataset scores (columns dataset_id, learner, score).
 
     Returns the omnibus test and one row per pairwise comparison (with `control`, only
@@ -333,7 +335,14 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
 
     matrix = score_matrix(scores, higher_is_better=higher_is_better)
     n, k = matrix.shape
-    omnibus = friedman(matrix) | {"nemenyi_cd": nemenyi_critical_difference(k, n, alpha), "alpha": alpha}
+    if n >= 2 and k >= 2 and matrix.nunique(axis=1).eq(1).all():
+        omnibus = {"status": "all_tied", "datasets": n, "learners": k,
+                   "mean_ranks": dict.fromkeys(matrix.columns, (k + 1) / 2),
+                   "friedman_chi2": None, "friedman_p": None, "iman_davenport_f": None,
+                   "iman_davenport_df": [k - 1, (k - 1) * (n - 1)], "iman_davenport_p": None}
+    else:
+        omnibus = friedman(matrix) | {"status": "estimated"}
+    omnibus.update(nemenyi_cd=nemenyi_critical_difference(k, n, alpha), alpha=alpha)
     ranks = omnibus["mean_ranks"]
     learners = list(matrix.columns)
     if control is not None and control not in learners:
@@ -344,7 +353,7 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
         else list(combinations(learners, 2))
     )
     rows = []
-    for first, second in pairs:
+    for first, second in pairs if pairwise else ():
         differences = (matrix[first] - matrix[second]).to_numpy()
         bayes = bayesian_signed_rank(differences, rope)
         rows.append({
@@ -361,8 +370,10 @@ def compare_learners(scores, *, higher_is_better, control=None, rope, alpha=0.05
             "bayes_p_equivalent": bayes["p_equivalent"],
             "bayes_p_better": bayes["p_better"],
         })
-    table = pd.DataFrame(rows)
-    table["p_holm"] = holm(table.p_wilcoxon)  # Valid under any dependence: confirmatory.
+    table = pd.DataFrame(rows, columns=["learner", "versus", "datasets", "wins", "ties", "losses",
+                                      "median_oriented_difference", "p_wilcoxon", "mean_rank_difference",
+                                      "bayes_p_worse", "bayes_p_equivalent", "bayes_p_better"])
+    table["p_holm"] = holm(table.p_wilcoxon)
     table["comparison"] = "versus_control" if control is not None else "all_pairwise"
     table["rope"] = rope
     table.attrs["control"] = control

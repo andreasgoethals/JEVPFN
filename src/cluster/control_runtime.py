@@ -396,7 +396,7 @@ def seal(folder):
         "for d in m.distributions() if d.metadata['Name']}}))"
     )
     output = subprocess.check_output(
-        [str(folder / "bin/python"), "-I", "-c", code], text=True, timeout=180
+        host_step_command([str(folder / "bin/python"), "-I", "-c", code]), text=True, timeout=180
     )
     records = [
         json.loads(s.split("=", 1)[1])
@@ -415,7 +415,8 @@ def seal(folder):
 
     if Path(runtime["source"]).resolve() != (REPO_ROOT / "src/__init__.py").resolve():
         raise ValueError("CPU image imports another checkout")
-    subprocess.run([str(folder / "bin/python"), "-m", "pip", "check"], check=True, timeout=120)
+    subprocess.run(host_step_command([str(folder / "bin/python"), "-m", "pip", "check"]),
+                   check=True, timeout=120)
     result = dict(
         schema="jevpfn.container.v1",
         provider="control",

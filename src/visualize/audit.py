@@ -70,16 +70,16 @@ def feature_store_figure(status):
     present = [s for s in ("observed", "partial", "unknown") if any(s in row for row in codes)]
     _legend(fig, present)
     counts = status.groupby("status").size()
+    observed = int(counts.get("observed", 0))
+    manifest_only = int(status.source.eq("compact manifest").sum())
     return fig, "feature_store_completeness", (
-        f"Decision-feature store completeness for {len(datasets)} datasets and {len(models)} decision "
-        "models; each cell is split into the per-column (left) and joint (right) request view. "
-        "A view is complete when a complete feature artifact is present in the local dataset store or "
-        "listed in a compact feature-creation manifest. "
-        + ("Amber marks Jev datasets with recorded requests but no complete artifact (fixed "
-           "per-dataset allocation). " if "partial" in counts else "")
-        + "White means no local evidence, not a failed extraction. "
-        f"Counts: {int(counts.get('observed', 0))} complete, {int(counts.get('partial', 0))} partial, "
-        f"{int(counts.get('unknown', 0))} without local evidence of {len(status)} dataset-model-views."
+        f"Each cell covers one of {len(datasets)} datasets and one of {len(models)} decision models. "
+        "Its left half represents per-column requests and its right half represents joint requests. "
+        f"Of {len(status)} views, {observed} have a published feature block. Local stores contain "
+        f"{observed - manifest_only} of these views. Publication records alone account for {manifest_only}. "
+        + (f"Amber marks {int(counts['partial'])} Jev views with recorded requests and an incomplete "
+           "feature block under the fixed allocation. " if "partial" in counts else "")
+        + f"White marks {int(counts.get('unknown', 0))} views awaiting evidence."
     )
 
 
@@ -143,7 +143,7 @@ def compute_figure(by_study=None, spend=None, budget=None):
     for ax, (key, label) in zip(axes, panels):
         if key in ("gpu", "cpu"):
             unit = "gpu_hours" if key == "gpu" else "cpu_core_hours"
-            data = by_study.sort_values(unit, ascending=True)
+            data = by_study.sort_values(["gpu_hours", "cpu_core_hours", "study"])
             y = np.arange(len(data))
             ax.barh(y, data[unit], height=0.62, color=style.FAINT_COLOR, edgecolor=style.MEDIAN_COLOR,
                     linewidth=0.6, label="all attempts")
@@ -181,13 +181,13 @@ def compute_figure(by_study=None, spend=None, budget=None):
     parts = []
     if panels[0][0] == "gpu":
         parts.append("GPU-hours (elapsed time × allocated GPUs) and CPU core-hours per study from the "
-                     "Slurm compute ledger; dark bars count successful jobs, outlined bars all terminal "
+                     "Slurm compute ledger. Both panels use the same study order. Filled bars show hours used by successful jobs. Outlines include all finished "
                      "attempts including failed, cancelled and timed-out jobs")
     if panels[-1][0] == "jev":
         parts.append("recorded Jev charges and open reservations per dataset from the stored job ledgers "
                      "(one record per request), with the fixed per-dataset allocation as a vertical tick")
-    caption = "; ".join(parts)
-    return fig, "compute_and_spending", caption[0].upper() + caption[1:] + ". No API or token prices enter the GPU panels."
+    caption = ". ".join(parts)
+    return fig, "compute_and_spending", caption[0].upper() + caption[1:] + "."
 
 
 def failure_register_figure(register):
@@ -211,19 +211,19 @@ def failure_register_figure(register):
         left += wide[state].to_numpy()
     failed = wide.drop(columns=["COMPLETED"], errors="ignore").sum(axis=1)
     for i, (total, bad) in enumerate(zip(left, failed)):
-        ax.text(total, i, f"  {int(bad)}/{int(total)} unsuccessful", va="center", fontsize=6.5,
-                color=style.MEDIAN_COLOR)
+        ax.annotate(f"{int(bad):,}/{int(total):,}", (total, i), xytext=(3, 0),
+                    textcoords="offset points", va="center", fontsize=6.5, color=style.MEDIAN_COLOR)
     ax.set_yticks(y, [s.replace("_", " ") for s in wide.index], fontsize=7)
     ax.set_xscale("symlog", linthresh=10)
     ax.set_xlim(0, left.max() * 4)
-    ax.set_xlabel("Terminal Slurm jobs (symmetric log scale)", fontsize=7)
+    ax.set_xlabel("Finished job attempts (linear to 10, then log)", fontsize=7)
     layout.light_grid(ax)
     fig.legend(*ax.get_legend_handles_labels(), loc="outside lower center", ncols=len(wide.columns),
                fontsize=7, frameon=False)
     return fig, "failure_register", (
-        "Terminal Slurm jobs per stage, stacked by final state, from the compute ledger. The label "
-        "gives unsuccessful over all terminal attempts. Failed attempts remain historical evidence; "
-        "cancelled includes deliberate cancellations at handovers. Linear up to 10 jobs, logarithmic above."
+        "Terminal Slurm jobs per stage, stacked by final state, from the compute ledger. Each label gives the number of "
+        "unsuccessful attempts divided by all finished attempts. The category "
+        "“cancelled” includes deliberate stops at handovers. Linear up to 10 jobs, logarithmic above."
     )
 
 

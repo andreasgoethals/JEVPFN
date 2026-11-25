@@ -258,19 +258,51 @@ def test_standalone_analysis_moved_from_exp04_to_exp01():
 # ---------------------------------------------------------------- A1: model profile
 
 def test_compute_per_thousand_is_compute_only_and_never_invented():
-    ledger = {"summary": [
+    legacy = {"summary": [
         {"stage": "decision_feature_creation", "decision_model": "kev", "successful_jobs": 2, "successful_gpu_hours": 10.0},
         {"stage": "decision_feature_creation", "decision_model": "strands", "successful_jobs": 0, "successful_gpu_hours": 0.0},
         {"stage": "benchmark", "decision_model": None, "successful_jobs": 3, "successful_gpu_hours": 99.0}]}
-    audit = {"self_hosted": [{"provider": "kev", "unique_inputs": 20000}, {"provider": "strands", "unique_inputs": 5}]}
+    audit = {"dataset_ids": ["a", "b"], "self_hosted": [
+        {"provider": "kev", "unique_inputs": 20000}, {"provider": "strands", "unique_inputs": 5}]}
+    job = {"stage": "decision_feature_creation", "decision_model": "kev", "state": "COMPLETED", "gpu_hours": 5.}
+    ledger = {**legacy, "jobs": [{**job, "dataset_id": "a"}, {**job, "dataset_id": "b"},
+                                 {**job, "dataset_id": "other"}]}
     frame = compute_per_thousand(ledger, audit, ["kev", "strands", "jev"]).set_index("provider")
     assert frame.loc["kev", "gpu_hours_per_1000_requests"] == pytest.approx(0.5)
+    assert frame.loc["kev", "successful_gpu_hours"] == 10
+    assert frame.loc["kev", "successful_datasets"] == 2
     assert np.isnan(frame.loc["strands", "gpu_hours_per_1000_requests"])
     assert frame.loc["jev", "compute_status"] == "no successful GPU job in the ledger"
     assert compute_per_thousand(None, audit, ["kev"]).compute_status.tolist() == ["no compute ledger"]
+    for old in (legacy, {**legacy, "jobs": [job, job]}):
+        unscoped = compute_per_thousand(old, audit, ["kev"]).iloc[0]
+        assert unscoped.successful_gpu_hours == 10 and pd.isna(unscoped.gpu_hours_per_1000_requests)
+        assert unscoped.compute_status == "successful-job dataset coverage unknown"
+    all_datasets = compute_per_thousand({"jobs": [{**job, "dataset_id": None}]}, audit, ["kev"]).iloc[0]
+    assert all_datasets.gpu_hours_per_1000_requests == pytest.approx(.25)
     assert not any("price" in c or "token" in c for c in frame.columns)
     profile = profile_table(frame.reset_index())
     assert {"parameters_billion", "readout_type", "architecture_family", "gpu_hours_per_1000_requests"} <= set(profile)
+
+
+def test_partial_extraction_keeps_measured_inference_with_no_whole_workload_rate():
+    from src.evaluation.study_audit import extraction_workload
+
+    datasets = [f"d{i}" for i in range(18)]
+    audit = {"dataset_ids": datasets, "self_hosted": [{"provider": "glide", "unique_inputs": 18_000}]}
+    job = {"stage": "decision_feature_creation", "decision_model": "glide", "state": "COMPLETED", "gpu_hours": 1.}
+    jobs = [{**job, "dataset_id": d} for d in datasets[:10]]
+    jobs += [{**job, "dataset_id": d, "state": "FAILED"} for d in datasets[10:]]
+    # Repeating a successful dataset cannot cover an absent one.
+    jobs.append(jobs[0])
+    timings = pd.DataFrame([{"model_id": "glide", "dataset_id": d, "requests": 1000, "gpu_seconds": 3600}
+                            for d in datasets[:10]])
+    result = extraction_workload(timings, token_audit=audit, ledger={"jobs": jobs},
+                                 models=["glide"], encoders=()).iloc[0]
+    assert result.timed_datasets == 10 and result.distinct_requests == 18_000
+    assert result.inference_gpu_hours_per_1000 == 1.
+    assert pd.isna(result.ledger_gpu_hours_per_1000)
+    assert result.ledger_status == "incomplete successful-job coverage (10/18 datasets)"
 
 
 # ---------------------------------------------------------------- exports
@@ -376,6 +408,11 @@ def test_averaged_presentation_quality_uses_joint_rows_and_labels_only_for_scori
 
 
 def test_robustness_export_collect_reads_completed_stores_only(tmp_path, monkeypatch):
+    from src.evaluation.design import decision_versions
+    from src.utils.serialization import digest
+
+    pin, = decision_versions(["kev"])
+    settings = {k: pin[k] for k in ("provider", "model", "version")}
     def store(dataset, provider, pilot):
         folder = tmp_path / dataset / provider
         folder.mkdir(parents=True)
@@ -383,13 +420,15 @@ def test_robustness_export_collect_reads_completed_stores_only(tmp_path, monkeyp
                       ("original", "repeat_1", "repeat_2", *robustness_export.WORDINGS[1:])} for n in range(6)}
         for n in trials:
             for v in trials[n]:
+                trials[n][v].update(reported_model=pin["model"], reported_version=pin["version"])
                 if v != "original":
                     trials[n][v]["effect"] = {"tv": 0.01 * (v.startswith("para") + 1), "flip": False}
         with sqlite3.connect(folder / "run.sqlite3") as db:
             db.execute("CREATE TABLE results (input_no INTEGER, variant TEXT, data TEXT)")
             db.executemany("INSERT INTO results VALUES (?,?,?)",
                            [(n, v, json.dumps(d)) for n, item in trials.items() for v, d in item.items()])
-        body = {"design": {"dataset": dataset, "provider": provider, "pilot": pilot, "source": "set"},
+        body = {"design": {"dataset": dataset, "provider": provider, "pilot": pilot, "source": "set",
+                           "settings": digest(settings)}, "decision_settings": settings,
                 "completed": True, "sample": {str(n): {} for n in trials},
                 "counts": [{"variant": "original", "status": "measured", "count": 6}],
                 "effects": {"paraphrase_1": {"measured": 6, "mean_tv": 0.02}},
@@ -405,6 +444,8 @@ def test_robustness_export_collect_reads_completed_stores_only(tmp_path, monkeyp
         load_targets=lambda dataset, _: ("binary_classification", np.array([0, 1, 0, 1, 0, 1])),
         question_path=lambda dataset: tmp_path / "unused")
     assert tables["sources"].dataset.tolist() == ["D1"]
+    assert tables["sources"].reported_model.tolist() == [pin["model"]]
+    assert tables["sources"].version.tolist() == [pin["version"]]
     assert set(tables["wording_averaging"]["mode"]) == {"joint", "per_column"}
     modes = tables["mode_effects"].set_index(["mode", "variant"])
     assert modes.loc[("joint", "paraphrase_1"), "excess_tv"] == pytest.approx(0.01)
@@ -416,6 +457,58 @@ def test_robustness_export_collect_reads_completed_stores_only(tmp_path, monkeyp
     frames, receipt = study_export.read_export(target, schema=robustness_export.SCHEMA,
                                                tables=robustness_export.TABLES)
     assert receipt["status"] == "verified_export" and len(frames) == len(robustness_export.TABLES)
+
+    with sqlite3.connect(tmp_path / "D1/kev/run.sqlite3") as db:
+        db.execute("UPDATE results SET data=json_set(data, '$.reported_version', 'another-revision') WHERE input_no=0")
+    with pytest.raises(ValueError, match="stored reply differs"):
+        robustness_export.collect(tmp_path, {"averaging": {"calibration_bins": 10}}, roster=["kev"])
+
+
+def test_robustness_release_selection_preserves_older_and_unidentified_campaigns(tmp_path, monkeypatch):
+    from src.utils.serialization import digest, write_json
+
+    current = {"provider": "jev", "model": "jev-1.14.0", "version": "1.14.0"}
+    old = {**current, "model": "jev-1.12.0", "version": "1.12.0"}
+    expected = {**current, "settings_sha256": digest(current)}
+    monkeypatch.setattr(robustness_export, "_release_selectors", lambda roster: {"jev": expected})
+    def record(dataset, name, settings, fingerprint=None):
+        design = {"dataset": dataset, "provider": "jev", "pilot": False,
+                  "settings": fingerprint or digest(settings)}
+        body = {"completed": True, "design": design}
+        if settings is not None:
+            body["decision_settings"] = settings
+        write_json(tmp_path / dataset / "jev" / (name + ".json"), body)
+    record("A", "current", current)
+    record("A", "previous", old)
+    record("B", "old_only", old)
+    record("C", "legacy_known", None, digest(current))
+    record("D", "legacy_unknown", None, "unknown")
+    record("E", "altered", current, "wrong-hash")
+    audit = []
+    assert [p.stem for p, *_ in robustness_export.completed_runs(tmp_path, release_evidence=audit)] == [
+        "current", "legacy_known"]
+    assert {r["file"]: r["status"] for r in audit} == {
+        "current.json": "recorded_settings", "previous.json": "other_release", "old_only.json": "other_release",
+        "legacy_known.json": "matched_legacy_settings", "legacy_unknown.json": "unidentified_release",
+        "altered.json": "inconsistent_settings"}
+    record("A", "same_release_duplicate", current)
+    with pytest.raises(ValueError, match="Select one"):
+        list(robustness_export.completed_runs(tmp_path))
+
+
+def test_robustness_analysis_identity_is_scoped_to_selected_provider_pins(monkeypatch):
+    from src.evaluation.design import decision_versions
+    from src.utils.config import load_yaml
+
+    main, cfg = load_yaml("experiment_1/main"), load_yaml("rq1/behavior")
+    monkeypatch.setattr(robustness_export, "load_yaml", lambda name: main)
+    old = robustness_export.analysis_identity(cfg, "open_weight")
+    main["feature_selectors"]["future-hosted"] = {"settings_sha256": "outside-this-edition"}
+    assert robustness_export.analysis_identity(cfg, "open_weight") == old
+    pin, = decision_versions(["kev"])
+    main["feature_selectors"]["kev"] = {
+        **pin, "question_bank_id": "bank", "question_variant": "accepted", "settings_sha256": "changed"}
+    assert robustness_export.analysis_identity(cfg, "open_weight") != old
 
 
 def test_behavior_config_declares_averaging_without_new_calls():

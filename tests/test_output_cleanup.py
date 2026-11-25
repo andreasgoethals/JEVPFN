@@ -53,6 +53,20 @@ def test_retired_experiment_output_remains_scoped_and_removable(output):
     assert any("8. experiment_5" in f["path"] for f in all_output["files"])
 
 
+def test_current_general_figure_owner_and_durable_assets(output):
+    root = paths.large_outputs_dir()
+    originals = ["C/exp10_representations/results/strands_hidden/fold.npy",
+                 "C/exp11_adaptation/results/adaptation/weights.pt",
+                 "B/exp06_tar/results/tar/vectors.npy", "01_exp0a/results/token_audit/tokens.db"]
+    for relative in originals:
+        file = root / relative
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("expensive input")
+    planned = {item["path"] for item in cleanup.plan(tier="project")[2]}
+    assert all(str(root / path) not in planned for path in originals)
+    assert cleanup.phase_of(Path("figures/general/2_feature_creation/01_inputs.pdf")) == "feature_creation"
+
+
 def test_age_pattern_and_no_implicit_deletion(output):
     old = paths.outputs_dir() / "3. experiment_0/logs/run.log"
     os.utime(old, (1, 1))

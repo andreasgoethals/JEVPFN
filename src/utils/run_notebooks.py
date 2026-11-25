@@ -344,7 +344,7 @@ def run_all(
     max_workers: int | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[NotebookResult]:
-    """Run every notebook in parallel, then rebuild both summary documents.
+    """Run independent notebooks in parallel, then the figure index and summary documents.
 
     Rebuilt even when a notebook failed, from whatever the successful ones wrote: a
     half-updated summary beats a stale one, and the failure is reported separately.
@@ -359,9 +359,14 @@ def run_all(
         tempfile.TemporaryDirectory(prefix="jevpfn-run-") as scratch,
         ThreadPoolExecutor(max_workers=workers) as pool,
     ):
-        futures = {pool.submit(run_one, name, timeout, scratch): name for name in names}
+        synthesis = "general/5_synthesis"
+        futures = {pool.submit(run_one, name, timeout, scratch): name for name in names
+                   if name != synthesis}
         for fut in as_completed(futures):
             results.append(fut.result())
+        # The synthesis reads the PDFs produced by the other notebooks in this run.
+        if synthesis in names:
+            results.append(run_one(synthesis, timeout, scratch))
 
     from src.utils.locking import file_lock
 

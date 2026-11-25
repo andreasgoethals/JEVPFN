@@ -76,41 +76,47 @@ def win_rate_matrix(pairwise, *, name, what):
     yield fig, name, (
         f"{what}: share of (dataset, predictor, outer fold) cells, up to {cells}, on which the row arm's "
         "headline score exceeds the column arm's (same predictor, same fold; ties count as not won). "
-        "Median-model rows use the per-fold median over all seventeen decision models. Descriptive; "
+        "Median-model rows use the per-fold median over the complete decision-model cohort. Descriptive; "
         "intervals (dataset-cluster bootstrap) are in the printed table.")
 
 
 def quality_vs_compute(points, *, name, what):
-    """Pooled headroom share against compute hours per 1,000 rows (log x), one point per arm."""
+    """Utility of the both-view decision features against extraction GPU time per audited request."""
     if points is None or points.empty:
         return
-    data = points.dropna(subset=["total_hours_per_1000_rows", "value"])
+    cost = "gpu_hours_per_1000_requests"
+    data = points.loc[points.representation.str.startswith("decision/both/")].dropna(subset=[cost, "value"])
+    data = data[data[cost].gt(0)]
     if data.empty:
         return
     single = data[data.representation.str.match(r"^decision/[a-z_]+/(?!median)")]
     named = data.drop(index=single.index)
     fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 3.0), layout="constrained")
-    ax.scatter(single.total_hours_per_1000_rows, single.value, s=10, color=style.DECISION_POOL_COLOR,
+    ax.scatter(single[cost], single.value, s=10, color=style.DECISION_POOL_COLOR,
                linewidths=0, zorder=2)
     handles = [Line2D([], [], ls="none", marker="o", ms=3, color=style.DECISION_POOL_COLOR,
                       label="One decision model")] if not single.empty else []
     for _, row in named.iterrows():
         color = color_of(row.representation)
-        ax.vlines(row.total_hours_per_1000_rows, row.low, row.high, color=color, lw=0.7)
-        ax.scatter(row.total_hours_per_1000_rows, row.value, s=22, marker="D", color=color, zorder=3)
+        ax.vlines(row[cost], row.low, row.high, color=color, lw=0.7)
+        ax.scatter(row[cost], row.value, s=22, marker="D", color=color, zorder=3)
         handles.append(Line2D([], [], ls="none", marker="D", ms=4, color=color,
                               label=_label(row.representation).replace(" (median model)", " (median)")))
     ax.set_xscale("log")
     ax.axhline(0, color=style.MEDIAN_COLOR, lw=0.7)
     layout.light_grid(ax, axis="both")
     ax.tick_params(labelsize=6.5)
-    ax.set_xlabel("Extraction GPU-hours + predictor fit hours per 1,000 rows (log scale)", fontsize=7)
+    ax.set_xlabel("Recorded extraction GPU-hours per 1,000 audited distinct requests (log scale)", fontsize=7)
     ax.set_ylabel("Mean headroom share (all datasets)", fontsize=7)
     fig.legend(handles=handles, loc="outside lower center", ncol=3, frameon=False, fontsize=6.5)
+    cohort = (
+        "The diamond pairs the full cohort’s median extraction rate with the median-model utility arm. "
+        "Its line spans predictors. " if not named.empty else
+        "The cohort median is unavailable with the current coverage. "
+    )
     yield fig, name, (
-        f"{what}: per arm, the equal-dataset mean share of the baseline headroom gained over all datasets "
-        "(median over the seven predictors; line: their range) against measured compute per 1,000 rows: "
-        "successful extraction GPU-hours per 1,000 distinct requests (Slurm accounting) plus the median "
-        "predictor fit wall time per 1,000 training rows. Grey dots are single decision models (both "
-        "view), diamonds median-model arms. Arms without a measured cost are omitted and listed in the "
-        "printed table.")
+        "Each dot pairs one decision model’s both-view gain with the GPU-hours recorded for its "
+        "successful extraction jobs per 1,000 distinct requests in the audited workload. The vertical "
+        "coordinate is the median across predictors of the equal-dataset mean headroom gain. "
+        f"{cohort}The table identifies missing rates and reports predictor fit time separately "
+        "per 1,000 training rows.")

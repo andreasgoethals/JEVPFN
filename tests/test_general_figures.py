@@ -145,7 +145,8 @@ def fixture_profiles():
 
 def test_feature_store_status_marks_complete_partial_and_unknown_views():
     status = fixture_store_status()
-    assert len(status) == 18 * 17 * 2
+    model_count = len(roster()[2])
+    assert len(status) == 18 * model_count * 2
     jev = status[status.provider.eq("jev")]
     assert set(jev.status) == {"partial", "unknown"}
     glide = status[status.provider.eq("glide")]
@@ -153,7 +154,8 @@ def test_feature_store_status_marks_complete_partial_and_unknown_views():
     from src.visualize.audit import feature_store_figure
 
     fig, name, caption = feature_store_figure(status)
-    assert name == "feature_store_completeness" and "17 decision" in caption
+    assert name == "feature_store_completeness" and f"{model_count} decision" in caption
+    assert "Local stores contain 396" in caption and "records alone account for 5" in caption
     plt.close(fig)
 
 
@@ -161,7 +163,7 @@ def test_extraction_workload_pools_timed_requests_and_never_estimates_untimed_mo
     timings = fixture_timings()
     audit = {"self_hosted": [{"provider": m, "unique_inputs": 1_698_127} for m in roster()[2][1:]]}
     work = study_audit.extraction_workload(timings, token_audit=audit, distinct_texts=1_181_154)
-    assert len(work) == 17 + 3
+    assert len(work) == len(roster()[2]) + 3
     timed = work.dropna(subset=["inference_gpu_hours_per_1000"])
     part = timings[timings.model_id.eq(timed.model_id.iloc[0])]
     assert timed.inference_gpu_hours_per_1000.iloc[0] == pytest.approx(
@@ -169,9 +171,51 @@ def test_extraction_workload_pools_timed_requests_and_never_estimates_untimed_mo
     assert work.set_index("model_id").loc["sieve", "inference_gpu_hours"] != work.set_index("model_id").loc["sieve", "inference_gpu_hours"]
     from src.visualize.build_review import extraction_figure
 
+    # Near-complete coverage must remain distinguishable from an exact workload match.
+    work.loc[work.model_id.eq(timed.model_id.iloc[0]), "distinct_requests"] = part.requests.sum() + 1
     fig, name, caption = extraction_figure(work, study_audit.dataset_rates(timings), jev_charges=4.2)
-    assert name == "extraction_compute" and "not estimated" in caption
+    assert name == "extraction_compute" and "audited number of distinct inputs" in caption
+    assert "<100%" in [label.get_text() for label in fig.axes[1].texts]
+    assert len(fig.axes[1].patches) == len(timed)
     plt.close(fig)
+
+
+def test_reuse_separates_cross_view_workload_from_within_view_repetition(monkeypatch):
+    from matplotlib.colors import to_rgba
+
+    from src.data.text_reuse import text_reuse_profile
+    from src.visualize import exploration
+
+    fields = pd.DataFrame({"a": ["x", "x", "y", None], "b": ["z", "z", None, None]})
+    summary = pd.DataFrame([
+        {"dataset_id": name, "dataset": name, "task_type": "regression",
+         **text_reuse_profile(frame, dataset_id=name)["summary"]}
+        for name, frame in (("included", fields), ("excluded", fields[["a"]]))
+    ])
+    lengths = pd.DataFrame({"dataset_id": summary.dataset_id, "dataset": summary.dataset,
+                           "text_columns": [2, 1], **{f"joint_tokens_{q}": [1, 1] for q in
+                           ("p01", "p25", "median", "p75", "p99", "max")}})
+    monkeypatch.setattr(exploration, "_removed", lambda: {"excluded"})
+    fig, _, _ = exploration.reuse_figure(summary, lengths)
+    per_column, extra_joint = fig.axes[1].containers
+    assert [bar.get_width() for bar in per_column] == [3, 2]
+    assert [bar.get_width() for bar in extra_joint] == [1, 0]
+    per_column, joint = fig.axes[2].collections
+    np.testing.assert_allclose(per_column.get_offsets()[:, 0], [40, 100 / 3])
+    np.testing.assert_allclose(joint.get_offsets()[:, 0], [100 / 3, 100 / 3])
+    assert per_column.get_offsets()[1, 1] != joint.get_offsets()[1, 1]
+    for points in (per_column, joint):
+        np.testing.assert_allclose(points.get_facecolors()[1], to_rgba(style.REMOVED_COLOR))
+    plt.close(fig)
+
+
+def test_batched_gpu_rate_uses_requests_inside_batches(tmp_path):
+    stage = {"stage": "decision_inference", "dataset_id": "d", "items": 8,
+             "observations": 4, "wall_seconds": 36}
+    (tmp_path / "batch.json").write_text(json.dumps({"name": "cloudflare", "stages": [stage]}))
+    timings = study_audit.inference_timings(tmp_path)
+    assert timings.requests.tolist() == [8]
+    assert study_audit.dataset_rates(timings).gpu_hours_per_1000.iloc[0] == pytest.approx(1.25)
 
 
 def test_jev_spend_counts_each_request_once_across_snapshots(tmp_path):
@@ -276,6 +320,7 @@ def test_confirmatory_forest_and_qualification_matrix_draw():
     assert "Kumo override" in set(profiles.family)
     fig, name, caption = qualification_figure(predictors, profiles)
     assert name == "predictor_qualification" and "500" in caption
+    assert {"column refit", "training size", "Kumo override"} <= {tick.get_text() for tick in fig.axes[0].get_xticklabels()}
     plt.close(fig)
 
 
@@ -288,8 +333,9 @@ def test_feature_design_wording_is_current():
     plt.close(fig)
     assert "seven fixed predictors" in caption and "six" not in caption
     summary = pd.DataFrame([{"dataset_id": d, "dataset": d, "task_type": t} for d, t in roster()[1].items()])
-    fig, _, caption = predictor_width_figure(pd.DataFrame(benchmark_plan()), summary)
+    fig, _, caption = predictor_width_figure(pd.DataFrame(benchmark_plan(cohort="open_weight")), summary)
     plt.close(fig)
+    assert "16 selected decision models" in caption
     assert "excluded for Kumo" not in caption and "Experiment" not in caption
     fig, _, caption = regression_scale_figure({str(i): f"Level {i}: text" for i in range(-4, 5)})
     plt.close(fig)

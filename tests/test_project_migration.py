@@ -83,7 +83,12 @@ def test_hardlinks_are_kept_and_checked(tmp_path):
     for root in (source, target):
         root.mkdir()
         (root / "a").write_bytes(b"same")
-    os.link(source / "a", source / "b")
+    try:
+        os.link(source / "a", source / "b")
+    except PermissionError as exc:
+        if os.name != "nt" or getattr(exc, "winerror", None) not in (5, 1314):
+            raise
+        pytest.skip(f"Windows denied hard-link creation on the test volume (WinError {exc.winerror})")
     (target / "b").write_bytes(b"same")
     with pytest.raises(ValueError, match="hardlink"):
         migration.compare(migration.inventory(source), migration.inventory(target), source, target)

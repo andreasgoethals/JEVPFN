@@ -32,6 +32,7 @@ def _isolate_routing_environment(tmp_path, monkeypatch):
     """
     for variable in (
         "JEVPFN_PHASE",
+        "JEVPFN_DECISION_COHORT",
         "JEVPFN_STAGING_ROOT",
         "JEVPFN_PROJECT_ROOT",
         "VSC_PROJECT_ROOT",

@@ -152,7 +152,7 @@ def contrast_summary(table):
     ).reset_index()
 
 
-def predictor_evidence():
+def predictor_evidence(*, cohort="open_weight"):
     from src.evaluation.acceptance import evaluation_identity
     from src.evaluation.qualification import profile_plan
     from src.utils.serialization import digest
@@ -160,7 +160,7 @@ def predictor_evidence():
     current = evaluation_identity()
     catalog = load_yaml("experiment_1/models")["models"]
     folder = paths.phase_path("experiment_0", "manifests", "after_extraction")
-    required = profile_plan()
+    required = profile_plan(cohort=cohort)
     profiles = {}
     for path in folder.glob("profile_*.json"):
         body = json.loads(path.read_text(encoding="utf-8"))
@@ -183,6 +183,7 @@ def predictor_evidence():
         )
         rows.append({
             "model": model,
+            "decision_cohort": cohort,
             "configured_packages": json.dumps(catalog[model]["runtime"]["packages"]),
             "contract_status": body.get("status", "not found locally"),
             "current_evaluation_identity": body.get("evaluation_identity") == current if body else None,
@@ -195,7 +196,7 @@ def predictor_evidence():
     return pd.DataFrame(rows)
 
 
-def profile_evidence(predictors=None, profiles=None, plan=None):
+def profile_evidence(predictors=None, profiles=None, plan=None, *, cohort="open_weight"):
     """0B full-fold profiles per predictor and arm family: required versus passed.
 
     A profile passes when a ``full_fold_profile_passed`` record for the current evaluation
@@ -203,13 +204,12 @@ def profile_evidence(predictors=None, profiles=None, plan=None):
     (the widest Kumo arm, widened beyond 500 columns) is its own column.
     """
     from src.evaluation.acceptance import evaluation_identity
-    from src.evaluation.campaign import benchmark_plan
     from src.evaluation.qualification import kumo_override_arm, profile_plan
     from src.evaluation.study_audit import FEATURE_FAMILY
     from src.utils.serialization import digest
 
-    plan = profile_plan() if plan is None else plan
-    predictors = predictor_evidence() if predictors is None else predictors
+    plan = profile_plan(cohort=cohort) if plan is None else plan
+    predictors = predictor_evidence(cohort=cohort) if predictors is None else predictors
     if profiles is None:
         current = evaluation_identity()
         folder = paths.phase_path("experiment_0", "manifests", "after_extraction")
@@ -222,15 +222,20 @@ def profile_evidence(predictors=None, profiles=None, plan=None):
     for row in predictors.itertuples():
         if row.source and row.contract_passed:
             runtimes[row.model] = json.loads(Path(row.source).read_text(encoding="utf-8")).get("runtime_identity")
-    override = kumo_override_arm(benchmark_plan())
+    override = kumo_override_arm(plan)
     override_key = digest(override) if override else None
     rows = []
     for arm in plan:
         key = digest(arm)
-        family = "Kumo override" if key == override_key else FEATURE_FAMILY.get(arm["feature_set"], arm["feature_set"])
+        family = FEATURE_FAMILY.get(arm["feature_set"], arm["feature_set"])
+        if arm.get("phase") == "data_efficiency":
+            family = "training size"
+        if key == override_key:
+            family = "Kumo override"
         found = profiles.get(key)
         rows.append({"model": arm["model"], "family": family, "dataset_id": arm["dataset_id"],
-                     "passed": bool(found) and found.get("runtime_identity") == runtimes.get(arm["model"])})
+                     "passed": bool(found) and arm["model"] in runtimes
+                     and found.get("runtime_identity") == runtimes[arm["model"]]})
     table = pd.DataFrame(rows)
     return table.groupby(["model", "family"], as_index=False).agg(
         required=("passed", "size"), passed=("passed", "sum"))

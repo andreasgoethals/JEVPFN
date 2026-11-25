@@ -1252,7 +1252,7 @@ def main():
         try:
             report = stage(args.runtime, datasets=args.dataset) if args.action == "stage" else publish(args.runtime)
             print(json.dumps(report, indent=2))
-        except ScratchCapacityUnavailable as exc:
+        except (ScratchCapacityUnavailable, WorkspaceBusy, TimeoutError) as exc:
             # A distinct status lets the dispatcher wait and retry instead of failing.
             print(exc, flush=True)
             raise SystemExit(SCRATCH_CAPACITY_UNAVAILABLE) from None

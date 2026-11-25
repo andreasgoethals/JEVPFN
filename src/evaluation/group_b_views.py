@@ -184,7 +184,10 @@ def median_fold_scores(head: pd.DataFrame, *, roster, modes=MODES, family="decis
     if data.empty:
         return data
     keys = ["dataset_id", "task_type", "model_id", "checkpoint_id", "split_id", "outer_fold", "mode"]
-    out = data.groupby(keys, as_index=False).agg(value=("value", "median"), models=("provider", "nunique"))
+    if data.duplicated([*keys, "provider"]).any():
+        raise ValueError("Duplicate decision-model score within a fold")
+    data["value"] = data.value.where(np.isfinite(data.value.to_numpy(float)))
+    out = data.groupby(keys, as_index=False).agg(value=("value", "median"), models=("value", "count"))
     out = out[out.models.eq(len(set(roster)))]
     out["representation"] = f"{family}/" + out["mode"] + "/median"
     return out.drop(columns=["mode", "models"])
@@ -195,6 +198,7 @@ def _scores(head, learners, *, model=None):
     data = head[head.representation.isin(learners)]
     if model is not None:
         data = data[data.model_id.eq(model)]
+    group_b.validate_fold_identities(data)
     return pd.DataFrame({"dataset_id": data.dataset_id.astype(str),
                          "outer_fold": data.model_id.astype(str) + ":" + data.outer_fold.astype(str),
                          "learner": data.representation, "score": data.value.astype(float)})
@@ -219,7 +223,9 @@ def fold_win_rates(head: pd.DataFrame, learners, *, versus="baseline", by_predic
             try:
                 result = fold_wins.fold_win_rate(frame, learner=learner, versus=versus,
                                                  higher_is_better=True, resamples=resamples, seed=seed)
-            except ValueError:
+            except ValueError as error:
+                if not str(error).startswith("No complete (dataset, fold) cell"):
+                    raise
                 continue
             rows.append({"model_id": model or "all", **result})
     return pd.DataFrame(rows)
@@ -238,8 +244,9 @@ def pairwise_win_rates(head: pd.DataFrame, learners, *, resamples=WIN_RESAMPLES,
             try:
                 rows.append(fold_wins.fold_win_rate(frame, learner=a, versus=b, higher_is_better=True,
                                                     resamples=resamples, seed=seed))
-            except ValueError:
-                continue
+            except ValueError as error:
+                if not str(error).startswith("No complete (dataset, fold) cell"):
+                    raise
     return pd.DataFrame(rows)
 
 
@@ -251,8 +258,14 @@ def model_pama(head: pd.DataFrame, *, roster, mode="both", resamples=WIN_RESAMPL
     frame = _scores(head, learners)
     if frame.empty:
         return pd.DataFrame()
-    present = [learner for learner in learners if learner in set(frame.learner)]
-    table = fold_wins.pama(frame, higher_is_better=True, learners=present, resamples=resamples, seed=seed)
+    if set(frame.learner) != set(learners) or len(learners) < 2:
+        return pd.DataFrame()
+    try:
+        table = fold_wins.pama(frame, higher_is_better=True, learners=learners, resamples=resamples, seed=seed)
+    except ValueError as error:
+        if str(error).startswith("No complete (dataset, fold) cell"):
+            return pd.DataFrame()
+        raise
     return table.assign(provider=table.learner.str.split("/").str[2])
 
 
@@ -299,7 +312,9 @@ def arm_widths(folds: pd.DataFrame, *, roster) -> pd.DataFrame:
         bits = part.representation.str.split("/")
         part = part[bits.str[2].isin(roster)]
         part["representation"] = family + "/" + bits.str[1] + "/median"
-        medians.append(part.groupby(["dataset_id", "representation"], as_index=False)["columns"].median())
+        grouped = part.groupby(["dataset_id", "representation"], as_index=False).agg(
+            columns=("columns", "median"), providers=("columns", "count"))
+        medians.append(grouped[grouped.providers.eq(len(roster))].drop(columns="providers"))
     return pd.concat([widths, *medians], ignore_index=True)
 
 
@@ -337,7 +352,7 @@ def headroom_table(medians: pd.DataFrame, *, representation="decision/both/media
                                            "high": "headroom_high"}), on="dataset_id")
 
 
-DIAGNOSTICS = ("standalone_quality", "calibration_ece", "consensus_distance", "stability_excess_tv")
+DIAGNOSTICS = ("standalone_classification_auc", "standalone_regression_spearman", "calibration_ece", "consensus_distance", "stability_excess_tv")
 
 
 def model_usefulness_relations(gains: pd.DataFrame, diagnostics: pd.DataFrame, *, roster, mode="both",
@@ -349,7 +364,18 @@ def model_usefulness_relations(gains: pd.DataFrame, diagnostics: pd.DataFrame, *
     data = data[data["mode"].eq(mode) & data.provider.isin(roster)]
     if data.empty or diagnostics is None or diagnostics.empty:
         return pd.DataFrame(), pd.DataFrame()
-    per_predictor = data.groupby(["provider", "model_id"], as_index=False)[outcome].mean()
+    from src.evaluation.models import MAIN_MODELS
+
+    # The model-level association declares a common set of 18 datasets and seven predictors.
+    datasets = set(text_column_counts())
+    data = data[data.dataset_id.isin(datasets) & data.model_id.isin(MAIN_MODELS)]
+    if data.duplicated(["provider", "model_id", "dataset_id"]).any():
+        raise ValueError("Several usefulness scores for one decision model, predictor and dataset")
+    per_predictor = data.groupby(["provider", "model_id"], as_index=False).agg(
+        **{outcome: (outcome, "mean")}, datasets=(outcome, "count"))
+    per_predictor = per_predictor[per_predictor.datasets.eq(len(datasets))]
+    complete = per_predictor.groupby("provider").model_id.transform("nunique").eq(len(MAIN_MODELS))
+    per_predictor = per_predictor[complete]
     usefulness = per_predictor.groupby("provider", as_index=False).agg(
         usefulness=(outcome, "mean"), low=(outcome, "min"), high=(outcome, "max"))
     keep = ["provider", *[c for c in DIAGNOSTICS if c in diagnostics]]
@@ -361,13 +387,21 @@ def model_usefulness_relations(gains: pd.DataFrame, diagnostics: pd.DataFrame, *
     return table, relations
 
 
-def column_refits(importance: pd.DataFrame, *, field_types: pd.DataFrame | None = None) -> pd.DataFrame:
+def column_refits(importance: pd.DataFrame, *, field_types: pd.DataFrame | None = None, roster=None) -> pd.DataFrame:
     """Per dataset x text column: median over decision models and predictors of the per-column
     arm minus its refit without that column (headline units; positive = the column helps)."""
     if importance is None or importance.empty:
         return pd.DataFrame()
-    per = importance.groupby(["dataset_id", "task_type", "text_column", "model_id"],
-                             as_index=False).importance.median()
+    from src.evaluation.benchmark_export import decision_roster
+
+    roster = decision_roster() if roster is None else roster
+    importance = importance[importance.provider.isin(roster)]
+    keys = ["dataset_id", "task_type", "text_column", "model_id"]
+    if importance.duplicated([*keys, "provider"]).any():
+        raise ValueError("Several refits for one column and decision model")
+    per = importance.groupby(keys, as_index=False).agg(
+        importance=("importance", "median"), providers=("importance", "count"))
+    per = per[per.providers.eq(len(roster))]
     out = _spread(per, ["dataset_id", "text_column"], "importance")
     if field_types is not None and not field_types.empty:
         types = field_types.assign(text_column=field_types.groupby("dataset_id").cumcount())
@@ -380,18 +414,52 @@ def column_refits(importance: pd.DataFrame, *, field_types: pd.DataFrame | None 
 COHORT_AXES = ("availability", "length", "baseline_entropy", "decision_confidence", "decision_agreement")
 
 
-def cohort_benefits(balanced: pd.DataFrame) -> pd.DataFrame:
-    """Equal-dataset mean row benefit per task family, decision view, axis and cohort (mean over
-    predictors); only the pre-specified B3 axes."""
-    if balanced is None or balanced.empty:
+def row_cohort_cells(measured: pd.DataFrame, *, roster, headline_folds=None) -> pd.DataFrame:
+    """Combine the declared models' row benefits, verifying their source arms at export."""
+    import json
+
+    keys = ["dataset", "task", "model", "features", "axis", "cohort"]
+    columns = [*keys, "benefit", "decision_models"]
+    if measured.empty:
+        return pd.DataFrame(columns=columns)
+    data = measured[measured.phase.eq("experiment_1") & measured.axis.isin(COHORT_AXES)
+                    & measured.features.isin(group_b.MODE_LABELS)].copy()
+    data["provider"] = data.representation.map(lambda rep: json.loads(rep)["provider"])
+    data = data[data.provider.isin(roster)]
+    if headline_folds is not None and not data.empty:
+        names = {"dataset_id": "dataset", "task_type": "task", "model_id": "model", "checkpoint_id": "checkpoint",
+                 "feature_set": "features", "recipe_id": "arm", "phase": "phase", "provider": "provider",
+                 "split_id": "split_id", "data_identity": "data_identity"}
+        expected = headline_folds[list(names)].rename(columns=names).drop_duplicates()
+        observed = data[list(names.values())].drop_duplicates()
+        checked = observed.merge(expected, how="left", indicator=True, validate="one_to_one")
+        unmatched = checked[checked["_merge"].eq("left_only")]
+        if not unmatched.empty:
+            row = unmatched.iloc[0]
+            raise ValueError(f"Row-benefit source differs from the benchmark folds for "
+                             f"{row.dataset}/{row.model}/{row.provider}/{row.features}")
+    if data.duplicated([*keys, "provider"]).any():
+        raise ValueError("Several measurements for one row-benefit cohort and model")
+    out = data.groupby(keys, as_index=False).agg(benefit=("benefit", "mean"), decision_models=("benefit", "count"))
+    return out[out.decision_models.eq(len(roster))].reset_index(drop=True)
+
+
+def cohort_benefits(cells: pd.DataFrame) -> pd.DataFrame:
+    """Equal-dataset row benefit for each task family, over the seven prespecified predictors."""
+    from src.evaluation.models import MAIN_MODELS
+
+    if cells is None or cells.empty:
         return pd.DataFrame()
-    data = balanced[balanced.axis.isin(COHORT_AXES) & balanced.phase.eq("experiment_1")].copy()
+    data = cells[cells.model.isin(MAIN_MODELS) & cells.axis.isin(COHORT_AXES)].copy()
     data["task_family"] = data.task.map(group_b.task_family)
     data["mode"] = data.features.map(group_b.MODE_LABELS)
-    data = data.dropna(subset=["mode"])
-    return data.groupby(["task_family", "mode", "axis", "cohort"], as_index=False).agg(
-        mean_benefit=("mean_benefit", "mean"), low=("mean_benefit", "min"),
-        high=("mean_benefit", "max"), predictors=("model", "nunique"), datasets=("datasets", "max"))
+    keys = ["task_family", "mode", "axis", "cohort"]
+    complete = data.groupby([*keys, "dataset"]).model.transform("nunique").eq(len(MAIN_MODELS))
+    per = data[complete].groupby([*keys, "model"], as_index=False).agg(
+        benefit=("benefit", "mean"), datasets=("dataset", "nunique"))
+    return per.groupby(keys, as_index=False).agg(
+        mean_benefit=("benefit", "mean"), low=("benefit", "min"), high=("benefit", "max"),
+        predictors=("model", "nunique"), datasets=("datasets", "first"))
 
 
 # --------------------------------------------------------------------------- B4
@@ -400,37 +468,21 @@ def cohort_benefits(balanced: pd.DataFrame) -> pd.DataFrame:
 def size_draw_gains(head: pd.DataFrame, *, roster) -> pd.DataFrame:
     """Per dataset x predictor x arm x size x draw: five-fold mean gain over the same-size,
     same-draw baseline, plus the median decision model (median over the whole roster)."""
-    keys = ["dataset_id", "task_type", "model_id", "training_size", "draw", "outer_fold"]
-    data = head.dropna(subset=["training_size"]).copy()
-    base = data[data.representation.eq("baseline")][keys + ["value"]].rename(columns={"value": "baseline"})
-    data = data[~data.representation.eq("baseline")].merge(base, on=keys, how="inner")
-    data["raw_gain"] = data.value - data.baseline
-    data["headroom_share"] = data.raw_gain / np.maximum(1 - data.baseline, group_b.HEADROOM_FLOOR)
-    per = data.groupby(["dataset_id", "task_type", "model_id", "representation", "training_size", "draw"],
-                       as_index=False).agg(raw_gain=("raw_gain", "mean"),
-                                           headroom_share=("headroom_share", "mean"),
-                                           folds=("outer_fold", "nunique"))
-    per = per[per.folds.eq(5)].drop(columns="folds")
+    from src.evaluation import data_efficiency
+
+    per = data_efficiency.draw_gains(head)
+    if per.empty:
+        return per
     decision = per[per.representation.str.startswith("decision/")]
     parts = decision.representation.str.split("/")
     decision = decision[parts.str[2].isin(roster)].assign(mode=parts.str[1])
     median = decision.groupby(["dataset_id", "task_type", "model_id", "training_size", "draw", "mode"],
                               as_index=False).agg(raw_gain=("raw_gain", "median"),
                                                   headroom_share=("headroom_share", "median"),
-                                                  models=("representation", "nunique"))
+                                                  baseline=("baseline", "first"), models=("representation", "nunique"))
     median = median[median.models.eq(len(set(roster)))]
     median["representation"] = "decision/" + median["mode"] + "/median"
     return pd.concat([per, median.drop(columns=["mode", "models"])], ignore_index=True)
-
-
-def _over_draws(per_draw):
-    out = per_draw.groupby(["dataset_id", "task_type", "model_id", "representation", "training_size"],
-                           as_index=False).agg(
-        raw_gain=("raw_gain", "mean"), headroom_share=("headroom_share", "mean"),
-        draws=("draw", "nunique"), draw_variance=("raw_gain", "var"),
-        headroom_share_draw_variance=("headroom_share", "var"))
-    out["log2_size"] = np.log2(out.training_size)
-    return out
 
 
 def size_curves(head: pd.DataFrame, *, roster, curves, representations, outcome="raw_gain"):
@@ -444,17 +496,23 @@ def size_curves(head: pd.DataFrame, *, roster, curves, representations, outcome=
     per_draw = per_draw[per_draw.representation.isin(representations)]
     if per_draw.empty:
         return pd.DataFrame()
+    from src.evaluation.models import MAIN_MODELS
+
+    per_draw = per_draw[per_draw.model_id.isin(MAIN_MODELS)]
     counts = per_draw.groupby(["dataset_id", "representation", "training_size", "draw"]).model_id.transform("nunique")
-    averaged = (per_draw[counts.eq(per_draw.model_id.nunique())]
+    valid_share = per_draw.groupby(["dataset_id", "representation", "training_size", "draw"]).headroom_share.transform("count")
+    per_draw = per_draw.assign(complete_share=valid_share.eq(len(MAIN_MODELS)))
+    averaged = (per_draw[counts.eq(len(MAIN_MODELS))]
                 .groupby(["dataset_id", "task_type", "representation", "training_size", "draw"], as_index=False)
-                [["raw_gain", "headroom_share"]].mean().assign(model_id="all"))
-    sizes = _over_draws(pd.concat([per_draw, averaged], ignore_index=True))
+                [["raw_gain", "headroom_share", "baseline", "complete_share"]].mean().assign(model_id="all"))
+    averaged.loc[~averaged.complete_share.astype(bool), "headroom_share"] = np.nan
+    sizes = data_efficiency.over_draws(pd.concat([per_draw, averaged], ignore_index=True))
     cohorts = data_efficiency.cohort_gains(sizes, curves)
     parts = []
     for family, group in with_family(cohorts).groupby("task_family"):
         pooled = data_efficiency.pooled_curve(group.drop(columns="task_family"), outcome=outcome)
         parts.append(pooled.assign(task_family=family))
-    return pd.concat(parts, ignore_index=True)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
 def size_slopes(head: pd.DataFrame, *, roster, representations, max_size=2048, outcome="raw_gain"):
@@ -466,9 +524,19 @@ def size_slopes(head: pd.DataFrame, *, roster, representations, max_size=2048, o
     per_draw = per_draw[per_draw.representation.isin(representations) & per_draw.training_size.le(max_size)]
     if per_draw.empty:
         return pd.DataFrame()
-    sizes = _over_draws(per_draw)
+    sizes = data_efficiency.over_draws(per_draw)
+    required = [s for s in data_efficiency.config()["curves"]["main"]["sizes"] if s <= max_size]
+    by = ["dataset_id", "model_id", "representation"]
+    sizes = sizes[sizes.training_size.isin(required)]
+    sizes = sizes[sizes.groupby(by).training_size.transform("nunique").eq(len(required))]
     slopes = data_efficiency.gain_slopes(sizes, outcome=outcome)
-    return _spread(slopes, ["dataset_id", "representation"], "slope_per_doubling")
+    if slopes.empty:
+        return pd.DataFrame()
+    from src.evaluation.models import MAIN_MODELS
+
+    slopes = slopes[slopes.model_id.isin(MAIN_MODELS)]
+    complete = slopes.groupby(["dataset_id", "representation"]).model_id.transform("nunique").eq(len(MAIN_MODELS))
+    return _spread(slopes[complete], ["dataset_id", "representation"], "slope_per_doubling")
 
 
 # --------------------------------------------------------------------------- B5
@@ -506,15 +574,23 @@ LADDER = (
 def native_gains(head: pd.DataFrame) -> pd.DataFrame:
     """Native system minus the median no-text baseline over the seven predictors, per dataset
     (native systems share no predictor; ``model_id = "native"``)."""
-    per = head.groupby(["dataset_id", "task_type", "model_id", "representation"], as_index=False).agg(
-        value=("value", "mean"), folds=("outer_fold", "nunique"))
+    from src.evaluation.models import MAIN_MODELS
+
+    group_b.validate_fold_identities(head)
+    keys = ["dataset_id", "task_type", "model_id", "representation"]
+    if head.duplicated([*keys, "outer_fold"]).any():
+        raise ValueError("Duplicate headline fold for a native system or its baseline")
+    per = head.assign(value=head.value.where(np.isfinite(head.value))).groupby(keys, as_index=False).agg(
+        value=("value", "mean"), folds=("value", "count"))
     per = per[per.folds.eq(5)]
-    base = per[per.representation.eq("baseline")].groupby("dataset_id").value.median().rename("baseline")
+    candidates = per[per.representation.eq("baseline") & per.model_id.isin(MAIN_MODELS)]
+    base = candidates.groupby("dataset_id").value.agg(["median", "count"])
+    base = base.loc[base["count"].eq(len(MAIN_MODELS)), "median"].rename("baseline")
     native = per[per.representation.str.startswith("native/")].merge(base.reset_index(), on="dataset_id")
     if native.empty:
         return pd.DataFrame()
     native = native.assign(raw_gain=native.value - native.baseline, model_id="native")
-    native["headroom_share"] = native.raw_gain / np.maximum(1 - native.baseline, group_b.HEADROOM_FLOOR)
+    native["headroom_share"] = native.raw_gain / (1 - native.baseline).where(native.baseline < 1)
     native["family"] = "native"
     return native.drop(columns=["value", "folds"])
 
@@ -526,14 +602,18 @@ def ladder(b1: dict, b2: dict, b5: dict, *, n_boot=N_BOOT) -> pd.DataFrame:
     if b1:
         parts.append(b1["median_gains"])
     if b2:
-        parts += [b2["dataset_gains"], b2["median_gains"][b2["median_gains"].representation.eq(
-            "decision+frozen/both/median")]]
+        parts += [b2["dataset_gains"], b2["median_gains"]]
     if b5:
         parts.append(native_gains(group_b.headline(b5["folds"])))
     parts = [p for p in parts if p is not None and not p.empty]
     if not parts:
         return pd.DataFrame()
+    merged_heads(*((frames or {}).get("folds") for frames in (b1, b2, b5)))
     gains = pd.concat(parts, ignore_index=True)
+    keys = ["dataset_id", "task_type", "model_id", "representation"]
+    gains = gains[[*keys, "raw_gain", "headroom_share", "baseline", "family"]].drop_duplicates()
+    if gains.duplicated(keys).any():
+        raise ValueError("Overlapping exports disagree on a representation gain")
     arms = [*LADDER, *sorted(r for r in set(gains.representation) if r.startswith("native/"))]
     return family_summaries(gains, arms, n_boot=n_boot)
 
@@ -545,14 +625,9 @@ MAIN_ARMS = ("baseline", "decision/both/median", "decision+frozen/both/median",
 
 def main_arm_fold_scores(b1: dict, b2: dict, *, roster) -> pd.DataFrame:
     """Fold scores of the main arms (median decision models at the fold level)."""
-    heads = []
-    if b2:
-        heads.append(group_b.headline(b2["folds"]))
-    elif b1:
-        heads.append(group_b.headline(b1["folds"]))
-    if not heads:
-        return pd.DataFrame()
-    head = heads[0]
+    head = merged_heads(*((frames or {}).get("folds") for frames in (b1, b2)))
+    if head.empty:
+        return head
     medians = [median_fold_scores(head, roster=roster, modes=("both",))]
     medians.append(median_fold_scores(head, roster=roster, modes=("both",), family="decision+frozen"))
     head = pd.concat([head, *medians], ignore_index=True)
@@ -567,21 +642,21 @@ FOLD_KEYS = ["dataset_id", "task_type", "model_id", "representation", "outer_fol
 
 
 def merged_heads(*folds_tables) -> pd.DataFrame:
-    """Headline fold scores of several exports in one frame. An arm (representation) carried by
-    several exports (shared baselines and references on identical folds) is taken whole from the
-    FIRST export listed that has it, so no arm mixes records of two exports."""
-    parts, seen = [], set()
+    """Union of headline cells; overlapping exports must agree on score, split, checkpoint and recipe."""
+    keys = [*FOLD_KEYS, "checkpoint_id", "split_id", "value"]
+    parts = []
     for folds in folds_tables:
         if folds is None or folds.empty:
             continue
-        head = group_b.headline(folds)[[*FOLD_KEYS, "checkpoint_id", "split_id", "value"]]
-        head = head[~head.representation.isin(seen)]
-        seen |= set(head.representation)
-        if not head.empty:
-            parts.append(head)
+        head = group_b.headline(folds)
+        parts.append(head[[*keys, *(c for c in ("recipe_id", "pairing_identity") if c in head)]])
     if not parts:
-        return pd.DataFrame(columns=[*FOLD_KEYS, "checkpoint_id", "split_id", "value"])
-    return pd.concat(parts, ignore_index=True)
+        return pd.DataFrame(columns=keys)
+    merged = pd.concat(parts, ignore_index=True).drop_duplicates()
+    if merged.duplicated(FOLD_KEYS).any():
+        raise ValueError("Overlapping exports disagree on the identity or value of a headline fold")
+    group_b.validate_fold_identities(merged)
+    return merged[keys]
 
 
 def normalized_view(head: pd.DataFrame, representations, *, roster, n_boot=N_BOOT, seed=SEED):
@@ -603,34 +678,42 @@ def normalized_view(head: pd.DataFrame, representations, *, roster, n_boot=N_BOO
         if modes:
             medians.append(median_fold_scores(head, roster=roster, modes=tuple(modes), family=family))
     fold = pd.concat([head, *medians], ignore_index=True)
-    fold = fold[fold.representation.isin(wanted)][FOLD_KEYS + ["value"]]
+    fold = fold[fold.representation.isin(wanted)][FOLD_KEYS + ["checkpoint_id", "split_id", "value"]]
     if fold.empty:
         return pd.DataFrame(), pd.DataFrame()
     per_dataset = group_b.normalized_scores(fold)
     return per_dataset, group_b.summarize_normalized(per_dataset, n_boot=n_boot, seed=seed)
 
 
-def compute_costs(folds: pd.DataFrame, *, rows: dict, extraction: pd.DataFrame | None = None,
+def compute_costs(folds: pd.DataFrame, *, rows: dict | None = None, extraction: pd.DataFrame | None = None,
                   roster=()) -> pd.DataFrame:
-    """Per arm: predictor fit hours per 1,000 training rows (median over datasets, predictors and
-    folds of `seconds.fit`) plus decision extraction GPU-hours per 1,000 rows where measured
-    (`model_properties.compute_per_thousand`); unmeasured costs stay missing."""
+    """Report predictor fit time per training row and extraction GPU time per audited request.
+
+    Exact training counts come from the fit record. One row can generate several requests,
+    and identical inputs across rows share an answer. The two rates have different denominators.
+    """
     fit = folds[folds.metric.astype(str).eq("seconds.fit")]
     if fit.empty:
         return pd.DataFrame()
     fit = fit.astype({c: object for c in fit.columns if isinstance(fit[c].dtype, pd.CategoricalDtype)})
     fit = fit.assign(representation=[group_b.representation(r) for r in fit.to_dict("records")])
-    training = fit.dataset_id.map(rows).astype(float) * 0.8
-    fit = fit.assign(hours_per_1000=fit.value.astype(float) / training * 1000 / 3600)
+    training = pd.to_numeric(fit.get("n_train", pd.Series(np.nan, index=fit.index)))
+    if rows is not None:
+        # Legacy B1 exports use all rows and five balanced outer folds. The first N%5
+        # folds contain one extra test row. Use an exact count supplied by the caller.
+        n = fit.dataset_id.map(rows).astype(float)
+        training = training.fillna((n - n // 5 - fit.outer_fold.lt(n % 5)).where(fit.phase.eq("experiment_1")))
+    fit = fit.assign(hours_per_1000=fit.value.astype(float) / training.where(training.gt(0)) * 1000 / 3600)
     out = fit.groupby("representation", as_index=False).hours_per_1000.median().rename(
         columns={"hours_per_1000": "fit_hours_per_1000_rows"})
-    out["extraction_gpu_hours_per_1000_rows"] = np.nan
+    cost = "gpu_hours_per_1000_requests"
+    out[cost] = np.nan
     if extraction is not None and not extraction.empty:
         lookup = extraction.set_index("provider").gpu_hours_per_1000_requests
         provider = out.representation.str.split("/").str[2]
-        decision = out.representation.str.startswith("decision/")
-        out.loc[decision, "extraction_gpu_hours_per_1000_rows"] = provider[decision].map(lookup).to_numpy()
-    out["total_hours_per_1000_rows"] = out.fit_hours_per_1000_rows + out.extraction_gpu_hours_per_1000_rows
+        # The ledger covers the combined per-column and joint workload for each provider.
+        decision = out.representation.str.startswith("decision/both/")
+        out.loc[decision, cost] = provider[decision].map(lookup).to_numpy()
     medians = []
     for family in ("decision", "decision+frozen"):
         part = out[out.representation.str.startswith(f"{family}/")].copy()
@@ -639,7 +722,8 @@ def compute_costs(folds: pd.DataFrame, *, rows: dict, extraction: pd.DataFrame |
         if part.empty:
             continue
         part["representation"] = family + "/" + bits.str[1] + "/median"
-        medians.append(part.groupby("representation", as_index=False).median(numeric_only=True))
+        groups = part.groupby("representation")
+        medians.append(groups.median(numeric_only=True).where(groups.count().eq(len(roster))).reset_index())
     return pd.concat([out, *medians], ignore_index=True)
 
 

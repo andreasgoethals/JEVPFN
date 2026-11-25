@@ -72,24 +72,29 @@ def c2_arms():
 
 def folds(arms, seed=7) -> pd.DataFrame:
     """Five headline-metric fold records per dataset x predictor x arm."""
-    rng = np.random.default_rng(seed)
+    import hashlib
+
     rows = []
     predictor_shift = dict(zip(style.MAIN_PREDICTORS, np.linspace(-0.012, 0.012, len(style.MAIN_PREDICTORS))))
     for d_index, (dataset, task) in enumerate(DATASETS):
         regression = task == "regression"
         base = (0.45 if regression else 0.80) + 0.02 * (d_index % 5)
         scale = 2.2 if regression else 1.0  # R2 gains are larger than AUC gains
-        dataset_shift = rng.normal(0, 0.012) * scale
+        dataset_rng = np.random.default_rng(seed + d_index)
+        dataset_shift = dataset_rng.normal(0, 0.012) * scale
         for model in style.MAIN_PREDICTORS:
-            model_base = base + rng.normal(0, 0.02)
-            for a_index, arm in enumerate(arms):
+            model_base = base + dataset_rng.normal(0, 0.02)
+            for arm in arms:
+                recipe_key = repr((seed, dataset, model, sorted(arm.items()))).encode()
+                recipe_id = hashlib.sha256(recipe_key).hexdigest()
+                rng = np.random.default_rng(int(recipe_id[:16], 16))
                 effect = 0.0 if arm["effect"] == 0 else scale * (arm["effect"] + predictor_shift[model]) + dataset_shift
                 for fold in range(5):
                     value = model_base + effect + rng.normal(0, 0.004)
                     rows.append({**BLANK, **{k: v for k, v in arm.items() if k != "effect"},
                                  "dataset_id": dataset, "task_type": task, "model_id": model,
                                  "checkpoint_id": f"ckpt-{model}", "split_id": f"split-{dataset}",
-                                 "outer_fold": fold, "recipe_id": f"r{a_index}", "metric": HEADLINES[task],
+                                 "outer_fold": fold, "recipe_id": recipe_id, "metric": HEADLINES[task],
                                  "value": min(value, 0.999)})
     return pd.DataFrame(rows)
 

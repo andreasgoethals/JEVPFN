@@ -334,7 +334,7 @@ def test_group_b_plan_counts():
     from src.evaluation.campaign import benchmark_plan
 
     # Group C phases (representations, rq3) are counted in test_group_c.
-    plan = [a for a in benchmark_plan() if a["phase"] not in ("representations", "rq3")]
+    plan = [a for a in benchmark_plan(cohort="with_jev") if a["phase"] not in ("representations", "rq3")]
     counts = Counter(a["phase"] for a in plan)
     # B1: (1 + 17 x 3) x 7 x 18; B2: 3 encoders x 2 PCA + 17 decision+frozen (+ TAR 2 + 6 probes);
     # B3: 17 models x 78 text columns (16 multi-text datasets) x 7; B4: 399 sample cells x 22 x 7.
@@ -481,6 +481,37 @@ def test_pilot_rows_are_fixed_label_free_and_independent_of_content():
     assert partial["pilot_rows"] == 200 and 0 < partial["pilot_scored_rows"] < 200
 
 
+def test_exported_redundancy_is_identical_when_downstream_targets_change(monkeypatch):
+    from src.data import loaders, selection
+    from src.evaluation import benchmark_export, row_benefit
+
+    rng = np.random.default_rng(9)
+    frame = pd.DataFrame(rng.normal(size=(60, 3)), columns=["one", "two", "three"])
+    frame["text"] = [f"text {i}" for i in range(len(frame))]
+    frame["target"] = np.tile([0, 1], 30)
+    meta = extract_metadata(frame, {"target": "target", "task_type": "cls", "num_classes": 2},
+                            dataset_id="toy", dataset_name="Toy", text_columns=["text"])
+    dataset = LoadedDataset(frame, meta, {}, {"data_identity": "toy"}, [])
+    logits = 0.4 * frame.one + 0.7 * frame.two + rng.normal(0, 1.5, len(frame))
+    column = "toy__all_text__p_positive"
+    block = SimpleNamespace(
+        manifest={"feature_columns": [column], "identity": {"representation": "joint"}},
+        values=pd.DataFrame({"row_id": [f"csv:{i}" for i in range(len(frame))],
+                             column: 1 / (1 + np.exp(-logits))}),
+    )
+    monkeypatch.setattr(loaders, "load_catalog", lambda: {"datasets": [{"id": "toy"}]})
+    monkeypatch.setattr(selection, "selected_entries", lambda catalog, main: catalog["datasets"])
+    monkeypatch.setattr(loaders, "load_dataset", lambda *args, **kwargs: dataset)
+    monkeypatch.setattr(row_benefit, "load_decision_block", lambda *args: (block, "fixture"))
+    before = benchmark_export.dataset_properties_and_redundancy(roster=["toy_model"])
+    assert np.isfinite(before[0][["decision_redundancy_r2", "pilot_redundancy_r2"]]).all(axis=None)
+    for targets in (rng.permutation(frame.target), pd.NA):
+        frame["target"] = targets
+        after = benchmark_export.dataset_properties_and_redundancy(roster=["toy_model"])
+        for first, second in zip(before, after, strict=True):
+            pd.testing.assert_frame_equal(first, second)
+
+
 def test_redundancy_is_label_free_and_detects_predictable_outputs():
     rng = np.random.default_rng(1)
     non_text = pd.DataFrame({"x": rng.normal(size=300), "c": rng.choice(["a", "b"], 300)})
@@ -494,6 +525,77 @@ def test_redundancy_is_label_free_and_detects_predictable_outputs():
     assert predictable["rows"] == 290
 
 
+def test_b3_row_cohorts_accept_only_matching_fold_recipes(tmp_path, monkeypatch):
+    import json
+
+    from src.evaluation import benchmark_export, row_benefit
+
+    scope = benchmark_export.cohort_record("open_weight")
+    providers = scope["decision_roster"]
+    rows = []
+    records = []
+    for fold in range(5):
+        base = {"phase": "experiment_1", "dataset_id": "toy", "task_type": "binary_classification",
+                "model_id": "linear", "split_id": "split", "data_identity": "source", "checkpoint_id": "checkpoint",
+                "outer_fold": fold, "metric": "roc_auc"}
+        rows.append({**base, "feature_set": "non_text", "provider": None, "recipe_id": "baseline", "value": 0.5})
+        for provider in providers:
+            arm = f"recipe-{provider}"
+            rows.append({**base, "feature_set": "non_text_plus_both", "provider": provider, "recipe_id": arm,
+                         "value": 0.6})
+            records.append({"fold": fold, "arm": arm, "phase": "experiment_1", "model": "linear",
+                            "checkpoint": "checkpoint", "feature_set": "non_text_plus_both", "recipe": {"provider": provider},
+                            "cohorts": [{"axis": "length", "cohort": "short", "rows": 5, "defined": 5,
+                                         "baseline_loss_sum": 3.0, "augmented_loss_sum": 1.0}]})
+    folds = pd.DataFrame(rows)
+    report = {**scope, "dataset": "toy", "task": "binary_classification", "split_id": "split",
+              "data_identity": "source", "folds": records}
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    properties = pd.DataFrame([{"dataset_id": "toy", "task_type": "binary_classification", "log10_median_text_chars": 1.0,
+                                "pilot_redundancy_r2": 0.0, "decision_redundancy_r2": 0.1}])
+    monkeypatch.setattr(row_benefit, "report_folder", lambda *args: tmp_path)
+    monkeypatch.setattr(benchmark_export, "coverage", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(benchmark_export, "dataset_properties_and_redundancy",
+                        lambda **kwargs: (properties, pd.DataFrame()))
+    monkeypatch.setattr(benchmark_export, "_group_a_frames", lambda **kwargs: {})
+
+    current = benchmark_export.build_tables("B3", folds, cohort="open_weight")["row_cohorts"]
+    assert current.benefit.item() == pytest.approx(0.4) and current.decision_models.item() == len(providers)
+    for column in ("recipe_id", "split_id", "data_identity", "checkpoint_id"):
+        changed = folds.copy()
+        changed[column] = "new-" + changed[column]
+        with pytest.raises(ValueError, match="Row-benefit source differs"):
+            benchmark_export.build_tables("B3", changed, cohort="open_weight")
+
+
+def test_b3_group_a_inputs_distinguish_superseded_and_corrupt_archives(tmp_path, monkeypatch):
+    from zipfile import ZipFile
+
+    from src.evaluation import benchmark_export, comparison_report, robustness_export, study_export
+    from src.utils.config import load_yaml
+
+    target = tmp_path / "a2.zip"
+    monkeypatch.setattr(comparison_report, "report_path", lambda cohort: tmp_path / "absent-a1.zip")
+    monkeypatch.setattr(robustness_export, "export_path", lambda cohort: target)
+    assert benchmark_export._group_a_frames(cohort="open_weight") == {}
+    identity = robustness_export.analysis_identity(load_yaml("rq1/behavior"), "open_weight")
+    tables = {name: pd.DataFrame({"value": [1]}) for name in robustness_export.TABLES}
+    study_export.write_export(target, tables, schema=robustness_export.SCHEMA, identity=identity, origin="fixture")
+    assert benchmark_export._group_a_frames(cohort="open_weight")["a2_mode_effects"].value.item() == 1
+    with monkeypatch.context() as patch:
+        patch.setattr(robustness_export, "analysis_identity", lambda cfg, cohort: "new-identity")
+        assert benchmark_export._group_a_frames(cohort="open_weight") == {}
+    with ZipFile(target) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    members["mode_effects.parquet"] += b"changed"
+    with ZipFile(target, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    with pytest.raises(ValueError, match="checksum differs for mode_effects"):
+        benchmark_export._group_a_frames(cohort="open_weight")
+
+
 def test_b4_size_gains_and_pooled_curve():
     rows = []
     for d in range(4):
@@ -503,8 +605,9 @@ def test_b4_size_gains_and_pooled_curve():
                     for rep, delta in (("baseline", 0), ("decision/both/m", 0.01 * (size == 128) + 0.001 * draw)):
                         rows.append(dict(dataset_id=f"d{d}", task_type="regression", model_id="linear",
                                          representation=rep, training_size=size, draw=draw,
+                                         checkpoint_id="ck", split_id=f"split-{size}-{draw}",
                                          outer_fold=fold, value=0.5 + delta + 0.01 * d))
-    sizes = data_efficiency.size_gains(pd.DataFrame(rows))
+    sizes = data_efficiency.size_gains(pd.DataFrame(rows), cfg={"draws": [{"max_size": 256, "draws": 3}]})
     assert sizes.draws.eq(3).all()
     pooled = data_efficiency.pooled_curve(sizes)
     assert pooled.set_index("training_size").pooled.round(4).to_dict() == {128: 0.011, 256: 0.001}
@@ -521,8 +624,9 @@ def test_b4_raw_pooling_never_mixes_auc_and_r2():
                 for rep, gain in (("baseline", 0), ("decision/both/m", delta + 0.001 * draw)):
                     rows.append(dict(dataset_id=f"d{d}", task_type=task, model_id="linear",
                                      representation=rep, training_size=128, draw=draw,
+                                     checkpoint_id="ck", split_id=f"split-{draw}",
                                      outer_fold=fold, value=0.5 + gain))
-    sizes = data_efficiency.size_gains(pd.DataFrame(rows))
+    sizes = data_efficiency.size_gains(pd.DataFrame(rows), cfg={"draws": [{"max_size": 128, "draws": 2}]})
     pooled = data_efficiency.pooled_curve_by_family(sizes).set_index("task_family")
     assert pooled.pooled.round(4).to_dict() == {"classification": 0.0105, "regression": 0.2005}
     assert pooled.datasets.eq(2).all()
@@ -534,13 +638,48 @@ def test_b3_usefulness_averages_raw_gain_only_within_a_task_family():
              representation="decision/both/m1", raw_gain=raw, headroom_share=share)
         for i, (task, raw, share) in enumerate((("regression", 0.2, 0.4), ("regression", 0.4, 0.6),
                                                  ("binary_classification", 0.01, 0.1)))])
-    use = group_b.per_model_usefulness(gains).set_index("task_family")
+    use = group_b.per_model_usefulness(gains, datasets=gains[["dataset_id", "task_type"]]).set_index("task_family")
     assert use.loc["regression", "raw_gain"] == pytest.approx(0.3)
     assert use.loc["classification", "raw_gain"] == pytest.approx(0.01)
     assert np.isnan(use.loc["all", "raw_gain"])
     assert use.loc["all", "headroom_share"] == pytest.approx(1.1 / 3)
     assert use.loc["all", "datasets"] == 3
 
+
+def test_provider_usefulness_requires_the_same_named_datasets_for_each_reported_mean():
+    datasets = pd.DataFrame({"dataset_id": ["easy", "hard", "reg"], "task_type": [
+        "binary_classification", "multiclass_classification", "regression"]})
+    rows = [{"dataset_id": task.dataset_id, "task_type": task.task_type, "model_id": "linear",
+             "representation": f"decision/both/{provider}", "family": "decision", "raw_gain": raw,
+             "headroom_share": np.nan if provider == "undefined" and task.dataset_id == "reg" else share}
+            for provider in ("full", "partial", "undefined")
+            for task, raw, share in zip(datasets.itertuples(), (0.1, -0.1, 0.4), (0.2, -0.4, 0.8))
+            if (provider, task.dataset_id) != ("partial", "hard")]
+    rows.append({**rows[0], "dataset_id": "outside-roster", "representation": "decision/both/partial"})
+    results = group_b.per_model_usefulness(pd.DataFrame(rows), datasets=datasets).set_index(["provider", "task_family"])
+    good = results.loc["full", "all"]
+    assert good.headroom_share == pytest.approx(0.2) and good.datasets == good.expected_datasets == 3
+    partial = results.loc["partial", "classification"]
+    assert pd.isna(partial.raw_gain) and pd.isna(partial.headroom_share)
+    assert partial.datasets == 1 and partial.expected_datasets == 2
+    assert results.loc[("partial", "regression"), "raw_gain"] == 0.4
+    assert pd.isna(results.loc[("partial", "all"), "headroom_share"])
+    undefined = results.loc["undefined", "regression"]
+    assert undefined.raw_gain == 0.4 and undefined.headroom_share_datasets == 0 and pd.isna(undefined.headroom_share)
+    with pytest.raises(ValueError, match="Several usefulness scores"):
+        group_b.per_model_usefulness(pd.DataFrame([*rows, rows[0]]), datasets=datasets)
+
+
+def test_b3_stability_gives_wording_one_vote_per_dataset_before_averaging_datasets():
+    stability = pd.DataFrame([
+        {"provider": "p", "dataset": dataset, "variant": variant, "excess_tv": tv, "mode": mode}
+        for dataset, variant, tv, mode in (
+            ("first", "paraphrase_1", 0., "joint"), ("first", "paraphrase_2", 0., "joint"),
+            ("first", "paraphrase_3", 0., "joint"), ("first", "option_order", 0.3, "joint"),
+            ("first", "field_order", 0.6, "joint"), ("second", "paraphrase_1", 0.5, "joint"),
+            ("first", "field_order", 1.0, "per_column"), ("first", "replay_1", 0.8, "joint"))])
+    summary = group_b.model_diagnostics(stability=stability)
+    assert summary.stability_excess_tv.item() == pytest.approx((0.3 + 0.5) / 2)
 
 def test_group_b_figures_render_at_a4_width():
     from src.evaluation import group_b_views

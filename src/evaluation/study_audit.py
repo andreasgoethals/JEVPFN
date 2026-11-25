@@ -16,12 +16,10 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation.endpoints import HEADLINES
+from src.jev.spending import JEV_CEILING_USD, diagnostic_spending, ledger_jobs, replay_spending
 from src.utils import paths
 from src.utils.config import load_yaml
 
-#: The owner-authorised Jev allowance (AGENTS.md, 5 November 2026): EUR 5 under a cumulative
-#: USD 5.50 ceiling. No top-up is approved.
-JEV_CEILING_USD = 5.50
 WAITING = "waiting for export"
 
 #: Benchmark phase -> study label used in audit tables (folder renumbering of 23-11-2026).
@@ -46,6 +44,30 @@ ARM_KEYS = ["phase", "dataset_id", "model_id", "feature_set", "provider", "view"
             "pca_scope", "pca_components", "probe_view", "dropped_text_column", "training_size",
             "draw", "hidden_view", "hidden_position", "hidden_layer", "adaptation_cell"]
 STATUSES = ("complete", "missing", "roster_gap", "excluded", "waiting")
+
+
+def strands_qualification():
+    """C0 plan and locally recorded measurements. Production checks the signed review on VSC."""
+    from src.evaluation import strands_adaptation as adaptation
+
+    folder = paths.manifests_dir("rq3") / "adaptation_pilot"
+    rows = []
+    for task in adaptation.TASK_TYPES:
+        dataset = adaptation.smallest_dataset(task)
+        for cell in adaptation.CELLS:
+            row = {"task": task, "dataset": dataset, "training configuration": cell,
+                   "local receipt": "pending", "training examples/s": None, "peak GPU GiB": None}
+            path = folder / f"{dataset}_{cell}.json"
+            if path.is_file():
+                report = json.loads(path.read_text(encoding="utf-8"))
+                if (report["task_type"], report["dataset_id"], report["cell"]) != (task, dataset, cell):
+                    raise ValueError(f"C0 receipt identifies a different pilot: {path}")
+                row["local receipt"] = report["status"]
+                row["training examples/s"] = report.get("examples_per_second")
+                if report.get("peak_gpu_bytes") is not None:
+                    row["peak GPU GiB"] = report["peak_gpu_bytes"] / 2**30
+            rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def _roster():
@@ -75,9 +97,10 @@ def _local_stores(datasets) -> pd.DataFrame:
 
     frames = []
     for dataset_id in datasets:
-        if paths.dataset_cache_path(dataset_id).is_file():
-            frames.append(notebook_inventory(dataset_id)[["dataset_id", "provider", "representation",
-                                                          "row_count"]].rename(columns={"row_count": "rows"}))
+        inventory = notebook_inventory(dataset_id)
+        if not inventory.empty:
+            frames.append(inventory[["dataset_id", "provider", "representation", "row_count"]]
+                          .rename(columns={"row_count": "rows"}))
     return (pd.concat(frames, ignore_index=True) if frames
             else pd.DataFrame(columns=["dataset_id", "provider", "representation", "rows"]))
 
@@ -120,8 +143,8 @@ def feature_store_status(local: pd.DataFrame | None = None, manifests: pd.DataFr
 def inference_timings(folder=None) -> pd.DataFrame:
     """Measured inference wall time per model and dataset from the timing manifests.
 
-    Decision models: ``decision_inference`` (one request per observation, cache reuse is
-    excluded); frozen encoders: ``embedding_batch`` items (distinct texts). One allocated GPU
+    Decision models: ``decision_inference`` items (requests within each batch, excluding
+    cache hits); frozen encoders: ``embedding_batch`` items (distinct texts). One allocated GPU
     per job, so wall seconds are GPU seconds. Loading, staging and publication are excluded.
     """
     folder = Path(folder or paths.manifests_dir("feature_creation") / "timings")
@@ -136,7 +159,7 @@ def inference_timings(folder=None) -> pd.DataFrame:
                 continue
             rows.append({"model_id": model, "kind": "decision" if name != "embeddings" else "encoder",
                          "dataset_id": stage["dataset_id"],
-                         "requests": stage["items"] if name == "embeddings" else stage["observations"],
+                         "requests": stage["items"],
                          "gpu_seconds": stage.get("wall_seconds"), "job_id": context.get("job_id"),
                          "source": path.name})
     return pd.DataFrame(rows, columns=["model_id", "kind", "dataset_id", "requests", "gpu_seconds",
@@ -161,14 +184,14 @@ def extraction_workload(timings: pd.DataFrame, *, token_audit=None, ledger=None,
     """Per decision model and encoder: distinct requests and GPU-hours per 1,000 requests.
 
     ``inference`` rates come from the timing manifests (inference only); ``ledger`` rates
-    from successful Slurm decision-feature jobs (all job time) over audited distinct requests.
+    from successful Slurm jobs on the full audited dataset selection (all job time).
     """
     from src.evaluation.model_properties import compute_per_thousand
 
     models = list(models if models is not None else _roster()[1])
     audit = {r["provider"]: r["unique_inputs"] for r in (token_audit or {}).get("self_hosted", [])}
     ledger_rates = (compute_per_thousand(ledger, token_audit, models).set_index("provider")
-                    if ledger is not None else None)
+                    if models else pd.DataFrame())
     rows = []
     for model in [*models, *encoders]:
         part = timings[timings.model_id.eq(model) & timings.gpu_seconds.notna()]
@@ -179,9 +202,11 @@ def extraction_workload(timings: pd.DataFrame, *, token_audit=None, ledger=None,
                "timed_requests": timed or None, "timed_datasets": part.dataset_id.nunique(),
                "inference_gpu_hours": seconds / 3600 if timed else None,
                "inference_gpu_hours_per_1000": seconds / timed * 1000 / 3600 if timed else None,
-               "ledger_gpu_hours_per_1000": None}
-        if ledger_rates is not None and model in ledger_rates.index:
-            row["ledger_gpu_hours_per_1000"] = ledger_rates.loc[model, "gpu_hours_per_1000_requests"]
+               "ledger_gpu_hours_per_1000": None, "ledger_status": "not a decision-feature job"}
+        if model in ledger_rates.index:
+            rate = ledger_rates.loc[model]
+            row.update(ledger_gpu_hours_per_1000=rate.gpu_hours_per_1000_requests,
+                       ledger_status=rate.compute_status)
         rows.append(row)
     frame = pd.DataFrame(rows)
     for column in ("distinct_requests", "timed_requests", "inference_gpu_hours",
@@ -200,59 +225,56 @@ def dataset_rates(timings: pd.DataFrame) -> pd.DataFrame:
 
 # ----------------------------------------------------------------------- Jev spending
 
-def jev_spend(cache_folder=None) -> pd.DataFrame:
+def jev_spend(cache_folder=None, *, replay_folder=None) -> pd.DataFrame:
     """Recorded Jev charges per dataset from the stored job ledgers (read-only).
 
-    Reads the live ``extraction_jobs`` table and imported snapshots; one record per request
-    key (the largest recorded charge), so repeated snapshots are never double counted.
+    Uses the dispatcher's accounting for distinct paid calls, signed settlements and open holds.
     """
     rows = []
-    for path in sorted(Path(cache_folder or paths.jev_cache_path()).glob("*.sqlite3")):
+    if cache_folder is None and replay_folder is None:
+        replay_folder = paths.results_dir("hosted_ledgers", phase="rq1")
+    cache_folder = Path(cache_folder or paths.jev_cache_path())
+    for path in sorted(cache_folder.glob("*.sqlite3")):
         with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            jobs, allocation = {}, None
+            allocation = None
             if "imported_extraction_records" in tables:
-                for table, key, body in db.execute(
-                        "SELECT table_name,record_key,record_json FROM imported_extraction_records"):
-                    record = json.loads(body)
-                    if table == "extraction_policy":
-                        allocation = json.loads(record.get("settings_json", "{}")).get("budget", allocation)
-                    elif table == "extraction_jobs":
-                        _keep_job(jobs, key, record)
-            if "extraction_jobs" in tables:
-                columns = [r[1] for r in db.execute("PRAGMA table_info(extraction_jobs)")]
-                for values in db.execute("SELECT * FROM extraction_jobs"):
-                    record = dict(zip(columns, values))
-                    _keep_job(jobs, record.get("request_key"), record)
-        jev = [j for j in jobs.values() if _provider(j) == "jev"]
+                for (raw,) in db.execute("SELECT record_json FROM imported_extraction_records "
+                                         "WHERE table_name='extraction_policy'"):
+                    allocation = json.loads(json.loads(raw).get("settings_json", "{}")).get("budget", allocation)
+            if "extraction_policy" in tables:
+                row = db.execute("SELECT settings_json FROM extraction_policy WHERE id=1").fetchone()
+                if row:
+                    allocation = json.loads(row[0]).get("budget", allocation)
+            jev = [job for job in ledger_jobs(db) if job.provider == "jev"]
         if jev:
             rows.append({"dataset_id": path.stem, "jobs": len(jev),
-                         "completed": sum(j.get("status") == "completed" for j in jev),
-                         "unresolved": sum(j.get("status") != "completed" for j in jev),
-                         "spent_usd": sum(j.get("spent_usd") or 0 for j in jev),
-                         "reserved_usd": sum(j.get("reserved_usd") or 0 for j in jev),
+                         "completed": sum(job.completed for job in jev),
+                         "unresolved": sum(not job.completed for job in jev),
+                         "spent_usd": sum(job.spent for job in jev),
+                         "reserved_usd": sum(job.reserved for job in jev),
                          "allocation_usd": allocation})
-    return pd.DataFrame(rows, columns=["dataset_id", "jobs", "completed", "unresolved", "spent_usd",
-                                       "reserved_usd", "allocation_usd"])
-
-
-def _provider(job):
-    try:
-        return json.loads(job.get("request_json") or "{}").get("settings", {}).get("provider")
-    except (TypeError, ValueError):
-        return None
-
-
-def _keep_job(jobs, key, record):
-    if key is not None and (key not in jobs or (record.get("spent_usd") or 0) > (jobs[key].get("spent_usd") or 0)):
-        jobs[key] = record
+    frame = pd.DataFrame(rows, columns=["dataset_id", "jobs", "completed", "unresolved", "spent_usd",
+                                        "reserved_usd", "allocation_usd"])
+    diagnostics = list(diagnostic_spending(cache_folder))
+    frame.attrs["diagnostic_charges_usd"] = sum(row[1] for row in diagnostics)
+    frame.attrs["diagnostic_reservations_usd"] = sum(row[2] for row in diagnostics)
+    replays = list(replay_spending(replay_folder))
+    frame.attrs["replay_charges_usd"] = sum(row[0] for row in replays)
+    frame.attrs["replay_reservations_usd"] = sum(row[1] for row in replays)
+    return frame
 
 
 def jev_budget(spend: pd.DataFrame) -> dict:
     """Recorded charges and open reservations against the owner-approved ceiling."""
     eur = load_yaml("feature_creation")["live_extraction"]["owner_budget_eur"]
-    spent, reserved = float(spend.spent_usd.sum()), float(spend.reserved_usd.sum())
-    return {"recorded_charges_usd": spent, "open_reservations_usd": reserved,
+    diagnostic_charges = spend.attrs.get("diagnostic_charges_usd", 0)
+    replay_charges = spend.attrs.get("replay_charges_usd", 0)
+    spent = float(spend.spent_usd.sum()) + diagnostic_charges + replay_charges
+    reserved = (float(spend.reserved_usd.sum()) + spend.attrs.get("diagnostic_reservations_usd", 0)
+                + spend.attrs.get("replay_reservations_usd", 0))
+    return {"diagnostic_charges_usd": diagnostic_charges, "replay_charges_usd": replay_charges,
+            "recorded_charges_usd": spent, "open_reservations_usd": reserved,
             "committed_usd": spent + reserved, "ceiling_usd": JEV_CEILING_USD, "allowance_eur": eur,
             "remaining_usd": JEV_CEILING_USD - spent - reserved,
             "datasets_with_jobs": int(len(spend)), "unresolved_jobs": int(spend.unresolved.sum())}
@@ -270,7 +292,10 @@ def ledger_tables(ledger: dict | None):
     if jobs.empty:
         return jobs, pd.DataFrame()
     # Re-derive the stage so jobs from before a STAGES addition are classified the same way.
-    jobs["stage"] = jobs.job_name.map(stage_of)
+    # Legacy job names can cover both the pilot and production. Native accounting
+    # also inspects the submission arguments before discarding the command line.
+    pilot = jobs.get("stage", pd.Series(index=jobs.index, dtype=object)).eq("strands_qualification")
+    jobs["stage"] = jobs.job_name.map(stage_of).mask(pilot, "strands_qualification")
     jobs["study"] = jobs.stage.map(STAGE_STUDY).fillna("Other")
     jobs["successful"] = jobs.state.eq("COMPLETED")
     by_study = jobs.groupby("study").apply(lambda g: pd.Series({

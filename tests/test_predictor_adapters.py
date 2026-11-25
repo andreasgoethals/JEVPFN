@@ -54,6 +54,20 @@ def test_category_vocabulary_is_train_only_and_missing_stays_missing():
     assert encoder.transform(train, strings=True).loc[1, "c"] == "null"
 
 
+def test_numeric_training_column_accepts_missing_and_malformed_query_values():
+    train = pd.DataFrame({"amount": pd.array([1.5, None, -2], dtype="Float64")})
+    test = pd.DataFrame({"amount": ["-3.45", "2e1", "9.4 oz", "-", None, np.inf]}, index=range(6, 12))
+    transformed = FoldInput().fit(train).transform(test)
+    assert transformed.index.equals(test.index)
+    np.testing.assert_allclose(transformed.amount, [-3.45, 20, np.nan, np.nan, np.nan, np.nan])
+
+    # Benchmark folds share one frame's dtype. A mixed unit column stays categorical.
+    mixed = pd.DataFrame({"amount": ["9.4 oz", "-", "37 in"]})
+    encoder = FoldInput().fit(mixed.iloc[:2])
+    assert encoder.categorical_ == ["amount"]
+    assert np.isnan(encoder.transform(mixed.iloc[2:]).amount.iloc[0])
+
+
 @pytest.mark.parametrize("model_id", MAIN_MODELS + TEXT_MODELS)
 @pytest.mark.parametrize(
     "task", ["binary_classification", "multiclass_classification", "regression"]

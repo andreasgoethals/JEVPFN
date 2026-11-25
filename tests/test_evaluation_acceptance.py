@@ -39,10 +39,15 @@ def test_execution_switch_and_acceptance_path_do_not_change_0b_identity(configur
         cfg["experiment_0_acceptance"] = "/new/reviewed.json"
     for cfg in configuration["feature_creation/embedding_models"]["models"].values():
         cfg["enabled"] = True
+    configuration["rq3/adaptation"]["pilot_acceptance"] = "owner-reviewed-b200-pilot.json"
+    configuration["rq3/adaptation"]["pilot_enabled"] = True
+    configuration["rq3/adaptation"]["training_enabled"] = True
+    configuration["representations/representations"]["extraction"]["enabled"] = True
     assert acceptance.evaluation_identity() == before
 
 
-@pytest.mark.parametrize("change", ["checkpoint", "seed", "pca", "classes", "selector", "encoder"])
+@pytest.mark.parametrize("change", ["checkpoint", "seed", "pca", "classes", "encoder",
+                                    "c1_extraction_layer", "c1_pca_grid"])
 def test_untested_recipes_invalidate_0b_identity(configuration, change):
     before = acceptance.evaluation_identity()
     if change == "checkpoint":
@@ -55,8 +60,10 @@ def test_untested_recipes_invalidate_0b_identity(configuration, change):
         configuration["experiment_2/embeddings"]["pca_grid"]["joint"] = [7]
     elif change == "classes":
         configuration["experiment_1/protocol"]["evaluation"]["binary"]["positive_class"] = "first"
-    elif change == "selector":
-        configuration["experiment_1/main"]["feature_selectors"]["jev"] = {"version": "other"}
+    elif change == "c1_extraction_layer":
+        configuration["representations/representations"]["extraction"]["layers"]["middle"] = 11
+    elif change == "c1_pca_grid":
+        configuration["representations/representations"]["arms"]["views"]["joint"]["pca_components"] = 32
     else:
         configuration["feature_creation/embedding_models"]["models"]["e5_small_v2"]["revision"] = (
             "other"
@@ -64,21 +71,46 @@ def test_untested_recipes_invalidate_0b_identity(configuration, change):
     assert acceptance.evaluation_identity() != before
 
 
+def test_optional_paid_selectors_preserve_open_review_and_shared_predictor_contracts(configuration):
+    from src.evaluation.design import decision_providers
+
+    shared = acceptance.evaluation_identity()
+    open_providers, paid = decision_providers("open_weight"), decision_providers("paid")
+    open_identity = acceptance.decision_input_identity(open_providers)
+    paid_identity = acceptance.decision_input_identity(paid)
+    for name in ("experiment_1/main", *acceptance.GROUP_B_C_CONFIGS):
+        configuration[name].setdefault("feature_selectors", {})["jev"] = {"version": "new"}
+        configuration[name].setdefault("dataset_feature_artifacts", {})["data"] = {"jev": {"joint": "new"}}
+    assert acceptance.evaluation_identity() == shared
+    assert acceptance.decision_input_identity(open_providers) == open_identity
+    assert acceptance.decision_input_identity(paid) != paid_identity
+    configuration["experiment_1/main"]["feature_selectors"]["strands"] = {"version": "new"}
+    assert acceptance.decision_input_identity(open_providers) != open_identity
+
+
 def test_changed_code_invalidates_0b_identity(configuration, monkeypatch, tmp_path):
     root = tmp_path / "workspace"
-    (root / "src").mkdir(parents=True)
+    (root / "src/evaluation").mkdir(parents=True)
+    (root / "src/jev").mkdir()
     questions = root / "config/A/question_versions.csv"
     questions.parent.mkdir(parents=True)
     questions.write_text("dataset,original\nexample,Sentence?\n", encoding="utf-8")
-    source = root / "src" / "pipeline.py"
+    source = root / "src/evaluation/protocol.py"
     source.write_text("pass\n", encoding="utf-8")
     (root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
     monkeypatch.setattr(acceptance.paths, "REPO_ROOT", root)
     before = acceptance.evaluation_identity()
     source.write_bytes(b"pass\r\n")
     assert acceptance.evaluation_identity() == before
-    source.write_text("pass\n# different implementation\n", encoding="utf-8")
-    assert acceptance.evaluation_identity() != before
+    for name in ("src/jev/new_paid_adapter.py", "src/evaluation/group_b.py", "src/evaluation/geometry_export.py",
+                 "src/evaluation/study_audit.py"):
+        (root / name).write_text("# independent module\n", encoding="utf-8")
+    assert acceptance.evaluation_identity() == before
+    for name in ("evaluation/protocol", "evaluation/models", "evaluation/qualification", "jev/cache",
+                 "jev/checkpoints", "jev/checkpoint_hashes", "jev/templates", "jev/question_bank"):
+        before = acceptance.evaluation_identity()
+        (root / f"src/{name}.py").write_text("# different implementation\n", encoding="utf-8")
+        assert acceptance.evaluation_identity() != before
 
 
 def test_checksums_alone_do_not_authorize_a_different_pipeline(tmp_path):
@@ -108,6 +140,80 @@ def test_checksums_alone_do_not_authorize_a_different_pipeline(tmp_path):
         )
 
 
+def test_group_b_analysis_edits_invalidate_exports_and_preserve_fit_qualification(monkeypatch):
+    from src.evaluation import benchmark_export, group_c
+    from src.utils import provenance
+
+    def identities():
+        return (acceptance.evaluation_identity(), benchmark_export.analysis_identity("B1"),
+                group_c.analysis_identity("C1"), group_c.analysis_identity("C2"))
+
+    before = identities()
+    hash_source = provenance.source_hash
+
+    def changed(path):
+        return "f" * 64 if path.as_posix().endswith("/evaluation/group_b.py") else hash_source(path)
+
+    monkeypatch.setattr(provenance, "source_hash", changed)
+    monkeypatch.setattr(acceptance, "source_hash", changed)
+    after = identities()
+    assert before[0] == after[0]
+    assert all(old != new for old, new in zip(before[1:], after[1:]))
+
+
+def test_importing_group_c_fit_recipes_does_not_require_group_b_reporting():
+    import subprocess
+    import sys
+
+    subprocess.run([sys.executable, "-B", "-c",
+                    "import sys\n"
+                    "sys.modules['src.evaluation.group_b'] = None\n"
+                    "from src.evaluation.group_c import arms\n"
+                    "assert len(arms([{'id': 'example'}], ['linear'])) == 17"],
+                   cwd=acceptance.paths.REPO_ROOT, check=True)
+
+
+def test_imported_absolute_vsc_receipt_reopens_the_exact_signed_bytes(tmp_path):
+    from src.utils.acceptance import evidence_path
+
+    manifests = tmp_path / "output_JEVPFN" / "01_exp0a" / "manifests"
+    review = manifests / "before_extraction" / "accepted.json"
+    original = manifests / "question_audit.json"
+    write_json(original, {"source": "desktop audit"})
+    source = manifests / "native_audit.json"
+    write_json(source, {"source": "signed native audit"})
+    sha = file_sha256(source)
+    imported = manifests / "imported_revisions" / "evidence" / (sha + ".json")
+    imported.parent.mkdir(parents=True)
+    source.replace(imported)
+    item = {"path": "/data/account/JEVPFN/output_JEVPFN/01_exp0a/manifests/question_audit.json", "sha256": sha}
+    write_json(review, {"accepted": True, "stage": "before_extraction", "reviewed_by": "reviewer",
+                        "evidence": [item]})
+    assert evidence_path(review, item) == imported
+    assert reviewed_acceptance(review, stage="before_extraction")["accepted"] is True
+    write_json(imported, {"source": "changed"})
+    with pytest.raises(ValueError, match="missing or changed"):
+        reviewed_acceptance(review, stage="before_extraction")
+
+
+def test_direct_production_cli_requires_a_freeze_before_checking_evidence(monkeypatch):
+    import sys
+
+    from src.cluster import freeze
+    from src.evaluation import campaign
+
+    arm = {"phase": "experiment_1", "dataset_id": "fixture", "model": "linear",
+           "feature_set": "non_text", "provider": None}
+    monkeypatch.setattr(campaign, "benchmark_plan", lambda **kwargs: [arm])
+    monkeypatch.setattr(campaign, "load_yaml", lambda name: {"candidates": {}, "enabled": True})
+    monkeypatch.setattr("src.evaluation.qualification.benchmark_evidence",
+                        lambda *args: pytest.fail("Qualification must follow the production freeze"))
+    monkeypatch.setattr(sys, "argv", ["campaign", "--dataset", "fixture", "--execute"])
+    assert not freeze.receipt_path().exists()
+    with pytest.raises(ValueError, match="Freeze the reviewed source"):
+        campaign.main()
+
+
 def test_campaign_refuses_stale_0b_before_loading_models(tmp_path, monkeypatch):
     from src.cluster import freeze
     from src.evaluation import campaign
@@ -125,7 +231,7 @@ def test_campaign_refuses_stale_0b_before_loading_models(tmp_path, monkeypatch):
             "evidence": [{"path": str(report), "sha256": file_sha256(report)}],
         },
     )
-    monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": False})
+    monkeypatch.setattr(freeze, "check_if_present", lambda: {"frozen": True})
     monkeypatch.setattr(acceptance, "evaluation_identity", lambda: "current")
     monkeypatch.setattr(
         campaign,

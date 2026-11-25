@@ -107,6 +107,9 @@ def test_response_version_must_match(dataset, cfg):
     cfg["jev"]["model"] = "jev-latest"
     with pytest.raises(ValueError, match="pin"):
         api_preview(build_requests(dataset.features, dataset.metadata, 0, cfg)[0])
+    cfg["jev"]["version"] = "latest"
+    with pytest.raises(ValueError, match="pin"):
+        api_preview(build_requests(dataset.features, dataset.metadata, 0, cfg)[0])
 
 
 def test_complete_multiclass_vector(dataset, cfg):

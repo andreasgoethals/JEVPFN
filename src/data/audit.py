@@ -121,6 +121,12 @@ def request_lengths(dataset: LoadedDataset) -> dict[str, np.ndarray]:
     return lengths
 
 
+def _encoder_text(value) -> str:
+    """Match the native frozen encoders' nonempty string representation in input_rows."""
+    value = text_value(value)
+    return "" if value is None else str(value)
+
+
 def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
     frame, m = dataset.frame, dataset.metadata
     ratio = cfg["token_estimation"]["characters_per_token"]
@@ -134,6 +140,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         r["text_columns"][0]: r for r in reuse["groups"] if r["mode"] == "per_column"
     }
     columns, texts, numeric, categorical, examples = [], [], [], [], {}
+    encoder_texts = set()
     longest_examples = {}
     combined_chars = pd.Series(np.zeros(n, dtype=np.int64), index=frame.index)
     cell_tokens_total = 0
@@ -167,7 +174,8 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         }
         columns.append(base)
         if kind == "text":
-            values = series.map(text_value).fillna("").astype(str)
+            values = series.astype(object).map(_encoder_text)
+            encoder_texts.update(values.unique())
             chars = values.str.len()
             words = values.str.split().str.len()
             tokens = np.ceil(chars / ratio).astype(np.int64)
@@ -225,6 +233,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
             categorical.append(
                 {**base, "top_values": [{"value": k, "count": v} for k, v in common]}
             )
+    encoder_texts.discard("")
     combined_tokens = np.ceil(combined_chars / ratio).astype(np.int64)
     summary = {
         "dataset_id": m.dataset_id,
@@ -240,6 +249,7 @@ def audit_dataset(dataset: LoadedDataset, cfg: dict) -> tuple[dict, dict]:
         "class_labels": list(m.classes),
         "text_columns": len(m.text_columns),
         "non_text_columns": len(m.non_text_columns),
+        "encoder_unique_texts": len(encoder_texts),
         **reuse["summary"],
         **_length_stats(combined_tokens, "combined_tokens"),
         "total_text_tokens": int(combined_tokens.sum()),

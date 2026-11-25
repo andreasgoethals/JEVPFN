@@ -1,6 +1,7 @@
 """Exercise the routes used by RQ1 and RQ2 during deterministic 0B preflight."""
 
 import json
+import sqlite3
 from types import SimpleNamespace
 
 import numpy as np
@@ -39,15 +40,21 @@ def test_replay_is_fresh_and_resume_keeps_only_completed_trials(request, monkeyp
         calls.append(r.payload_json)
         if len(calls) == 3:
             raise RuntimeError("interrupted")
-        return {"score": len(calls) % 2}
+        return {"score": len(calls) % 2, "model": "strands-test", "version": "test-revision"}
 
-    client = SimpleNamespace(settings={"pin": "test"}, counter=Counter(), evaluate=evaluate)
+    client = SimpleNamespace(settings={"provider": "strands", "model": "strands-test", "version": "test-revision"},
+                             counter=Counter(), evaluate=evaluate)
     monkeypatch.setattr(robust, "readout", lambda r, s, v: [s["score"], 1 - s["score"]])
     with pytest.raises(RuntimeError, match="interrupted"):
         robust.run(ds, "strands", pilot=True, acceptance=None, client=client)
     report = robust.run(ds, "strands", pilot=True, acceptance=None, client=client)
     result = json.loads(report.read_text())
     assert result["completed"]
+    assert result["decision_settings"] == client.settings
+    with sqlite3.connect(report.with_suffix(".sqlite3")) as db:
+        assert db.execute("SELECT DISTINCT json_extract(data,'$.reported_model'), json_extract(data,'$.reported_version') "
+                          "FROM results WHERE json_extract(data,'$.status')='measured'").fetchall() == [
+                              ("strands-test", "test-revision")]
     counts = {(r["variant"], r["status"]): r["count"] for r in result["counts"]}
     assert counts["field_order", "canonicalized_by_runtime"] >= 1
     assert counts["repeat_1", "measured"] == counts["repeat_2", "measured"] == 3
@@ -158,10 +165,13 @@ def test_five_fold_prediction_store_to_rq2e_summary(isolated_output, monkeypatch
 
 
 def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypatch):
+    monkeypatch.setenv("JEVPFN_DECISION_COHORT", "all")  # Two synthetic registered providers.
     import sqlite3
     from contextlib import closing
 
+    from src.evaluation import design, geometry_export
     from src.evaluation import geometry_study as gs
+    from src.evaluation.benchmark_export import cohort_key
     from src.utils.serialization import digest
 
     dataset = SimpleNamespace(
@@ -180,18 +190,11 @@ def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypat
         question_variant="original",
     )
     cfg = dict(seed=42, texts_per_group=500, encoders=["enc"])
-    monkeypatch.setattr(
-        gs,
-        "load_yaml",
-        lambda name: (
-            cfg
-            if name == "rq1/geometry"
-            else {
-                "candidate_extractors": ["p", "q"],
-                "feature_selectors": {"p": {"provider": "p", **select}},
-            }
-        ),
-    )
+    main = {"candidate_extractors": ["p", "q"], "feature_selectors": {"p": {"provider": "p", **select}}}
+    registry = {"candidates": {p: {"model": "model", "version": "test", "delivery": "hosted"} for p in ("p", "q")}}
+    configs = {"rq1/geometry": cfg, "experiment_1/main": main, "extractors": registry}
+    for module in (gs, design, geometry_export):
+        monkeypatch.setattr(module, "load_yaml", configs.__getitem__)
     store = tmp_path / "vectors.sqlite3"
     monkeypatch.setattr(gs.em, "encoder_config", lambda name: {})
     monkeypatch.setattr(gs.em, "cache_path", lambda *a: store)
@@ -234,7 +237,6 @@ def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypat
         probabilities=np.stack([prob, 1 - prob], axis=1),
     )
     monkeypatch.setattr(gs, "normalize_group", lambda *a: group)
-    monkeypatch.setattr(gs.paths, "results_dir", lambda name, **k: tmp_path / name)
     from src.jev import inputs
     monkeypatch.setattr(inputs, "prepared_row", lambda _, pos: [
         {"representation": "per_column", "text_columns": ["note"], "payload_sha256": dataset.frame.note.iloc[pos]}
@@ -243,11 +245,18 @@ def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypat
         gs.run("d")
     with pytest.raises(ValueError, match="every selected provider"):
         gs.run("d", pilot=True)
-    main = gs.load_yaml("experiment_1/main")
     main["candidate_extractors"] = ["p"]
-    monkeypatch.setattr(gs, "load_yaml", lambda name: cfg if name == "rq1/geometry" else main)
-    gs.run("d", pilot=True)
-    result = json.loads(gs.run("d").read_text())
+    pilot = gs.run("d", pilot=True)
+    pilot_bytes = pilot.read_bytes()
+    full = gs.run("d")
+    assert pilot != full and pilot.read_bytes() == pilot_bytes
+    assert tmp_path in full.parents and cohort_key("all") in pilot.parts
+    assert full.parent == geometry_export.export_path("all").parent
+    result = json.loads(full.read_text())
+    assert result["protocol"] == json.loads(pilot_bytes)["protocol"]
+    assert result["protocol"]["decision_model_versions"] == design.decision_versions(["p"])
+    archived = geometry_export.collect(full.parent, members=["p"])
+    assert archived["sources"].file.to_list() == [full.name]
     assert result["encoders"] == {"enc": "encoder-identity"}
     assert result["missing_providers"] == []
     assert result["comparisons"][0]["pairs"] == 6
@@ -269,12 +278,16 @@ def test_owner_jev_replay_bypasses_other_variants_but_reuses_paid_attempts(
 ):
     from src.evaluation.hosted_robustness import VARIANTS, HostedReplay
     from src.jev.requests import IntendedRequest
+    from src.jev.spending import JEV_CEILING_USD, campaign_committed
+    from src.utils import paths
     from src.utils.config import load_yaml
     from src.utils.serialization import canonical_json, digest, file_sha256, write_json
     from tests.test_spending_policy import request
 
     monkeypatch.delenv("VSC_DATA")
     monkeypatch.delenv("JEVPFN_STAGING_ROOT", raising=False)
+    cache_folder = tmp_path / "paid"
+    monkeypatch.setattr(paths, "jev_cache_path", lambda: cache_folder)
     cfg = load_yaml("feature_creation")
     review = cfg["live_extraction"]
     cfg["jev"].update(model="jev-1.14.0", version="1.14.0", request_configuration={})
@@ -309,7 +322,7 @@ def test_owner_jev_replay_bypasses_other_variants_but_reuses_paid_attempts(
         def evaluate(r):
             calls.append(r.payload_json)
             return dict(
-                model="jev-1.14.0",
+                model=cfg["jev"]["model"],
                 answers={"semantic": {"type": "noul", "noul": 0.4}},
                 usage={"input_tokens": 100},
             )
@@ -336,7 +349,7 @@ def test_owner_jev_replay_bypasses_other_variants_but_reuses_paid_attempts(
                 "evidence": [{"path": str(evidence), "sha256": file_sha256(evidence)}],
             },
         )
-        c.start({"source": "frozen"})
+        c.start({"source": "frozen", "settings": digest(c.settings)})
         return c
 
     a = client()
@@ -350,3 +363,32 @@ def test_owner_jev_replay_bypasses_other_variants_but_reuses_paid_attempts(
     assert len(calls) == 2
     a.evaluate_trial(req, "repeat_2")
     assert len(calls) == 3
+    # The prior single-marker layout remains usable as evidence for a distinct release.
+    old_marker = a.directory / "design.jev-1.14.0.json"
+    legacy = a.directory / "design.json"
+    old_marker.replace(legacy)
+    legacy_bytes = legacy.read_bytes()
+    cfg["jev"].update(model="jev-1.15.0", version="1.15.0")
+    review["context_envelope"]["model"] = "jev-1.15.0"
+    b = client()
+    new_req = IntendedRequest(orig.payload_json, canonical_json(b.settings), orig.provenance_json)
+    assert b.evaluate_trial(new_req, "original")["model"] == "jev-1.15.0"
+    assert a.evaluate_trial(req, "original")["model"] == "jev-1.14.0"
+    assert legacy.read_bytes() == legacy_bytes and len(calls) == 4
+    resumed = client()
+    assert resumed.evaluate_trial(new_req, "original")["model"] == "jev-1.15.0" and len(calls) == 4
+    with pytest.raises(ValueError, match="design changed"):
+        b.start({"source": "frozen", "settings": digest(b.settings), "different_sample": True})
+    replays = a.directory.parent.parent
+    charged = 4 * 100 * cfg["cost"]["input_price_per_million"] / 1e6
+    assert campaign_committed(cache_folder, replay_folder=replays) == pytest.approx(charged)
+    from src.evaluation.study_audit import jev_budget, jev_spend
+
+    assert jev_budget(jev_spend(cache_folder, replay_folder=replays))["recorded_charges_usd"] == pytest.approx(charged)
+    write_json(cache_folder / "_control/jev_smoke/state.json",
+               {"attempts": [{"charged_usd": JEV_CEILING_USD - charged}]})
+    # Reuse is free. A different, chargeable replay must respect the account ceiling.
+    resumed.evaluate_trial(new_req, "original")
+    with pytest.raises(RuntimeError, match="budget_stop"):
+        resumed.evaluate_trial(new_req, "paraphrase_1")
+    assert len(calls) == 4

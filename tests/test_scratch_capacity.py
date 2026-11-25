@@ -120,6 +120,25 @@ def test_shared_assets_release_retires_only_published_mutable_copies(roots, unkn
         request("intern"), kind="verified_response") == response()
 
 
+@pytest.mark.parametrize("folder,registered", [("B/exp04_decision_features", True), ("B/misspelled", False)])
+def test_shared_release_requires_a_registered_result_folder(roots, folder, registered):
+    durable, work = roots
+    marker(durable, work)
+    p = work / stage.MARKER
+    p.write_text(json.dumps({**json.loads(p.read_text()), "shared_immutable_root": str(durable)}))
+    relative = Path("output_JEVPFN") / folder / "results/example.json"
+    source = work / relative
+    source.parent.mkdir(parents=True)
+    source.write_text('{"complete": true}')
+    if registered:
+        cap.release("intern", apply=True)
+        assert not source.exists() and (durable / relative).read_text() == '{"complete": true}'
+    else:
+        with pytest.raises(ValueError, match="Unpublished"):
+            cap.release("intern", apply=True)
+        assert source.exists()
+
+
 def test_partial_stage_can_release_copies_but_unknown_workspace_cannot(roots):
     durable, work = roots
     copied_assets(durable, work)
