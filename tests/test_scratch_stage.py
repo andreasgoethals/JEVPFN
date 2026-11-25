@@ -4,6 +4,7 @@ import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from threading import Timer
 from types import SimpleNamespace
 
 import pytest
@@ -62,15 +63,17 @@ def test_publication_unions_providers_without_overwriting_paid_local_response(ro
     assert remote.path.is_file()  # Recovery copy never deleted.
 
 
-def test_conflict_keeps_both_originals(roots):
+def test_conflict_keeps_both_originals(roots, monkeypatch):
     durable, work = roots
     marker(durable, work)
     destination = cache(durable / "data/jev_cache/fixture.sqlite3", value=0.7)
     source = cache(work / "data/jev_cache/fixture.sqlite3", value=0.9)
+    monkeypatch.setattr(stage, "_PUBLISHED_ROWIDS", {})
     with pytest.raises(ValueError):
         stage.publish("intern")
     assert destination.get(request(), kind="verified_response") == response(0.7)
     assert source.get(request(), kind="verified_response") == response(0.9)
+    assert not stage._PUBLISHED_ROWIDS
 
 
 def test_periodic_publication_ignores_historical_backups_and_does_not_multiply_files(roots):
@@ -315,14 +318,14 @@ def test_incremental_warm_retains_new_origin_and_old_artifact_dependency(roots):
     from test_cache_merge import feature
 
     durable, work = roots
-    source = cache(durable / "data/jev_cache/fixture.sqlite3", request("intern"))
+    source = cache(durable / "data/jev_cache/fixture.sqlite3", request("glide"))
     work.mkdir(parents=True, exist_ok=True)
     rowids = {}
-    stage._provider_cache(source.path, work / "first.sqlite3", "intern", rowids=rowids)
-    source.get(request("intern", row="csv:extra"), kind="verified_response")
-    artifact = feature(source, "intern")
+    stage._provider_cache(source.path, work / "first.sqlite3", "glide", rowids=rowids)
+    source.get(request("glide", row="csv:extra"), kind="verified_response")
+    artifact = feature(source, "glide")
     increment = work / "increment.sqlite3"
-    stage._provider_cache(source.path, increment, "intern", after=rowids)
+    stage._provider_cache(source.path, increment, "glide", after=rowids)
     with closing(sqlite3.connect(increment)) as db:
         assert (artifact,) in list(db.execute("SELECT artifact_id FROM feature_artifacts"))
         assert db.execute("SELECT count(*) FROM responses").fetchone() == (1,)
@@ -357,6 +360,163 @@ def test_periodic_publish_defers_a_held_extraction_lock(roots):
         assert stage._publish(durable, work, periodic=True)["busy_skipped"] == 1
     assert stage._publish(durable, work)["decision_stores"] == 1
     assert original.get(request("intern"), kind="verified_response") == response()
+
+
+def test_periodic_delta_releases_live_reader_between_batches_and_retries_late_rows(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    relative = Path("data/jev_cache/fixture.sqlite3")
+    target = cache(durable / relative)
+    live = cache(work / relative, request("glide", text="first"))
+    live.put(request("glide", text="second"), response(), kind="verified_response")
+    late = request("glide", text="after captured high water")
+    monkeypatch.setattr(stage, "PUBLICATION_BATCH_ROWS", 1)
+    monkeypatch.setattr(stage, "_live_snapshot", lambda *args: pytest.fail("ordinary tick copied whole store"))
+    real = sqlite3.connect
+    batches = []
+
+    class ConcurrentWriter(sqlite3.Connection):
+        def executemany(self, sql, rows):
+            if sql.startswith("INSERT INTO responses VALUES"):
+                batches.append(len(rows))
+                if len(batches) == 1:
+                    # This independent rollback-mode connection must commit while
+                    # publication is still writing its first local response batch.
+                    with closing(real(live.path, timeout=0)) as writer, writer:
+                        assert writer.execute("PRAGMA journal_mode").fetchone() == ("delete",)
+                        writer.execute("BEGIN EXCLUSIVE")
+                        writer.execute("INSERT INTO responses VALUES (?,?,?,?,?,?)", (
+                            late.cache_key, "verified_response", late.payload_json, late.settings_json,
+                            json.dumps(response()), "2099-01-01T00:00:00+00:00"))
+                        live._trace(writer, late, "verified_response")
+            return super().executemany(sql, rows)
+
+    def connect(path, *args, **kwargs):
+        if isinstance(path, Path) and path.parent.name.startswith(".delta-"):
+            kwargs["factory"] = ConcurrentWriter
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    assert stage._publish(durable, work, periodic=True)["decision_stores"] == 1
+    assert batches == [1, 1]
+    assert target.get(late, kind="verified_response") is None
+    info = live.path.stat()
+    key = (str(target.path), str(live.path), info.st_dev, info.st_ino)
+    assert stage._PUBLISHED_ROWIDS[key]["responses"] == 2
+    # A busy live writer defers just this checkpoint, keeping the successful marks.
+    with closing(real(live.path, timeout=0)) as writer:
+        writer.execute("BEGIN EXCLUSIVE")
+        assert stage._publish(durable, work, periodic=True)["busy_skipped"] == 1
+    assert stage._PUBLISHED_ROWIDS[key]["responses"] == 2
+    assert stage._publish(durable, work)["decision_stores"] == 1
+    assert target.get(late, kind="verified_response") == response()
+    assert stage._PUBLISHED_ROWIDS[key]["origins"] == 3
+    stage._publish(durable, work)
+    with closing(real(target.path)) as db:
+        assert {key for key, in db.execute("SELECT request_key FROM responses")} == {
+            request().cache_key, request("glide", text="first").cache_key,
+            request("glide", text="second").cache_key, late.cache_key,
+        }
+
+
+def test_mutable_ledger_snapshot_releases_reader_and_restarts_after_concurrent_commit(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    relative = Path("data/jev_cache/fixture.sqlite3")
+    target = cache(durable / relative)
+    live = cache(work / relative)
+    entry = request("glide")
+    live.put(entry, {**response(), "padding": "x" * 2**20}, kind="verified_response")
+    with live._connect() as db:
+        db.execute("CREATE TABLE extraction_jobs (request_key TEXT PRIMARY KEY, status TEXT)")
+        db.execute("INSERT INTO extraction_jobs VALUES ('job', 'running')")
+    info = live.path.stat()
+    key = (str(target.path), str(live.path), info.st_dev, info.st_ino)
+    with monkeypatch.context() as budget:
+        budget.setattr(stage, "PERIODIC_BACKUP_SECONDS", 0)
+        assert stage._publish(durable, work, periodic=True)["busy_skipped"] == 1
+    assert key not in stage._PUBLISHED_ROWIDS
+    assert target.get(entry, kind="verified_response") is None
+    real = stage.snapshot
+    steps = []
+
+    def snapshot(source, destination, *, progress=None):
+        if source != live.path:
+            return real(source, destination, progress=progress)
+
+        def write_between_pages(status, remaining, total):
+            if remaining and not steps:
+                with closing(sqlite3.connect(live.path, timeout=0)) as writer, writer:
+                    writer.execute("BEGIN EXCLUSIVE")
+                    writer.execute("UPDATE extraction_jobs SET status='completed'")
+            steps.append(remaining)
+            progress(status, remaining, total)
+
+        return real(source, destination, progress=write_between_pages)
+
+    monkeypatch.setattr(stage, "snapshot", snapshot)
+    assert stage._publish(durable, work, periodic=True)["decision_stores"] == 1
+    assert len(steps) > 1 and steps[0] > 0 and steps[-1] == 0
+    with closing(sqlite3.connect(target.path)) as db:
+        payload, = db.execute("SELECT record_json FROM imported_extraction_records "
+                              "WHERE table_name='extraction_jobs'").fetchone()
+        assert json.loads(payload)["status"] == "completed"
+    assert target.get(entry, kind="verified_response")["padding"] == "x" * 2**20
+
+
+def test_periodic_batch_waits_for_a_short_exclusive_writer(roots, monkeypatch):
+    durable, work = roots
+    marker(durable, work)
+    relative = Path("data/jev_cache/fixture.sqlite3")
+    target = cache(durable / relative)
+    entry = request("glide", text="brief exclusive commit")
+    live = cache(work / relative, entry)
+    real = sqlite3.connect
+    with closing(real(live.path, check_same_thread=False)) as writer:
+        unblock = Timer(0.1, writer.commit)
+
+        class Reader(sqlite3.Connection):
+            def execute(self, sql, *args):
+                if sql.startswith("SELECT * FROM responses WHERE rowid"):
+                    assert 0 < self.execute("PRAGMA busy_timeout").fetchone()[0] <= 2000
+                    # Keep this lock across the start of the real source query.
+                    writer.execute("BEGIN EXCLUSIVE")
+                    unblock.start()
+                return super().execute(sql, *args)
+
+        def connect(path, *args, **kwargs):
+            if path == live.path.resolve().as_uri() + "?mode=ro":
+                kwargs["factory"] = Reader
+            return real(path, *args, **kwargs)
+
+        monkeypatch.setattr(sqlite3, "connect", connect)
+        try:
+            assert stage._publish(durable, work, periodic=True)["decision_stores"] == 1
+        finally:
+            if unblock.ident is not None:
+                unblock.join()
+    assert target.get(entry, kind="verified_response") == response()
+
+
+def test_publication_marks_belong_to_the_actual_source_file(roots):
+    durable, first_work = roots
+    second_work = first_work.parents[1] / "glide" / "JEVPFN"
+    relative = Path("data/jev_cache/fixture.sqlite3")
+    marker(durable, first_work)
+    marker(durable, second_work)
+    first_request, second_request = request("intern"), request("glide")
+    first = cache(first_work / relative, first_request)
+    cache(second_work / relative, second_request)
+    assert stage._publish(durable, first_work, periodic=True)["decision_stores"] == 1
+    info = first.path.stat()
+    assert stage._PUBLISHED_ROWIDS[
+        (str(durable / relative), str(first.path), info.st_dev, info.st_ino)
+    ]["responses"] == 1
+    assert stage._publish(durable, second_work, periodic=True)["decision_stores"] == 1
+    with closing(sqlite3.connect(durable / relative)) as db:
+        assert {key for key, in db.execute("SELECT request_key FROM responses")} == {
+            first_request.cache_key, second_request.cache_key,
+        }
 
 
 def test_incremental_warm_reads_only_durable_rows_added_since_the_previous_warm(roots):

@@ -42,7 +42,7 @@ TABLES = {
 }
 
 
-def snapshot(source: Path, destination: Path) -> Path:
+def snapshot(source: Path, destination: Path, *, progress=None) -> Path:
     """SQLite's backup API includes committed WAL pages, unlike copying the main file."""
     source, destination = Path(source).resolve(), Path(destination).resolve()
     if not source.is_file() or destination.exists() or source == destination:
@@ -53,7 +53,9 @@ def snapshot(source: Path, destination: Path) -> Path:
             closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src,
             closing(sqlite3.connect(destination)) as dst,
         ):
-            src.backup(dst)
+            # Each step releases a rollback-journal source's shared lock before
+            # the next step, including while the progress callback runs.
+            src.backup(dst, pages=128, progress=progress, sleep=0.05)
             if dst.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
                 raise ValueError("SQLite snapshot integrity check failed")
     except BaseException:
@@ -313,7 +315,7 @@ def merge_cache(
                     "INSERT INTO imported_extraction_records VALUES (?,?,?,?)", row
                 ).rowcount
 
-            for row in incoming.execute("SELECT * FROM responses"):
+            for row in incoming.execute("SELECT * FROM responses ORDER BY request_key, kind"):
                 key, kind, payload, settings, response, _ = row
                 prior = db.execute(
                     "SELECT payload_json,settings_json,response_json FROM responses WHERE request_key=? AND kind=?",
@@ -328,7 +330,7 @@ def merge_cache(
                 else:
                     db.execute("INSERT INTO responses VALUES (?,?,?,?,?,?)", row)
                     counts["responses_added"] += 1
-            for row in incoming.execute("SELECT * FROM origins"):
+            for row in incoming.execute("SELECT * FROM origins ORDER BY request_key, kind, provenance_hash"):
                 counts["origins_added"] += db.execute(
                     "INSERT OR IGNORE INTO origins VALUES (?,?,?,?,?)", row
                 ).rowcount
@@ -336,7 +338,7 @@ def merge_cache(
                 r[0] for r in incoming.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
             if "failures" in tables:
-                for row in incoming.execute("SELECT * FROM failures"):
+                for row in incoming.execute("SELECT * FROM failures ORDER BY event_id"):
                     prior = db.execute(
                         "SELECT * FROM failures WHERE event_id=?", (row[0],)
                     ).fetchone()

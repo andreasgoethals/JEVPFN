@@ -24,7 +24,7 @@ from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
 
 MARKER = "_JEVPFN_WORKSPACE.json"
-# (durable root, relative path) -> closed source identity published by THIS process.
+# (durable destination, scratch source) -> closed identity published by this process.
 _PUBLISHED_IDENTITIES = {}
 # Workspace stores observed to differ from their staged bytes. Stores only grow, so a
 # store never returns to its staged content; remembering this avoids rehashing it.
@@ -252,7 +252,7 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                 # A closed SQLite store this process already published, unchanged
                 # since (same inode, size, mtime and ctime, no journal), is durable:
                 # durable stores only grow by validated unions.
-                published_key = (str(durable), relative.as_posix())
+                published_key = (str(destination), str(source))
                 # Staging publishes any earlier workspace results first and then only
                 # copies or unions durable records into the workspace, so a store whose
                 # bytes still equal its staged hash holds nothing durable lacks. Without
@@ -316,6 +316,12 @@ def _publish_stores(durable, work, *, periodic=False, dataset_id=None,
                         try:
                             identity = _merge_decision_delta(source, destination, work, published_key,
                                                              relative, periodic)
+                        except sqlite3.OperationalError as exc:
+                            code = getattr(exc, "sqlite_errorcode", 0) & 0xff
+                            if not periodic or code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                                raise
+                            counts["busy_skipped"] += 1
+                            continue
                         except TimeoutError as exc:
                             if not periodic:
                                 raise PublicationLockUnavailable(
@@ -545,6 +551,9 @@ DELTA_TABLES = {
 LEDGER_TABLES = ("extraction_policy", "extraction_policy_history", "extraction_jobs",
                  "extraction_recoveries", "imported_extraction_records")
 STAGE_CUTOFF_MARGIN_SECONDS = 3600
+PUBLICATION_BATCH_ROWS = 128
+PERIODIC_BACKUP_SECONDS = 600
+PERIODIC_READER_TIMEOUT = 2
 
 
 def _store_rowids(path):
@@ -590,6 +599,81 @@ def _copy_artifact_responses(db, path, source_schema):
                    "WHERE request_key=? AND kind='verified_response'", ((k,) for k in keys))
 
 
+def _live_snapshot(source, target, periodic):
+    if not periodic:
+        return snapshot(source, target)
+    deadline = time.monotonic() + PERIODIC_BACKUP_SECONDS
+
+    def limited(status, remaining, total):
+        if status != sqlite3.SQLITE_DONE and time.monotonic() >= deadline:
+            raise TimeoutError("Live SQLite backup deferred until the next publication")
+
+    return snapshot(source, target, progress=limited)
+
+
+def _copy_rowid_batches(source, output, table, floor, high, cutoff):
+    # Do not retain a source cursor while writing temporary pages. Ordering by
+    # primary key for the durable merge happens on the independent delta.
+    where, params = "", ()
+    if "created_at" in cutoff:
+        stamp = "first_seen_at" if table == "origins" else "created_at"
+        where, params = f" AND {stamp} >= ?", (cutoff["created_at"],)
+    for lower in range(floor, high, PUBLICATION_BATCH_ROWS):
+        upper = min(lower + PUBLICATION_BATCH_ROWS, high)
+        with closing(source.execute(
+            f"SELECT * FROM {table} WHERE rowid > ? AND rowid <= ?{where}",
+            (lower, upper, *params),
+        )) as cursor:
+            rows = cursor.fetchall()
+        if rows:
+            placeholders = ",".join("?" for _ in rows[0])
+            output.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
+
+
+def _copy_append_only_delta(source, delta, destination, cutoff, published, periodic):
+    """Copy one committed prefix without holding a read transaction during extraction."""
+    def reader(path):
+        # Wait briefly for a committing writer before acquiring a batch's read lock.
+        timeout = PERIODIC_READER_TIMEOUT if periodic else 30
+        return closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=timeout))
+
+    with reader(destination) as dst:
+        has_artifacts = dst.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='feature_artifacts'"
+        ).fetchone()
+        durable_ids = {r[0] for r in dst.execute("SELECT artifact_id FROM feature_artifacts")} if has_artifacts else set()
+    with reader(source) as src:
+        src.execute("BEGIN")
+        schema = dict(src.execute("SELECT name,sql FROM sqlite_master WHERE type='table' "
+                                  "AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+        identity = src.execute("SELECT * FROM dataset_identity").fetchall()
+        high = {t: src.execute(f"SELECT COALESCE(MAX(rowid),0) FROM {t}").fetchone()[0]
+                for t in DELTA_TABLES if t in schema}
+        floors = {t: max(published.get(t, 0), cutoff.get("rowids", {}).get(t, 0)) for t in high}
+        # Queue rows can change in place. An unpublished feature block can contain
+        # a large blob and reference much older responses. Use a paged snapshot
+        # for these cases, with the expensive decode/copy on independent storage.
+        mutable = any(t in schema and src.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()
+                      for t in LEDGER_TABLES)
+        new_block = "feature_artifacts" in high and any(
+            key not in durable_ids for key, in src.execute(
+                "SELECT artifact_id FROM feature_artifacts WHERE rowid > ?",
+                (floors["feature_artifacts"],),
+            )
+        )
+        src.commit()
+        if mutable or new_block:
+            return None
+        with closing(sqlite3.connect(delta)) as output, output:
+            for sql in schema.values():
+                output.execute(sql)
+            output.executemany("INSERT INTO dataset_identity VALUES (?)", identity)
+            for table in ("responses", "origins", "failures"):
+                if table in high:
+                    _copy_rowid_batches(src, output, table, floors[table], high[table], cutoff)
+    return high
+
+
 def _merge_decision_delta(source, destination, work, key, relative, periodic=False):
     """Union only rows written since staging, in one durable transaction.
 
@@ -601,18 +685,31 @@ def _merge_decision_delta(source, destination, work, key, relative, periodic=Fal
     validates every copied row and compares it with any durable row under the same
     key, so a conflicting paid response still aborts the whole union. Candidates
     are written in key order so durable B-tree pages are visited sequentially.
+    Short source reads copy append-only tables. Mutable ledgers and new feature
+    blocks use an independent, page-stepped SQLite snapshot.
     Probing every scratch key against PROJECT instead costs ~5 ms per row
     (174 s for 34,633 rows, probe job 11870855, 24-11-2026). Rows up to an earlier
     successful publication by this process are skipped.
     """
     from src.jev.cache import ResponseCache
 
-    size = source.stat().st_size
+    source_stat = source.stat()
+    mark_key = (*key, source_stat.st_dev, source_stat.st_ino)
+    size = source_stat.st_size
+    with suppress(FileNotFoundError):  # A checkpoint or rollback-mode source has no WAL.
+        size += source.with_name(source.name + "-wal").stat().st_size
     if not destination.exists():
-        root = _publication_temporary_root(work, size + _union_bytes(size, destination))
+        required = size + _union_bytes(size, destination)
+        root = _publication_temporary_root(work, required)
+        if shutil.disk_usage(root).free < required:
+            raise OSError("Insufficient native space for the initial SQLite snapshot and union")
         with tempfile.TemporaryDirectory(prefix=".publish-", dir=root) as t:
-            return _merge_native_decision(snapshot(source, Path(t) / source.name), destination, work, periodic)
-    published = _PUBLISHED_ROWIDS.get(key, {})
+            sealed = _live_snapshot(source, Path(t) / source.name, periodic)
+            high = _store_rowids(sealed)
+            identity = _merge_native_decision(sealed, destination, work, periodic)
+            _PUBLISHED_ROWIDS[mark_key] = high
+            return identity
+    published = _PUBLISHED_ROWIDS.get(mark_key, {})
     cutoff = _stage_cutoff(work, relative)
     with (
         file_lock(destination.with_suffix(".extraction.lock"), timeout=0 if periodic else LOCK_WAIT_SECONDS),
@@ -621,58 +718,71 @@ def _merge_decision_delta(source, destination, work, key, relative, periodic=Fal
     ):
         _recover_rollback(destination)
         delta = Path(temporary) / source.name
-        with closing(sqlite3.connect(delta.as_uri(), uri=True)) as db:
-            db.execute("ATTACH DATABASE ? AS src", (source.resolve().as_uri() + "?mode=ro",))
-            db.execute("ATTACH DATABASE ? AS dst", (destination.resolve().as_uri() + "?mode=ro",))
-            db.execute("BEGIN")  # One consistent read of the scratch store.
-            schema = dict(db.execute(
-                "SELECT name, sql FROM src.sqlite_master WHERE type='table' AND sql IS NOT NULL "
-                "AND name NOT LIKE 'sqlite_%'"))
-            dst_tables = {r[0] for r in db.execute(
-                "SELECT name FROM dst.sqlite_master WHERE type='table'")}
-            for sql in schema.values():
-                db.execute(sql)
-            db.execute("INSERT INTO main.dataset_identity SELECT * FROM src.dataset_identity")
-            high = {}
-            for table, (columns, timed) in DELTA_TABLES.items():
-                if table not in schema:
-                    continue
-                floor = published.get(table, 0)
-                high[table] = db.execute(f"SELECT COALESCE(MAX(rowid),0) FROM src.{table}").fetchone()[0]
-                order = ", ".join(columns)
-                if "rowids" in cutoff:
-                    new, args = "rowid > ?", (max(floor, cutoff["rowids"].get(table, 0)),)
-                elif timed:
-                    new, args = "rowid > ? AND created_at >= ?", (floor, cutoff["created_at"])
-                elif table == "origins":
-                    # Cache hits add new row provenance without rewriting their response.
-                    new, args = "rowid > ? AND first_seen_at >= ?", (floor, cutoff["created_at"])
-                else:
-                    new, args = "rowid > ?", (floor,)
-                if table == "feature_artifacts" and table in dst_tables:
-                    # Artifacts are few; durable ones are complete, so only absent IDs travel.
-                    new += (" AND NOT EXISTS (SELECT 1 FROM dst.feature_artifacts AS x "
-                            "WHERE x.artifact_id=s.artifact_id)")
-                db.execute(f"INSERT OR IGNORE INTO main.{table} SELECT * FROM src.{table} AS s "
-                           f"WHERE {new} ORDER BY {order}", args)
-            for table in LEDGER_TABLES:
-                if table in schema:
-                    db.execute(f"INSERT INTO main.{table} SELECT * FROM src.{table}")
-            db.execute("COMMIT")
-            if "feature_artifacts" in schema:
-                _copy_artifact_responses(db, delta, "src")
-                db.commit()
-            db.execute("DETACH DATABASE src")
-            db.execute("DETACH DATABASE dst")
+        high = _copy_append_only_delta(source, delta, destination, cutoff, published, periodic)
+        if high is None:
+            required = 2 * size + 512 * 2**20
+            native = _publication_temporary_root(work, required)
+            if shutil.disk_usage(native).free < required:
+                raise OSError("Insufficient native space for the delta and its SQLite snapshot")
+            with tempfile.TemporaryDirectory(prefix=".publish-", dir=native) as backup:
+                sealed = _live_snapshot(source, Path(backup) / source.name, periodic)
+                high = _copy_sealed_delta(sealed, delta, destination, cutoff, published)
         ResponseCache(delta)  # Same schema guarantees as every store.
         merged = merge_cache(delta, destination, backup_destination=False, deduplicate_ledger=True,
                              destination_locked=True, validate_destination=False,
                              commit_unchanged=False)
-        _PUBLISHED_ROWIDS[key] = high
+        _PUBLISHED_ROWIDS[mark_key] = high
         print(json.dumps({"event": "publication_delta", "path": destination.name,
                           **{k: v for k, v in merged.items() if k.endswith(("_added", "_reused"))}}),
               flush=True)
         return _closed_db_identity(destination)
+
+
+def _copy_sealed_delta(source, delta, destination, cutoff, published):
+    with closing(sqlite3.connect(delta.as_uri(), uri=True)) as db:
+        db.execute("ATTACH DATABASE ? AS src", (source.resolve().as_uri() + "?mode=ro",))
+        db.execute("ATTACH DATABASE ? AS dst", (destination.resolve().as_uri() + "?mode=ro",))
+        db.execute("BEGIN")  # Assemble the delta from the independent snapshot.
+        schema = dict(db.execute(
+            "SELECT name, sql FROM src.sqlite_master WHERE type='table' AND sql IS NOT NULL "
+            "AND name NOT LIKE 'sqlite_%'"))
+        dst_tables = {r[0] for r in db.execute(
+            "SELECT name FROM dst.sqlite_master WHERE type='table'")}
+        for sql in schema.values():
+            db.execute(sql)
+        db.execute("INSERT INTO main.dataset_identity SELECT * FROM src.dataset_identity")
+        high = {}
+        for table, (columns, timed) in DELTA_TABLES.items():
+            if table not in schema:
+                continue
+            floor = published.get(table, 0)
+            high[table] = db.execute(f"SELECT COALESCE(MAX(rowid),0) FROM src.{table}").fetchone()[0]
+            order = ", ".join(columns)
+            if "rowids" in cutoff:
+                new, args = "rowid > ?", (max(floor, cutoff["rowids"].get(table, 0)),)
+            elif timed:
+                new, args = "rowid > ? AND created_at >= ?", (floor, cutoff["created_at"])
+            elif table == "origins":
+                # Cache hits add new row provenance without rewriting their response.
+                new, args = "rowid > ? AND first_seen_at >= ?", (floor, cutoff["created_at"])
+            else:
+                new, args = "rowid > ?", (floor,)
+            if table == "feature_artifacts" and table in dst_tables:
+                # Artifacts are few; durable ones are complete, so only absent IDs travel.
+                new += (" AND NOT EXISTS (SELECT 1 FROM dst.feature_artifacts AS x "
+                        "WHERE x.artifact_id=s.artifact_id)")
+            db.execute(f"INSERT OR IGNORE INTO main.{table} SELECT * FROM src.{table} AS s "
+                       f"WHERE {new} ORDER BY {order}", args)
+        for table in LEDGER_TABLES:
+            if table in schema:
+                db.execute(f"INSERT INTO main.{table} SELECT * FROM src.{table}")
+        db.execute("COMMIT")
+        if "feature_artifacts" in schema:
+            _copy_artifact_responses(db, delta, "src")
+            db.commit()
+        db.execute("DETACH DATABASE src")
+        db.execute("DETACH DATABASE dst")
+    return high
 
 
 def _backup_page_identity(path):
