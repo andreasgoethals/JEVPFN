@@ -254,7 +254,7 @@ def run(*, phase="question_preparation", progress=print):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--phase", choices=("question_preparation", "experiment_0"), default="question_preparation"
+        "--phase", choices=("question_preparation", "0"), default="question_preparation"
     )
     args = parser.parse_args(argv)
     run(phase=args.phase, progress=lambda message: print(message, flush=True))

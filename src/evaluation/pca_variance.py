@@ -28,7 +28,7 @@ def outer_variance_table(encoders=None) -> pd.DataFrame:
     from src.evaluation.protocol import shared_splits
     from src.utils.config import load_yaml
 
-    cfg = load_yaml("experiment_2/embeddings")
+    cfg = load_yaml("B2")
     encoders = list(encoders or cfg["encoders"])
     rows = []
     for entry in selected_entries(load_catalog(), cfg):

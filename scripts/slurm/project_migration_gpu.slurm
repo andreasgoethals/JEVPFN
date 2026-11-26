@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gpus-per-node=1
 #SBATCH --time=02:00:00
-#SBATCH --output="output_JEVPFN/02_feature_creation/manifests/storage_migration/gpu_%j.log"
-#SBATCH --error="output_JEVPFN/02_feature_creation/manifests/storage_migration/gpu_%j.log"
+#SBATCH --output="output_JEVPFN/general/2_feature_creation/manifests/storage_migration/gpu_%j.log"
+#SBATCH --error="output_JEVPFN/general/2_feature_creation/manifests/storage_migration/gpu_%j.log"
 set -euo pipefail
 requested="${1:-all}"
 case "$requested" in
@@ -20,13 +20,13 @@ esac
 if [[ $# -gt 1 ]]; then echo 'Pass at most one provider' >&2; exit 2; fi
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh
-retired_root="$(/usr/bin/python3 -c 'import json; from pathlib import Path; print(json.loads(Path("output_JEVPFN/02_feature_creation/manifests/storage_migration/copy_verified.json").read_text())["source"])')"
+retired_root="$(/usr/bin/python3 -c 'import json; from pathlib import Path; print(json.loads(Path("output_JEVPFN/general/2_feature_creation/manifests/storage_migration/copy_verified.json").read_text())["source"])')"
 base_bindpath="${APPTAINER_BINDPATH:-}"
 jevpfn_mask_retired_project() {
     mkdir -m 700 "$XDG_CACHE_HOME/retired_project"
     export APPTAINER_BINDPATH="${APPTAINER_BINDPATH:+$APPTAINER_BINDPATH,}$XDG_CACHE_HOME/retired_project:$retired_root:ro"
 }
-export JEVPFN_PHASE=experiment_0 JEVPFN_RUNTIME_PROFILE=blackwell-cu130
+export JEVPFN_PHASE=0 JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 export VSC_SCRATCH_GPFS1="${VSC_SCRATCH_GPFS1:?}/jevpfn-migration-validation"
 test -d "$VSC_SCRATCH_GPFS1/jevpfn-work"
 for provider in liquid liquid_lfm3 strands perplexity cloudflare intern h2o sii kev decision3 nimble; do

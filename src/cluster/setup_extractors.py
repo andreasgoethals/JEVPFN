@@ -40,9 +40,9 @@ def plan(providers, *, reuse=()):
     root = profile["durable_root"]
     export_root = project_export(root)
     steps = [
-        dict(name="cpu", dependencies=[], script="experiment_0_cpu.slurm", args=[root], flags=[]),
+        dict(name="cpu", dependencies=[], script="0_cpu.slurm", args=[root], flags=[]),
         dict(
-            name="storage", dependencies=[], script="experiment_0_storage.slurm", args=[root], flags=[]
+            name="storage", dependencies=[], script="0_storage.slurm", args=[root], flags=[]
         ),
     ]
     for step in steps:
@@ -52,7 +52,7 @@ def plan(providers, *, reuse=()):
             dict(
                 name="embedding_stage",
                 dependencies=[],
-                script="experiment_0_embedding_stage.slurm",
+                script="0_embedding_stage.slurm",
                 args=[],
                 flags=[],
                 cluster=cpu_cluster(),
@@ -63,7 +63,7 @@ def plan(providers, *, reuse=()):
             dict(
                 name=provider + "_stage",
                 dependencies=[],
-                script="experiment_0_stage.slurm",
+                script="0_stage.slurm",
                 args=[provider, root],
                 flags=[],
                 cluster=cpu_cluster(),
@@ -76,7 +76,7 @@ def plan(providers, *, reuse=()):
                 dict(
                     name=provider + "_build",
                     dependencies=deps,
-                    script="experiment_0_container_build.slurm",
+                    script="0_container_build.slurm",
                     args=[provider, "new", root, profile["runtime_profile"]],
                     flags=[],
                     cluster=cpu_cluster(),
@@ -99,7 +99,7 @@ def plan(providers, *, reuse=()):
                         ]
                     )
                 ),
-                script="experiment_0_scratch_stage.slurm",
+                script="0_scratch_stage.slurm",
                 args=[provider],
                 flags=[],
                 cluster=cpu_cluster(),
@@ -107,7 +107,7 @@ def plan(providers, *, reuse=()):
         )
         storage = "gpfs_storage" if provider == "cloudflare" else provider + "_gpfs_storage"
         steps.append(dict(name=storage, dependencies=[provider + "_scratch"],
-                          script="experiment_0_storage_gpfs.slurm", args=[provider],
+                          script="0_storage_gpfs.slurm", args=[provider],
                           flags=[], cluster="mindwell"))
         gpu_root = gpu_profile(runtime=provider)["staging_root"]
         gpu = [
@@ -119,7 +119,7 @@ def plan(providers, *, reuse=()):
             dict(
                 name=provider + "_contracts",
                 dependencies=["cpu", "storage", storage, provider + "_scratch"],
-                script="experiment_0_decision_contracts.slurm",
+                script="0_decision_contracts.slurm",
                 args=[provider, provider, gpu_root],
                 flags=gpu,
                 cluster=profile["cluster"],
@@ -129,7 +129,7 @@ def plan(providers, *, reuse=()):
             dict(
                 name=provider + "_pilot",
                 dependencies=[provider + "_contracts"],
-                script="experiment_0_decision_pilot.slurm",
+                script="0_decision_pilot.slurm",
                 args=[provider, provider, gpu_root],
                 flags=[f for f in gpu if not f.startswith("--time=")] + ["--time=01:00:00"],
                 cluster=profile["cluster"],
@@ -142,7 +142,7 @@ def plan(providers, *, reuse=()):
                 dict(
                     name="embeddings_" + encoder,
                     dependencies=["cpu", "storage", "gpfs_storage", "cloudflare_scratch"],
-                    script="experiment_0_embeddings.slurm",
+                    script="0_embeddings.slurm",
                     args=["cloudflare", root, encoder],
                     flags=["--partition=gpu_b200"],
                     cluster="mindwell",
@@ -157,7 +157,7 @@ def plan(providers, *, reuse=()):
 
 def run(providers, *, execute=False, restart=False):
     if execute:
-        lock = paths.manifests_dir("experiment_0") / "container_setup" / ".submission.lock"
+        lock = paths.manifests_dir("0") / "container_setup" / ".submission.lock"
         with file_lock(lock, timeout=1):
             return _run(providers, execute=True, restart=restart)
     return _run(providers, restart=restart)
@@ -167,7 +167,7 @@ def _run(providers, *, execute=False, restart=False):
     from src.cluster import containers
 
     receipt = (
-        paths.manifests_dir("experiment_0") / "container_setup" / "open_models_mindwell_b200.json"
+        paths.manifests_dir("0") / "container_setup" / "open_models_mindwell_b200.json"
     )
     runtime_profile = gpu_profile()["runtime_profile"]
     previous = json.loads(receipt.read_text()) if (execute or restart) and receipt.exists() else None
@@ -213,10 +213,10 @@ def _run(providers, *, execute=False, restart=False):
     if not paths.on_vsc() or os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Submit from the VSC login terminal")
     if check_if_present()["frozen"]:
-        raise ValueError("Runtime setup must precede the final frozen 0A campaign")
+        raise ValueError("Runtime setup must precede the final frozen Experiment 0 campaign")
     identity = digest(dict(source=source_snapshot(), providers=providers, steps=steps))
     receipt.parent.mkdir(parents=True, exist_ok=True)
-    paths.logs_dir("experiment_0").mkdir(parents=True, exist_ok=True)
+    paths.logs_dir("0").mkdir(parents=True, exist_ok=True)
     if previous:
         saved = json.loads(receipt.read_text())
         if saved["identity"] != identity:
@@ -259,7 +259,7 @@ def _run(providers, *, execute=False, restart=False):
             nonlocal active_step
             active_step = step
             command = ["sbatch", "--parsable", f"--clusters={step['cluster']}",
-                       f"--account={load_yaml('experiment_0/scheduling')['account']}",
+                       f"--account={load_yaml('0/scheduling')['account']}",
                        *step["flags"], "scripts/slurm/" + step["script"], *step["args"]]
             step.update(status="starting", command=command)
             save()
@@ -276,7 +276,7 @@ def _run(providers, *, execute=False, restart=False):
             save()
             print(f"Submitted {step['name']}: {step['job_id']}", flush=True)
 
-        report["summary"] = advance(steps, settings=load_yaml("experiment_0/scheduling"),
+        report["summary"] = advance(steps, settings=load_yaml("0/scheduling"),
                                     state=scheduler_state, submit=submit, save=save)
         report["status"] = (
             ("setup_completed_with_failures" if report["summary"]["failures"]

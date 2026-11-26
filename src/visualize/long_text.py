@@ -118,6 +118,6 @@ def long_text_figures(datasets, columns, *, all_columns=False):
             "Lengths use one token per four characters, rounded up. Blue dotted lines mark encoder "
             "chunk sizes. Longer text is split and all chunks contribute to its embedding. "
             "Red dashed lines mark decision-model limits for complete requests, including the question "
-            "and options. Experiment 0A checks the actual token counts. Grey italic labels mark "
+            "and options. Experiment 0 checks the actual token counts. Grey italic labels mark "
             "datasets outside the benchmark.",
         )

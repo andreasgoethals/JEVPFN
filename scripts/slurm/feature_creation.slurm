@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --output="output_JEVPFN/02_feature_creation/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/02_feature_creation/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/general/2_feature_creation/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/general/2_feature_creation/logs/%x_%j.log"
 set -euo pipefail
 source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 export JEVPFN_PHASE=feature_creation

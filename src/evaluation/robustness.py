@@ -1,4 +1,4 @@
-"""RQ1B. Fresh, paired one-factor interventions on the frozen question bank."""
+"""A2. Fresh, paired one-factor interventions on the frozen question bank."""
 
 import argparse
 import csv
@@ -22,7 +22,7 @@ from src.utils.serialization import canonical_json, digest, write_json
 
 
 def catalogue():
-    with paths.config_file("question_versions.csv").open(
+    with paths.config_file("A2_question_versions.csv").open(
         encoding="utf-8-sig", newline=""
     ) as f:
         rows = list(csv.DictReader(f))
@@ -33,7 +33,7 @@ def catalogue():
 
 
 def sample(path, dataset, limit):
-    cfg = load_yaml("rq1/behavior")
+    cfg = load_yaml("A2")
     wording = catalogue()[dataset]
     with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)) as db:
         identity, recipe, _, entry = _read_set(db, None)
@@ -206,14 +206,14 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
     hosted = provider == "jev" and isinstance(client, HostedReplay)
     if provider not in SELF_HOSTED and not hosted:
         raise ValueError("Use a separately budgeted hosted protocol for Jev")
-    cfg = load_yaml("rq1/behavior")
+    cfg = load_yaml("A2")
     limit = min(3, cfg["requests_per_dataset"]) if pilot else cfg["requests_per_dataset"]
     path = paths.dataset_question_path(dataset)
     identity, wording, trials = sample(path, dataset, limit)
     if not pilot:
         from src.evaluation.qualification import benchmark_evidence
 
-        benchmark_evidence(acceptance, {"phase": "experiment_1", "dataset_id": dataset,
+        benchmark_evidence(acceptance, {"phase": "B1", "dataset_id": dataset,
                                         "model": "linear", "feature_set": "non_text_plus_joint",
                                         "provider": provider})
     client = client or SelfHostedClient(provider, allow_model_runs=True)
@@ -235,7 +235,7 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
     if not pilot:
         from src.evaluation.qualification import decision_selector
 
-        selector = decision_selector(load_yaml("experiment_1/main"), provider)
+        selector = decision_selector(load_yaml("B1"), provider)
         if selector["settings_sha256"] != design["settings"]:
             raise ValueError("Robustness settings differ from the frozen RQ2 extractor")
         passed = set()
@@ -247,7 +247,7 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
                 )
             ) as bank:
                 frozen_id, _, _, _ = _read_set(bank, None)
-            for file in paths.results_dir("robustness", dataset_id, provider, phase="rq1").glob(
+            for file in paths.results_dir("robustness", dataset_id, provider, phase="A2").glob(
                 "*.json"
             ):
                 receipt = json.loads(file.read_text(encoding="utf-8"))
@@ -270,7 +270,7 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
             )
     if hosted:
         client.start(design)
-    folder = paths.results_dir("robustness", dataset, provider, phase="rq1")
+    folder = paths.results_dir("robustness", dataset, provider, phase="A2")
     folder.mkdir(parents=True, exist_ok=True)
     store = folder / (digest(design) + ".sqlite3")
     with file_lock(store.with_suffix(".lock"), timeout=1), closing(sqlite3.connect(store)) as db:
@@ -419,7 +419,7 @@ if __name__ == "__main__":
         from src.jev.self_hosted import SelfHostedClient
 
         client = SelfHostedClient(args.provider, allow_model_runs=True)
-        for dataset in load_yaml("rq1/behavior")["qualifying_datasets"]:
+        for dataset in load_yaml("A2")["qualifying_datasets"]:
             print(
                 run(dataset, args.provider, pilot=True, acceptance=None, client=client), flush=True
             )

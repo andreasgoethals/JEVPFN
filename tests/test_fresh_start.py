@@ -52,7 +52,7 @@ def test_archive_both_tiers_preserves_every_file_and_protected_data(isolated_out
         assert (archive / "transfers/cache_backups/paid.sqlite3").is_file()
         assert not list(Path(move["source"]).rglob("*.sqlite3"))
     assert all(p.read_bytes() == b"protected" for p in protected)
-    assert paths.logs_dir("experiment_0").is_dir()
+    assert paths.logs_dir("0").is_dir()
 
 
 @pytest.mark.parametrize("delete", [False, True])
@@ -184,7 +184,7 @@ def test_local_reset_cannot_bypass_vsc_checks(isolated_output):
 
 def test_local_fixture_cannot_read_the_owners_real_diagnostic_ledgers(isolated_output, monkeypatch):
     monkeypatch.delenv("VSC_DATA")
-    assert paths.manifests_dir("experiment_0").is_relative_to(isolated_output)
+    assert paths.manifests_dir("0").is_relative_to(isolated_output)
     assert paths.jev_cache_path().is_relative_to(isolated_output)
 
 
@@ -243,7 +243,7 @@ def test_delete_cleans_only_output_and_explicit_archives(
         if include_archives:
             assert not archive.parent.parent.exists()
     if not local:
-        assert paths.logs_dir("experiment_0").is_dir()
+        assert paths.logs_dir("0").is_dir()
     # Repeating a completed reset is safe and does not turn inputs into cleanup targets.
     fresh_start.run(apply=True, writers_stopped=True, **options)
     assert all(p.read_bytes() == b"must survive byte for byte" for p in protected)

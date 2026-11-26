@@ -1,0 +1,518 @@
+extends: B1/protocol
+phase: B1
+name: decision_text_feature_comparison
+enabled: false
+proposal: false
+model_catalog: B1/models
+candidate_models:
+- catboost
+- tabpfn_3_5
+- tabicl_v2
+- limix_2
+- kumo_tabular
+- linear
+- lightgbm
+roster_note: seven_predictors_library_defaults_baseline_shared_across_extractors
+feature_artifacts: []
+candidate_combinations:
+- non_text
+- non_text_plus_joint
+- non_text_plus_per_column
+- non_text_plus_both
+include_non_text_features_in_jev: false
+feature_view:
+  binary_classification: positive_class_probability
+  multiclass_classification: full_class_probability_vector
+  regression: full_class_probability_vector
+deduplicate_identical_columns_in_combined_view: true
+reuse_fits_between_identical_named_arms: false
+requires:
+- accepted_0
+- complete_feature_artifacts
+- agreed_evaluation_protocol
+dataset_selection:
+  exclude:
+  - REG_TEXT_ZOMATO_RESTAURANTS
+  - MUL_TEXT_SPOTIFY_GENRES
+gate_acceptance: null
+candidate_extractors:
+- jev
+- liquid
+- liquid_lfm3
+- perplexity
+- cloudflare
+- strands
+- intern
+- h2o
+- sii
+- kev
+- decision3
+- nimble
+- glide
+- mammoth
+- drex_max
+- knowline
+- sieve
+# The membership of the first release stays fixed when a later model is registered.
+initial_decision_providers: [liquid, liquid_lfm3, perplexity, cloudflare, strands, intern,
+  h2o, sii, kev, decision3, nimble, glide, mammoth, drex_max, knowline, sieve]
+# Each release also defines a <name>_added work list for its new open-weight or hosted providers.
+# Registration defines a study scope. Inference and qualification use their own approvals.
+decision_extensions:
+  with_jev: {parent: open_weight, add: [jev]}
+non_text_columns: all_original_numerical_and_categorical_features
+# Two publications of this dataset have identical features and request bytes.
+# The completed recovery job 11794789 wrote the selected revision.
+dataset_feature_artifacts:
+  MUL_TEXT_US_ACCIDENTS:
+    nimble:
+      per_column: fc29e6bbe75bafe7e7cc072aaeb684de83770298a36b4ed17d227767285d75e9
+      joint: 70bf81c3b07118c7cf68934f2800eb22b5b8187637f89eb5f5fdee59157c8d57
+feature_selectors:
+  jev: null
+  liquid: null
+  liquid_lfm3: null
+  perplexity: null
+  cloudflare: null
+  strands: null
+  intern: null
+  h2o: null
+  sii: null
+  kev: null
+  decision3: null
+  nimble: null
+  mammoth: null
+  drex_max: null
+  knowline: null
+  sieve: null
+  glide: null
+
+# Further named configurations of B1 (load_yaml('B1/models'), load_yaml('B1/protocol')):
+# the predictor catalogue and the evaluation protocol shared by every Group B experiment.
+sections:
+  models:
+    enabled: false
+    adapters_implemented: true
+    common_tasks:
+    - binary_classification
+    - multiclass_classification
+    - regression
+    roster_status: owner_selected_seven_numeric_predictors_three_original_text_models
+    text_comparison_rule: distinguish_text_encoders_from_categorical_string_encoding
+    excluded_frameworks: []
+    excluded_models:
+    - TabM
+    - Google_Research_TabFM
+    model_selection_objective: compare_decision_text_features_within_each_fixed_predictor
+    hyperparameter_search: false
+    models:
+      tabpfn_3_5:
+        name: TabPFN-3.5
+        priority: selected_decision_and_embedding_experiments
+        package: tabpfn==9.0.0
+        model_selector: ModelVersion.V3_5
+        extra: models
+        device_proposal: cuda
+        source: https://github.com/PriorLabs/TabPFN
+        raw_text: optional_shared_TFIDF_SVD_preprocessing_off_by_default
+        main_arm_text_configuration: 'inference_config={"TRANSFORM_TEXT": false}'
+        optional_text_configuration_reference: 'inference_config={"TRANSFORM_TEXT": true}; pandas_string_dtype'
+        hosted_3_5_plus: separate_service_not_the_local_checkpoint
+        categorical: pandas_category_dtype_training_vocabulary_plus_categorical_features_indices
+        runtime:
+          packages:
+            tabpfn: 9.0.0
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints:
+            binary_classification:
+              path: null
+              sha256: null
+            multiclass_classification:
+              path: null
+              sha256: null
+            regression:
+              path: null
+              sha256: null
+      catboost:
+        name: CatBoost
+        priority: selected_decision_and_embedding_experiments
+        package: catboost==1.2.10
+        extra: baselines
+        device_proposal: cpu
+        source: https://catboost.ai/docs/
+        raw_text: built_in_tokenizers_dictionaries_and_feature_calcers
+        text_review: regression_calcer_support_and_empty_dictionary_edge_cases
+        runtime:
+          packages:
+            catboost: 1.2.10
+          seed: 20260929
+          device: cpu
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints: {}
+      lightgbm:
+        name: LightGBM
+        priority: selected_decision_and_embedding_experiments
+        package: lightgbm==4.7.0
+        extra: baselines
+        device_proposal: cpu
+        estimators: LGBMClassifier_and_LGBMRegressor
+        regularization: library_defaults_no_search
+        categorical: pandas_category_dtype_training_vocabulary_native_categorical_splits
+        missing: native_nan
+        feature_names: positional_because_lightgbm_rejects_json_special_characters
+        source: https://lightgbm.readthedocs.io/en/stable/Advanced-Topics.html#categorical-feature-support
+        raw_text: requires_explicit_numeric_features
+        runtime:
+          packages:
+            lightgbm: 4.7.0
+          seed: 20260929
+          device: cpu
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints: {}
+      linear:
+        name: Logistic regression for classification; linear regression for regression
+        priority: selected_decision_and_embedding_experiments
+        package: scikit-learn==1.9.1
+        extra: baselines
+        device_proposal: cpu
+        regression_estimator: LinearRegression
+        classification_estimator: LogisticRegression
+        regularization: library_defaults_no_search
+        preprocessing: training_fold_imputation_one_hot_encoding_and_scaling
+        source: https://scikit-learn.org/stable/modules/linear_model.html
+        raw_text: requires_explicit_TFIDF_or_embeddings
+        runtime:
+          packages:
+            scikit-learn: 1.9.1
+          seed: 20260929
+          device: cpu
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints: {}
+      tabicl_v2:
+        name: TabICL v2
+        priority: selected_decision_and_embedding_experiments
+        package: tabicl==2.2.0
+        classification_checkpoint: tabicl-classifier-v2-20260212.ckpt
+        regression_checkpoint: tabicl-regressor-v2-20260212.ckpt
+        extra: tabicl
+        device_proposal: cuda
+        source: https://github.com/soda-inria/tabicl
+        raw_text: no_semantic_encoder_use_external_embeddings
+        many_classes: support_many_classes_true_wrapper
+        categorical: pandas_category_dtype_training_vocabulary_internal_ordinal_encoding_missing_own_category
+        runtime:
+          packages:
+            tabicl: 2.2.0
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints:
+            binary_classification:
+              path: null
+              sha256: null
+            multiclass_classification:
+              path: null
+              sha256: null
+            regression:
+              path: null
+              sha256: null
+      limix_2:
+        name: LimiX-2
+        priority: selected_decision_and_embedding_experiments
+        package: null
+        extra: limix
+        checkpoint: LimiX-2.ckpt
+        parameters: 400000000
+        interface: inference.predictor.LimiXPredictor
+        raw_text: no_documented_semantic_encoder_external_encoding_required
+        environment: Python_3_12_Torch_at_least_2_9_1_in_reviewed_current_source
+        weight_license: StableAI_LimiX_Non_Commercial
+        review:
+        - source_and_checkpoint_hash
+        - categorical_preprocessing
+        - many_class_coverage
+        - v2_configuration
+        - CUDA
+        source: https://github.com/limix-ldm-ai/LimiX
+        runtime:
+          packages:
+            LimiX: git:516bf396333feb3198cf7aff8a6c10421f218e24
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints:
+            binary_classification:
+              path: null
+              sha256: null
+            multiclass_classification:
+              path: null
+              sha256: null
+            regression:
+              path: null
+              sha256: null
+          inference_configs:
+            binary_classification:
+              path: null
+              sha256: null
+            multiclass_classification:
+              path: null
+              sha256: null
+            regression:
+              path: null
+              sha256: null
+      tabstar:
+        name: TabSTAR v1.1
+        model_generation: v1.1
+        interface: tabstar.tabstarv1p1_model
+        priority: selected_original_text_baseline
+        package: tabstar==1.2.2
+        extra: tabstar
+        device_proposal: cuda
+        review:
+        - real_data_pretraining_overlap
+        - target_task_finetuning_budget
+        - text_encoder_weights
+        source: https://github.com/alanarazi7/TabSTAR
+        raw_text: pretrained_language_encoder_and_supervised_task_adaptation
+        runtime:
+          packages:
+            tabstar: 1.2.2
+            transformers: 4.57.6
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints: {}
+          pretrain_dataset_or_path: null
+          assets: []
+          repositories:
+            classification:
+              model: alana89/TabSTAR-v1.1-cls-20261011
+              revision: 4480a25fea83029b02b07c10b9f03a376481daaf
+            regression:
+              model: alana89/TabSTAR-v1.1-reg-20261009
+              revision: 076160ddcfe71faa98841df274bc0ebdc5d2c093
+            text_encoder:
+              model: intfloat/e5-small-v2
+              revision: ffb93f3bd4047442299a41ebb6fa998a38507c52
+      contexttab:
+        name: ConTextTab (SAP RPT-1 OSS)
+        priority: selected_original_text_baseline
+        package: null
+        extra: contexttab
+        raw_text: embedded_column_names_and_cell_values_in_semantic_ICL
+        interface: SAP_RPT_OSS_Classifier_and_SAP_RPT_OSS_Regressor
+        review:
+        - real_data_overlap
+        - checkpoint_terms
+        - text_encoder
+        - context_budget
+        - GPU_memory
+        - Python_3_11_reference_environment
+        source: https://github.com/SAP-samples/sap-rpt-1-oss
+        runtime:
+          packages:
+            sap-rpt-oss: git:a0067b3c9db56bc35a6dcab09a9223a3ff0821e0
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints: {}
+          checkpoint_filename: null
+          assets: []
+      ag_mm:
+        name: AutoGluon-Multimodal (AG-MM)
+        priority: selected_original_text_baseline
+        extra: ag-mm
+        source: https://auto.gluon.ai/stable/api/autogluon.multimodal.MultiModalPredictor.html
+        raw_text: supervised_text_encoder_and_numeric_categorical_fusion
+        fixed_recipe: medium_quality_no_HPO_no_model_ensemble
+        text_encoder_source: google/electra-base-discriminator
+        runtime:
+          packages:
+            autogluon.multimodal: 1.6.1
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints: {}
+          text_checkpoint_path: null
+          assets: []
+        review:
+        - immutable_text_encoder_revision_and_all_file_hashes
+        - separate_runtime_transformers_less_than_5_15
+        - offline_GPU_binary_multiclass_regression_contracts
+        - full_fold_training_time_and_memory
+      kumo_tabular:
+        name: NVIDIA Kumo Tabular
+        source: https://github.com/NVIDIA/structured-data-models
+        raw_text: no_semantic_encoder
+        extra: kumo
+        checkpoint_revision: v1.0.1
+        regression_point: mean_of_999_predicted_quantiles
+        priority: selected_decision_and_embedding_experiments
+        runtime:
+          packages:
+            structured-data-models: git:bd2d55db104679393fcd6afe13305f37e40b5467
+          seed: 20260929
+          device: cuda
+          threads: 8  # capped to the actual Slurm CPU allocation
+          parameters: {}
+          checkpoints:
+            binary_classification:
+              path: null
+              sha256: null
+            multiclass_classification:
+              path: null
+              sha256: null
+            regression:
+              path: null
+              sha256: null
+          size: large
+          num_estimators: 8
+          prediction_batch_size: 256
+    acceptance_before_benchmark:
+    - immutable_checkpoint_hashes_and_licenses
+    - all_selected_task_and_class_limits_up_to_30_classes
+    - missing_value_and_categorical_handling
+    - training_data_overlap_check_for_models_pretrained_on_real_tables
+    - matching_row_splits_and_declared_compute_budgets
+    - offline_vsc_import_and_tiny_model_smoke_after_approval
+    live_runtime_verified: false
+    adapter_module: src.evaluation.models
+    campaign_module: src.evaluation.campaign
+  protocol:
+    # Injectable evaluation runner exists; model/checkpoint selection and execution remain disabled.
+    enabled: false
+    proposal: true
+    random_seed: 20260929
+    evaluation:
+      outer_folds: 5  # Owner requested five-fold CV; repeated CV was not requested.
+      repeats: 1
+      identical_splits_across_models_and_features: true
+      split_manifest: null  # Generate once from row IDs and the pinned dataset version.
+      classification_split: stratified_kfold  # Binary AND multiclass.
+      regression_split: kfold
+      shuffle: true
+      group_or_time_policy: not_used_in_this_benchmark  # Owner decision, not a deployment claim.
+      training_rows: all_outer_training_rows
+      training_row_cap: null
+      silent_subsampling: forbidden
+      unsupported_full_training_set: record_resource_limit_and_review_never_silently_cap
+      inner_validation:
+        source: outer_training_only
+        strategy: stratified_out_of_fold
+        folds: 3
+        shuffle: true
+        applies_to: binary_threshold_selection_only
+        preprocessing_fit_scope: each_inner_training_partition
+      binary:
+        primary_metric: roc_auc
+        threshold_objective: f1
+        threshold_source: inner_validation_predictions_only
+        experiment_3_threshold_policy: fixed_0_5_no_inner_encoder_refits
+        test_threshold_tuning: forbidden
+        positive_class: canonical_last  # Same fixed class orientation as Jev templates.
+        tie_break_proposal: closest_to_0_5_then_larger_threshold
+        refit_after_threshold_selection: true  # Refit on the full outer training fold; freeze threshold.
+        record_probability_metrics: [roc_auc, average_precision, pr_auc_trapezoidal, log_loss, brier, ece, maximum_calibration_error]
+        record_decision_metrics: [f1, precision, recall, specificity, negative_predictive_value, accuracy, balanced_accuracy, f1_macro, f1_micro, f1_weighted, precision_macro, precision_micro, precision_weighted, recall_macro, recall_micro, recall_weighted, mcc, cohen_kappa]
+        record_thresholds: [default_0_5, validation_selected]
+        record_confusion_matrix_and_per_class_scores: true
+      multiclass:
+        primary_metric: roc_auc_ovr_macro
+        decision_rule_proposal: argmax
+        per_class_threshold_tuning: false  # Needs a separate design if later requested.
+        secondary_metrics_proposal: [log_loss, accuracy, roc_auc_ovr_macro]
+        record_probability_metrics: [log_loss, brier_multiclass_sum, roc_auc_ovr_macro, roc_auc_ovr_weighted, roc_auc_ovo_macro, roc_auc_ovo_weighted, average_precision_macro, average_precision_micro, average_precision_weighted, ece, maximum_calibration_error]
+        record_decision_metrics: [accuracy, balanced_accuracy, f1_macro, f1_micro, f1_weighted, precision_macro, precision_micro, precision_weighted, recall_macro, recall_micro, recall_weighted, mcc, cohen_kappa]
+        record_top_k_accuracy: [2, 3, 5]  # Null when k >= number of classes (trivial metric).
+        record_confusion_matrix_and_per_class_scores: true
+        probability_columns: fixed_class_vocabulary_aligned_across_folds
+        rare_classes: review_split_feasibility_never_silently_merge_or_drop
+      regression:
+        primary_metric: r2
+        secondary_metrics_proposal: [mae, r2]
+        candidate_metrics: [rmse, mae, r2]
+        classification_threshold: not_applicable
+        record_point_metrics: [rmse, mse, mae, median_absolute_error, max_absolute_error, r2, explained_variance, mean_error, pearson_r, spearman_rho]
+        conditional_metrics: [mape_pct, rmsle]  # Require explicitly declared meaningful ratio scale.
+        optional_quantile_metrics: [pinball_loss, observed_fraction_below, interval_coverage, mean_interval_width, interval_score]
+        unsupported_distribution_metrics: [crps, negative_log_likelihood]  # No common distribution contract yet; never fabricate from point predictions.
+        target_scale: declared_per_dataset_no_automatic_inverse_transform
+      metric_conventions:
+        implementation: src.evaluation.metrics
+        version: prediction-metrics-v2
+        headline_metric_selection: approved_2026_10_27_multabench_auc_and_r2
+        headline_metric_does_not_block_metric_recording: true
+        record_all_configured_metrics: true
+        never_select_primary_metric_after_results: true
+        undefined_metric: null_with_reason
+        invalid_probabilities: reject_never_renormalize
+        binary_brier: mean_squared_positive_class_probability_error_range_0_1
+        multiclass_brier: mean_sum_of_squared_class_probability_errors_range_0_2
+        average_precision_is_not_trapezoidal_pr_auc: true
+        calibration_bins: 15
+        calibration_binning: equal_width
+        calibration_error: diagnostic_not_a_proper_scoring_rule
+        decision_zero_division: 0
+        constant_target_or_decision_mcc: null
+        class_order: explicit_fixed_vocabulary
+        save_reliability_bins_and_per_class_support: true
+      recording:
+        implementation: src.evaluation.records
+        runner: src.evaluation.protocol.evaluate_cv
+        save_predictions: true  # Row ID, target, full probabilities or point/quantile predictions.
+        prediction_roles: [outer_test, inner_oof_binary_threshold]
+        prediction_storage: project
+        row_level_split_assignments_storage: project
+        materialized_feature_matrices_storage: project
+        full_metric_tables_storage: project
+        compact_manifests_and_logs_storage: data
+        save_prediction_hash: true
+        required_identity: [dataset_id, data_identity, model_id, feature_set, feature_input_identity, feature_artifact_ids, estimator_settings, outer_fold, split_id, checkpoint_id, n_train, n_validation, target_scale]
+        timing_stages: [inner_model_loading, inner_fit, inner_predict, threshold_selection, model_loading, fit, predict, metric_evaluation, prediction_serialization]
+        fit_scope: library_fit_including_deferred_loading_and_preprocessing
+        extraction_timing: separate_project_sqlite_journal_with_data_summary
+        clocks: [wall_seconds, current_process_cpu_seconds]
+        cuda_synchronize_before_and_after_timing: true
+        record_fit_attempts_and_failures: true
+        resources: [peak_rss_bytes, peak_gpu_allocated_bytes, peak_gpu_reserved_bytes]
+        unavailable_resource_measurement: null_not_zero
+        adapter_metadata: [package_versions, checkpoint_hash, device, hardware, thread_count, prediction_batch_size, cold_or_warm, cache_hit, effective_context_rows, n_features, feature_artifact_id, code_hash, config_hash]
+        feature_creation_cost: recorded_once_separately_not_charged_to_every_cv_fold
+      field_attribution:  # B4 supplement; src.evaluation.attribution. Approved 18 Nov 2026.
+        # Disabled 20 Nov 2026 (Group B): permutation importance is replaced by B3 text-column
+        # refits (config/B/text_column_refits.yaml); no shuffling, no SHAP.
+        enabled: false
+        repeats: 3  # Joint permutations per feature group and outer fold.
+        max_test_rows: null  # All outer-test rows; any cap is recorded with its row subset.
+        # Decision blocks and embedding groups move only among rows with the same text-availability
+        # flags (approved 19 Nov 2026); `unconditional` is the original v1 scheme. Recorded per fold.
+        permutation: conditional_on_availability
+      preprocessing_fit_scope: training_partition_only
+      model_tuning_budget: 0
+      hyperparameters: pinned_library_defaults_with_explicit_seed_device_and_resource_settings
+      optional_finetuning: disabled  # Native adaptation and Experiment 3 TAR are prespecified required methods.
+      optional_automl_or_bagging: disabled
+      native_epoch_averaging: TabSTAR_v1p1_three_internal_validation_epochs_as_published
+      calibration: none
+      small_n: outside_current_scope
+      statistical_tests: synthesis/analysis  # Disabled until metrics/contrasts are approved before outcomes.
+      comparison: jev_feature_combinations_within_the_same_model_on_identical_folds
+      aggregation: per_dataset_paired_deltas_then_task_specific_across_dataset_summaries
+      fold_sd_interpretation: descriptive_only_never_standard_error
+      native_text_comparison: descriptive_reference_results_no_same_predictor_baseline
+      model_leaderboard: outside_research_objective
+      pool_raw_classification_and_regression_metrics: forbidden
+      failed_or_unsupported_runs: record_explicitly_never_silently_drop
+      cached_jev_features_are_fold_independent: true
+      native_text_preprocessing_is_fold_specific: true

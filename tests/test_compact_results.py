@@ -36,25 +36,25 @@ def save(index):
             "prediction_role": "outer_test",
         },
     )
-    complete_fold(recipe, [ref], "experiment_1")
+    complete_fold(recipe, [ref], "B1")
     return recipe, ref, values
 
 
 def test_concurrent_folds_one_database_roundtrip_and_corruption(isolated_output):
     with ThreadPoolExecutor(max_workers=3) as pool:
         saved = list(pool.map(save, range(8)))
-    root = paths.results_dir(phase="experiment_1")
+    root = paths.results_dir(phase="B1")
     assert len(list(root.rglob("*.sqlite3"))) == 1
     assert not list(root.rglob("*.parquet")) and not list(root.rglob("record.json"))
-    assert len(list(paths.manifests_dir("experiment_1").rglob("*.json"))) == 1
+    assert len(list(paths.manifests_dir("B1").rglob("*.json"))) == 1
     for recipe, ref, values in saved:
-        assert completed_fold(recipe, "experiment_1") == [ref]
+        assert completed_fold(recipe, "B1") == [ref]
         pd.testing.assert_frame_equal(store.read_predictions(ref), values)
     recipe, ref, _ = saved[0]
     with store.connect(ref.database) as db:
         db.execute("UPDATE records SET predictions=? WHERE id=?", (b"corrupt", ref.key))
     with pytest.raises(ValueError, match="Corrupt"):
-        completed_fold(recipe, "experiment_1")
+        completed_fold(recipe, "B1")
 
 
 def test_merge_is_idempotent_portable_and_atomic_on_conflict(isolated_output, tmp_path):
@@ -85,22 +85,22 @@ def test_transfer_import_merges_evaluation_records(isolated_output, tmp_path, mo
     import_bundle(first)
     import_bundle(second)
     import_bundle(second)
-    refs = completed_fold(recipe, "experiment_1")
+    refs = completed_fold(recipe, "B1")
     pd.testing.assert_frame_equal(store.read_predictions(refs[0]), values)
-    assert len(list(store.recipes("experiment_1"))) == 2
-    assert len(list(paths.results_dir("evaluation", phase="experiment_1").glob("*.sqlite3"))) == 1
+    assert len(list(store.recipes("B1"))) == 2
+    assert len(list(paths.results_dir("evaluation", phase="B1").glob("*.sqlite3"))) == 1
 
 
 def test_completion_accepts_equivalent_path_alias_but_not_another_store(
     isolated_output, monkeypatch, tmp_path
 ):
-    original = store.database("fixture", "experiment_1")
+    original = store.database("fixture", "B1")
     detour = original.parent / "detour"
     detour.mkdir(parents=True)
     monkeypatch.setattr(store, "database", lambda *a: detour / ".." / original.name)
     recipe, ref, values = save(3)
     pd.testing.assert_frame_equal(
-        store.read_predictions(store.completed(recipe, "experiment_1")[0]), values
+        store.read_predictions(store.completed(recipe, "B1")[0]), values
     )
     with pytest.raises(ValueError, match="own dataset"):
-        store.complete(recipe, [store.RecordRef(tmp_path / original.name, ref.key)], "experiment_1")
+        store.complete(recipe, [store.RecordRef(tmp_path / original.name, ref.key)], "B1")

@@ -1,4 +1,4 @@
-"""Label-free RQ2-E moderators are fixed before results and never read targets."""
+"""Label-free B4 moderators are fixed before results and never read targets."""
 
 import numpy as np
 import pandas as pd

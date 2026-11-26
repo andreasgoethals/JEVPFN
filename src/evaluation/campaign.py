@@ -49,15 +49,14 @@ from src.utils.events import append_event
 from src.utils.provenance import code_identity
 from src.utils.serialization import digest, write_json
 
-#: Group B (approved 20 November 2026): B1 experiment_1, B2 experiment_2 (frozen; decision +
-#: frozen) and experiment_3 (TAR; supervised probe), B3 rq2 (text-column refits),
-#: B4 data_efficiency (training-size curves), B5 experiment_4 (native text).
-GROUP_B_PHASES = {
-    "experiment_1": "B1", "experiment_2": "B2", "experiment_3": "B2", "rq2": "B3",
-    "data_efficiency": "B4", "experiment_4": "B5",
-}
-#: Group C (approved 20 November 2026, Strands only): C1 representations (exp09), C2 rq3 (exp10).
-GROUP_C_PHASES = {"representations": "C1", "rq3": "C2"}
+#: Group B (approved 20 November 2026; one name per experiment since 26 November 2026):
+#: B1 decision features, B2 frozen embeddings (and decision + frozen), B3 TAR and the
+#: label-trained classifier, B4 text-column refits, B5 training-size curves, B6 native text.
+GROUP_B_PHASES = {"B1": "B1", "B2": "B2", "B3": "B3", "B4": "B4", "B5": "B5", "B6": "B6"}
+#: Group C (approved 20 November 2026, Strands only): C1 hidden states, C2 learning from labels.
+GROUP_C_PHASES = {"C1": "C1", "C2": "C2"}
+#: The config of each phase's arms (B4's arms are its text-column refits).
+ARM_CONFIGS = {"B4": "B4/text_column_refits"}
 PROBE_VIEWS = ("per_column", "joint")
 B2_DECISION_EMBEDDING = {"encoder": "e5_small_v2", "pca_scope": "per_column", "pca_components": 32}
 
@@ -65,11 +64,11 @@ B2_DECISION_EMBEDDING = {"encoder": "e5_small_v2", "pca_scope": "per_column", "p
 def benchmark_plan(main=None, text=None, *, cohort="all"):
     from src.evaluation.design import decision_providers, incremental_cohort, pca_grid
 
-    main = main or load_yaml("experiment_1/main")
+    main = main or load_yaml("B1")
     providers = decision_providers(cohort, main)
-    text = text or load_yaml("experiment_4/native_text")
-    embedding = load_yaml("experiment_2/embeddings")
-    tar = load_yaml("experiment_3/tar")
+    text = text or load_yaml("B6")
+    embedding = load_yaml("B2")
+    tar = load_yaml("B3")
     if (
         tuple(main["candidate_models"]) != MAIN_MODELS
         or tuple(text["candidate_models"]) != TEXT_MODELS
@@ -114,38 +113,38 @@ def benchmark_plan(main=None, text=None, *, cohort="all"):
                     rows[-1]["provider"] = provider
 
     for entry in selected:
-        arms(entry, MAIN_MODELS, DECISION_FEATURE_SETS, "experiment_1")
+        arms(entry, MAIN_MODELS, DECISION_FEATURE_SETS, "B1")
         for encoder in embedding["encoders"]:
             for scope, components in grid:
                 for model in MAIN_MODELS:
                     extra = dict(encoder=encoder, pca_scope=scope, pca_components=components)
-                    add(entry, model, EMBEDDING_FEATURE_SETS[0], "experiment_2", **extra)
+                    add(entry, model, EMBEDDING_FEATURE_SETS[0], "B2", **extra)
         for scope, components in grid:
             for model in MAIN_MODELS:
-                add(entry, model, "non_text_plus_tar", "experiment_3",
+                add(entry, model, "non_text_plus_tar", "B3",
                     encoder="e5_small_v2_tar", pca_scope=scope, pca_components=components)
         for model in TEXT_MODELS:
-            add(entry, model, NATIVE_FEATURE_SETS[0], "experiment_4")
-        # B2a: each decision model's "both" block with frozen E5-small per-column PCA32.
+            add(entry, model, NATIVE_FEATURE_SETS[0], "B6")
+        # B2: each decision model's "both" block with frozen E5-small per-column PCA32.
         for model in MAIN_MODELS:
             for provider in providers:
-                add(entry, model, DECISION_PLUS_EMBEDDING, "experiment_2", **B2_DECISION_EMBEDDING)
+                add(entry, model, DECISION_PLUS_EMBEDDING, "B2", **B2_DECISION_EMBEDDING)
                 rows[-1]["provider"] = provider
-        # B2b: label-trained classifier on each frozen encoder, per text column and joint.
+        # B3: label-trained classifier on each frozen encoder, per text column and joint.
         for encoder in embedding["encoders"]:
             for view in PROBE_VIEWS:
                 for model in MAIN_MODELS:
-                    add(entry, model, SUPERVISED_PROBE, "experiment_3", encoder=encoder,
+                    add(entry, model, SUPERVISED_PROBE, "B3", encoder=encoder,
                         probe_view=view)
-        # B3: per-column decision arm refitted without one text column's block.
+        # B4: per-column decision arm refitted without one text column's block.
         if entry["paper_summary"]["text_columns"] >= 2:
             for column in range(entry["paper_summary"]["text_columns"]):
                 for model in MAIN_MODELS:
                     for provider in providers:
-                        add(entry, model, PER_COLUMN_WITHOUT_ONE, "rq2",
+                        add(entry, model, PER_COLUMN_WITHOUT_ONE, "B4",
                             dropped_text_column=column)
                         rows[-1]["provider"] = provider
-    # B4: training-size curves (explicit, recorded subsamples; see data_efficiency).
+    # B5: training-size curves (explicit, recorded subsamples; see data_efficiency).
     from src.evaluation.data_efficiency import data_efficiency_arms
 
     rows.extend(data_efficiency_arms(selected, MAIN_MODELS, providers))
@@ -240,19 +239,9 @@ def task_cache():
 
 
 def run_arm(arm, *, allow_model_runs=False, profile=False):
-    config_names = {
-        "experiment_1": "main",
-        "experiment_2": "embeddings",
-        "experiment_3": "tar",
-        "experiment_4": "native_text",
-        "rq2": "text_column_refits",
-        "data_efficiency": "data_efficiency",
-        "representations": "representations",
-        "rq3": "adaptation",
-    }
-    cfg = load_yaml(arm["phase"] + "/" + config_names[arm["phase"]])
+    cfg = load_yaml(ARM_CONFIGS.get(arm["phase"], arm["phase"]))
     enabled = (
-        load_yaml("experiment_0/debug")["full_fold_profile_enabled"] if profile else cfg["enabled"]
+        load_yaml("0/debug")["full_fold_profile_enabled"] if profile else cfg["enabled"]
     )
     if allow_model_runs is not True or enabled is not True:
         raise RuntimeError("Benchmark execution is disabled; plan only")
@@ -264,7 +253,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
             raise ValueError("Freeze the reviewed source before executing a production benchmark arm")
         from src.evaluation.qualification import acceptance_for, benchmark_evidence
 
-        acceptance = acceptance_for(cfg.get("experiment_0_acceptance"), arm.get("provider"))
+        acceptance = acceptance_for(cfg.get("gate_acceptance"), arm.get("provider"))
         qualified = _cached(
             ("evidence", acceptance, arm["phase"], arm.get("model"), arm.get("provider")),
             lambda: benchmark_evidence(acceptance, arm),
@@ -275,14 +264,14 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     if digest(arm) not in planned:
         raise ValueError("Arm is outside the selected datasets/models/feature combinations")
     hidden_key = _retain_for_arm(arm)
-    catalog = load_yaml("experiment_1/models")
+    catalog = load_yaml("B1/models")
     settings = copy.deepcopy(catalog["models"][arm["model"]]["runtime"])
     settings["threads"] = min(
         settings["threads"], int(os.environ.get("SLURM_CPUS_PER_TASK", settings["threads"]))
     )
     settings["seed"] = cfg["random_seed"]
     if arm["model"] == "tabstar":
-        settings["output_phase"] = "experiment_0" if profile else arm["phase"]
+        settings["output_phase"] = "0" if profile else arm["phase"]
     settings["code_sha256"] = code_identity(
         [
             "src/evaluation/models.py",
@@ -377,7 +366,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
     embedding_cfg = None
     tar_arm = arm["feature_set"] == "non_text_plus_tar"
     probe_arm = arm["feature_set"] == SUPERVISED_PROBE
-    subsampled = arm["phase"] == "data_efficiency"
+    subsampled = arm["phase"] == "B5"
     if uses_embeddings(arm["feature_set"]) and not tar_arm:
         from src.data.text_embeddings import encoder_config, load
 
@@ -534,8 +523,8 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
         import torch
 
         synchronize = torch.cuda.synchronize
-    phase = "experiment_0" if profile else arm["phase"]
-    # Group B (20 November 2026) replaced permutation attribution by B3 text-column refits:
+    phase = "0" if profile else arm["phase"]
+    # Group B (20 November 2026) replaced permutation attribution by B4 text-column refits:
     # no shuffled re-predictions are made (protocol field_attribution.enabled is false).
     fixed_threshold = tar_arm or probe_arm or subsampled or adapted_arm
     log = paths.logs_dir(phase) / "benchmark.log"
@@ -608,7 +597,7 @@ def main():
     parser.add_argument(
         "--profile-fold",
         action="store_true",
-        help="Experiment 0B: full first outer fold, no row cap",
+        help="B0: full first outer fold, no row cap",
     )
     args = parser.parse_args()
     plan = benchmark_plan(cohort=args.cohort)
@@ -651,15 +640,15 @@ def main():
                     "group_b_study_by_phase": GROUP_B_PHASES,
                     "group_c_study_by_phase": GROUP_C_PHASES,
                     "feature_sets_by_experiment": {
-                        "experiment_1": DECISION_FEATURE_SETS,
-                        "experiment_2": EMBEDDING_FEATURE_SETS + (DECISION_PLUS_EMBEDDING,),
-                        "experiment_3": ("non_text_plus_tar", SUPERVISED_PROBE),
-                        "experiment_4": NATIVE_FEATURE_SETS,
-                        "rq2": (PER_COLUMN_WITHOUT_ONE,),
-                        "data_efficiency": ("non_text", "non_text_plus_both",
+                        "B1": DECISION_FEATURE_SETS,
+                        "B2": EMBEDDING_FEATURE_SETS + (DECISION_PLUS_EMBEDDING,),
+                        "B3": ("non_text_plus_tar", SUPERVISED_PROBE),
+                        "B6": NATIVE_FEATURE_SETS,
+                        "B4": (PER_COLUMN_WITHOUT_ONE,),
+                        "B5": ("non_text", "non_text_plus_both",
                                             "non_text_plus_frozen_e5", SUPERVISED_PROBE),
-                        "representations": HIDDEN_FEATURE_SETS,
-                        "rq3": (ADAPTED,),
+                        "C1": HIDDEN_FEATURE_SETS,
+                        "C2": (ADAPTED,),
                     },
                     "configurations_by_experiment": {
                         phase: sum(a["phase"] == phase for a in selected)
@@ -668,9 +657,9 @@ def main():
                     "original_text_models": TEXT_MODELS,
                     "outer_folds": 5,
                     "inner_binary_threshold_folds_by_phase": {
-                        "experiment_1": 3, "experiment_2": 3, "experiment_3": 0,
-                        "experiment_4": 3, "rq2": 3, "data_efficiency": 0,
-                        "representations": 3, "rq3": 0},
+                        "B1": 3, "B2": 3, "B3": 0,
+                        "B6": 3, "B4": 3, "B5": 0,
+                        "C1": 3, "C2": 0},
                     "selected_arm_count": len(selected),
                     "unsupported_width_arms": sum(
                         a["width_status"] == "unsupported_width" for a in selected
@@ -678,7 +667,7 @@ def main():
                     "outer_fits": 5 * len(selected),
                     "non_text_includes_categorical": True,
                     "training_row_cap": None,
-                    "explicit_training_subsamples": "data_efficiency only (B4 design)",
+                    "explicit_training_subsamples": "B5 only (training-size design)",
                     "selected_arms": selected
                     if len(selected) <= 30
                     else "Filter with --dataset/--model/--feature-set/--provider to inspect",

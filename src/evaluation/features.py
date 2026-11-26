@@ -55,11 +55,11 @@ NATIVE_FEATURE_SETS = (
     "original_features",
 )
 #: Group B additions (approved 20 November 2026).
-#: B2a: one decision model's "both" block plus frozen E5-small per-column PCA32.
+#: B2: one decision model's "both" block plus frozen E5-small per-column PCA32.
 DECISION_PLUS_EMBEDDING = "non_text_plus_both_plus_frozen_e5"
-#: B2b: label-trained L2-logistic classifier on frozen embeddings (cross-fitted).
+#: B3: label-trained L2-logistic classifier on frozen embeddings (cross-fitted).
 SUPERVISED_PROBE = "non_text_plus_supervised_probe"
-#: B3: the per-column decision arm refitted without one text column's decision block.
+#: B4: the per-column decision arm refitted without one text column's decision block.
 PER_COLUMN_WITHOUT_ONE = "non_text_plus_per_column_without_one_text"
 GROUP_B_FEATURE_SETS = (DECISION_PLUS_EMBEDDING, SUPERVISED_PROBE, PER_COLUMN_WITHOUT_ONE)
 #: Group C additions (approved 20 November 2026), Strands only.

@@ -1,4 +1,4 @@
-"""Cross-study overview figures for `general/5_synthesis` (no letter-synthesis panels redrawn)."""
+"""Cross-study overview figures for `general/4_synthesis` (no letter-synthesis panels redrawn)."""
 
 from __future__ import annotations
 

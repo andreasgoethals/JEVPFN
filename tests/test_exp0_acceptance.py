@@ -15,11 +15,11 @@ from src.utils import paths
 
 @pytest.fixture
 def local_preflight(tmp_path, monkeypatch):
-    cfg = deepcopy(preflight.load_yaml("experiment_0/debug"))
-    control = preflight.load_yaml("experiment_0/control_runtime")
+    cfg = deepcopy(preflight.load_yaml("0/debug"))
+    control = preflight.load_yaml("0/control_runtime")
     cfg["dataset_selection"]["exclude"] = []
     cfg["candidate_extractors"] = []
-    monkeypatch.setenv("JEVPFN_PHASE", "experiment_0")
+    monkeypatch.setenv("JEVPFN_PHASE", "0")
     for variable in (
         "VSC_DATA",
         "SLURM_JOB_ID",
@@ -48,7 +48,7 @@ def test_local_preflight_does_not_create_inputs_or_claim_live_acceptance(local_p
     report = preflight.run_preflight(local=True)
     assert report["status"] == "preflight_passed"
     assert report["execution_site"] == "local" and report["job_id"] is None
-    assert not report["full_experiment_0_passed"]
+    assert not report["full_qualification_passed"]
     assert not report["performed_checks"]["live_decision_inference"]
     assert not report["performed_checks"]["predictive_models_fitted"]
     assert not report["performed_checks"]["cuda_tensor_and_tabpfn_import"]
@@ -73,10 +73,10 @@ def test_exp0_before_and_after_features_have_distinct_requirements(local_preflig
     assert before["status"] == "preflight_passed"
     assert before["feature_validation"] == "not_required_before_extraction"
     assert "provider_task_contracts" in {c["id"] for c in before["stage_pending_acceptance"]}
-    after = preflight.run_preflight(local=True, stage="after_extraction")
+    after = preflight.run_preflight(local=True, stage="B0")
     assert after["status"] == "failed"
     assert after["evaluation_identity"] == "fixture-evaluation"
-    assert any("0B requires" in failure for failure in after["failures"])
+    assert any("B0 requires" in failure for failure in after["failures"])
 
 
 def test_preflight_records_the_versions_for_the_selected_extension(local_preflight, monkeypatch):
@@ -88,7 +88,7 @@ def test_preflight_records_the_versions_for_the_selected_extension(local_preflig
     monkeypatch.setattr(design, "load_yaml", lambda name: {
         "candidates": {"jev": registration, "strands": {"delivery": "self_hosted"}}
     })
-    after = preflight.run_preflight(local=True, stage="after_extraction", cohort="with_jev_added")
+    after = preflight.run_preflight(local=True, stage="B0", cohort="with_jev_added")
     assert after["decision_cohort"] == "with_jev_added"
     assert after["qualified_decision_providers"] == ["jev"]
     assert after["decision_model_versions"] == [registration | {"provider": "jev"}]
@@ -106,7 +106,7 @@ def test_corrupt_tar_partition_does_not_hide_other_dataset_results(local_preflig
             raise TypeError("malformed archive receipt")
         return {"dataset_id": dataset, "status": "passed"}
     monkeypatch.setattr("src.evaluation.tar.validate_dataset", validate)
-    report = preflight.run_preflight(local=True, stage="after_extraction")
+    report = preflight.run_preflight(local=True, stage="B0")
     assert report["status"] == "failed"
     assert "TAR broken: TypeError" in report["failures"]
     assert report["tar_artifacts"] == [{"dataset_id": "healthy", "status": "passed"}]
@@ -228,4 +228,4 @@ def test_contract_suite_uses_current_interpreter_and_preserves_failed_log(
     assert run.call_args.args[0] == [preflight.sys.executable, "-m", "pytest", "-q"]
     assert report["status"] == "failed"
     assert Path(report["contract_tests"]["log"]).read_text() == "1 failed\n"
-    assert not report["full_experiment_0_passed"]
+    assert not report["full_qualification_passed"]

@@ -1,0 +1,290 @@
+# Decision-model properties: one sourced row per provider in extractors.yaml.
+# Every field is {value, verified, source}; value null + verified false means not
+# verifiable from local sources (never guessed). Interpretation aid only: these
+# covariates never select providers, features or predictors.
+schema: jevpfn.model_properties.v1
+checked_on: '2026-11-19'
+architecture_families:
+  decoder_pointer_head: Decoder language model with a separate pointer/decision head over option positions
+  decoder_lm_head: Decoder language model read out through LM-head logits of label tokens
+  bidirectional_encoder: Bidirectional (encoder or non-causal) backbone with a decision readout
+  other: Recurrent, diffusion, hybrid or otherwise non-standard backbone
+  undisclosed: Hosted model whose architecture is not disclosed
+readout_types:
+  pointer_head: Learned head scoring option/candidate positions
+  lm_label_tokens: Softmax over LM-head logits of option label tokens
+  linear_readout: Learned linear/classifier head on pooled hidden states
+  api: Probabilities returned by a hosted API
+providers:
+  jev:
+    display_name: {value: 'Jev 1.14', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'TypeSafe', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-10-14 (1.14 available)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: 'jev-1.14.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Not disclosed', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'undisclosed', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    readout_type: {value: 'api', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 32000, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Hosted weights; public SDKs do not make Jev itself open source', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    training: {value: 'Training approach named RLCD in the launch post; architecture, parameters and training data not disclosed', verified: true, source: 'dm-library/SUMMARIES.md#web-qezz55x7'}
+    source_url: {value: 'https://docs.typesafe.ai/api', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  liquid:
+    display_name: {value: 'd1-3B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Liquid AI', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-10-07 (open-weight release)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: '051bcc464b01b9f92942b364d9586b0ef5912432', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 3.12, verified: true, source: 'dm-library/SUMMARIES.md#web-4u52t7rc'}
+    parameters_note: {value: 'Stated total 3.12B (card: 3B-parameter decision model)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: 'LiquidAI/LFM2.5-VL-3B', verified: true, source: 'dm-library/repositories/LiquidD1_3B.txt (README.md base_model; snapshot revision 05b80faf)'}
+    architecture_family: {value: 'decoder_lm_head', verified: true, source: 'checkpoints/tokenizers/liquid/runner.py (causal LFM backbone, answer read off answer-slot logits)'}
+    readout_type: {value: 'lm_label_tokens', verified: true, source: 'checkpoints/tokenizers/liquid/runner.py'}
+    hidden_size: {value: 2048, verified: true, source: 'checkpoints/tokenizers/liquid/config.json (text_config)'}
+    num_layers: {value: 30, verified: true, source: 'checkpoints/tokenizers/liquid/config.json (text_config; conv/full-attention hybrid)'}
+    context_tokens: {value: 32768, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'LFM_Open_License', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Post-trained from LFM2.5-VL-3B for single-pass calibrated decisions (choice, yes/no, ordinal score)', verified: true, source: 'dm-library/repositories/LiquidD1_3B.txt (README.md)'}
+    source_url: {value: 'https://huggingface.co/LiquidAI/d1-3B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  liquid_lfm3:
+    display_name: {value: 'd1-2B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Liquid AI', verified: true, source: 'docs/LITERATURE_REVIEW.md (28 October addition: Liquid d1-2B)'}
+    release: {value: null, verified: false, source: null}
+    revision: {value: 'cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Not stated locally; the 2B in the name is nominal', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: null, verified: false, source: null}
+    readout_type: {value: null, verified: false, source: null}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 128000, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'LFM_Open_License_v1.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Distinct LFM3 checkpoint, successor to d1-3B; training not described locally', verified: true, source: 'docs/LITERATURE_REVIEW.md (28 October addition: Liquid d1-2B)'}
+    source_url: {value: 'https://huggingface.co/LiquidAI/d1-2B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  perplexity:
+    display_name: {value: 'pplx-decider-v1.1-27b', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Perplexity AI', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-10-06 (public v1.1 announcement; checkpoint committed 2026-10-05)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: '14c9d90137962d300f3de95633f7b6535e80c5ce', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 26.085, verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    parameters_note: {value: 'Nominal 27B; full stored tensors about 26.085B', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: 'Qwen/Qwen3.8-27B (revision 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0)', verified: true, source: 'checkpoints/tokenizers/perplexity/decision_config.json'}
+    architecture_family: {value: 'bidirectional_encoder', verified: true, source: 'checkpoints/tokenizers/perplexity/decision_config.json (attention_mode noncausal_full_attention; linear-attention layers keep native behavior)'}
+    readout_type: {value: 'linear_readout', verified: true, source: 'checkpoints/tokenizers/perplexity/publisher_model.py:DecisionModel (Linear hidden_size->255 on last-token state; README: [255, 5120] decision head, not lm_head)'}
+    hidden_size: {value: 5120, verified: true, source: 'dm-library/repositories/PerplexityDecider.txt (config.json at pinned revision 14c9d901)'}
+    num_layers: {value: 64, verified: true, source: 'dm-library/repositories/PerplexityDecider.txt (config.json at pinned revision 14c9d901)'}
+    context_tokens: {value: 8192, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Update of pplx-decider-v1-27b on the same Qwen3.8-27B backbone; causal mask lifted and more training data (incl. tasksource); saved temperature 1.0087', verified: true, source: 'dm-library/repositories/PerplexityDecider.txt (README.md); checkpoints/tokenizers/perplexity/decision_config.json'}
+    source_url: {value: 'https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  cloudflare:
+    display_name: {value: 'clef-flash', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Cloudflare', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-10-01 (public announcement)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: '8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 9.41, verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    parameters_note: {value: 'Nominal 9B; Hub total about 9.410B', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'decoder_pointer_head', verified: true, source: 'checkpoints/tokenizers/cloudflare/joint_schema_model.py (Qwen backbone + JointSchemaHead); joint_head_config.json'}
+    readout_type: {value: 'pointer_head', verified: true, source: 'checkpoints/tokenizers/cloudflare/joint_schema_model.py:JointSchemaHead (one logit per allowed option from routed option representations)'}
+    hidden_size: {value: 4096, verified: true, source: 'checkpoints/tokenizers/cloudflare/config.json (text_config)'}
+    num_layers: {value: 32, verified: true, source: 'checkpoints/tokenizers/cloudflare/config.json (text_config)'}
+    context_tokens: {value: 16384, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Clef family: Qwen backbone plus joint schema head trained with label-smoothed CE, Brier loss and adapters, then an RL objective', verified: true, source: 'dm-library/SUMMARIES.md#web-mwjhy75j'}
+    source_url: {value: 'https://huggingface.co/Cloudflare/clef-flash', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  intern:
+    display_name: {value: 'Intern-Decision-4B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'InternLM', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-09-26 (public 4B release)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: '0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Nominal 4B; exact count not stated', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'decoder_lm_head', verified: true, source: 'dm-library/SUMMARIES.md#web-x58irxca (one causal forward pass)'}
+    readout_type: {value: 'lm_label_tokens', verified: true, source: 'checkpoints/tokenizers/intern/inference.py (softmax over model logits at candidate-symbol ids); dm-library/SUMMARIES.md#web-x58irxca'}
+    hidden_size: {value: 2560, verified: true, source: 'checkpoints/tokenizers/intern/config.json (text_config)'}
+    num_layers: {value: 32, verified: true, source: 'checkpoints/tokenizers/intern/config.json (text_config)'}
+    context_tokens: {value: 8192, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Fine-tunes the Qwen3.5 language backbone with vision tower and projector frozen; saved calibration temperature', verified: true, source: 'dm-library/repositories/InternDecision.txt (README.md); config/general/2_feature_creation/extractors.yaml'}
+    source_url: {value: 'https://huggingface.co/internlm/Intern-Decision-4B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  strands:
+    display_name: {value: 'strands-decider-2B-qwen3.5-v1-2610', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Strands Labs / Strands Agents', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-10 (v1-2610 release month; family announced 2026-10-01)', verified: true, source: 'dm-library/repositories/StrandsDecider.txt (README naming section); dm-library/DECISION_MODELS.md'}
+    revision: {value: '216d1ccb46a9e9b036eb9187b248db98480f77d4', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Qwen3.5-2B-Base torso about 1.9B plus pointer head and LoRA; total for this checkpoint not stated', verified: true, source: 'dm-library/repositories/StrandsDecider.txt (architecture notes)'}
+    base_model: {value: 'Qwen/Qwen3.5-2B-Base (revision b1485b2fa6dfa1287294f269f5fb618e03d52d7c, publisher-inferred)', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    architecture_family: {value: 'decoder_pointer_head', verified: true, source: 'checkpoints/tokenizers/strands/strands_decider_config.json (head_type pointer)'}
+    readout_type: {value: 'pointer_head', verified: true, source: 'checkpoints/tokenizers/strands/strands_decider_config.json (head_type pointer, pointer_dim 768)'}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: 24, verified: true, source: 'dm-library/repositories/StrandsDecider.txt (Qwen3.5-2B-Base torso: 18 Gated DeltaNet + 6 full-attention layers)'}
+    context_tokens: {value: 4096, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'LoRA (r=48) plus pointer head on Qwen3.5-2B-Base; soup of three seeds on the v1 mix (246,678 rows, gemma-4-31B-it teacher), calibrated after the soup', verified: true, source: 'dm-library/repositories/StrandsDecider.txt (configs/v1/strands-decider-2B-qwen3.5-v1-2610.yaml); checkpoints/tokenizers/strands/strands_decider_config.json'}
+    source_url: {value: 'https://github.com/strands-labs/strands-decider', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  h2o:
+    display_name: {value: 'h2o-lightning-4b', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'H2O.ai', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: 'Public launch day unconfirmed; Hub repository created 2026-10-02', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: 'e7b32490c9d2a994bd75a4d1ea7e45716080175e', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 4.66, verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    parameters_note: {value: 'Nominal 4B; complete Hub tensors about 4.660B', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: 'Qwen/Qwen3.5-4B', verified: true, source: 'dm-library/SUMMARIES.md#web-skwpxqtg'}
+    architecture_family: {value: 'bidirectional_encoder', verified: true, source: 'config/general/2_feature_creation/extractors.yaml (attention: bidirectional_full_attention_causal_deltanet)'}
+    readout_type: {value: 'lm_label_tokens', verified: true, source: 'dm-library/repositories/H2OLightning.txt (pooled_readout.label_logits over label-token rows at the pooled state)'}
+    hidden_size: {value: null, verified: false, source: null}  # Library snapshot 659fc412 (2560) is not the pinned revision.
+    num_layers: {value: null, verified: false, source: null}  # Library snapshot 659fc412 (32) is not the pinned revision.
+    context_tokens: {value: 32000, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Fine-tune of Qwen3.5-4B in three stages (text foundation, text with replay, image stage; 2,223,151 examples), trained for one-way and two-way attention', verified: true, source: 'dm-library/repositories/H2OLightning.txt (README.md, What it was trained on; snapshot revision 659fc412)'}
+    source_url: {value: 'https://huggingface.co/h2oai/h2o-lightning-4b', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  sii:
+    display_name: {value: 'SII-Decision-27B-Full', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Jueyu Lin / SII research team', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: 'Zotero date 2026-10-01; first public day not independently verified', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: '8f5a51dcde7b0fd6a2eea3ab423bad5e3b11dfda', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Nominal 27B (Qwen3.8-27B); 22.817B language parameters updated full-rank; total not stated', verified: true, source: 'dm-library/papers/web/SII-Decision-27B-Full.txt'}
+    base_model: {value: 'Qwen/Qwen3.8-27B', verified: true, source: 'dm-library/papers/web/SII-Decision-27B-Full.txt'}
+    architecture_family: {value: 'decoder_lm_head', verified: true, source: 'dm-library/repositories/SIIDecision.txt (sii_decision/infer.py: head = get_output_embeddings)'}
+    readout_type: {value: 'lm_label_tokens', verified: true, source: 'dm-library/repositories/SIIDecision.txt (sii_decision/infer.py and prompts.py: legal option-token logits after ''The correct answer is ('')'}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: 64, verified: true, source: 'dm-library/repositories/SIIDecision.txt (configs/27B/modules.json lists language layers 0-63)'}
+    context_tokens: {value: 6000, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Full-rank update of Qwen3.8-27B language linear layers by reasoning-to-readout self-distillation (39,279 train / 7,506 validation questions); thinking disabled', verified: true, source: 'dm-library/papers/web/SII-Decision-27B-Full.txt'}
+    source_url: {value: 'https://github.com/amazingljy1206/SII-Decision', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  kev:
+    display_name: {value: 'kev-27b', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Jared Palmer', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-09-30 (27B v2 / Kev 1.0)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: 'af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 25.6, verified: true, source: 'dm-library/repositories/Kev.txt (docs/model-cards/kev-27b.md, Parameters)'}
+    parameters_note: {value: 'Nominal 27B; 25.6B loaded backbone plus 2.6M pointer head (vision tower, LM head and MTP not loaded)', verified: true, source: 'dm-library/repositories/Kev.txt (docs/model-cards/kev-27b.md)'}
+    base_model: {value: 'Qwen/Qwen3.8-27B (revision 1d4bf0f2)', verified: true, source: 'dm-library/repositories/Kev.txt (docs/model-cards/kev-27b.md)'}
+    architecture_family: {value: 'decoder_pointer_head', verified: true, source: 'dm-library/repositories/Kev.txt (model card: causal LM backbone run prefill-only with a pointer head)'}
+    readout_type: {value: 'pointer_head', verified: true, source: 'dm-library/repositories/Kev.txt (model card: pointer head scores each option''s closing token)'}
+    hidden_size: {value: 5120, verified: true, source: 'dm-library/repositories/Kev.txt (docs/model-cards/kev-27b.md, Backbone)'}
+    num_layers: {value: 64, verified: true, source: 'dm-library/repositories/Kev.txt (docs/model-cards/kev-27b.md, Backbone)'}
+    context_tokens: {value: 65536, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'Full-weight fine-tune of Qwen3.8-27B with weight averaging and a pointer head; one fitted temperature T=1.32', verified: true, source: 'dm-library/repositories/Kev.txt (docs/model-cards/kev-27b.md)'}
+    source_url: {value: 'https://github.com/jaredpalmer/kev', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  decision3:
+    display_name: {value: 'd3-turbo', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'vLLM Semantic Router Team', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: 'Zotero date 2026-10-19; first public day not independently verified', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: 'a0f3e9e59ebd1202fe1d4de1c4c0f9a986758cbb', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 26.09, verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    parameters_note: {value: 'Nominal 27B; about 26.09B including the 0.46B vision encoder', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'bidirectional_encoder', verified: true, source: 'config/general/2_feature_creation/extractors.yaml (attention: publisher_prefix_bidir)'}
+    readout_type: {value: null, verified: false, source: null}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 32768, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: null, verified: false, source: null}
+    source_url: {value: 'https://huggingface.co/vllm-sr/d3-turbo', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  nimble:
+    display_name: {value: 'Bespoke-Nimble-9B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Bespoke Labs', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: 'Zotero date 2026-09-18; card updated 2026-09-24', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: 'bd792f44ec8e265be861bfcdf4e05967ffe0e858', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Qwen3.5-9B base plus roughly 165 MiB LoRA adapter; total not stated', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: 'Qwen/Qwen3.5-9B (revision c202236235762e1c871ad0ccb60c8ee5ba337b9a)', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    architecture_family: {value: 'decoder_lm_head', verified: true, source: 'dm-library/papers/web/Bespoke-Nimble-9B.txt (scores allowed answer tokens directly)'}
+    readout_type: {value: 'lm_label_tokens', verified: true, source: 'dm-library/papers/web/Bespoke-Nimble-9B.txt (softmax(candidate_logits / temperature))'}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 8192, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: 'LoRA adapter on Qwen3.5-9B for choices, booleans and rubric levels; T=1.0, no separate temperature fit', verified: true, source: 'dm-library/papers/web/Bespoke-Nimble-9B.txt'}
+    source_url: {value: 'https://huggingface.co/bespokelabs/Bespoke-Nimble-9B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  glide:
+    display_name: {value: 'GLiDE-27B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Fastino', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    release: {value: '2026-09-30 (hosted GLiDE announcement; open-weight release date not stated)', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    revision: {value: '4d32743ae96b74f0116f050d37742bbd43c04e7d', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: null, verified: false, source: null}
+    parameters_note: {value: 'Unconfirmed: live HTML says undisclosed, Markdown catalog says 27B; the 27B in the name is nominal', verified: true, source: 'dm-library/DECISION_MODELS.md'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'other', verified: true, source: 'config/general/2_feature_creation/extractors.yaml (attention noncausal_full_attention_native_linear_recurrence; recurrent_depth blocks 24-35 and 36-47 run twice)'}
+    readout_type: {value: null, verified: false, source: null}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 39992, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Fastino-Community-License', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: null, verified: false, source: null}
+    source_url: {value: 'https://huggingface.co/fastino/GLiDE-27B', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  mammoth:
+    display_name: {value: 'mammoth-1', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Baseten (baselabs)', verified: true, source: 'docs/LITERATURE_REVIEW.md'}
+    release: {value: null, verified: false, source: null}
+    revision: {value: '61cec44c281c693992e3d6ebeb44dd3402dfa186', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 27, verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    parameters_note: {value: 'Nominal 27B; exact stored count not stated', verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'bidirectional_encoder', verified: true, source: 'src/jev/frontier_decisions.py:Runtime (requires attention noncausal); src/jev/upstream/mammoth/qev/readout.py (block-bidirectional full-attention layers)'}
+    readout_type: {value: 'lm_label_tokens', verified: true, source: 'src/jev/frontier_decisions.py:Runtime (requires readout slot_lm); src/jev/upstream/mammoth/qev/readout.py (slot_lm: softmax over LM-head logits of slot letters)'}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 16384, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'MIT', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: null, verified: false, source: null}
+    source_url: {value: 'https://huggingface.co/baselabs/mammoth-1', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  drex_max:
+    display_name: {value: 'drex-max-v1', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Nace.AI', verified: true, source: 'docs/LITERATURE_REVIEW.md'}
+    release: {value: null, verified: false, source: null}
+    revision: {value: '005d4eb46cd2f2f56ae0e82c6444fba8363c9c17', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 27, verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    parameters_note: {value: 'Nominal 27B; exact stored count not stated', verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'bidirectional_encoder', verified: true, source: 'src/jev/frontier_decisions.py (requires decision_config.json attention_mode noncausal_full_attention)'}
+    readout_type: {value: null, verified: false, source: null}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 16384, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Nace.AI Open RAIL-M', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: null, verified: false, source: null}
+    source_url: {value: 'https://huggingface.co/nace-ai/drex-max-v1', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  knowline:
+    display_name: {value: 'KnowLine-31B-Gen1', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'PelaAI', verified: true, source: 'docs/LITERATURE_REVIEW.md'}
+    release: {value: null, verified: false, source: null}
+    revision: {value: 'a45b64060e1d6928e7e20bdffd2c482e4ebf7de6', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 31, verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    parameters_note: {value: 'Nominal 31B; exact stored count not stated', verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: null, verified: false, source: null}
+    readout_type: {value: null, verified: false, source: null}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 32768, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: null, verified: false, source: null}
+    source_url: {value: 'https://huggingface.co/PelaAI/KnowLine-31B-Gen1', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+  sieve:
+    display_name: {value: 'Sieve-31B-v3', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    publisher: {value: 'Sthanika AI', verified: true, source: 'docs/LITERATURE_REVIEW.md'}
+    release: {value: null, verified: false, source: null}
+    revision: {value: 'ed0a046788205f0457918af8dbae3c6e8c3ee9f5', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    parameters_billion: {value: 31, verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    parameters_note: {value: 'Nominal 31B; exact stored count not stated', verified: true, source: 'config/general/2_feature_creation/approved_additions.yaml'}
+    base_model: {value: null, verified: false, source: null}
+    architecture_family: {value: 'bidirectional_encoder', verified: true, source: 'src/jev/arena_decisions.py (requires head.pt global_attention bidirectional)'}
+    readout_type: {value: null, verified: false, source: null}
+    hidden_size: {value: null, verified: false, source: null}
+    num_layers: {value: null, verified: false, source: null}
+    context_tokens: {value: 32768, verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    license: {value: 'Apache-2.0', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}
+    training: {value: null, verified: false, source: null}
+    source_url: {value: 'https://huggingface.co/sthanika-ai/Sieve-31B-v3', verified: true, source: 'config/general/2_feature_creation/extractors.yaml'}

@@ -19,14 +19,12 @@ from src.utils import paths
 from src.utils.config import load_yaml
 
 
-def test_research_layout_keeps_legacy_config_and_output_identities():
-    assert paths.config_path("experiment_1/main") == paths.config_path("rq2/4. experiment_1/main")
-    assert paths.config_path("experiment_1/main").parent.name == "B"
-    assert paths.config_path("exp04_decision_features/main") == paths.config_path("experiment_1/main")
-    assert paths.notebook_phase("rq2/01_frozen_embeddings") == "experiment_2"
-    assert paths.notebook_phase("rq1/04_decision_feature_comparison") == "feature_creation"
-    assert paths.phase_folder("experiment_1") == "B/exp04_decision_features"
-    assert load_yaml("rq3/adaptation")["enabled"] is False
+def test_research_layout_uses_one_name_per_experiment():
+    assert paths.config_path("B1") == paths.REPO_ROOT / "config" / "B" / "B1.yaml"
+    assert paths.notebook_phase("B2/01_frozen_embeddings") == "B2"
+    assert paths.notebook_phase("feature_creation/04_decision_feature_comparison") == "feature_creation"
+    assert paths.phase_folder("B1") == "B/B1"
+    assert load_yaml("C2")["enabled"] is False
 
 
 def test_removed_readout_is_absent_from_benchmark_and_qualification():
@@ -35,8 +33,8 @@ def test_removed_readout_is_absent_from_benchmark_and_qualification():
     plan = benchmark_plan()
     assert len(plan) == 81240 + 2142  # Group B grid (B1-B5) + Group C (C1, C2), 20-11-2026
     assert {a["phase"] for a in plan} == set(PHASE_CONFIGS) == {
-        "experiment_1", "experiment_2", "experiment_3", "experiment_4", "rq2", "data_efficiency",
-        "representations", "rq3"}
+        "B1", "B2", "B3", "B6", "B4", "B5",
+        "C1", "C2"}
     assert all(a["phase"] != "regression_readout" for a in profile_plan())
     widths = regression_width_table().set_index("dataset_id")
     row = widths.loc["REG_TEXT_ROTTEN_TOMATOES"]
@@ -88,7 +86,7 @@ def test_random_source_rows_are_uniform_reproducible_and_not_deduplicated_by_tex
 def test_primary_regression_probability_view_cannot_reuse_historical_mean_identity():
     from src.evaluation.campaign import benchmark_plan
     semantics = load_yaml("dataset_semantics")["datasets"]
-    arms = [a for a in benchmark_plan() if a["phase"] == "experiment_1"
+    arms = [a for a in benchmark_plan() if a["phase"] == "B1"
             and a.get("provider") and semantics[a["dataset_id"]]["task_type"] == "regression"]
     assert arms and all(a["view"] == "probabilities" for a in arms)
     assert max(a["predictor_columns"] for a in arms) == 141
@@ -151,7 +149,7 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
     additions = load_yaml("feature_creation/approved_additions")
     assert additions["execution_enabled"] is False
     assert set(additions["models"]) == {"mammoth", "drex_max", "knowline", "sieve"}
-    active = set(load_yaml("experiment_1/main")["candidate_extractors"])
+    active = set(load_yaml("B1")["candidate_extractors"])
     assert set(additions["models"]) <= active
     for model in additions["models"].values():
         assert re.fullmatch(r"[0-9a-f]{40}", model["revision"])
@@ -164,15 +162,16 @@ def test_approved_additions_are_pinned_but_not_silently_executable():
 def test_summary_discovery_follows_research_order():
     from src.utils.run_notebooks import discover
 
-    # Layout v3 (23-11-2026): general notebooks, then the letter groups A (RQ1), B (RQ2) and
-    # C; B4 was renumbered from Exp 11 to B/exp09 so each group's numbers are contiguous.
+    # Layout v4 (26-11-2026): general notebooks, then the letter groups A (RQ1), B (RQ2) and C,
+    # each opened by its gate notebook (A0, B0, C0).
     names = discover()
     order = {"general": 0, "A": 1, "B": 2, "C": 3}
     groups = [n.split("/")[0] for n in names]
     assert [order[g] for g in groups] == sorted(order[g] for g in groups)
-    assert paths.research_group(paths.notebook_phase("B/exp09_data_efficiency")) == "rq2"
-    assert {paths.research_group(paths.notebook_phase(n)) for n in names if n.startswith("A/")} == {"rq1"}
-    assert {paths.research_group(paths.notebook_phase(n)) for n in names if n.startswith("B/")} == {"rq2"}
+    assert paths.research_group(paths.notebook_phase("B/B5")) == "B"
+    for group in "ABC":
+        assert {paths.research_group(paths.notebook_phase(n)) for n in names if n.startswith(group + "/")} == {group}
+        assert names[[n.split("/")[0] for n in names].index(group)] == f"{group}/{group}0"
     for group in "ABC":  # Each group ends with its synthesis notebook.
         assert [n for n in names if n.startswith(f"{group}/")][-1] == f"{group}/{group}_synthesis"
 
@@ -180,7 +179,7 @@ def test_summary_discovery_follows_research_order():
 def test_replay_control_precedes_interventions():
     from src.utils.config import load_yaml
 
-    studies = load_yaml("rq1/behavior")["studies"]
+    studies = load_yaml("A2")["studies"]
     assert list(studies) == ["B1_replay", "B2_wording", "B3_field_order", "B4_option_order"]
     assert studies["B1_replay"]["eligible"] == "union_of_B2_B3_B4_samples"
     assert studies["B1_replay"]["total_fresh_executions"] == 3

@@ -1,11 +1,11 @@
-"""Sourced decision-model properties (`config/02_feature_creation/model_properties.yaml`).
+"""Sourced decision-model properties (`config/general/2_feature_creation/model_properties.yaml`).
 
 One row per provider in `extractors.yaml`. Every field is ``{value, verified, source}``;
 a value that the local sources (extractors config, dm-library summaries, pinned tokenizer
 configs) do not state is ``null`` with ``verified: false`` and is never guessed.
 
 The table is an interpretation aid: it explains *who* the decision models are when their
-outputs or downstream gains differ (Exp 1, Exp 8). It never selects providers, features or
+outputs or downstream gains differ (A1, B4). It never selects providers, features or
 predictors, and it never enters a decision request.
 """
 
@@ -28,7 +28,7 @@ FIELDS = (
 EXTRACTOR_KEYS = {"context_tokens": "context_tokens", "source_url": "reference"}
 NUMERIC = {"parameters_billion": (int, float), "hidden_size": (int,), "num_layers": (int,),
            "context_tokens": (int,)}
-#: Model-level covariates offered to Exp 8 moderators.
+#: Model-level covariates offered to B4 moderators.
 COVARIATES = ("parameters_billion", "log10_parameters", "architecture_family", "readout_type")
 
 

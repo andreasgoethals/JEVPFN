@@ -218,7 +218,7 @@ def save_evaluation(
     resources: dict | None = None,
     warnings: list | None = None,
     run_id: str | None = None,
-    phase: str = "experiment_1",
+    phase: str = "B1",
 ) -> Path:
     """Save raw predictions first and a completion record last, with their checksum.
 

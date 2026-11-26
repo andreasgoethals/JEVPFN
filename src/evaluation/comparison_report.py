@@ -1,6 +1,6 @@
-"""A1 (exp01_outputs): publish the CPU analysis as a ZIP keyed by the selected decision-model roster; render it locally.
+"""A1: publish the CPU analysis as a ZIP keyed by the selected decision-model roster; render it locally.
 
-The Mindwell CPU job (`scripts/slurm/rq1_outputs.slurm`) reads every complete published
+The Mindwell CPU job (`scripts/slurm/A1_outputs.slurm`) reads every complete published
 feature store on GPFS PROJECT and writes one compact ZIP with the label-free comparison
 tables, the output-shape, pairwise and leave-one-out consensus tables, the joint-request
 stand-alone quality/calibration tables (labels used for scoring only) and the model profile
@@ -55,7 +55,7 @@ def report_config(cohort=None):
     cfg["comparison"]["providers"] = selected["decision_roster"]
     cfg["decision_cohort"] = selected["decision_cohort"]
     cfg["decision_model_versions"] = selected["decision_model_versions"]
-    pins = load_yaml("experiment_1/main")["dataset_feature_artifacts"]
+    pins = load_yaml("B1")["dataset_feature_artifacts"]
     for dataset, providers in pins.items():
         for provider, modes in providers.items():
             if provider not in selected["decision_roster"]:
@@ -65,7 +65,7 @@ def report_config(cohort=None):
             )
             for mode, identity in modes.items():
                 if specific.setdefault(mode, identity) != identity:
-                    raise ValueError("RQ1A and RQ2 select different decision features")
+                    raise ValueError("A1 and RQ2 select different decision features")
     return cfg
 
 
@@ -107,7 +107,7 @@ def analysis_identity(cfg):
 def report_path(cohort=None):
     from src.evaluation.benchmark_export import cohort_key
 
-    return paths.results_dir("outputs", f"comparison.{cohort_key(cohort)}.zip", phase="rq1")
+    return paths.results_dir("outputs", f"comparison.{cohort_key(cohort)}.zip", phase="A1")
 
 
 def write_report(result, cfg, target, *, origin, joint_rows):
@@ -189,7 +189,7 @@ def build(*, cohort=None):
     with file_lock(target.with_suffix(".lock")):
         result = compare_saved_features(cfg, workers=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)))
         if result.table("pairs").empty:
-            raise ValueError("At least two complete published providers are required for RQ1A")
+            raise ValueError("At least two complete published providers are required for A1")
         inspect_cases(result)
         result.frames["peer_majority"] = [peer_majority_agreement(result)]
         quality, reliability = direct_scores(cfg=cfg)

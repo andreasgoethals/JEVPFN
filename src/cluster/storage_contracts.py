@@ -57,7 +57,7 @@ def worker(folder, *, expect_busy):
 
 def worker_receipt(run_id, *, expect_busy):
     return (
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / "storage_contracts"
         / paths.output_component(run_id)
@@ -98,7 +98,7 @@ def remote_worker(command, *, run_id, expect_busy):
     if receipt.exists():
         raise FileExistsError(f"Refusing an existing worker receipt: {receipt}")
     receipt.parent.mkdir(parents=True, exist_ok=True)
-    log_dir = paths.logs_dir("experiment_0") / "storage_contracts" / run_id
+    log_dir = paths.logs_dir("0") / "storage_contracts" / run_id
     log_dir.mkdir(parents=True, exist_ok=True)
     probe_id = uuid4().hex
     argv = [*command, "--probe-id", probe_id]
@@ -159,12 +159,12 @@ def run(*, execute=False):
         raise ValueError("Two distinct allocated nodes are required for this filesystem test")
     run_id = uuid4().hex
     folder = paths.require_project_output(
-        paths.results_dir("storage_contracts", run_id, phase="experiment_0")
+        paths.results_dir("storage_contracts", run_id, phase="0")
     )
     backend = storage_backend(folder)
     folder.mkdir(parents=True, exist_ok=False)
     manifest = (
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / "storage_contracts"
         / f"{run_id}.json"
@@ -182,7 +182,7 @@ def run(*, execute=False):
             name: str(worker_receipt(run_id, expect_busy=busy))
             for name, busy in (("blocked", True), ("released", False))
         },
-        "worker_logs": str(paths.logs_dir("experiment_0") / "storage_contracts" / run_id),
+        "worker_logs": str(paths.logs_dir("0") / "storage_contracts" / run_id),
         "quota_verified": False,
         "independent_backup_verified": False,
     }

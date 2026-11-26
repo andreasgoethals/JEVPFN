@@ -88,7 +88,7 @@ def staged(isolated_output, monkeypatch):
 
 def test_offline_aliases_resolve_distinct_cls_and_regression_snapshots(staged):
     body, calls, download = staged
-    settings = load_yaml("experiment_1/models")["models"]["tabstar"]["runtime"]
+    settings = load_yaml("B1/models")["models"]["tabstar"]["runtime"]
     assert len(calls) == 3 and len(body["assets"]) == 9
     assert manifest_path().is_file()
     assert predictor_assets.stage_tabstar(execute=True, download=download) == body
@@ -103,7 +103,7 @@ def test_offline_aliases_resolve_distinct_cls_and_regression_snapshots(staged):
 
 def test_corruption_and_external_cache_never_fall_back_online(staged, monkeypatch, tmp_path):
     body, _, _ = staged
-    settings = load_yaml("experiment_1/models")["models"]["tabstar"]["runtime"]
+    settings = load_yaml("B1/models")["models"]["tabstar"]["runtime"]
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "external"))
     with pytest.raises(ValueError, match="active native"):
         verified_settings(settings, "regression")
@@ -114,7 +114,7 @@ def test_corruption_and_external_cache_never_fall_back_online(staged, monkeypatc
 
 
 def test_changed_model_pin_invalidates_asset_manifest(staged):
-    settings = copy.deepcopy(load_yaml("experiment_1/models")["models"]["tabstar"]["runtime"])
+    settings = copy.deepcopy(load_yaml("B1/models")["models"]["tabstar"]["runtime"])
     settings["repositories"]["classification"]["revision"] = "other"
     with pytest.raises(ValueError, match="configured v1.1"):
         asset_manifest(settings)
@@ -134,7 +134,7 @@ def test_staging_requires_explicit_execution_unfrozen_cpu(isolated_output, monke
 
 def test_new_generation_has_own_container_path_and_fixed_runtime(isolated_output):
     from src.cluster.containers import container_dir
-    config = load_yaml("experiment_1/models")["models"]["tabstar"]
+    config = load_yaml("B1/models")["models"]["tabstar"]
     assert config["model_generation"] == "v1.1"
     assert config["runtime"]["packages"] == {"tabstar": "1.2.2", "transformers": "4.57.6"}
     assert container_dir("tabstar", profile="blackwell-cu130").name == "tabstar-v1p1"

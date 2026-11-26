@@ -62,10 +62,10 @@ def relocated(request, isolated_output, monkeypatch):
 
 
 def _save_gpu_evidence(provider, execution):
-    base = paths.manifests_dir("experiment_0")
+    base = paths.manifests_dir("0")
     if provider in containers.PREDICTORS:
         settings = {"model": provider}
-        target = paths.phase_path("experiment_0", "manifests", "after_extraction") / f"predictor_{provider}_fixture.json"
+        target = paths.phase_path("B0", "manifests") / f"predictor_{provider}_fixture.json"
         report = {
             "model": provider,
             "status": "predictor_contracts_passed_requires_full_fold_profile",

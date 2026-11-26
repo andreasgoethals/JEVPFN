@@ -11,8 +11,8 @@ from src.utils import paths
 def output(isolated_output, monkeypatch):
     for root in (paths.outputs_dir(), paths.large_outputs_dir()):
         root.mkdir(parents=True)
-        for name in ("3. experiment_0/logs/run.log", "3. experiment_0/results/data.csv",
-                     "4. experiment_1/logs/run.log", "transfers/bundle.zip"):
+        for name in ("general/0/logs/run.log", "general/0/results/data.csv",
+                     "B/B1/logs/run.log", "transfers/bundle.zip"):
             file = root / name
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_text("test")
@@ -24,40 +24,39 @@ def output(isolated_output, monkeypatch):
 
 
 def test_preview_and_phase_category_tier_selection(output):
-    selection = dict(tier="project", phases=["experiment_0"], kinds=["logs"])
+    selection = dict(tier="project", phases=["0"], kinds=["logs"])
     preview = cleanup.run(**selection)
     assert preview["status"] == "preview" and preview["file_count"] == 1
-    file = paths.large_outputs_dir() / "3. experiment_0/logs/run.log"
+    file = paths.large_outputs_dir() / "general/0/logs/run.log"
     assert file.exists()
     cleanup.run(**selection, apply=True, writers_stopped=True)
     assert not file.exists()
-    assert (paths.outputs_dir() / "3. experiment_0/logs/run.log").exists()
-    assert (paths.large_outputs_dir() / "4. experiment_1/logs/run.log").exists()
+    assert (paths.outputs_dir() / "general/0/logs/run.log").exists()
+    assert (paths.large_outputs_dir() / "B/B1/logs/run.log").exists()
     assert paths.dataset_cache_path("paid").read_text() == "paid"
 
 
-def test_retired_experiment_output_remains_scoped_and_removable(output):
+def test_earlier_layout_output_is_never_selected_by_phase(output):
     root = paths.outputs_dir()
-    for relative in ("7. experiment_4/logs/old.log", "8. experiment_5/results/old.csv",
-                     "9. synthesis/results/old.csv"):
+    for relative in ("7. experiment_4/logs/old.log", "01_exp0a/results/old.csv",
+                     "general/4_synthesis/results/new.csv"):
         file = root / relative
         file.parent.mkdir(parents=True)
-        file.write_text("historical output")
-    # Active-phase cleanup does not fail on old folders or include their files.
-    current = cleanup.run(tier="data", phases=["experiment_0"])
-    assert all("3. experiment_0" in f["path"] for f in current["files"])
+        file.write_text("output")
+    # Earlier-layout folders are migrated first (layout_migration); phase cleanup ignores them.
+    current = cleanup.run(tier="data", phases=["0"])
+    assert current["files"] and all("general" in f["path"] and "01_exp0a" not in f["path"]
+                                    for f in current["files"])
     synthesis = cleanup.run(tier="data", phases=["synthesis"])
-    assert any("9. synthesis" in f["path"] for f in synthesis["files"])
-    all_output = cleanup.run(tier="data")
-    assert any("7. experiment_4" in f["path"] for f in all_output["files"])
-    assert any("8. experiment_5" in f["path"] for f in all_output["files"])
+    assert any("new.csv" in f["path"] for f in synthesis["files"])
+    assert any("experiment_4" in f["path"] for f in cleanup.run(tier="data")["files"])  # Explicit all-output cleanup.
 
 
 def test_current_general_figure_owner_and_durable_assets(output):
     root = paths.large_outputs_dir()
-    originals = ["C/exp10_representations/results/strands_hidden/fold.npy",
-                 "C/exp11_adaptation/results/adaptation/weights.pt",
-                 "B/exp06_tar/results/tar/vectors.npy", "01_exp0a/results/token_audit/tokens.db"]
+    originals = ["C/C1/results/strands_hidden/fold.npy",
+                 "C/C2/results/adaptation/weights.pt",
+                 "B/B3/results/tar/vectors.npy", "general/0/results/token_audit/tokens.db"]
     for relative in originals:
         file = root / relative
         file.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +67,7 @@ def test_current_general_figure_owner_and_durable_assets(output):
 
 
 def test_age_pattern_and_no_implicit_deletion(output):
-    old = paths.outputs_dir() / "3. experiment_0/logs/run.log"
+    old = paths.outputs_dir() / "general/0/logs/run.log"
     os.utime(old, (1, 1))
     _, _, files = cleanup.plan(tier="data", pattern="*/logs/*.log", older_than_days=1)
     assert [f["path"] for f in files] == [str(old)]
@@ -87,7 +86,7 @@ def test_all_tiers_validated_before_deleting_any(output, monkeypatch):
     monkeypatch.setattr(cleanup, "validate_deletion_tree", reject_project)
     with pytest.raises(ValueError, match="linked"):
         cleanup.run(apply=True, writers_stopped=True)
-    assert (paths.outputs_dir() / "3. experiment_0/logs/run.log").exists()
+    assert (paths.outputs_dir() / "general/0/logs/run.log").exists()
 
 
 def test_full_cleanup_removes_archives_preserves_inputs(output):
@@ -104,7 +103,7 @@ def test_failed_gpfs_stage_output_cleaned_without_touching_assets(output, monkey
     scratch = output / "gpfs_scratch"
     monkeypatch.setenv("VSC_SCRATCH_GPFS1", str(scratch))
     work = scratch / "jevpfn-work/liquid/JEVPFN"
-    token = work / "output_JEVPFN/3. experiment_0/results/token_audit/partial.sqlite3"
+    token = work / "output_JEVPFN/general/0/results/token_audit/partial.sqlite3"
     weight = work / "checkpoints/model.safetensors"
     foreign = scratch / "jevpfn-work/another_project/JEVPFN/output_JEVPFN/log.txt"
     for path in (token, weight, foreign):
@@ -119,13 +118,13 @@ def test_failed_gpfs_stage_output_cleaned_without_touching_assets(output, monkey
 
 def test_partial_figure_cleanup_invalidates_combined_reports(output):
     root = paths.outputs_dir()
-    report = root / "B/exp04_decision_features/results/notebook/_report.txt"
-    for name in ("figures/B/exp04_decision_features/01_plot.pdf", "figures/CAPTIONS.md",
+    report = root / "B/B1/results/notebook/_report.txt"
+    for name in ("figures/B/B1/01_plot.pdf", "figures/CAPTIONS.md",
                  "All_Results.md", report.relative_to(root).as_posix()):
         file = root / name
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text("old")
-    cleanup.run(tier="data", phases=["experiment_1"], kinds=["figures"], apply=True, writers_stopped=True)
+    cleanup.run(tier="data", phases=["B1"], kinds=["figures"], apply=True, writers_stopped=True)
     for name in ("All_Results.md", "figures/CAPTIONS.md"):
         assert not (root / name).exists(), name
     assert not report.exists()
@@ -149,16 +148,16 @@ def test_partial_pdf_cleanup_preserves_only_surviving_captions(output):
 
 def test_figure_records_pair_figures_with_notebook_reports(tmp_path):
     root = tmp_path / "output_JEVPFN"
-    assert cleanup.figure_records(root, root / "figures/A/exp01_outputs/01_a.pdf") == (
-        root / "figures/A/exp01_outputs/_figures.json",
-        root / "A/exp01_outputs/results/notebook/_report.txt")
+    assert cleanup.figure_records(root, root / "figures/A/A1/01_a.pdf") == (
+        root / "figures/A/A1/_figures.json",
+        root / "A/A1/results/notebook/_report.txt")
     data = "figures/general/1_data_and_questions"
     assert cleanup.figure_records(root, root / f"{data}/nb/01_a.pdf") == (
         root / f"{data}/nb/_figures.json",
-        root / "00_data/results/notebook/nb/_report.txt")
+        root / "general/1_data_and_questions/results/notebook/nb/_report.txt")
     assert cleanup.figure_records(root, root / "figures/unknown_group/01_a.pdf") is None
     assert cleanup.figure_records(root, root / "figures/exp01_outputs/01_a.pdf") is None  # Flat layout.
-    assert cleanup.classify(Path("B/exp04_decision_features/logs/a.log")) == "logs"
-    assert cleanup.classify(Path("01_exp0a/manifests/a.json")) == "manifests"
-    assert cleanup.phase_of(Path("B/exp09_data_efficiency/results/a.json")) == "data_efficiency"
-    assert cleanup.figure_records(root, root / "01_exp0a/results/a.pdf") is None
+    assert cleanup.classify(Path("B/B1/logs/a.log")) == "logs"
+    assert cleanup.classify(Path("general/0/manifests/a.json")) == "manifests"
+    assert cleanup.phase_of(Path("B/B5/results/a.json")) == "B5"
+    assert cleanup.figure_records(root, root / "general/0/results/a.pdf") is None

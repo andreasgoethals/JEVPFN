@@ -46,7 +46,7 @@ def test_rq1a_shares_production_recovery_selection_and_refuses_login_execution(m
 
     assert (
         reports.report_config()["comparison"]["artifacts"]
-        == load_yaml("experiment_1/main")["dataset_feature_artifacts"]
+        == load_yaml("B1")["dataset_feature_artifacts"]
     )
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     with pytest.raises(RuntimeError, match="Mindwell CPU allocation"):
@@ -118,11 +118,11 @@ def test_a1_identity_uses_only_the_selected_model_versions(tmp_path, monkeypatch
 
     configuration = design.load_yaml
     candidates = deepcopy(configuration("extractors"))
-    main = deepcopy(configuration("experiment_1/main"))
+    main = deepcopy(configuration("B1"))
     def modified(name):
         if name == "extractors":
             return candidates
-        return main if name == "experiment_1/main" else configuration(name)
+        return main if name == "B1" else configuration(name)
 
     monkeypatch.setattr(design, "load_yaml", modified)
     monkeypatch.setattr(reports, "load_yaml", modified)

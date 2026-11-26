@@ -55,7 +55,7 @@ def coverage_figures(table, title, *, feature_inventory=False):
         label = "Share of representation types present"
         detail = (
             "Each cell counts saved manifest types out of the two planned for a dataset and "
-            "extractor (joint and separate text). This local inventory precedes 0B validation."
+            "extractor (joint and separate text). This local inventory precedes B0 validation."
         )
     else:
         label = "Share of configurations complete"
@@ -96,8 +96,8 @@ def burden_figures(table):
         ax.set_xlabel("input columns (log)", fontsize=7)
     for ax in axes[:, 0]:
         ax.set_ylabel("fit time (s, log)", fontsize=7)
-    names = {"experiment_1": "Decision features", "experiment_2": "Frozen embedding",
-             "experiment_3": "Supervised TAR", "experiment_4": "Native text"}
+    names = {"B1": "Decision features", "B2": "Frozen embedding",
+             "B3": "Supervised TAR", "B6": "Native text"}
     handles = [Line2D([], [], linestyle="none", marker="o", markersize=4, color=c, label=names[p])
                for p, c in style.FAMILY_COLORS.items() if p in set(table.phase)]
     fig.legend(handles=handles, loc="outside upper center", ncols=len(handles), fontsize=7,
@@ -111,7 +111,7 @@ def burden_figures(table):
 
 
 def qualification_figure(table, profiles=None):
-    """0B evidence per predictor: contract, then passed/required full-fold profiles per arm family.
+    """B0 evidence per predictor: contract, then passed/required full-fold profiles per arm family.
 
     ``table`` is `notebook_study.predictor_evidence`; ``profiles`` is
     `notebook_study.profile_evidence`. Green: all passed; amber: some; white: none locally;
@@ -155,7 +155,7 @@ def qualification_figure(table, profiles=None):
               Patch(facecolor=style.EVIDENCE_MARKS["not_applicable"], label="not required")]
     fig.legend(handles=legend, loc="outside lower center", ncols=4, fontsize=7, frameon=False)
     return fig, "predictor_qualification", (
-        "Experiment 0B evidence per predictor, read from local records for the current evaluation "
+        "B0 evidence per predictor, read from local records for the current evaluation "
         "identity. First column: the synthetic task-contract fit on VSC. Other columns: passed over "
         "required one-outer-fold profiles on real data per arm family, with the same runtime as the "
         "contract; the Kumo override column is the widest Kumo arm, whose 500-column default recipe "

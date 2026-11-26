@@ -292,7 +292,7 @@ def test_campaign_embedding_factory_for_every_predictor(
         model=model,
         provider=None,
         feature_set=name,
-        phase="experiment_2",
+        phase="B2",
         encoder="e5_small_v2",
         pca_components=components,
         pca_scope=scope,
@@ -300,9 +300,9 @@ def test_campaign_embedding_factory_for_every_predictor(
     real_load = campaign.load_yaml
     def config(name):
         cfg = copy.deepcopy(real_load(name))
-        if name == "experiment_0/debug":
+        if name == "0/debug":
             cfg["full_fold_profile_enabled"] = True
-        if name == "experiment_1/models":
+        if name == "B1/models":
             cfg["models"][model]["runtime"]["device"] = "cpu"
         return cfg
 
@@ -338,7 +338,7 @@ def test_campaign_embedding_factory_for_every_predictor(
         encoded.attrs["embedding_groups"],
         components=components,
         scope=scope,
-        seed=real_load("experiment_1/main")["random_seed"],
+        seed=real_load("B1")["random_seed"],
         prepared_cache=cache_path("fixture", "e5_small_v2"),
         embedding_artifacts=["e5-artifact"],
         prepare=True,

@@ -1,4 +1,4 @@
-"""Opt-in Experiment 0B: real predictor fits on bounded synthetic task fixtures.
+"""Opt-in B0: real predictor fits on bounded synthetic task fixtures.
 
 These establish adapter/task compatibility, not full-dataset resource feasibility.
 Run each model in its separately prepared environment and allocated compute job.
@@ -34,7 +34,7 @@ CONTRACT_VERSION = 8
 
 
 def embedding_fixture_recipes():
-    encoders = load_yaml("experiment_2/embeddings")["encoders"]
+    encoders = load_yaml("B2")["encoders"]
     configs = load_yaml("feature_creation/embedding_models")["models"]
     dimensions = sorted({configs[encoder]["dimensions"] for encoder in encoders})
     return [
@@ -203,19 +203,19 @@ def interrupt_fixture(dataset, features, factory, args):
 
 
 def run(model, *, execute=False):
-    cfg = load_yaml("experiment_0/debug")
+    cfg = load_yaml("0/debug")
     if not execute or not cfg["predictor_execution_enabled"]:
         raise RuntimeError("Enable bounded predictor tests explicitly before execution")
     if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Predictor tests belong in a compute allocation")
-    settings = copy.deepcopy(load_yaml("experiment_1/models")["models"][model]["runtime"])
+    settings = copy.deepcopy(load_yaml("B1/models")["models"][model]["runtime"])
     settings["threads"] = min(
         settings["threads"], int(os.environ.get("SLURM_CPUS_PER_TASK", settings["threads"]))
     )
     if model == "tabstar":
-        settings["output_phase"] = "experiment_0"
+        settings["output_phase"] = "0"
     run_id = f"predictor_{model}_{uuid4().hex}"
-    manifest = paths.phase_path("experiment_0", "manifests", "after_extraction") / f"{run_id}.json"
+    manifest = paths.phase_path("B0", "manifests") / f"{run_id}.json"
     report = {
         "model": model,
         "settings": settings,
@@ -265,7 +265,7 @@ def run(model, *, execute=False):
                     "synthetic_vectors": components is not None,
                 },
                 allow_model_runs=True,
-                phase="experiment_0",
+                phase="0",
                 estimator_settings=settings,
                 feature_artifact_ids=[],
                 device=settings["device"],
@@ -321,14 +321,14 @@ def verify_published_fixtures(report):
     from src.evaluation.store import RecordRef, completed, database, read_predictions, readonly
 
     if paths.on_vsc() and paths.staging_override() != paths.durable_project_override():
-        raise ValueError("Verify published 0B fixtures outside scratch on durable PROJECT")
+        raise ValueError("Verify published B0 fixtures outside scratch on durable PROJECT")
     datasets = {(d.metadata.task_type, len(d.metadata.classes)): d for d in fixtures()}
     for case in report["fixtures"]:
         task = case["task_type"]
         data = datasets[task, case["classes"]]
         split = shared_splits(data)
         dataset_id = data.metadata.dataset_id
-        db = database(dataset_id, "experiment_0")
+        db = database(dataset_id, "0")
         expected = {(i, role) for i in range(len(split["folds"])) for role in
                     (("outer_test", "inner_oof_binary_threshold") if task == "binary_classification"
                      else ("outer_test",))}
@@ -336,23 +336,23 @@ def verify_published_fixtures(report):
         for locator in case["records"]:
             original, sep, record_id = locator.rpartition("#")
             if not sep or not original.replace("\\", "/").endswith("/" + db.name):
-                raise ValueError("0B fixture record locator has a different dataset")
+                raise ValueError("B0 fixture record locator has a different dataset")
             ref = RecordRef(db, record_id)
             body = json.loads(ref.read_text())
             meta = body["metadata"]
             fold, role = meta["outer_fold"], meta["prediction_role"]
             if (fold, role) not in expected:
-                raise ValueError("0B fixture has duplicate or unexpected fold/role")
+                raise ValueError("B0 fixture has duplicate or unexpected fold/role")
             expected.remove((fold, role))
             recipe_id = meta["fold_recipe_id"]
             if recipe_id not in marker_records:
                 with readonly(db) as conn:
                     marker = conn.execute("SELECT recipe FROM folds WHERE id=?", (recipe_id,)).fetchone()
                 if not marker or digest(recipe := json.loads(marker[0])) != recipe_id:
-                    raise ValueError("0B fixture lacks a current completed fold")
-                marker_records[recipe_id] = set(completed(recipe, "experiment_0"))
+                    raise ValueError("B0 fixture lacks a current completed fold")
+                marker_records[recipe_id] = set(completed(recipe, "0"))
             if ref not in marker_records[recipe_id]:
-                raise ValueError("0B fixture record differs from its completed fold")
+                raise ValueError("B0 fixture record differs from its completed fold")
             table = read_predictions(ref)
             positions = split["folds"][fold]["test" if role == "outer_test" else "train"]
             spec = meta["representation_recipe"]
@@ -366,7 +366,7 @@ def verify_published_fixtures(report):
                     or (case.get("partial_fold_resume_verified") and not spec.get("partial_resume_trial"))
                     or table.row_id.tolist() != [f"csv:{i}" for i in positions]
                     or table.y_true.tolist() != data.frame[data.metadata.target].iloc[positions].tolist()):
-                raise ValueError("Published 0B fixture does not match its runtime, case or expected rows")
+                raise ValueError("Published B0 fixture does not match its runtime, case or expected rows")
             if task == "regression":
                 scores = regression_metrics(table.y_true, table.prediction)
             else:
@@ -385,7 +385,7 @@ def verify_published_fixtures(report):
                            for k, value in reproduced.items() if value is not None)):
                 raise ValueError("Published fixture scores do not reproduce from its held-out predictions")
         if expected or len(marker_records) != len(split["folds"]):
-            raise ValueError("0B fixture omitted a published fold/role")
+            raise ValueError("B0 fixture omitted a published fold/role")
         if case.get("partial_fold_resume_verified"):
             orphan = RecordRef(db, case["interrupted_record_id"])
             interrupted = json.loads(orphan.read_text())["metadata"]

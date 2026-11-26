@@ -87,7 +87,7 @@ def run(step_name, job_id, *, apply=False):
         raise ValueError("Provide one numeric allocation job ID")
     if apply:
         require_idle_vsc()
-    directory = paths.manifests_dir("experiment_0") / "container_setup"
+    directory = paths.manifests_dir("0") / "container_setup"
     receipt = directory / "open_models_mindwell_b200.json"
     if apply:
         with file_lock(directory / ".submission.lock", timeout=1):

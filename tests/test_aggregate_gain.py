@@ -9,7 +9,7 @@ from src.evaluation import aggregate
 TEXT = {"BIN_A": 2, "BIN_B": 3, "BIN_ONE": 1, "REG_A": 2}
 
 
-def arm(dataset, *, model="catboost", phase="experiment_1", feature_set="non_text_plus_joint",
+def arm(dataset, *, model="catboost", phase="B1", feature_set="non_text_plus_joint",
         provider="jev", encoder=None, scope=None, components=None, baseline=0.8, augmented=0.9,
         folds=5, task="binary_classification"):
     metric = {"binary_classification": "roc_auc", "regression": "r2"}[task]
@@ -90,7 +90,7 @@ def test_single_text_datasets_leave_mode_contrasts_but_stay_against_baseline():
     contrast = pick(table, "decision/per_column/median", scope="multi_text")
     assert contrast.n_datasets == 1 and contrast.dataset_ids == "BIN_A"
     # Embedding recipes have no separate/joint/both identity, so they have no restricted scope.
-    embedded = frame(arm("BIN_ONE", phase="experiment_2", feature_set="non_text_plus_frozen_e5",
+    embedded = frame(arm("BIN_ONE", phase="B2", feature_set="non_text_plus_frozen_e5",
                          provider=None, encoder="e5_small_v2", scope="joint", components=64))
     assert set(summary_of(embedded).dataset_scope) == {"all"}
 
@@ -112,7 +112,7 @@ def test_kendall_tau_b_on_constructed_rankings():
     for model, gains in {"catboost": [0.1, 0.2, 0.3], "linear": [0.1, 0.2, 0.3],
                          "tabpfn_3_5": [0.3, 0.2, 0.1]}.items():
         for (encoder, scope, components), gain in zip(recipes, gains):
-            rows.append(arm("BIN_A", model=model, phase="experiment_2", provider=None,
+            rows.append(arm("BIN_A", model=model, phase="B2", provider=None,
                             feature_set="non_text_plus_frozen_e5", encoder=encoder, scope=scope,
                             components=components, baseline=0.5, augmented=0.5 + gain / 2))
     pairs, mean_tau = aggregate.ranking_stability(frame(*rows), text_columns=TEXT)

@@ -50,8 +50,8 @@ def test_default_gpu_plans_use_b200_and_cpu_jobs_stay_on_cpu():
     for step in by_name.values():
         if "--partition=gpu_b200" in step["command"]:
             assert any(d.endswith("gpfs_storage") for d in step["depends_on"])
-    assert plan("experiment_1", "tabpfn_3_5")["route"]["partition"] == "gpu_b200"
-    assert plan("experiment_1", "catboost")["gpu"] is False
+    assert plan("B1", "tabpfn_3_5")["route"]["partition"] == "gpu_b200"
+    assert plan("B1", "catboost")["gpu"] is False
     with pytest.raises(ValueError, match="Unknown GPU"):
         scheduling.gpu_profile("wice_a100")
 

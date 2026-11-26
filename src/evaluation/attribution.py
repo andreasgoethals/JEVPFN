@@ -1,4 +1,4 @@
-"""RQ2-E field attribution: grouped permutation importance on outer-test rows, no extra fits.
+"""B4 field attribution: grouped permutation importance on outer-test rows, no extra fits.
 
 After the final outer-training fit and the regular outer-test prediction, each feature
 GROUP (one decision block per provider/mode/text field, the text-availability flags, the
@@ -47,7 +47,7 @@ UNCONDITIONAL = "unconditional"
 PERMUTATIONS = (CONDITIONAL, UNCONDITIONAL)
 #: Group kinds whose permutation is stratified by text availability under CONDITIONAL.
 STRATIFIED_KINDS = ("decision", "embedding")
-STRUCTURED_PHASES = ("experiment_1", "experiment_2", "experiment_3")
+STRUCTURED_PHASES = ("B1", "B2", "B3")
 NATIVE_SKIP_REASON = (
     "native_text_system: original text enters the system's own preprocessing, so no "
     "fixed decision/embedding feature groups exist to permute"
@@ -74,7 +74,7 @@ def settings_for_phase(config, phase):
         "skip_reason": None,
     }
     validate_settings(settings)
-    if phase == "experiment_4":
+    if phase == "B6":
         settings.update(enabled=False, skip_reason=NATIVE_SKIP_REASON)
     elif phase not in STRUCTURED_PHASES:
         raise ValueError("Field attribution applies to benchmark phases only")
@@ -203,7 +203,7 @@ def permute_columns(frame: pd.DataFrame, columns, order) -> pd.DataFrame:
 
 
 def row_losses(y_true, prediction, classes, variance):
-    """Per-row loss with the RQ2-E definitions used by ``row_benefit``."""
+    """Per-row loss with the B4 definitions used by ``row_benefit``."""
     prediction = np.asarray(prediction, dtype=float)
     if not len(classes):
         y = np.asarray(y_true, dtype=float)
@@ -349,7 +349,7 @@ def _representation(recipe, feature_set, phase):
     return family(label), label
 
 
-def attribution_status(phases=STRUCTURED_PHASES + ("experiment_4",)):
+def attribution_status(phases=STRUCTURED_PHASES + ("B6",)):
     """Completed folds versus stored attribution: complete, skipped, undefined or missing."""
     from src.evaluation.store import all_recipes, attribution_bodies
 

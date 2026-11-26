@@ -228,7 +228,7 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
         "src/jev/", "src/data/", "config/0. exploration/",
         "config/1. question_preparation/", "config/2. feature_creation/",
         "config/general/0. exploration/", "config/general/1. question_preparation/",
-        "config/general/2. feature_creation/", "config/00_data/", "config/02_feature_creation/",
+        "config/general/2. feature_creation/", "config/general/1_data_and_questions/", "config/general/2_feature_creation/",
     )
     core = {
         "src/cluster/freeze.py", "src/cluster/feature_campaign.py",
@@ -238,9 +238,7 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
         "scripts/activate_conda.sh", "scripts/slurm/embedding_creation.slurm",
     }
     forbidden = {name for name in changed if name.startswith(protected) or name in core
-                 or (name.startswith(("config/3. experiment_0/", "config/general/3. experiment_0/", "config/01_exp0a/"))
-                     and name not in {"config/3. experiment_0/debug.yaml", "config/general/3. experiment_0/debug.yaml",
-                                      "config/01_exp0a/debug.yaml"})}
+                 or (name.startswith("config/general/0/") and name != "config/general/0/debug.yaml")}
     # The original extraction checkout predates hosted-only credit handling and
     # read-only notebook repairs. Accept only these named, exactly reviewed paths;
     # request generation, self-hosted inference and feature construction stay protected.
@@ -250,8 +248,8 @@ def validate_source_review(old, current, changed, review_path, reviewed_by):
                 "config/general/2. feature_creation/feature_comparison.yaml",
                 "config/2. feature_creation/feature_creation.yaml",
                 "config/2. feature_creation/feature_comparison.yaml",
-                "config/02_feature_creation/feature_creation.yaml",
-                "config/02_feature_creation/feature_comparison.yaml"}
+                "config/general/2_feature_creation/feature_creation.yaml",
+                "config/general/2_feature_creation/feature_comparison.yaml"}
     if exceptions.keys() - eligible or any(not reason for reason in exceptions.values()):
         raise ValueError("Unrecognized non-extraction source exception")
     for name in forbidden & exceptions.keys():
@@ -324,14 +322,14 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
     allowed = {
         "AGENTS.md",  # Previously reviewed operational companion policy, no scientific inputs.
         "src/cluster/feature_admission.py", "src/cluster/scratch_stage.py",
-        "src/cluster/job_graph.py", "scripts/slurm/experiment_0_scratch_stage.slurm",
-        "src/cluster/scratch_capacity.py", "scripts/slurm/experiment_0_scratch_release.slurm",
+        "src/cluster/job_graph.py", "scripts/slurm/0_scratch_stage.slurm",
+        "src/cluster/scratch_capacity.py", "scripts/slurm/0_scratch_release.slurm",
         "tests/test_feature_admission.py", "tests/test_scratch_stage.py",
         "tests/test_scratch_capacity.py",
         "scripts/slurm/feature_recovery_test.slurm",
         "scripts/slurm/_provider_memory.sh", "scripts/slurm/feature_creation.slurm",
-        "scripts/slurm/experiment_0_decision_contracts.slurm",
-        "scripts/slurm/experiment_0_decision_pilot.slurm", "tests/test_shell_environment.py",
+        "scripts/slurm/0_decision_contracts.slurm",
+        "scripts/slurm/0_decision_pilot.slurm", "tests/test_shell_environment.py",
     }
     reviewed_delta = None
     pins = runtime_pins()
@@ -388,7 +386,7 @@ def recover_campaign(*, previous_identity, previous_freeze, expected_source, rev
                 template = next(s for s in templates if s["name"] == step["name"])
                 step.clear()
                 step.update(template, previous_attempt=previous_attempt)
-    base = load_yaml("experiment_0/scheduling")
+    base = load_yaml("0/scheduling")
     legacy = {**base, "test_pool_limits": {**base["test_pool_limits"], **dict.fromkeys(SELF_HOSTED, 2)}}
     identity = digest(dict(frozen=frozen, runtime_pins=runtime_pins(), steps=original, settings=legacy))
     policy = {**report["parallel_admission"]["policy"], "campaign_identity": identity,
@@ -428,7 +426,7 @@ def validate_runtime_additions(previous, current, review_path, reviewed_by):
 
 def run(*, execute=False, expected_campaign=None, expected_source=None, reviewed_by=None):
     original_steps = plan()
-    base = load_yaml("experiment_0/scheduling")
+    base = load_yaml("0/scheduling")
     legacy = {**base, "test_pool_limits": {**base["test_pool_limits"], **dict.fromkeys(SELF_HOSTED, 2)}}
     all_encoders = [s["name"] for s in original_steps if s["name"].startswith("embeddings_")]
     settings = admission_settings(base, partition_encoders(original_steps, all_encoders))
@@ -447,7 +445,7 @@ def run(*, execute=False, expected_campaign=None, expected_source=None, reviewed
     identity = digest(dict(frozen=frozen, runtime_pins=runtime_pins(), steps=original_steps, settings=legacy))
     if identity != expected_campaign:
         raise ValueError("Frozen campaign plan/configuration/runtime differs from admission approval")
-    cfg = load_yaml("experiment_0/self_hosted")
+    cfg = load_yaml("0/self_hosted")
     if cfg["full_feature_creation_enabled"] is not True:
         raise ValueError("Full feature creation is disabled")
     for provider in SELF_HOSTED:

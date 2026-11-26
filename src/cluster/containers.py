@@ -437,7 +437,7 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
             "New container: use --allow-replacement to retire its obsolete/partial native environment after GPU verification"
         )
     evidence = []
-    root = paths.manifests_dir("experiment_0") / "before_extraction" / "gpu_contracts"
+    root = paths.manifests_dir("0") / "before_extraction" / "gpu_contracts"
     for p in root.glob("*.json"):
         report = json.loads(p.read_text(encoding="utf-8"))
         image = (
@@ -454,7 +454,7 @@ def retire(provider, *, apply=False, writers_stopped=False, allow_replacement=Fa
         ):
             evidence.append(str(p))
     if provider in PREDICTORS:
-        root = paths.phase_path("experiment_0", "manifests", "after_extraction")
+        root = paths.phase_path("B0", "manifests")
         for p in root.glob(f"predictor_{provider}_*.json"):
             report = json.loads(p.read_text(encoding="utf-8"))
             if (

@@ -1,4 +1,4 @@
-"""Label-free text-field taxonomy for RQ2-E moderators, fixed before any result.
+"""Label-free text-field taxonomy for B4 moderators, fixed before any result.
 
 MulTaBench reviewers asked to distinguish short categorical strings, IDs, names,
 long descriptions and reviews. Each text column gets one type from its non-empty
@@ -63,7 +63,7 @@ def field_type_table(entries=None) -> pd.DataFrame:
     from src.data.selection import selected_entries
     from src.utils.config import load_yaml
 
-    entries = entries or selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+    entries = entries or selected_entries(load_catalog(), load_yaml("B1"))
     tables = []
     for entry in entries:
         table = dataset_field_types(load_dataset(entry, allow_download=False))

@@ -39,7 +39,7 @@ def shard_path(original, index, count):
 
 def receipt_path(path):
     return (
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / "token_shards"
         / (path.stem + ".json")
@@ -454,12 +454,12 @@ def plan(provider, root, *, dependencies=()):
     from src.cluster.token_preparation import resources
     from src.jev.catalog import ADDED
 
-    count = load_yaml("experiment_0/scheduling").get("token_audit_shards", 10)
+    count = load_yaml("0/scheduling").get("token_audit_shards", 10)
     validate_shard(0, count)
     preparation = dict(
         name=provider + "_tokens_prepare",
         dependencies=list(dependencies),
-        script="experiment_0_tokens.slurm",
+        script="0_tokens.slurm",
         args=[root, provider, "prepare", str(count)],
         flags=["--cpus-per-task=2", "--time=02:00:00"],
         cluster=cpu_cluster(),
@@ -468,7 +468,7 @@ def plan(provider, root, *, dependencies=()):
         dict(
             name=f"{provider}_tokens_part{i:02d}",
             dependencies=[preparation["name"]],
-            script="experiment_0_tokens.slurm",
+            script="0_tokens.slurm",
             args=[root, provider, str(i), str(count)],
             flags=resources(provider, sharded=True),
             cluster=cpu_cluster(),
@@ -482,7 +482,7 @@ def plan(provider, root, *, dependencies=()):
         dict(
             name=provider + "_tokens",
             dependencies=[p["name"] for p in parts],
-            script="experiment_0_tokens.slurm",
+            script="0_tokens.slurm",
             args=[root, provider, "merge", str(count)],
             flags=[
                 "--cpus-per-task=2",

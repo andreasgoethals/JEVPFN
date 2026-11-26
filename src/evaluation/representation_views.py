@@ -17,7 +17,7 @@ def _complete_headlines(folds, phases):
     return chosen[chosen.arm_id.isin(complete[complete.eq(5)].index)]
 
 
-def decision_vs_embedding(folds, phase="experiment_2"):
+def decision_vs_embedding(folds, phase="B2"):
     """Pair every recipe for the three displayed descriptive metrics, without ranking.
 
     All other metrics remain in collect()'s tables. Avoid a cartesian expansion of
@@ -25,8 +25,8 @@ def decision_vs_embedding(folds, phase="experiment_2"):
     """
     if folds.empty:
         return pd.DataFrame()
-    chosen = _complete_headlines(folds, ("experiment_1", phase))
-    decisions = chosen[chosen.phase.eq("experiment_1") & chosen.feature_set.isin(MODES)]
+    chosen = _complete_headlines(folds, ("B1", phase))
+    decisions = chosen[chosen.phase.eq("B1") & chosen.feature_set.isin(MODES)]
     embeddings = chosen[chosen.phase.eq(phase) & chosen.encoder.notna()]
     embedding_recipe = pd.MultiIndex.from_frame(embeddings[["pca_scope", "pca_components"]])
     embeddings = embeddings[embedding_recipe.isin(pca_grid())]
@@ -70,10 +70,10 @@ def tar_vs_frozen(folds):
     """Prespecified same-E5 and PCA comparison; input policies are not identical."""
     if folds.empty:
         return pd.DataFrame()
-    chosen = _complete_headlines(folds, ("experiment_2", "experiment_3"))
+    chosen = _complete_headlines(folds, ("B2", "B3"))
     keys = PAIR_KEYS + (["pairing_identity"] if "pairing_identity" in folds else []) + ["pca_scope", "pca_components"]
-    tar = chosen[chosen.phase.eq("experiment_3")]
-    frozen = chosen[chosen.phase.eq("experiment_2") & chosen.encoder.eq("e5_small_v2")]
+    tar = chosen[chosen.phase.eq("B3")]
+    frozen = chosen[chosen.phase.eq("B2") & chosen.encoder.eq("e5_small_v2")]
     if tar.empty or frozen.empty:
         return pd.DataFrame()
     if tar.duplicated(keys).any() or frozen.duplicated(keys).any():

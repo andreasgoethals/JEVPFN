@@ -13,17 +13,17 @@ from src.evaluation.widths import pca_width_table
 def test_primary_grid_and_widths():
     plan = benchmark_plan(cohort="with_jev")
     assert Counter(a["phase"] for a in plan) == {
-        "experiment_1": 6552,
-        "experiment_2": 2898,
-        "experiment_3": 1008,
-        "experiment_4": 54,
-        "rq2": 9282,
-        "data_efficiency": 61446,
-        "representations": 1764,  # C1: (12 + 2) arms x 7 predictors x 18 datasets
-        "rq3": 378,  # C2: 3 trained cells x 7 predictors x 18 datasets
+        "B1": 6552,
+        "B2": 2898,
+        "B3": 1008,
+        "B6": 54,
+        "B4": 9282,
+        "B5": 61446,
+        "C1": 1764,  # C1: (12 + 2) arms x 7 predictors x 18 datasets
+        "C2": 378,  # C2: 3 trained cells x 7 predictors x 18 datasets
     }
     assert all(a["provider"] is None for a in plan
-               if a["phase"] in ("experiment_3", "experiment_4")
+               if a["phase"] in ("B3", "B6")
                or a["feature_set"] == "non_text_plus_frozen_e5")
     assert all(a["width_status"] == "within_known_width_limit" for a in plan)
     widened = [a for a in plan if a.get("kumo_max_columns_override")]
@@ -107,7 +107,7 @@ def test_verify_prepared_pca_checks_all_inner_and_outer_keys(tmp_path, monkeypat
 
     dataset = next(d for d in fixtures() if d.metadata.task_type == "binary_classification")
     path = tmp_path / "pca.sqlite3"
-    seed = prepare_pca.load_yaml("experiment_2/embeddings")["random_seed"]
+    seed = prepare_pca.load_yaml("B2")["random_seed"]
     monkeypatch.setattr(prepare_pca, "cache_path", lambda *_: path)
     encoder = {"encoder_id": "fixture", "dimensions": 2}
     columns = [[f"frozen_e5__text_{i:03d}__{j:03d}" for j in range(2)] for i in range(2)]
@@ -143,8 +143,8 @@ def test_gpu_routes_use_native_scratch_and_cpu_plan_has_no_gpu():
 
     assert gpu_profile("mindwell_b200")["storage_mode"] == "scratch_mirror"
     assert gpu_profile("wice_h100")["partition"] == "gpu_h100"
-    assert plan("experiment_1", "catboost")["gpu"] is False
-    assert plan("experiment_1", "tabpfn_3_5")["gpu"] is True
+    assert plan("B1", "catboost")["gpu"] is False
+    assert plan("B1", "tabpfn_3_5")["gpu"] is True
 
 
 def test_gpu_sampling_does_not_claim_unallocated_devices(monkeypatch):
@@ -276,10 +276,10 @@ def test_telemetry_host_step_preserves_wrapper_and_child_failure(monkeypatch, tm
 def test_array_plan_reports_width_exclusions(monkeypatch):
     from src.cluster import benchmark_jobs
 
-    valid = dict(phase="experiment_1", model="catboost", width_status="within_known_width_limit")
+    valid = dict(phase="B1", model="catboost", width_status="within_known_width_limit")
     excluded = {**valid, "width_status": "unsupported_width", "predictor_columns": 501}
     monkeypatch.setattr(benchmark_jobs, "benchmark_plan", lambda **kw: [valid, excluded])
-    result = benchmark_jobs.plan("experiment_1", "catboost")
+    result = benchmark_jobs.plan("B1", "catboost")
     assert result["arms"] == [valid]
     assert result["excluded_arms"] == [excluded]
 
@@ -290,7 +290,7 @@ def test_retired_experiments_have_no_grid_or_configuration():
     assert EMBEDDING_FEATURE_SETS == ("non_text_plus_frozen_e5",)
     assert NATIVE_FEATURE_SETS == ("original_features",)
     assert not any(a.get("control") or a.get("selection_id") for a in benchmark_plan())
-    for phase in ("experiment_5", "experiment_6"):
-        with pytest.raises(ValueError, match="Unknown research phase"):
+    for phase in ("experiment_5", "experiment_6", "B7"):
+        with pytest.raises((ValueError, FileNotFoundError)):
             load_yaml(phase + "/main")
     assert load_yaml("synthesis/analysis")["test"] == "two_sided_wilcoxon_signed_rank"

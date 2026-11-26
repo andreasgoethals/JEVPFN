@@ -1,0 +1,223 @@
+# The ONE old -> new map of JEVPFN names (layout v4, owner-approved 26 November 2026).
+# Its SHA-256 is recorded in config/structure.yaml and verified whenever the registry loads.
+# Active code uses only the new names. This map is consulted for provenance only:
+# locating paths recorded in earlier receipts and signed reviews, migrating existing output
+# trees (`src.utils.layout_migration`) and re-keying the two re-creatable stores whose keys
+# contained source hashes. Never edit an entry; append a new version instead.
+schema: jevpfn.layout-aliases.v1
+version: 4
+created: 26-11-2026
+
+# Internal phase IDs (keys of receipts, manifests and recipes before 26-11-2026).
+# experiment_0 was 0A (before extraction) and 0B (after extraction); 0B is now B0 (predictor
+# contracts and profiles), A0 (Group A pilots) and C0 (Strands training pilots).
+phases:
+  experiment_0: '0'
+  experiment_1: B1
+  experiment_2: B2
+  experiment_3: B3
+  experiment_4: B6
+  rq1: A1
+  rq2: B4
+  rq3: C2
+  data_efficiency: B5
+  representations: C1
+# Sub-trees of an old phase that now belong to another phase (old phase, path prefix).
+phase_routes:
+  - {phase: experiment_0, prefix: manifests/after_extraction, to: B0, as: manifests}
+  - {phase: experiment_0, prefix: logs/after_extraction, to: B0, as: logs}
+  - {phase: rq1, prefix: results/robustness, to: A2, as: results/robustness}
+  - {phase: rq1, prefix: results/hosted_ledgers, to: A2, as: results/hosted_ledgers}
+  - {phase: rq1, prefix: results/geometry_pilots, to: A0, as: results/geometry_pilots}
+  - {phase: rq1, prefix: results/geometry, to: A3, as: results/geometry}
+  - {phase: rq3, prefix: results/adaptation_pilots, to: C0, as: results/adaptation_pilots}
+
+# Output paths relative to output_JEVPFN/: every folder name of layouts v1 (numbered, until
+# 18-11-2026), v2 (flat, 18-23 November) and v3 (letter groups, 23-26 November). The longest
+# matching prefix wins; `../archive/...` lies beside the output root.
+output_prefixes:
+  # v1: numbered phase folders and research-question trees.
+  '0. exploration': general/1_data_and_questions
+  '1. question_preparation': general/1_data_and_questions
+  '2. feature_creation': general/2_feature_creation
+  '3. experiment_0/manifests/after_extraction': B/B0/manifests
+  '3. experiment_0/logs/after_extraction': B/B0/logs
+  '3. experiment_0': general/0
+  '4. experiment_1': B/B1
+  '5. experiment_2': B/B2
+  '6. experiment_3': B/B3
+  '7. experiment_4': B/B6
+  '8. synthesis': general/4_synthesis
+  'rq2/4. experiment_1': B/B1
+  'rq2/5. experiment_2': B/B2
+  'rq2/6. experiment_3': B/B3
+  'rq2/7. experiment_4': B/B6
+  'rq2/8. synthesis': general/4_synthesis
+  'rq2/regression_readout': B/B1/regression_readout
+  regression_readout: B/B1/regression_readout
+  rq1/results/outputs: A/A1/results/outputs
+  rq1/results/robustness: A/A2/results/robustness
+  rq1/results/hosted_ledgers: A/A2/results/hosted_ledgers
+  rq1/results/geometry_pilots: A/A0/results/geometry_pilots
+  rq1/results/geometry: A/A3/results/geometry
+  rq1: A/A1
+  rq2: B/B4
+  rq3/results/adaptation_pilots: C/C0/results/adaptation_pilots
+  rq3: C/C2
+  # v2: flat folders.
+  00_data: general/1_data_and_questions
+  01_exp0a/manifests/after_extraction: B/B0/manifests
+  01_exp0a/logs/after_extraction: B/B0/logs
+  01_exp0a: general/0
+  02_feature_creation: general/2_feature_creation
+  03_exp0b/manifests/after_extraction: B/B0/manifests
+  03_exp0b/logs/after_extraction: B/B0/logs
+  03_exp0b/manifests/reports.json: ../archive/layout_20261126/03_exp0b/manifests/reports.json
+  03_exp0b/manifests/notebook: ../archive/layout_20261126/03_exp0b/manifests/notebook
+  03_exp0b/logs/notebook: ../archive/layout_20261126/03_exp0b/logs/notebook
+  03_exp0b/results/notebook: ../archive/layout_20261126/03_exp0b/results/notebook
+  03_exp0b: B/B0
+  04_study_audit: general/3_study_audit
+  synthesis: general/4_synthesis
+  05_synthesis: general/4_synthesis
+  exp01_outputs: A/A1
+  exp02_robustness: A/A2
+  exp03_geometry/results/geometry_pilots: A/A0/results/geometry_pilots
+  exp03_geometry: A/A3
+  exp04_decision_features: B/B1
+  exp05_frozen_embeddings: B/B2
+  exp06_tar: B/B3
+  exp07_native_text: B/B6
+  exp08_when_text_helps: B/B4
+  exp11_data_efficiency: B/B5
+  exp09_representations: C/C1
+  exp09_adaptation: C/C2
+  exp10_adaptation/results/adaptation_pilots: C/C0/results/adaptation_pilots
+  exp10_adaptation: C/C2
+  # v3: letter groups.
+  A/exp01_outputs: A/A1
+  A/exp02_robustness: A/A2
+  A/exp03_geometry/results/geometry_pilots: A/A0/results/geometry_pilots
+  A/exp03_geometry: A/A3
+  B/exp04_decision_features: B/B1
+  B/exp05_frozen_embeddings: B/B2
+  B/exp06_tar: B/B3
+  B/exp07_native_text: B/B6
+  B/exp08_when_text_helps: B/B4
+  B/exp09_data_efficiency: B/B5
+  C/exp10_representations: C/C1
+  C/exp11_adaptation/results/adaptation_pilots: C/C0/results/adaptation_pilots
+  C/exp11_adaptation: C/C2
+  A_synthesis: A/A_synthesis
+  B_synthesis: B/B_synthesis
+  C_synthesis: C/C_synthesis
+  # Figure folders (one per notebook). The combined 0A/0B notebook is archived; its
+  # successors general/0 and B/B0 regenerate their figures.
+  figures/general/3_model_and_feature_qualification: ../archive/layout_20261126/figures/general/3_model_and_feature_qualification
+  figures/general/4_study_audit: figures/general/3_study_audit
+  figures/general/5_synthesis: figures/general/4_synthesis
+  figures/A/exp01_outputs: figures/A/A1
+  figures/A/exp02_robustness: figures/A/A2
+  figures/A/exp03_geometry: figures/A/A3
+  figures/B/exp04_decision_features: figures/B/B1
+  figures/B/exp05_frozen_embeddings: figures/B/B2
+  figures/B/exp06_tar: figures/B/B3
+  figures/B/exp07_native_text: figures/B/B6
+  figures/B/exp08_when_text_helps: figures/B/B4
+  figures/B/exp09_data_efficiency: figures/B/B5
+  figures/C/exp10_representations: figures/C/C1
+  figures/C/exp11_adaptation: figures/C/C2
+
+# Config keys (load_yaml names) and files before 26-11-2026.
+config_keys:
+  experiment_0/control_runtime: 0/control_runtime
+  experiment_0/debug: 0/debug
+  experiment_0/gpu_contracts: 0/gpu_contracts
+  experiment_0/jev_prefix_pilot: 0/jev_prefix_pilot
+  experiment_0/jev_smoke: 0/jev_smoke
+  experiment_0/scheduling: 0/scheduling
+  experiment_0/self_hosted: 0/self_hosted
+  experiment_0/research_questions: B0
+  experiment_1/main: B1
+  experiment_1/models: B1/models
+  experiment_1/protocol: B1/protocol
+  experiment_2/embeddings: B2
+  experiment_3/tar: B3
+  experiment_4/native_text: B6
+  rq1/behavior: A2
+  rq1/geometry: A3
+  rq2/when_text_helps: B4
+  rq2/text_column_refits: B4/text_column_refits
+  data_efficiency/data_efficiency: B5
+  representations/representations: C1
+  rq3/adaptation: C2
+config_files:
+  config/01_exp0a/research_questions.yaml: [config/A/A0.yaml, config/B/B0.yaml, config/C/C0.yaml]
+  config/A/behavior.yaml: config/A/A2.yaml
+  config/A/question_versions.csv: config/A/A2_question_versions.csv
+  config/A/geometry.yaml: config/A/A3.yaml
+  config/B/main.yaml: config/B/B1.yaml
+  config/B/models.yaml: config/B/B1.yaml#models
+  config/B/protocol.yaml: config/B/B1.yaml#protocol
+  config/B/embeddings.yaml: config/B/B2.yaml
+  config/B/tar.yaml: config/B/B3.yaml
+  config/B/when_text_helps.yaml: config/B/B4.yaml
+  config/B/text_column_refits.yaml: config/B/B4.yaml#text_column_refits
+  config/B/data_efficiency.yaml: config/B/B5.yaml
+  config/B/native_text.yaml: config/B/B6.yaml
+  config/C/representations.yaml: config/C/C1.yaml
+  config/C/adaptation.yaml: config/C/C2.yaml
+  config/00_data: config/general/1_data_and_questions
+  config/01_exp0a: config/general/0
+  config/02_feature_creation: config/general/2_feature_creation
+  config/05_synthesis: config/general/4_synthesis
+
+# Notebook IDs.
+notebooks:
+  general/3_model_and_feature_qualification: [general/0, B/B0]
+  general/4_study_audit: general/3_study_audit
+  general/5_synthesis: general/4_synthesis
+  A/exp01_outputs: A/A1
+  A/exp02_robustness: A/A2
+  A/exp03_geometry: A/A3
+  B/exp04_decision_features: B/B1
+  B/exp05_frozen_embeddings: B/B2
+  B/exp06_tar: B/B3
+  B/exp07_native_text: B/B6
+  B/exp08_when_text_helps: B/B4
+  B/exp09_data_efficiency: B/B5
+  C/exp10_representations: C/C1
+  C/exp11_adaptation: C/C2
+
+# Study labels of layout v3 (Group B numbering before 26-11-2026).
+study_labels:
+  B2b: B3
+  B3: B4
+  B4: B5
+  B5: B6
+
+# Slurm scripts (commands recorded in campaign receipts).
+scripts:
+  scripts/slurm/experiment_0_after.slurm: scripts/slurm/B0_preflight.slurm
+  scripts/slurm/experiment_0_predictor.slurm: scripts/slurm/B0_predictor.slurm
+  scripts/slurm/experiment_0_predictor_cpu.slurm: scripts/slurm/B0_predictor_cpu.slurm
+  scripts/slurm/experiment_0_robustness.slurm: scripts/slurm/A0_robustness.slurm
+  scripts/slurm/rq1_outputs.slurm: scripts/slurm/A1_outputs.slurm
+  scripts/slurm/rq1_robustness_export.slurm: scripts/slurm/A2_export.slurm
+  scripts/slurm/rq1_geometry_export.slurm: scripts/slurm/A3_export.slurm
+  scripts/slurm/rq2_group_b_export.slurm: scripts/slurm/B_export.slurm
+  scripts/slurm/c1_strands_hidden.slurm: scripts/slurm/C1_strands_hidden.slurm
+  scripts/slurm/c2_adaptation.slurm: scripts/slurm/C2_adaptation.slurm
+  scripts/slurm/experiment_0_*.slurm: scripts/slurm/0_*.slurm
+
+# Re-keyed re-creatable stores: their keys contained the hash of source files whose phase
+# literals changed. `src.utils.layout_migration --rekey` rewrites them and records both hashes.
+rekey:
+  pca_implementation:
+    store: B/B2/results/pca/<encoder>/<dataset>.sqlite3
+    sources: [src/evaluation/embedding_control.py, src/evaluation/pca_cache.py]
+    old_code_identity: 7a3cb6ed6d4983baddeaeec632b03b5e253a7e7d6d2460595c26e9d26259444a
+  tar_adapter_source:
+    store: B/B3/results/tar/<dataset>/fold_<k>/manifest.json
+    source: src/evaluation/tar.py
+    old_sha256_lf: 1a475b38836a6446beeba8f27065b69618b605b6e516e92749e848a91a279911

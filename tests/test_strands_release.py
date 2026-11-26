@@ -281,7 +281,7 @@ def _token_evidence(dataset_id, lengths, input_id):
     audit_id = digest(audit)
     receipt = {"provider": "strands", "audit_id": audit_id, "status": "counted_all_inputs",
                "overflow_unique_inputs": 0, "datasets": [{"dataset_id": dataset_id, "input_set_id": input_id}]}
-    write_json(sa.paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json",
+    write_json(sa.paths.manifests_dir("0") / "before_extraction" / "token_audit.json",
                {"self_hosted": [receipt]})
     counts = sa.paths.token_audit_dir() / f"strands_{audit_id}.sqlite3"
     counts.parent.mkdir(parents=True, exist_ok=True)

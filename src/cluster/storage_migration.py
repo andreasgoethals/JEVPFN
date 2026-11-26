@@ -206,7 +206,7 @@ def cpu_accept():
     job = os.environ["SLURM_JOB_ID"]
     if os.environ.get("SLURM_CLUSTER_NAME") != "mindwell":
         raise ValueError("GPFS cutover CPU validation must run natively on Mindwell")
-    before = paths.manifests_dir("experiment_0") / "before_extraction"
+    before = paths.manifests_dir("0") / "before_extraction"
     control = before / ("control_" + job + ".json")
     if json.loads(control.read_text()).get("status") != "control_integration_passed":
         raise ValueError("CPU image launch/integration failed")
@@ -332,7 +332,7 @@ def numeric_backup():
 
 
 def accept(reviewed_by):
-    """Derive new acceptances; retain original 0A reports and scientific identities."""
+    """Derive new acceptances; retain original Experiment 0 reports and scientific identities."""
     from src.cluster.experiment_zero import scheduler_state
     from src.cluster.maintenance import require_idle_vsc
     from src.jev.catalog import SELF_HOSTED
@@ -366,7 +366,7 @@ def accept(reviewed_by):
         if scheduler_state(job, cluster="mindwell") != ("COMPLETED", "0:0"):
             raise ValueError("Validation allocation is not confirmed complete")
     embeddings = []
-    folder = paths.manifests_dir("experiment_0") / "before_extraction/embeddings"
+    folder = paths.manifests_dir("0") / "before_extraction/embeddings"
     for p in folder.glob("*.json"):
         r = json.loads(p.read_text())
         if r.get("job_id") in jobs and r.get("status") == "embedding_contracts_passed_requires_full_dataset_review":
@@ -399,7 +399,7 @@ def accept(reviewed_by):
                    "migration": {"original_acceptance": str(old), "original_sha256": file_sha256(old),
                                  "meaning": "Same scientific settings, relocated host wrappers; bounded native revalidation"},
                    "evidence": mapped + [{"path": str(p), "sha256": file_sha256(p)} for p in [old, *evidence]]}
-        write_json(paths.manifests_dir("experiment_0") / "storage_migration" / ("accepted_" + provider + ".json"), derived)
+        write_json(paths.manifests_dir("0") / "storage_migration" / ("accepted_" + provider + ".json"), derived)
     result = {"status": "accepted_requires_consumer_check_and_retirement", "reviewed_by": reviewed_by,
               "source": str(source), "destination": str(destination),
               "evidence": [{"path": str(p), "sha256": file_sha256(p)} for p in evidence]}
@@ -559,7 +559,7 @@ def rebind(previous_freeze, reviewed_by):
                if old_freeze["files"].get(k) != current["files"].get(k)}
     protected = {k for k in changed if k.startswith(("src/jev/", "src/data/", "src/visualize/", "notebooks/"))
                  or (k.startswith("src/evaluation/") and k != "src/evaluation/checkpoint_paths.py")
-                 or (k.startswith("config/") and not k.endswith(("experiment_0/scheduling.yaml", "experiment_0/self_hosted.yaml")))}
+                 or (k.startswith("config/") and not k.endswith(("0/scheduling.yaml", "0/self_hosted.yaml")))}
     routing_sources = {"src/utils/paths.py", "src/evaluation/checkpoint_paths.py", *(
         "src/cluster/" + name + ".py" for name in (
             "project_migration", "storage_migration", "closed_publication", "storage_config", "maintenance", "scheduling", "preflight",
@@ -607,7 +607,7 @@ def rebind(previous_freeze, reviewed_by):
         frozen = check_if_present()
         if not frozen.get("frozen"):
             raise ValueError("Freeze the reviewed migrated source before recovery")
-        base = load_yaml("experiment_0/scheduling")
+        base = load_yaml("0/scheduling")
         legacy = {**base, "test_pool_limits": {**base["test_pool_limits"], **dict.fromkeys(SELF_HOSTED, 2)}}
         identity = digest(dict(frozen=frozen, runtime_pins=runtime_pins(), steps=original, settings=legacy))
         policy = {**report["parallel_admission"]["policy"], "campaign_identity": identity,
@@ -639,7 +639,7 @@ def gpu(provider):
     inference_environment()
     client = SelfHostedClient(provider, allow_model_runs=True)
     evidence, _ = token_evidence(provider, client.counter)
-    old_acceptance = paths.manifests_dir("experiment_0") / "before_extraction" / f"accepted_{provider}.json"
+    old_acceptance = paths.manifests_dir("0") / "before_extraction" / f"accepted_{provider}.json"
     accepted = json.loads(old_acceptance.read_text())
     old_gpu = []
     for item in accepted["evidence"]:
@@ -650,7 +650,7 @@ def gpu(provider):
                 old_gpu.append(r)
     if not old_gpu or not same_science(old_gpu[0]["settings"], client.settings):
         raise ValueError("Relocated runtime changed scientific settings")
-    cache = ResponseCache(paths.results_dir("storage_migration", provider + ".sqlite3", phase="experiment_0"),
+    cache = ResponseCache(paths.results_dir("storage_migration", provider + ".sqlite3", phase="0"),
                           dataset_id="EXP0_SEMANTICS")
     first = exercise_semantics(client, cache)
     second = exercise_semantics(client, cache)

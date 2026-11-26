@@ -176,9 +176,9 @@ def exercise_feature_pipeline(client, dataset, directory):
     for mode in ("per_column", "joint"):
         cfg["jev"]["representation"] = mode
         block = materialize_cached_block(
-            dataset, cfg, cache, provider_settings=client.settings, phase="experiment_0"
+            dataset, cfg, cache, provider_settings=client.settings, phase="0"
         )
-        path = save_block(block, cache_path, phase="experiment_0")
+        path = save_block(block, cache_path, phase="0")
         loaded = load_block(path, block.manifest["artifact_id"])
         values = loaded.values.drop(columns="row_id")
         if loaded.values.row_id.tolist() != [f"csv:{i}" for i in range(len(dataset.frame))]:
@@ -318,7 +318,7 @@ def checked_inputs(provider):
 def run(provider, *, execute=False):
     if not execute or not paths.on_vsc() or not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU contracts require --execute inside a VSC GPU allocation")
-    cfg = load_yaml("experiment_0/gpu_contracts")
+    cfg = load_yaml("0/gpu_contracts")
     if provider not in cfg["providers"] or cfg["full_extraction_authorized"] is not False:
         raise ValueError("Unsupported GPU test configuration")
     if failures := storage_policy_failures(os.environ.get("SLURM_CLUSTER_NAME")):
@@ -326,14 +326,14 @@ def run(provider, *, execute=False):
     inference_environment()
     run_id = f"{provider}_{uuid4().hex}"
     manifest = (
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / "gpu_contracts"
         / f"{run_id}.json"
     )
-    log = paths.logs_dir("experiment_0") / "before_extraction" / "gpu_contracts" / f"{run_id}.log"
+    log = paths.logs_dir("0") / "before_extraction" / "gpu_contracts" / f"{run_id}.log"
     directory = paths.require_project_output(
-        paths.results_dir("gpu_contracts", run_id, phase="experiment_0")
+        paths.results_dir("gpu_contracts", run_id, phase="0")
     )
     report = {
         "run_id": run_id,
@@ -345,7 +345,7 @@ def run(provider, *, execute=False):
         "cluster": os.environ.get("SLURM_CLUSTER_NAME"),
         "configuration": cfg,
         "configuration_sha256": digest(cfg),
-        "full_experiment_0_passed": False,
+        "full_qualification_passed": False,
         "full_extraction_authorized": False,
         "results_directory": str(directory),
         "synthetic": [],

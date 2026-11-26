@@ -392,7 +392,7 @@ def summarize_normalized(per_dataset: pd.DataFrame, *, keys=("model_id", "repres
     return pd.DataFrame(rows, columns=columns)
 
 
-# ---------------------------------------------------------------------- B3: text columns
+# ---------------------------------------------------------------------- B4: text columns
 
 
 def text_column_importance(head: pd.DataFrame) -> pd.DataFrame:
@@ -522,7 +522,7 @@ def per_model_usefulness(gains: pd.DataFrame, *, datasets=None) -> pd.DataFrame:
         from src.utils.config import load_yaml
 
         semantics = load_yaml("dataset_semantics")["datasets"]
-        entries = selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+        entries = selected_entries(load_catalog(), load_yaml("B1"))
         datasets = pd.DataFrame([{"dataset_id": e["id"], "task_type": semantics[e["id"]]["task_type"]}
                                  for e in entries])
     tasks = datasets.set_index("dataset_id", verify_integrity=True).task_type

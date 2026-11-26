@@ -1,4 +1,4 @@
-"""RQ1C. Compare frozen, same-field representations on an outcome-blind text sample."""
+"""A3. Compare frozen, same-field representations on an outcome-blind text sample."""
 
 import argparse
 import json
@@ -102,15 +102,15 @@ def geometry_protocol(dataset_id, source, cfg, main, members):
 def run(dataset_id, *, pilot=False, cohort=None):
     from src.evaluation.benchmark_export import cohort_key, cohort_record
 
-    cfg = load_yaml("rq1/geometry")
-    main = load_yaml("experiment_1/main")
+    cfg = load_yaml("A3")
+    main = load_yaml("B1")
     members = cohort_record(cohort, main=main)["decision_roster"]
     folder = cohort_key(cohort, main=main)
     entry = next(e for e in selected_entries(load_catalog(), main) if e["id"] == dataset_id)
     dataset = load_dataset(entry, allow_download=False)
     from src.evaluation.qualification import decision_artifact_pins, decision_selector
     protocol = geometry_protocol(dataset_id, dataset.source["data_identity"], cfg, main, members)
-    pilot_path = paths.results_dir("geometry_pilots", phase="rq1") / folder / (dataset_id + ".json")
+    pilot_path = paths.results_dir("geometry_pilots", phase="A0") / folder / (dataset_id + ".json")
     if not pilot:
         if not pilot_path.is_file():
             raise ValueError("Full geometry requires a current pilot for this dataset")
@@ -247,12 +247,12 @@ def run(dataset_id, *, pilot=False, cohort=None):
         missing_providers=missing,
     )
     if pilot and (missing or not rows):
-        raise ValueError("0B geometry pilot requires every selected provider and a measurable text field")
+        raise ValueError("B0 geometry pilot requires every selected provider and a measurable text field")
     if not pilot and (prior["encoders"] != encoder_ids or
             {r["provider"]: r["artifact_id"] for r in prior["comparisons"]} !=
             {r["provider"]: r["artifact_id"] for r in rows}):
         raise ValueError("The pilot and full geometry use different saved artifacts")
-    destination = pilot_path if pilot else paths.results_dir("geometry", phase="rq1") / folder / (dataset_id + ".json")
+    destination = pilot_path if pilot else paths.results_dir("geometry", phase="A3") / folder / (dataset_id + ".json")
     write_json(destination, body)
     return destination
 
@@ -261,6 +261,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--cohort", metavar="COHORT")
-    parser.add_argument("--pilot", action="store_true", help="0B readback with at most 12 distinct texts per field")
+    parser.add_argument("--pilot", action="store_true", help="B0 readback with at most 12 distinct texts per field")
     args = parser.parse_args()
     print(run(args.dataset, pilot=args.pilot, cohort=args.cohort))

@@ -1,4 +1,4 @@
-"""RQ2-E row-level complementarity and data maps from paired held-out predictions.
+"""B4 row-level complementarity and data maps from paired held-out predictions.
 
 **Complementarity.** For each dataset and fixed predictor, every decision-feature arm is
 compared with every frozen-embedding and TAR arm on the same outer-test rows and folds. The

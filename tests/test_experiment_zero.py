@@ -68,7 +68,7 @@ def test_submission_failure_is_recorded_and_stops_rest(isolated_output, monkeypa
     monkeypatch.setattr(exp0.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="uncertain"))
     with pytest.raises(ValueError, match="Unrecognized"):
         exp0.run("vsc", execute=True)
-    receipt = next((paths.manifests_dir("experiment_0") / "0A_vsc").glob("*.json"))
+    receipt = next((paths.manifests_dir("0") / "0A_vsc").glob("*.json"))
     body = json.loads(receipt.read_text())
     assert body["status"] == "stopped_requires_review"
     assert body["steps"][0]["status"] == "starting"
@@ -119,7 +119,7 @@ def test_frozen_submission_preserves_scheduler_error(isolated_output, monkeypatc
     monkeypatch.setattr(exp0.subprocess, "run", fail)
     with pytest.raises((subprocess.CalledProcessError, subprocess.TimeoutExpired)):
         exp0.run("vsc", execute=True)
-    receipt = next((paths.manifests_dir("experiment_0") / "0A_vsc").glob("*.json"))
+    receipt = next((paths.manifests_dir("0") / "0A_vsc").glob("*.json"))
     body = json.loads(receipt.read_text())
     assert body["status"] == "stopped_requires_review"
     assert body["steps"][0]["status"] == "starting"

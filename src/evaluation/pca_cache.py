@@ -17,13 +17,23 @@ from src.utils.serialization import digest
 
 
 def cache_path(dataset_id, encoder):
-    return paths.results_dir("pca", phase="experiment_2") / encoder / f"{dataset_id}.sqlite3"
+    return paths.results_dir("pca", phase="B2") / encoder / f"{dataset_id}.sqlite3"
 
 
-def identity(x, group, components, scope, seed, artifacts, *, standardize=False):
-    import sklearn
+#: The implementation sources whose identity is part of every key.
+IMPLEMENTATION_SOURCES = ["src/evaluation/embedding_control.py", "src/evaluation/pca_cache.py"]
 
+
+def implementation_identity():
     from src.utils.provenance import code_identity
+
+    return code_identity(IMPLEMENTATION_SOURCES)
+
+
+def identity(x, group, components, scope, seed, artifacts, *, standardize=False, implementation=None):
+    """Key of one prepared partition. `implementation` replays an earlier source identity
+    (re-keying after the layout v4 rename, `prepare_pca.rekey_prepared`)."""
+    import sklearn
 
     if not artifacts or not x.index.is_unique:
         raise ValueError("PCA reuse requires immutable embedding artifacts and unique row IDs")
@@ -32,9 +42,7 @@ def identity(x, group, components, scope, seed, artifacts, *, standardize=False)
             "version": 1,
             **({"standardize": True} if standardize else {}),
             "sklearn": sklearn.__version__,
-            "implementation": code_identity(
-                ["src/evaluation/embedding_control.py", "src/evaluation/pca_cache.py"]
-            ),
+            "implementation": implementation or implementation_identity(),
             "training_rows": list(x.index),
             "columns": group,
             "components": components,

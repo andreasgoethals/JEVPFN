@@ -57,12 +57,12 @@ def make_notebook(path, cells: list[str]) -> None:
 
 
 def test_synthesis_reads_figures_from_the_current_run(isolated_output, monkeypatch):
-    names = ("general/5_synthesis", "B/exp04_decision_features")
+    names = ("general/4_synthesis", "B/B1")
     monkeypatch.setattr(rn, "discover", lambda notebooks=None: names)
     figures = isolated_output / "figures_ready"
 
     def run_one(name, timeout, scratch):
-        if name == "general/5_synthesis":
+        if name == "general/4_synthesis":
             assert figures.exists()
         else:
             figures.touch()
@@ -77,14 +77,14 @@ def test_discovery_follows_registry_order(tmp_path, monkeypatch) -> None:
     stable — and discovered rather than listed, because a hard-coded list stops covering a
     notebook someone added."""
     monkeypatch.setattr(rn, "notebooks_dir", lambda: tmp_path)
-    for name in ("C/exp11_adaptation", "B/exp09_data_efficiency", "general/5_synthesis",
-                 "A/A_synthesis", "general/1_data_and_questions", "B/exp04_decision_features"):
+    for name in ("C/C2", "B/B5", "general/4_synthesis",
+                 "A/A_synthesis", "general/1_data_and_questions", "B/B1"):
         make_notebook(tmp_path / f"{name}.ipynb", ["print(1)"])
     (tmp_path / "paper").mkdir()
     (tmp_path / "paper" / ".gitkeep").write_text("")
-    assert rn.discover() == ("general/1_data_and_questions", "general/5_synthesis", "A/A_synthesis",
-                             "B/exp04_decision_features", "B/exp09_data_efficiency",
-                             "C/exp11_adaptation")
+    assert rn.discover() == ("general/1_data_and_questions", "general/4_synthesis", "A/A_synthesis",
+                             "B/B1", "B/B5",
+                             "C/C2")
 
 
 def test_discovery_can_be_overridden_for_a_partial_rerun(tmp_path, monkeypatch) -> None:
@@ -96,22 +96,22 @@ def test_discovery_uses_group_folders_and_rejects_stray_notebooks(tmp_path, monk
     """Notebooks live at `notebooks/<group>/<name>.ipynb` as the registry declares; a flat,
     unregistered or deeper-nested notebook would be silently skipped, so it is refused."""
     monkeypatch.setattr(rn, "notebooks_dir", lambda: tmp_path)
-    for name in ("B/exp04_decision_features", "general/1_data_and_questions",
-                 "B/exp09_data_efficiency", "general/.ipynb_checkpoints/x-checkpoint"):
+    for name in ("B/B1", "general/1_data_and_questions",
+                 "B/B5", "general/.ipynb_checkpoints/x-checkpoint"):
         make_notebook(tmp_path / f"{name}.ipynb", ["print(1)"])
-    assert rn.discover() == ("general/1_data_and_questions", "B/exp04_decision_features",
-                             "B/exp09_data_efficiency")
-    # Previous IDs (flat, older and renumbered) and stems resolve to the current notebook.
-    for alias in ("rq2/01_decisions", "exp04_decision_features/decisions", "decisions",
-                  "exp04_decision_features", "B/exp04_decision_features"):
-        assert rn.discover((alias,)) == ("B/exp04_decision_features",), alias
-    assert rn.discover(("00_data",)) == ("general/1_data_and_questions",)
-    assert rn.discover(("general/01_data",)) == ("general/1_data_and_questions",)
-    assert rn.discover(("exp11_data_efficiency",)) == ("B/exp09_data_efficiency",)
+    assert rn.discover() == ("general/1_data_and_questions", "B/B1",
+                             "B/B5")
+    # The notebook ID or its unique name selects a notebook; earlier IDs are not accepted.
+    for name in ("B/B1", "B1"):
+        assert rn.discover((name,)) == ("B/B1",), name
+    assert rn.discover(("general/1_data_and_questions",)) == ("general/1_data_and_questions",)
+    assert rn.discover(("B5",)) == ("B/B5",)
+    with pytest.raises(ValueError):
+        rn.discover(("B/exp04_decision_features",))
     with pytest.raises(ValueError):
         rn.discover(("../outside",))
-    for stray in ("exp01_outputs.ipynb", "A/unregistered.ipynb", "B/sub/exp04_decision_features.ipynb",
-                  "D/exp04_decision_features.ipynb", "A/exp04_decision_features.ipynb"):
+    for stray in ("A1.ipynb", "A/unregistered.ipynb", "B/sub/B1.ipynb",
+                  "D/B1.ipynb", "A/B1.ipynb", "B/exp04_decision_features.ipynb"):
         make_notebook(tmp_path / stray, ["print(1)"])
         with pytest.raises(ValueError, match="registered"):
             rn.discover()
@@ -205,14 +205,14 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
     nb_dir = isolated_output / "notebooks"
     monkeypatch.setattr(rn, "notebooks_dir", lambda: nb_dir)
     make_notebook(
-        nb_dir / "general" / "4_study_audit.ipynb",
+        nb_dir / "general" / "3_study_audit.ipynb",
         [
             "import sys\n"
             f"sys.path.insert(0, r{str(REPO_ROOT)!r})\n"
             "import matplotlib.pyplot as plt\n"
             "from src.visualize import figures, style\n"
             "style.apply()\n"
-            "save = figures.FigureSaver('general/4_study_audit')\n"
+            "save = figures.FigureSaver('general/3_study_audit')\n"
             "fig, ax = plt.subplots(figsize=style.figsize(style.WIDTH_HALF))\n"
             "ax.plot([0, 1], [0, 1])\n"
             "save(fig, 'line', caption='A line from (0,0) to (1,1).')\n"
@@ -221,10 +221,10 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
             "print('SMOKE SUMMARY: 1 figure')\n"
         ],
     )
-    result = rn.run_one("general/4_study_audit")
+    result = rn.run_one("general/3_study_audit")
     assert result.ok, result.error
     assert result.n_figures == 1
-    executed = json.loads((nb_dir / "general" / "4_study_audit.ipynb").read_text(encoding="utf-8"))
+    executed = json.loads((nb_dir / "general" / "3_study_audit.ipynb").read_text(encoding="utf-8"))
     assert executed["cells"][0]["execution_count"] == 1
     assert any("image/png" in output.get("data", {}) for output in executed["cells"][0]["outputs"])
     assert any(
@@ -234,15 +234,15 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
     progress = capsys.readouterr().out
     assert "cell 1/1" in progress and "saved executed outputs" in progress
 
-    folder = figures_dir("general/4_study_audit")
-    assert folder.parts[-3:] == ("figures", "general", "4_study_audit")
+    folder = figures_dir("general/3_study_audit")
+    assert folder.parts[-3:] == ("figures", "general", "3_study_audit")
     assert (folder / "01_line.pdf").is_file()
     assert not list(folder.glob("*.png"))  # PDF only
 
     from src.utils.paths import all_results_path, captions_path
 
-    rn.write_captions(("general/4_study_audit",))
-    rn.write_all_results(("general/4_study_audit",))
+    rn.write_captions(("general/3_study_audit",))
+    rn.write_all_results(("general/3_study_audit",))
     assert "A line from (0,0) to (1,1)." in captions_path().read_text(encoding="utf-8")
     assert "SMOKE SUMMARY: 1 figure" in all_results_path().read_text(encoding="utf-8")
 
@@ -252,12 +252,12 @@ def test_end_to_end_a_notebook_saves_its_own_figure(isolated_output, monkeypatch
 def test_cell_failure_saves_partial_outputs_and_error(isolated_output, monkeypatch):
     nb_dir = isolated_output / "notebooks"
     monkeypatch.setattr(rn, "notebooks_dir", lambda: nb_dir)
-    target = nb_dir / "general" / "4_study_audit.ipynb"
+    target = nb_dir / "general" / "3_study_audit.ipynb"
     make_notebook(
         target,
         ["print('before error')", "raise ValueError('expected failure')", "print('must not run')"],
     )
-    result = rn.run_one("general/4_study_audit")
+    result = rn.run_one("general/3_study_audit")
     assert not result.ok
     executed = json.loads(target.read_text(encoding="utf-8"))
     assert "before error" in "".join(executed["cells"][0]["outputs"][0]["text"])

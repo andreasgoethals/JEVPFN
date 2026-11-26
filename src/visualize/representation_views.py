@@ -1,4 +1,4 @@
-"""B2 supporting views: training-only PCA compression (exp05) and row-level complementarity (exp06).
+"""B2 supporting views: training-only PCA compression and row-level complementarity.
 
 Each function yields ``(figure, name, caption)`` and nothing for an empty table.
 """

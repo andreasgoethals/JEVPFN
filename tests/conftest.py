@@ -229,7 +229,7 @@ def historical_workspace_limits(monkeypatch, request):
 
     def load(name, *args, **kwargs):
         value = original(name, *args, **kwargs)
-        if name == "experiment_0/scheduling":
+        if name == "0/scheduling":
             value = {**value, "max_resident_workspaces": 2, "scratch_working_set_gib": 200}
         return value
 

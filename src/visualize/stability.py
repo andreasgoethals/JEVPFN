@@ -1,4 +1,4 @@
-"""A2 (exp02_robustness) figures: change beyond replay noise, averaging skill, wording averaging."""
+"""A2 figures: change beyond replay noise, averaging skill, wording averaging."""
 
 from __future__ import annotations
 

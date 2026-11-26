@@ -1,4 +1,4 @@
-"""Planned paper figures (`config/05_synthesis/paper_figures.yaml`) -> owning notebook and saved figures.
+"""Planned paper figures (`config/general/4_synthesis/paper_figures.yaml`) -> owning notebook and saved figures.
 
 A read-only map: it never moves notebooks, figures or results, and placement stays
 ``undecided`` until the owner decides. ``resolve`` reports, per planned figure, which saved
@@ -24,7 +24,7 @@ _SAVED = re.compile(r"^\d+_(?P<stem>.+)\.pdf$")
 
 
 def load(raw: dict | None = None, registry: structure.Registry | None = None) -> dict:
-    """The validated map; notebooks must be registered notebook IDs or reserved (planned) folders."""
+    """The validated map; every notebook must be a registered notebook ID."""
     if raw is None:
         from src.utils.config import load_yaml
 
@@ -33,7 +33,6 @@ def load(raw: dict | None = None, registry: structure.Registry | None = None) ->
     if raw.get("schema") != SCHEMA:
         raise ValueError("Unknown paper-figure schema")
     current = {n.id for n in registry.notebooks}
-    reserved = {p.folder for p in registry.planned}
     seen = set()
     for item in raw.get("figures") or []:
         if set(item) - {"id", "title", "notebook", "section", "figures", "placement", "status",
@@ -42,10 +41,8 @@ def load(raw: dict | None = None, registry: structure.Registry | None = None) ->
         if not item.get("id") or item["id"] in seen:
             raise ValueError("Paper figure IDs must be present and unique")
         seen.add(item["id"])
-        if item["notebook"] not in current | reserved:
+        if item["notebook"] not in current:
             raise ValueError(f"{item['id']}: unknown notebook {item['notebook']}")
-        if item["notebook"] in reserved and item.get("status") != "planned":
-            raise ValueError(f"{item['id']}: a reserved experiment can only be planned")
         if item.get("placement", "undecided") not in structure.PLACEMENTS:
             raise ValueError(f"{item['id']}: placement must be one of {structure.PLACEMENTS}")
         if item.get("status") not in STATUSES:

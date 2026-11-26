@@ -1,8 +1,8 @@
-"""A2 (exp02_robustness): one compact export of the completed stability campaigns.
+"""A2: one compact export of the completed stability campaigns.
 
 Reads only already-collected responses: every completed, non-pilot `robustness.run` store
 under `results/robustness/<dataset>/<provider>/` on PROJECT. No model is called. The Mindwell
-CPU job (`scripts/slurm/rq1_robustness_export.slurm`) writes a ZIP keyed by the selected decision-model roster:
+CPU job (`scripts/slurm/A2_export.slurm`) writes a ZIP keyed by the selected decision-model roster:
 
 * ``release_evidence`` identifies the completed receipts examined for each selected
   provider and records the outcome of checking its release and settings.
@@ -29,7 +29,7 @@ CPU job (`scripts/slurm/rq1_robustness_export.slurm`) writes a ZIP keyed by the 
   negative and equals ensemble diversity (Wood et al., JMLR 2023), so it is reported as
   guaranteed and is not evidence that averaging helps. Rank measures are not convex, so no
   contrast on them is guaranteed (``CONTRASTS``/``METRIC_ROLES``).
-* ``historical_0a`` / ``historical_0a_sources``: the dated 0A sensitivity probes (three real
+* ``historical_0a`` / ``historical_0a_sources``: the dated Experiment 0 sensitivity probes (three real
   inputs) and their receipts (file name, SHA-256), so the notebook reads nothing else.
 
 Within-dataset results are combined with equal dataset weight in the notebook.
@@ -70,7 +70,7 @@ METRIC_ROLES = {
 CONTRASTS = (("average_vs_original", "average", "original"),
              ("average_vs_mean_single", "average", "mean_single"))
 COLLECTED = ("sources", "release_evidence", "effects", "coverage", "mode_effects", "wording_averaging", "averaging_quality")
-#: The dated 0A sensitivity receipts (DATA manifests), so the notebook reads only this ZIP.
+#: The dated Experiment 0 sensitivity receipts (DATA manifests), so the notebook reads only this ZIP.
 HISTORICAL = ("historical_0a", "historical_0a_sources")
 TABLES = COLLECTED + HISTORICAL
 WORDINGS = ("original", "paraphrase_1", "paraphrase_2", "paraphrase_3")
@@ -80,7 +80,7 @@ REPEATS = ("repeat_1", "repeat_2")
 def export_path(cohort=None) -> Path:
     from src.evaluation.benchmark_export import cohort_key
 
-    return paths.results_dir("robustness", f"robustness.{cohort_key(cohort)}.zip", phase="rq1")
+    return paths.results_dir("robustness", f"robustness.{cohort_key(cohort)}.zip", phase="A2")
 
 
 def _release_selectors(roster=None):
@@ -89,7 +89,7 @@ def _release_selectors(roster=None):
     from src.evaluation.qualification import decision_selector
 
     members = cohort_record()["decision_roster"] if roster is None else roster
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     out = {}
     for release in decision_versions(members):
         provider = release["provider"]
@@ -365,7 +365,7 @@ def collect(root: Path, cfg: dict, *, roster=None, load_targets=None, question_p
 
 
 def historical_tables(evidence=None) -> dict[str, pd.DataFrame]:
-    """The dated 0A sensitivity probes (three real inputs; not the 500-request study).
+    """The dated Experiment 0 sensitivity probes (three real inputs; not the 500-request study).
 
     Receipts are identified by file name and SHA-256; absolute local paths are not exported.
     """
@@ -386,7 +386,7 @@ def _dataset_targets(dataset_id, target_values):
     from src.data.loaders import load_catalog, load_dataset
     from src.data.selection import selected_entries
 
-    entry = next(e for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+    entry = next(e for e in selected_entries(load_catalog(), load_yaml("B1"))
                  if e["id"] == dataset_id)
     dataset = load_dataset(entry, allow_download=False)
     return dataset.metadata.task_type, target_values(dataset)
@@ -407,7 +407,7 @@ def analysis_identity(cfg: dict, cohort=None) -> str:
 
 
 def read_export(target=None, *, cohort=None):
-    cfg = load_yaml("rq1/behavior")
+    cfg = load_yaml("A2")
     return study_export.read_export(target or export_path(cohort), schema=SCHEMA, tables=TABLES,
                                     identity=analysis_identity(cfg, cohort))
 
@@ -416,9 +416,9 @@ def build(*, cohort=None):
     from src.evaluation.benchmark_export import cohort_record
 
     study_export.require_mindwell_cpu("A2 stability")
-    cfg = load_yaml("rq1/behavior")
+    cfg = load_yaml("A2")
     record = cohort_record(cohort)
-    root = paths.results_dir("robustness", phase="rq1")
+    root = paths.results_dir("robustness", phase="A2")
     tables = collect(root, cfg, roster=record["decision_roster"])
     if tables["sources"].empty:
         raise ValueError("No completed scientific robustness campaign matches the selected releases")

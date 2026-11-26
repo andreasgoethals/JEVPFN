@@ -49,7 +49,7 @@ def test_existing_raw_inputs_are_never_write_probed(storage, monkeypatch):
     assert report["quota_verified"] is False
     assert report["backup_verified"] is False
     assert report["jobs_submitted"] is False
-    receipt = paths.manifests_dir("experiment_0") / "before_extraction/storage_setup.json"
+    receipt = paths.manifests_dir("0") / "before_extraction/storage_setup.json"
     assert json.loads(receipt.read_text(encoding="utf-8")) == report
 
 
@@ -80,7 +80,7 @@ def test_unreadable_raw_directory_still_stops_setup(storage, monkeypatch):
 def test_unwritable_destinations_still_fail_without_fallback(storage, monkeypatch, destination):
     directory = {
         "prepared_questions": paths.decision_inputs_dir(),
-        "small_logs": paths.logs_dir("experiment_0"),
+        "small_logs": paths.logs_dir("0"),
         "checkpoints": paths.checkpoints_dir(),
     }[destination]
     real_probe = paths.resolve_writable
@@ -93,7 +93,7 @@ def test_unwritable_destinations_still_fail_without_fallback(storage, monkeypatc
     monkeypatch.setattr(paths, "resolve_writable", deny_write)
     with pytest.raises(PermissionError, match=f"{destination}.*write"):
         setup.setup_storage("wice")
-    receipt = paths.manifests_dir("experiment_0") / "before_extraction/storage_setup.json"
+    receipt = paths.manifests_dir("0") / "before_extraction/storage_setup.json"
     assert not receipt.exists()
 
 

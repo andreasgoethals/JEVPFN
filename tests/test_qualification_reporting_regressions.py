@@ -87,18 +87,18 @@ def test_saved_fold_modes_reach_paired_tables_without_colliding(isolated_output,
     for mode in MODES:
         evaluate_cv(dataset, features, DummyRegressor, specification=spec,
                     model_id="linear", checkpoint_id="fixed", feature_set=mode,
-                    phase="experiment_1", allow_model_runs=True, estimator_settings={"fixture": True},
+                    phase="B1", allow_model_runs=True, estimator_settings={"fixture": True},
                     feature_artifact_ids=[mode], representation_recipe={"provider": "liquid"})
     for scope, width in (("joint", 64), ("per_column", 32)):
         evaluate_cv(dataset, features, DummyRegressor, specification=spec,
                     model_id="linear", checkpoint_id="fixed", feature_set="embedding",
-                    phase="experiment_2", allow_model_runs=True, estimator_settings={"fixture": True},
+                    phase="B2", allow_model_runs=True, estimator_settings={"fixture": True},
                     feature_artifact_ids=["encoder"], representation_recipe={"embedding": {
                         "encoder_id": "e5_small_v2", "pca_scope": scope, "pca_components_per_column": width}})
     # A baseline on the same rows from a different estimator runtime is ineligible.
     evaluate_cv(dataset, features, DummyRegressor, specification=spec,
                 model_id="linear", checkpoint_id="fixed", feature_set="non_text",
-                phase="experiment_1", allow_model_runs=True, estimator_settings={"fixture": "different-image"},
+                phase="B1", allow_model_runs=True, estimator_settings={"fixture": "different-image"},
                 feature_artifact_ids=[], representation_recipe={"provider": None})
     monkeypatch.setenv("JEVPFN_NOTEBOOK_SCRATCH", str(tmp_path / "notebooks"))
     status, folds, _, gains = results.collect_for_notebook()

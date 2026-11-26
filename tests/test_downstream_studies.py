@@ -1,4 +1,4 @@
-"""Exercise the routes used by RQ1 and RQ2 during deterministic 0B preflight."""
+"""Exercise the routes used by RQ1 and RQ2 during deterministic B0 preflight."""
 
 import json
 import sqlite3
@@ -137,9 +137,9 @@ def test_five_fold_prediction_store_to_rq2e_summary(isolated_output, monkeypatch
     name = ds.metadata.dataset_id
     monkeypatch.setattr(b, "load_catalog", lambda: {"datasets": [{"id": name}]})
     monkeypatch.setattr(b, "load_dataset", lambda *a, **kw: ds)
-    seed = b.load_yaml("experiment_1/main")["random_seed"]
+    seed = b.load_yaml("B1")["random_seed"]
     spec = shared_splits(ds, seed=seed, folds=5)
-    for phase, feature_set in [("experiment_1", "non_text"), ("experiment_2", "embedding")]:
+    for phase, feature_set in [("B1", "non_text"), ("B2", "embedding")]:
         evaluate_cv(
             ds,
             features,
@@ -161,7 +161,7 @@ def test_five_fold_prediction_store_to_rq2e_summary(isolated_output, monkeypatch
     all_rows = by[by.axis == "all"].iloc[0]
     assert all_rows.rows == len(ds.frame)
     assert all_rows.benefit == 0 and balanced.datasets.eq(1).all()
-    assert all_rows.phase == "experiment_2" and balanced.phase.eq("experiment_2").all()
+    assert all_rows.phase == "B2" and balanced.phase.eq("B2").all()
 
 
 def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypatch):
@@ -192,7 +192,7 @@ def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypat
     cfg = dict(seed=42, texts_per_group=500, encoders=["enc"])
     main = {"candidate_extractors": ["p", "q"], "feature_selectors": {"p": {"provider": "p", **select}}}
     registry = {"candidates": {p: {"model": "model", "version": "test", "delivery": "hosted"} for p in ("p", "q")}}
-    configs = {"rq1/geometry": cfg, "experiment_1/main": main, "extractors": registry}
+    configs = {"A3": cfg, "B1": main, "extractors": registry}
     for module in (gs, design, geometry_export):
         monkeypatch.setattr(module, "load_yaml", configs.__getitem__)
     store = tmp_path / "vectors.sqlite3"

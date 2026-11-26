@@ -32,7 +32,7 @@ ROSTER = fx.roster()
 @pytest.fixture(scope="module")
 def exports(tmp_path_factory):
     folder = tmp_path_factory.mktemp("group_b_exports")
-    return {study: fx.export(study, folder)[0] for study in ("B1", "B2", "B5")}
+    return {study: fx.export(study, folder)[0] for study in ("B1", "B2", "B3", "B6")}
 
 
 def _check(generator, *, width=style.WIDTH_FULL, count=1):
@@ -107,9 +107,9 @@ def test_b1_figures_render(exports):
                                             what="Test"), width=style.WIDTH_HALF)
 
 
-def test_b2_and_b5_figures_render(exports):
+def test_b2_b3_and_b6_figures_render(exports):
     b2 = exports["B2"]
-    gains = views.combined_gains(b2)
+    gains = views.combined_gains(views.representations(b2, exports["B3"]))
     pair = views.paired_gains(gains, x="frozen/e5_small_v2/per_column32", y="decision/both/median")
     assert len(pair) == 18 and (pair.x_low <= pair.x).all() and (pair.x <= pair.x_high).all()
     _check(figures.paired_scatter({"E5": pair}, name="a", what="Test"))
@@ -120,14 +120,15 @@ def test_b2_and_b5_figures_render(exports):
     arms = ["decision/both/median", "decision+frozen/both/median", "frozen/e5_small_v2/per_column32"]
     _check(figures.compactness(views.compactness(gains, widths, arms), name="c", what="Test"))
     _check(representation_views.complementarity(b2["complementarity_summary"], name="d", what="Test"))
-    scores = views.native_scores(views.fold_long(exports["B5"]["folds"]), roster=ROSTER)
+    scores = views.native_scores(views.fold_long(exports["B6"]["folds"]), roster=ROSTER)
     assert {"native/tabstar", "baseline", "decision/both/median"} <= set(scores.representation)
     _check(figures.native_references(scores, name="e", what="Test"))
 
 
 def test_synthesis_ladder_win_matrix_and_compute(exports):
-    b1, b2, b5 = exports["B1"], exports["B2"], exports["B5"]
-    ladder = views.ladder(b1, b2, b5, n_boot=50)
+    b1, b6 = exports["B1"], exports["B6"]
+    b2 = views.representations(exports["B2"], exports["B3"])
+    ladder = views.ladder(b1, b2, b6, n_boot=50)
     assert set(ladder[ladder.representation.str.startswith("native/")].model_id) == {"native"}
     _check(synthesis.representation_ladder(ladder, name="a", what="Test"))
     _check(synthesis.representation_ladder(ladder, name="b", what="Test", share=True))
@@ -148,7 +149,7 @@ def test_synthesis_ladder_win_matrix_and_compute(exports):
 
 
 def test_extraction_and_fit_costs_preserve_their_units_and_roster():
-    folds = fx.folds(("experiment_1",))
+    folds = fx.folds(("B1",))
     fit = folds[folds.metric.eq("seconds.fit") & folds.provider.eq(ROSTER[0])].copy()
     fit["n_train"] = 200
     fit["value"] = 360
@@ -163,7 +164,7 @@ def test_extraction_and_fit_costs_preserve_their_units_and_roster():
 
 
 def test_b3_tables_and_figures_render():
-    tables = fx.b3_tables(fx.folds(("experiment_1", "rq2")), n_permutations=50, n_shuffles=10)
+    tables = fx.b4_tables(fx.folds(("B1", "B4")), n_permutations=50, n_shuffles=10)
     medians = group_b.median_over_decision_models(tables["dataset_gains"], roster=ROSTER)
     headroom = views.headroom_table(medians)
     assert len(headroom) == 18 and (headroom.headroom > 0).all()
@@ -184,7 +185,7 @@ def test_b3_tables_and_figures_render():
 
 
 def test_b4_curves_pool_per_task_family_with_fixed_cohorts():
-    tables = benchmark_export.build_tables("B4", fx.size_folds(), cohort="all")
+    tables = benchmark_export.build_tables("B5", fx.size_folds(), cohort="all")
     head = views.fold_long(tables["folds"])
     curves = views.size_curves(head, roster=ROSTER, curves=data_efficiency.config()["curves"],
                                representations=figures.SIZE_ARMS)
@@ -219,7 +220,8 @@ def test_pca_variance_figure_and_empty_states():
 
 
 def test_normalized_score_views_and_figures(exports):
-    b1, b2, b5 = exports["B1"], exports["B2"], exports["B5"]
+    b1, b6 = exports["B1"], exports["B6"]
+    b2 = views.representations(exports["B2"], exports["B3"])
     arms = ["baseline", "decision/per_column/median", "decision/joint/median", "decision/both/median"]
     per, summary = views.normalized_view(views.fold_long(b1["folds"]), arms, roster=ROSTER, n_boot=50)
     assert per.normalized_score.between(0, 1).all() and per.dataset_id.nunique() == 18
@@ -233,7 +235,7 @@ def test_normalized_score_views_and_figures(exports):
     assert (spread["min"] < 0.5).all() and (spread["max"] > 0.5).all()
     produced = _check(figures.normalized_score_forest(summary, arms, name="n", what="Test"))
     assert "28 compared configurations" in produced[0][2] and "clipped at 0" in produced[0][2]
-    _, ladder = views.normalized_ladder(b1, b2, b5, roster=ROSTER, n_boot=50)
+    _, ladder = views.normalized_ladder(b1, b2, b6, roster=ROSTER, n_boot=50)
     assert {"baseline", "native/tabstar", "tar/e5_small_v2_tar/per_column32"} <= set(ladder.representation)
     assert ladder.configurations.max() == (1 + len(views.LADDER)) * 7 + 3
     _check(synthesis.normalized_ladder(ladder, name="l", what="Test"))
@@ -245,7 +247,7 @@ def test_glance_adds_the_normalized_scope_when_fold_tables_exist(exports):
     from src.evaluation.synthesis_overview import NO_TEXT, glance_table
     from src.visualize.overview import study_at_a_glance
 
-    table = glance_table({"B1": exports["B1"], "B2": exports["B2"], "C2": {}}, n_boot=50)
+    table = glance_table({"B1": exports["B1"], "B2": exports["B2"], "B3": exports["B3"], "C2": {}}, n_boot=50)
     normalized = table[table.scope.eq("normalized")]
     assert NO_TEXT in set(normalized.arm) and normalized.datasets.eq(18).all()
     assert normalized.estimate.between(0, 1).all()
@@ -268,7 +270,8 @@ def test_confirmatory_family_runs_on_the_declared_contrasts(exports):
     from src.evaluation import learner_scores
     from src.visualize.overview import confirmatory_forest
 
-    frames = {"B1_decision_features": exports["B1"], "B2_representations": exports["B2"]}
+    frames = {"B1_decision_features": exports["B1"], "B2_frozen_embeddings": exports["B2"],
+              "B3_label_trained": exports["B3"]}
     result = learner_scores.run_confirmatory_family(frames, n_boot=100)
     assert result["status"] == "compared", result.get("reason")
     results, forest = result["results"], result["forest"]

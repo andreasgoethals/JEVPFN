@@ -1,4 +1,4 @@
-"""B2b label-trained classifier on frozen embeddings ("supervised probe"), cross-fitted.
+"""B3 label-trained classifier on frozen embeddings ("supervised probe"), cross-fitted.
 
 For one encoder and one view (each text column separately, or all text columns jointly) an
 L2-regularised logistic regression is trained on the full standardized frozen embedding to
@@ -258,7 +258,7 @@ def identity(train_index, y, groups, view, task_type, seed, artifacts):
 def cache_path(dataset_id, encoder):
     from src.utils import paths
 
-    return paths.results_dir("supervised_probe", phase="experiment_3") / encoder / f"{dataset_id}.sqlite3"
+    return paths.results_dir("supervised_probe", phase="B3") / encoder / f"{dataset_id}.sqlite3"
 
 
 def write(path, key, table, diagnostics):
@@ -367,7 +367,7 @@ def run(dataset_id, encoder):
     if paths.on_vsc() and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("Probe preparation needs a CPU allocation")
     check_if_present()
-    cfg = load_yaml("experiment_3/tar")
+    cfg = load_yaml("B3")
     entry = next((e for e in selected_entries(load_catalog(), cfg) if e["id"] == dataset_id), None)
     if entry is None:
         raise ValueError("Unselected dataset")
@@ -392,7 +392,7 @@ def verify_prepared(dataset, encoder, artifact_id):
     from src.utils.config import load_yaml
     from src.utils.serialization import text_value
 
-    seed = load_yaml("experiment_3/tar")["random_seed"]
+    seed = load_yaml("B3")["random_seed"]
     split = shared_splits(dataset, seed=seed)
     rows = pd.Index([f"csv:{i}" for i in range(len(dataset.frame))])
     task = dataset.metadata.task_type

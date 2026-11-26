@@ -176,7 +176,7 @@ def test_output_figures_render_at_print_width():
     assert {"top_agreement", "total_variation", "earth_movers"} <= set(table)
 
 
-# ---------------------------------------------------------------- A1: stand-alone quality (moved from Exp 4)
+# ---------------------------------------------------------------- A1: stand-alone quality (moved from B1)
 
 def _dataset(task, target, classes=()):
     frame = pd.DataFrame({"y": target, "text": "x"})
@@ -233,9 +233,9 @@ def test_standalone_multiclass_ties_and_regression_rank_only():
     assert scores.set_index("provider").loc["x", "status"] == "pending: absent"
 
 
-def test_standalone_analysis_moved_from_exp04_to_exp01():
-    exp04 = (NOTEBOOKS / "B" / "exp04_decision_features.ipynb").read_text(encoding="utf-8")
-    exp01 = (NOTEBOOKS / "A" / "exp01_outputs.ipynb").read_text(encoding="utf-8")
+def test_standalone_analysis_moved_from_b1_to_a1():
+    exp04 = (NOTEBOOKS / "B" / "B1.ipynb").read_text(encoding="utf-8")
+    exp01 = (NOTEBOOKS / "A" / "A1.ipynb").read_text(encoding="utf-8")
     assert "zero_shot" not in exp04 and "direct_score" not in exp04
     assert "direct_score_figures" in exp01 and "joint" in exp01
     assert not hasattr(z, "structured_references") and not hasattr(z, "prediction_matrix")
@@ -500,7 +500,7 @@ def test_robustness_analysis_identity_is_scoped_to_selected_provider_pins(monkey
     from src.evaluation.design import decision_versions
     from src.utils.config import load_yaml
 
-    main, cfg = load_yaml("experiment_1/main"), load_yaml("rq1/behavior")
+    main, cfg = load_yaml("B1"), load_yaml("A2")
     monkeypatch.setattr(robustness_export, "load_yaml", lambda name: main)
     old = robustness_export.analysis_identity(cfg, "open_weight")
     main["feature_selectors"]["future-hosted"] = {"settings_sha256": "outside-this-edition"}
@@ -514,7 +514,7 @@ def test_robustness_analysis_identity_is_scoped_to_selected_provider_pins(monkey
 def test_behavior_config_declares_averaging_without_new_calls():
     from src.utils.config import load_yaml
 
-    cfg = load_yaml("rq1/behavior")
+    cfg = load_yaml("A2")
     assert cfg["averaging"]["additional_model_calls"] is False and cfg["lexical_rewordings"] is False
     assert cfg["averaging"]["wording"]["averaged_pairs"] == [["original", "paraphrase_1"],
                                                              ["paraphrase_2", "paraphrase_3"]]
@@ -522,7 +522,7 @@ def test_behavior_config_declares_averaging_without_new_calls():
 
 
 def test_robustness_export_carries_historical_0a_probes_without_local_paths(tmp_path):
-    """exp02 section 2 reads the dated 0A probes from the ZIP, never the local receipts."""
+    """exp02 section 2 reads the dated Experiment 0 probes from the ZIP, never the local receipts."""
     changes = pd.DataFrame({"provider": ["jev"], "source_sha256": ["a" * 64],
                             "source": [r"C:\local\receipt.json"], "probe": ["real_X__base"],
                             "total_variation_from_base": [0.0], "same_top_option": [True]})

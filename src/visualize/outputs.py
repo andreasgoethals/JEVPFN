@@ -1,4 +1,4 @@
-"""A1 (exp01_outputs) figures at final A4 width: model profile strip, output shape, pairwise agreement.
+"""A1 figures at final A4 width: model profile strip, output shape, pairwise agreement.
 
 Every view uses distinct inputs (``unique_inputs`` weighting). Per-column text fields are
 averaged within a dataset first, so each dataset counts once per request mode. The former

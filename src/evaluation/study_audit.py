@@ -1,7 +1,7 @@
 """Read-only study audit: completeness, compute, spending and data checks (no outcomes).
 
-Feeds the general notebooks (`general/2_feature_creation`, `general/4_study_audit`,
-`general/5_synthesis`). Every reader returns an explicit empty table or a waiting status when
+Feeds the general notebooks (`general/2_feature_creation`, `general/3_study_audit`,
+`general/4_synthesis`). Every reader returns an explicit empty table or a waiting status when
 its source is absent locally; nothing is estimated, simulated or written.
 """
 
@@ -22,11 +22,8 @@ from src.utils.config import load_yaml
 
 WAITING = "waiting for export"
 
-#: Benchmark phase -> study label used in audit tables (folder renumbering of 23-11-2026).
-PHASE_STUDY = {
-    "experiment_1": "B1", "experiment_2": "B2a", "experiment_3": "B2b", "rq2": "B3",
-    "data_efficiency": "B4", "experiment_4": "B5", "representations": "C1", "rq3": "C2",
-}
+#: Benchmark phase -> study label used in audit tables (one name per experiment).
+PHASE_STUDY = {phase: phase for phase in ("B1", "B2", "B3", "B4", "B5", "B6", "C1", "C2")}
 #: Feature set -> arm family (one column group per family in the completeness matrix).
 FEATURE_FAMILY = {
     "non_text": "no text",
@@ -50,7 +47,7 @@ def strands_qualification():
     """C0 plan and locally recorded measurements. Production checks the signed review on VSC."""
     from src.evaluation import strands_adaptation as adaptation
 
-    folder = paths.manifests_dir("rq3") / "adaptation_pilot"
+    folder = paths.manifests_dir("C2") / "adaptation_pilot"
     rows = []
     for task in adaptation.TASK_TYPES:
         dataset = adaptation.smallest_dataset(task)
@@ -74,7 +71,7 @@ def _roster():
     from src.data.loaders import load_catalog
     from src.data.selection import selected_entries
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     datasets = [e["id"] for e in selected_entries(load_catalog(), main)]
     return datasets, list(main["candidate_extractors"])
 
@@ -232,7 +229,7 @@ def jev_spend(cache_folder=None, *, replay_folder=None) -> pd.DataFrame:
     """
     rows = []
     if cache_folder is None and replay_folder is None:
-        replay_folder = paths.results_dir("hosted_ledgers", phase="rq1")
+        replay_folder = paths.results_dir("hosted_ledgers", phase="A2")
     cache_folder = Path(cache_folder or paths.jev_cache_path())
     for path in sorted(cache_folder.glob("*.sqlite3")):
         with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
@@ -328,15 +325,12 @@ def export_status() -> pd.DataFrame:
     )
 
     readers = [
-        ("A1", "A/exp01_outputs", lambda: comparison_report.read_report(comparison_report.report_config())),
-        ("A2", "A/exp02_robustness", robustness_export.read_export),
-        ("A3", "A/exp03_geometry", geometry_export.read_export),
-        *[(s, n, (lambda s=s: benchmark_export.read(s))) for s, n in (
-            ("B1", "B/exp04_decision_features"), ("B2", "B/exp05_frozen_embeddings"),
-            ("B3", "B/exp08_when_text_helps"), ("B4", "B/exp09_data_efficiency"),
-            ("B5", "B/exp07_native_text"))],
-        ("C1", "C/exp10_representations", lambda: group_c.read("C1")),
-        ("C2", "C/exp11_adaptation", lambda: group_c.read("C2")),
+        ("A1", "A/A1", lambda: comparison_report.read_report(comparison_report.report_config())),
+        ("A2", "A/A2", robustness_export.read_export),
+        ("A3", "A/A3", geometry_export.read_export),
+        *[(s, f"B/{s}", (lambda s=s: benchmark_export.read(s))) for s in ("B1", "B2", "B3", "B4", "B5", "B6")],
+        ("C1", "C/C1", lambda: group_c.read("C1")),
+        ("C2", "C/C2", lambda: group_c.read("C2")),
     ]
     rows, frames = [], {}
     for study, notebook, read in readers:

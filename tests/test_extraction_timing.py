@@ -11,7 +11,7 @@ from src.utils import paths
 from src.utils.timing import TimingJournal
 
 
-@pytest.mark.parametrize("phase", ["experiment_0", "feature_creation"])
+@pytest.mark.parametrize("phase", ["0", "feature_creation"])
 def test_journal_counts_batches_reuse_failures_and_routes_tiers(isolated_output, monkeypatch, phase):
     journal = TimingJournal("fixture", phase=phase)
     clock = iter([10.0, 12.0, 15.0, 18.0])
@@ -44,7 +44,7 @@ def test_concurrent_journal_and_transfer_preserve_every_observation(
 ):
     from src.cluster.transfer import export_bundle, import_bundle
 
-    journal = TimingJournal("fixture", phase="experiment_0")
+    journal = TimingJournal("fixture", phase="0")
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(
             pool.map(
@@ -75,7 +75,7 @@ def test_api_timing_failure_keeps_paid_response_recoverable(isolated_output, tmp
     }
     calls = []
     client = SimpleNamespace(evaluate=lambda r: calls.append(r.cache_key) or response)
-    journal = TimingJournal("jev", phase="experiment_0")
+    journal = TimingJournal("jev", phase="0")
     record = journal.record
 
     def broken_record(stage, **kw):
@@ -107,7 +107,7 @@ def test_embedding_timing_reuse_does_not_change_artifact(isolated_output, tmp_pa
     from tests.test_frozen_text import Encoder, fixture_data
 
     encoder = Encoder()
-    encoder.timings = TimingJournal("embeddings", phase="experiment_0")
+    encoder.timings = TimingJournal("embeddings", phase="0")
     cfg = load_yaml("feature_creation/text_embeddings") | {"dimensions": 3, "batch_size": 2}
     path = tmp_path / "features.sqlite3"
     first = embeddings.build(fixture_data(), cfg, encoder, destination=path)

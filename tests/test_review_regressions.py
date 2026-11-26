@@ -190,7 +190,7 @@ def test_cv_resumes_only_completed_folds_and_detects_corruption(isolated_output,
         checkpoint_id="pinned",
         feature_set="non_text",
         allow_model_runs=True,
-        phase="experiment_0",
+        phase="0",
         estimator_settings={},
         feature_artifact_ids=[],
     )
@@ -206,7 +206,7 @@ def test_cv_resumes_only_completed_folds_and_detects_corruption(isolated_output,
     assert body["resources"]["peak_rss_bytes"] > 0
     from src.evaluation.results import collect
 
-    summary, rows, means, _ = collect(("experiment_0",))
+    summary, rows, means, _ = collect(("0",))
     assert summary["complete_arms"] == 1 and not means.empty
     assert set(rows.outer_fold) == set(range(5))
     assert any(name.startswith("text.unseen_joint.") for name in rows.metric)
@@ -346,14 +346,14 @@ def test_acceptance_requires_existing_unchanged_evidence(tmp_path):
         {
             "accepted": True,
             "reviewed_by": "fixture",
-            "stage": "after_extraction",
+            "stage": "B0",
             "evidence": [{"path": "test.json", "sha256": file_sha256(evidence)}],
         },
     )
-    assert reviewed_acceptance(acceptance, stage="after_extraction")["accepted"]
+    assert reviewed_acceptance(acceptance, stage="B0")["accepted"]
     evidence.write_text('{"status":"failed"}')
     with pytest.raises(ValueError, match="missing or changed"):
-        reviewed_acceptance(acceptance, stage="after_extraction")
+        reviewed_acceptance(acceptance, stage="B0")
 
 
 def test_runtime_changes_create_distinct_feature_artifacts_and_reads_do_not_grow_origins(

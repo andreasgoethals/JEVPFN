@@ -1,24 +1,13 @@
-"""Move an existing output tree into the current layout (config/structure.yaml).
+"""Move an existing output tree into the current layout (config/structure.yaml, schema v4).
 
-Layout v3 (23-11-2026): research folders move into letter groups (`exp04_decision_features/`
--> `B/exp04_decision_features/`), Group B4/C are renumbered (`exp11_data_efficiency/` ->
-`B/exp09_data_efficiency/`, `exp09_representations/` -> `C/exp10_representations/`,
-`exp10_adaptation/` -> `C/exp11_adaptation/`), `synthesis/` -> `05_synthesis/`, and figure
-folders move to `figures/<notebook group>/<name>/` (`figures/00_data/` ->
-`figures/general/1_data_and_questions/`, `figures/exp04_decision_features/` ->
-`figures/B/exp04_decision_features/`).
-
-The 18-11-2026 layout was revised on 19-11-2026: one flat notebook per folder, `exp09_adaptation`
-renamed `exp10_adaptation`, and records of the four merged adaptation notebooks archived
-under `archives/layout_20261119/`. The final 19-11-2026 layout keeps ONE figures folder,
-`figures/<notebook>/` (PDFs with `_figures.json`, also from the briefly used `<folder>/figures/`
-or `manifests/notebooks/<folder>/`), the one `figures/CAPTIONS.md` (from `[figures/]Captions.md`
-or a root `CAPTIONS.md`) and the one `All_Results.md`; other notebook records move to
-`<folder>/{logs,manifests,results}/notebook/`. Retired per-folder report copies
-(`<folder>/All_Results.md`, `[figures/]<folder>/CAPTIONS.md`) and `output_JEVPFN/archives/*` move
-to `archive/` BESIDE the output root (`paths.archive_dir`: the git-ignored repository `archive/`
-locally and on DATA; beside the PROJECT output root for that tier, so every move stays a
-same-filesystem rename). The same command migrates any previous layout.
+Layout v4 (26-11-2026) gives every experiment one name and four top-level groups:
+`general/{0,1_data_and_questions,2_feature_creation,3_study_audit,4_synthesis}`,
+`A/{A0..A3}`, `B/{B0..B6}`, `C/{C0..C2}` (plus `<group>_synthesis`). Every earlier folder
+(layouts v1-v3) maps through the ONE checksummed alias table, `config/layout_aliases.yaml`
+(`01_exp0a/` -> `general/0/`, `03_exp0b/manifests/after_extraction/` -> `B/B0/manifests/`,
+`B/exp06_tar/` -> `B/B3/`, `figures/B/exp04_decision_features/` -> `figures/B/B1/`, ...);
+records of the retired combined qualification notebook move to `archive/` beside the
+output root.
 
 Preview by default; nothing changes without --apply --writers-stopped:
 
@@ -28,14 +17,21 @@ Preview by default; nothing changes without --apply --writers-stopped:
     python -m src.utils.layout_migration --tier project   # on VSC: <durable>/JEVPFN/output_JEVPFN
     python -m src.utils.layout_migration --root <.../output_JEVPFN>
 
-The plan uses the same translation as `paths`, so code and data agree afterwards. Directories
-are renamed within the one output root or into its sibling `archive/` (never copied); nothing
-is deleted except source directories that the moves left empty. Before moving, every file is inventoried (count, size,
-SHA-256); after moving, the same files are verified at their destinations. A destination that
-already exists, a link, a live SQLite sidecar or a locked database refuses the whole plan.
-Paths outside the layout (transfers, workspaces, ...) stay where they are. The
-receipt `<root>/manifests/layout_migration_<UTC>.json` maps every moved file old -> new.
-Internal phase IDs, recipes, receipts and hashes are untouched.
+Directories are renamed within the one output root or into its sibling `archive/` (never
+copied); nothing is deleted except source directories that the moves left empty. Before
+moving, every file is inventoried (count, size, SHA-256); after moving, the same files are
+verified at their destinations. A destination that already exists, a link, a live SQLite
+sidecar or a locked database refuses the whole plan. Paths outside the layout (transfers,
+workspaces, root manifests) stay where they are. The receipt
+`<root>/manifests/layout_migration_<UTC>.json` maps every moved file old -> new.
+
+Two re-creatable stores keyed by source hashes changed with the rename. After moving,
+`--rekey` rewrites their keys in place and records old and new values (preview without
+--apply): the prepared PCA stores (`B/B2/results/pca/`, keys contain the source identity
+of the PCA implementation) and TAR bundles (`B/B3/results/tar/`, recipes contain the
+adapter source hash). Payloads, vectors and fold contents are unchanged.
+
+    python -m src.utils.layout_migration --tier local --rekey [--apply --writers-stopped]
 """
 
 from __future__ import annotations
@@ -53,7 +49,7 @@ from pathlib import Path, PurePosixPath
 from src.utils import paths, structure
 from src.utils.serialization import file_sha256, write_json
 
-SCHEMA = "jevpfn.layout-migration.v1"
+SCHEMA = "jevpfn.layout-migration.v2"
 SIDECARS = ("-wal", "-shm", "-journal")
 
 
@@ -132,12 +128,6 @@ def plan(root: Path) -> dict:
             conflicts.append(f"link: {relative}")
             return
         target = structure.translate_output(relative)
-        if (relative.parts[0] == structure.FIGURES and path.is_dir() and target is not None
-                and target != relative and not any(path.iterdir())):
-            # An empty previous figure-record folder (e.g. `figures/exp03_geometry/geometry/`)
-            # would otherwise claim its notebook's whole new figure folder; removed afterwards.
-            empty.append(relative)
-            return
         if path.is_file():
             if target is None:
                 unmapped.append(relative.as_posix())
@@ -147,20 +137,14 @@ def plan(root: Path) -> dict:
                 else:
                     moves.append((relative, target))
             return
-        logical = structure.logical_output(relative.parts)
-        # A whole phase tree is never one unit: two previous trees (e.g. `4. experiment_1`
-        # and `rq2/4. experiment_1`) merge into one folder, child by child.
-        whole_tree = logical is not None and not logical[1]
-        if (target is not None and target != relative and not whole_tree
-                and _uniform(root, relative, target)):
-            if _occupied(root, target, [m[1] for m in moves]):
-                if not any(path.iterdir()):
-                    empty.append(relative)
-                    return  # An empty legacy directory; removed after the moves.
-                # A partly existing destination: move the children individually.
-            else:
+        if target is not None and target != relative and _uniform(root, relative, target):
+            if not any(path.iterdir()):
+                empty.append(relative)
+                return  # An empty earlier directory; removed after the moves.
+            if not _occupied(root, target, [m[1] for m in moves]):
                 moves.append((relative, target))
                 return
+            # A partly existing destination: move the children individually.
         for child in sorted(path.iterdir(), key=lambda p: p.name):
             visit(relative / child.name)
 
@@ -208,20 +192,24 @@ def _summary(result: dict) -> dict:
         "archive": result["archive"],
         "moves": [{"source": s.as_posix(), "destination": d.as_posix()} for s, d in result["moves"]],
         "conflicts": result["conflicts"],
-        "empty_legacy_directories": [e.as_posix() for e in result["empty"]],
+        "empty_earlier_directories": [e.as_posix() for e in result["empty"]],
         "unmapped_files": len(result["unmapped"]),
         "unmapped_top_level": sorted({PurePosixPath(u).parts[0] for u in result["unmapped"]}),
     }
 
 
-def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
-    """Apply the plan; verify count, sizes and SHA-256 at every destination; write a receipt."""
+def _require_stopped(writers_stopped: bool) -> None:
     if not writers_stopped:
         raise ValueError("Confirm every writer/consumer of this output tree has stopped")
     if paths.on_vsc():
         from src.cluster.maintenance import require_idle_vsc
 
         require_idle_vsc()
+
+
+def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
+    """Apply the plan; verify count, sizes and SHA-256 at every destination; write a receipt."""
+    _require_stopped(writers_stopped)
     root = Path(root)
     result = plan(root)
     if result["conflicts"]:
@@ -238,6 +226,7 @@ def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
         "archive": result["archive"],
         "registry": str(structure.REGISTRY),
         "registry_sha256": file_sha256(structure.REGISTRY),
+        "aliases_sha256": structure.aliases_sha256(structure.aliases_path()),
         "git_head": _git_head(),
         "planned_moves": [{"source": s.as_posix(), "destination": d.as_posix()} for s, d in moves],
         "files": inventory,
@@ -271,7 +260,7 @@ def migrate(root: Path, *, writers_stopped: bool = False) -> dict:
     if failures:
         raise RuntimeError("Moved files failed verification; both layouts preserved for review: "
                            + ", ".join(failures[:10]))
-    removed, kept = remove_empty_legacy_directories(root, [s for s, _ in moves], result["empty"])
+    removed, kept = remove_empty_earlier_directories(root, [s for s, _ in moves], result["empty"])
     receipt.update(removed_empty_directories=removed, empty_directories_left=kept,
                    completed_utc=datetime.now(UTC).isoformat(), status="complete")
     write_json(receipt_path, receipt)
@@ -294,14 +283,13 @@ def _remove_empty(directory: Path) -> bool:
             return False
 
 
-def remove_empty_legacy_directories(root: Path, sources=(), empty=()) -> tuple[list[str], list[str]]:
-    """Remove previous-layout directories that the moves left empty. Never removes a file.
+def remove_empty_earlier_directories(root: Path, sources=(), empty=()) -> tuple[list[str], list[str]]:
+    """Remove earlier-layout directories that the moves left empty. Never removes a file.
 
-    `empty` lists previous-layout directories the plan found already empty (e.g. a former
-    `figures/<folder>/<notebook>/` that never held a figure).
+    A directory qualifies when its path translates elsewhere (an earlier folder such as
+    `01_exp0a/` or `B/exp05_frozen_embeddings/`) or it is a parent of a moved source.
     """
     root = Path(root)
-    reg = structure.registry()
     candidates = {root / e for e in empty}
     for source in sources:
         for parent in (root / source).parents:
@@ -311,18 +299,10 @@ def remove_empty_legacy_directories(root: Path, sources=(), empty=()) -> tuple[l
     for directory in root.rglob("*"):
         if directory.is_dir() and not _linked(directory):
             relative = PurePosixPath(directory.relative_to(root).as_posix())
-            # Flat folders of 18-23-11-2026; figure folders were `figures/<folder>/` then.
-            flat = set(reg.flat_paths)
-            legacy = (relative.parts[0] in {"rq1", "rq2", "rq3", "regression_readout", *flat}
-                      or (relative.parts[0] == structure.FIGURES and len(relative.parts) >= 2
-                          and relative.parts[1] in flat | {e.folder for e in reg.entries})
-                      or structure.legacy_phase(relative.parts[0]) is not None
-                      or (len(relative.parts) >= 2 and (relative.parts[1] in structure.LEGACY_GROUPS
-                                                         or structure.legacy_phase(relative.parts[1])))
-                      or (len(relative.parts) >= 3 and relative.parts[1] == "notebooks"
-                          and (relative.parts[2] in structure.LEGACY_GROUPS
-                               or structure.legacy_phase(relative.parts[2]))))
-            if legacy and relative.parts[0] not in {"archives", "transfers", "workspaces"}:
+            if relative.parts[0] in structure.ROOT_ENTRIES:
+                continue
+            target = structure.translate_output(relative)
+            if target is not None and target != relative:
                 candidates.add(directory)
     removed, kept = [], []
     for directory in sorted(candidates, key=lambda p: -len(p.parts)):
@@ -333,16 +313,80 @@ def remove_empty_legacy_directories(root: Path, sources=(), empty=()) -> tuple[l
     return sorted(removed), sorted(kept)
 
 
+# ---------------------------------------------------------------------------
+# Re-keying the two re-creatable stores whose keys contained changed source hashes.
+# ---------------------------------------------------------------------------
+
+
+def rekey(root: Path, *, apply: bool = False, writers_stopped: bool = False) -> dict:
+    """Re-key prepared PCA stores and TAR bundles under one migrated output root.
+
+    The old values come from the alias map (`rekey:`); the new ones are recomputed from the
+    current sources. A store whose keys are already current is reported, not changed.
+    """
+    if apply:
+        _require_stopped(writers_stopped)
+    root = Path(root)
+    spec = structure.aliases()["rekey"]
+    report = {"schema": SCHEMA, "root": str(root), "applied": apply, "pca": [], "tar": [],
+              "aliases_sha256": structure.aliases_sha256(structure.aliases_path()),
+              "created_utc": datetime.now(UTC).isoformat(), "git_head": _git_head()}
+    pca_root = root / "B" / "B2" / "results" / "pca"
+    if pca_root.is_dir():
+        from src.data.loaders import load_catalog, load_dataset
+        from src.data.text_embeddings import cache_path as embedding_path
+        from src.data.text_embeddings import encoder_config
+        from src.evaluation.pca_cache import implementation_identity
+        from src.evaluation.prepare_pca import rekey_prepared
+
+        report["pca_implementation"] = {"old": spec["pca_implementation"]["old_code_identity"],
+                                        "new": implementation_identity()}
+        entries = {e["id"]: e for e in load_catalog()["datasets"]}
+        for store in sorted(pca_root.glob("*/*.sqlite3")):
+            encoder, dataset_id = store.parent.name, store.stem
+            item = {"store": store.relative_to(root).as_posix()}
+            try:
+                dataset = load_dataset(entries[dataset_id], allow_download=False)
+                config = encoder_config(encoder)
+                with closing(sqlite3.connect(embedding_path(dataset_id, config).resolve().as_uri() + "?mode=ro",
+                                             uri=True)) as db:
+                    (artifact_id,) = db.execute("SELECT value FROM metadata WHERE key='artifact_id'").fetchone()
+                item.update(rekey_prepared(dataset, config, artifact_id,
+                                           spec["pca_implementation"]["old_code_identity"], apply=apply))
+            except Exception as exc:  # Reported per store; nothing is changed for it.
+                item.update(error_type=type(exc).__name__, error=str(exc))
+            report["pca"].append(item)
+    tar_root = root / "B" / "B3" / "results" / "tar"
+    if tar_root.is_dir():
+        from src.evaluation.tar import rekey_manifest
+
+        for manifest in sorted(tar_root.glob("*/fold_*/manifest.json")):
+            item = {"bundle": manifest.parent.relative_to(root).as_posix()}
+            try:
+                item.update(rekey_manifest(manifest.parent, spec["tar_adapter_source"]["old_sha256_lf"],
+                                           apply=apply))
+            except Exception as exc:
+                item.update(error_type=type(exc).__name__, error=str(exc))
+            report["tar"].append(item)
+    if apply:
+        write_json(root / "manifests" / f"layout_rekey_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json",
+                   report)
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     where = parser.add_mutually_exclusive_group(required=True)
     where.add_argument("--tier", choices=("local", "data", "project"))
     where.add_argument("--root", type=Path)
-    parser.add_argument("--apply", action="store_true", help="move; default is a preview")
+    parser.add_argument("--apply", action="store_true", help="move or re-key; default is a preview")
     parser.add_argument("--writers-stopped", action="store_true")
+    parser.add_argument("--rekey", action="store_true", help="re-key PCA stores and TAR bundles after moving")
     args = parser.parse_args(argv)
     root = args.root or tier_root(args.tier)
-    if args.apply:
+    if args.rekey:
+        report = rekey(root, apply=args.apply, writers_stopped=args.writers_stopped)
+    elif args.apply:
         receipt = migrate(root, writers_stopped=args.writers_stopped)
         report = {k: receipt[k] for k in ("root", "archive", "file_count", "bytes", "verified",
                                            "moves", "removed_empty_directories")}

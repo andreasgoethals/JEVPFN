@@ -165,7 +165,7 @@ def test_client_setup_failure_has_no_attempt_and_can_resume_without_stale_error(
 
     with pytest.raises(ValueError):
         smoke.run(execute=True, client_factory=constructor_failure)
-    path = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
+    path = paths.manifests_dir("0") / "before_extraction/jev_smoke.json"
     assert json.loads(path.read_text())["attempts"] == []
     report = smoke.run(execute=True, client_factory=Client, sleep=lambda _: None)
     assert report["status"] == "jev_smoke_passed_requires_dataset_pilot"
@@ -217,13 +217,13 @@ def test_output_cleanup_cannot_erase_paid_attempts_or_repeat_calls(local):
     after = smoke.run(execute=True, client_factory=lambda: pytest.fail("No duplicate paid calls"))
     assert report["request_identity"] == after["request_identity"]
     assert after["total_cost_usd"] == report["total_cost_usd"]
-    assert (paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json").exists()
+    assert (paths.manifests_dir("0") / "before_extraction/jev_smoke.json").exists()
 
 
 def test_legacy_unresolved_attempt_survives_output_cleanup(local):
     from src.utils.serialization import write_json
 
-    legacy = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
+    legacy = paths.manifests_dir("0") / "before_extraction/jev_smoke.json"
     write_json(
         legacy,
         {
@@ -241,7 +241,7 @@ def test_legacy_unresolved_attempt_survives_output_cleanup(local):
 def test_legacy_response_corruption_blocks_migration(local):
     from src.utils.serialization import write_json
 
-    legacy = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
+    legacy = paths.manifests_dir("0") / "before_extraction/jev_smoke.json"
     write_json(
         legacy,
         {
@@ -250,7 +250,7 @@ def test_legacy_response_corruption_blocks_migration(local):
         },
     )
     write_json(
-        paths.results_dir("jev_smoke", phase="experiment_0") / "binary_True.json", {"answer": 1}
+        paths.results_dir("jev_smoke", phase="0") / "binary_True.json", {"answer": 1}
     )
     with pytest.raises(ValueError, match="checksum"):
         smoke.preserve_smoke_state()
@@ -261,7 +261,7 @@ def test_divergent_output_ledger_cannot_silently_replace_durable_spending(local)
 
     directory, state = smoke.preserve_smoke_state()
     write_json(state, {"request_identity": "fixed", "attempts": []})
-    legacy = paths.manifests_dir("experiment_0") / "before_extraction/jev_smoke.json"
+    legacy = paths.manifests_dir("0") / "before_extraction/jev_smoke.json"
     write_json(legacy, {"request_identity": "fixed", "attempts": [{"probe": "binary_True"}]})
     with pytest.raises(ValueError, match="ledgers differ"):
         smoke.preserve_smoke_state()

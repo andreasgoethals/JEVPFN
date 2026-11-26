@@ -1,0 +1,19 @@
+# C0: Strands training qualification before C2 (formerly the Group C part of B0). The
+# bounded B200 pilot itself is configured under `pilot:` in C2 and enabled there.
+phase: C0
+status: local_contracts_plus_pending_real_gates
+checks:
+- training_runtime
+- checkpoint_load_matches_pinned_base_adapter_and_head
+- head_only_freeze
+- lora_gradient_flow
+- disjoint_optimizer_validation_crossfit_and_test_rows
+- held_out_label_invariance
+- no_silent_truncation
+- save_reload_and_resume
+- real_b200_pilot
+- three_crossfit_parts_of_joint_questions_per_outer_fold
+- shared_fold_bundles_across_predictors
+- five_outer_folds_no_inner_threshold_refits
+- head_only_lora_only_lora_plus_head_prediction_and_reload_checks
+scientific_execution_enabled: false

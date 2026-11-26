@@ -141,8 +141,8 @@ def test_exact_counts_resume_without_recounting_or_removing_rows(inputs):
     assert report["unique_inputs"] == 3 and report["total_input_tokens"] == 15
     assert not report["rows_removed"] and not report["inference_executed"]
     assert Path(report["counts_database"]).is_relative_to(paths.large_outputs_dir())
-    assert list((paths.logs_dir("experiment_0") / "before_extraction").glob("*.log"))
-    assert list((paths.manifests_dir("experiment_0") / "before_extraction").glob("*.json"))
+    assert list((paths.logs_dir("0") / "before_extraction").glob("*.log"))
+    assert list((paths.manifests_dir("0") / "before_extraction").glob("*.json"))
     again = token_audit.audit_provider("liquid", inputs, counter=counter, batch_size=1)
     assert len(calls) == 3 and again["audit_id"] == report["audit_id"]
     assert inputs[0]["input_file_sha256"] == file_sha256(Path(inputs[0]["path"]))
@@ -221,7 +221,7 @@ def test_second_cli_run_stops_before_tokenizer_loading(isolated_output, monkeypa
 
 def test_report_merge_waits_for_other_publisher(isolated_output):
     started = Event()
-    report_path = paths.manifests_dir("experiment_0") / "before_extraction/token_audit.json"
+    report_path = paths.manifests_dir("0") / "before_extraction/token_audit.json"
 
     def publish():
         started.set()
@@ -259,7 +259,7 @@ def test_gpu_gate_rejects_incomplete_detailed_counts(inputs):
     )
     report = token_audit.audit_provider("liquid", inputs, counter=counter)
     write_json(
-        paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json",
+        paths.manifests_dir("0") / "before_extraction" / "token_audit.json",
         {"self_hosted": [report]},
     )
     _, database = token_evidence("liquid", counter)
@@ -275,9 +275,9 @@ def test_deleted_summary_recovers_from_counts_without_retokenizing(inputs):
     )
     report = token_audit.audit_provider("liquid", inputs, counter=counter)
     token_audit.save_reports([report])
-    summary = paths.manifests_dir("experiment_0") / "before_extraction/token_audit.json"
+    summary = paths.manifests_dir("0") / "before_extraction/token_audit.json"
     summary.unlink()
-    with pytest.raises(ValueError, match="experiment_0_tokens.slurm"):
+    with pytest.raises(ValueError, match="0_tokens.slurm"):
         token_evidence("liquid", counter)
 
     def no_recount(rows):
@@ -298,7 +298,7 @@ def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatc
     )
     report = token_audit.audit_provider("liquid", inputs, counter=counter)
     write_json(
-        paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json",
+        paths.manifests_dir("0") / "before_extraction" / "token_audit.json",
         {"self_hosted": [report], "created_utc": "fixture", "hosted_unverified": ["jev"]},
     )
     monkeypatch.setattr(token_audit, "selected_inputs", lambda: inputs)
@@ -319,7 +319,7 @@ def test_notebook_exact_counts_reject_changed_prepared_inputs(inputs, monkeypatc
 def test_notebook_includes_a_separately_signed_token_audit(inputs, monkeypatch):
     counter = SimpleNamespace(identity={"counter_id": "synthetic"}, limit=10, count_many=lambda rows: [2] * len(rows))
     report = token_audit.audit_provider("liquid", inputs, counter=counter)
-    folder = paths.manifests_dir("experiment_0") / "before_extraction"
+    folder = paths.manifests_dir("0") / "before_extraction"
     write_json(folder / "token_audit.json", {"self_hosted": [report], "created_utc": "fixture"})
     extra = folder / "tokens_glide_reviewed.json"
     write_json(extra, {**report, "provider": "glide", "audit_id": "separate"})
@@ -409,6 +409,6 @@ def test_completed_worker_report_survives_other_worker_failure(isolated_output, 
     with pytest.raises(RuntimeError, match="preserved"):
         token_audit.main()
     saved = json.loads(
-        (paths.manifests_dir("experiment_0") / "before_extraction/token_audit.json").read_text()
+        (paths.manifests_dir("0") / "before_extraction/token_audit.json").read_text()
     )
     assert saved["self_hosted"] == [{"provider": "liquid", "status": "counted_all_inputs"}]

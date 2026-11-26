@@ -22,7 +22,7 @@ def test_invalid_scopes_fail_before_planning(providers):
 @pytest.mark.parametrize("provider", ["glide", "cloudflare"])
 def test_provider_extension_contains_only_its_eighteen_datasets_and_release(provider):
     steps = campaign.plan([provider])
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     settings["test_pool_limits"][provider] = 2
     validate(steps, settings)
     assert len(steps) == 20
@@ -51,10 +51,10 @@ def test_scope_order_deduplication_and_default_receipt_stay_deterministic():
 def ready_scope(monkeypatch):
     """Mock host/scheduler only; exercise actual scoped grid and receipt handling."""
     original_load = campaign.load_yaml
-    cfg = copy.deepcopy(original_load("experiment_0/self_hosted"))
+    cfg = copy.deepcopy(original_load("0/self_hosted"))
     cfg["full_feature_creation_enabled"] = True
     cfg["accepted_before_extraction_manifests"]["glide"] = "glide-reviewed.json"
-    monkeypatch.setattr(campaign, "load_yaml", lambda name: cfg if name == "experiment_0/self_hosted" else original_load(name))
+    monkeypatch.setattr(campaign, "load_yaml", lambda name: cfg if name == "0/self_hosted" else original_load(name))
     monkeypatch.setattr(campaign.paths, "on_vsc", lambda: True)
     monkeypatch.setattr(campaign, "check_if_present", lambda: {"frozen": True, "source_sha256": "frozen-source"})
     monkeypatch.setattr(campaign, "runtime_pins", lambda: {"glide": "sealed-image"})
@@ -150,7 +150,7 @@ def test_scoped_recovery_restages_a_released_workspace_before_retrying_gpu(isola
     result = json.loads(receipt.read_text())
     stage, release = result["steps"][0], result["steps"][-1]
     assert len(submissions) == 2
-    assert "scripts/slurm/experiment_0_scratch_stage.slurm" in submissions[-1]
+    assert "scripts/slurm/0_scratch_stage.slurm" in submissions[-1]
     assert stage["previous_attempt"]["job_id"] == "1001" and stage["status"] == "submitted"
     assert release["previous_attempt"]["job_id"] == "1020" and "job_id" not in release
     assert "job_id" not in result["steps"][1]

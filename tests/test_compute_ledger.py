@@ -9,7 +9,7 @@ SAMPLE = "\n".join([
     "11781951|jevpfn-features|FAILED|22848|cpu=14,gres/gpu=1|gpu_b200|a|b|mindwell|"
     "sbatch scripts/slurm/feature_creation.slurm decision3 decision3 /x MUL_TEXT_US_ACCIDENTS",
     "11784791|jevpfn-scratch-release|COMPLETED|3600|cpu=2,mem=16000M|batch_graniterapids|a|b|mindwell|"
-    "sbatch scripts/slurm/experiment_0_scratch_release.slurm kev --apply",
+    "sbatch scripts/slurm/0_scratch_release.slurm kev --apply",
     "11784212|creditpfn-pd-train|COMPLETED|5400|cpu=8,gres/gpu=1|gpu_b200|a|b|mindwell|sbatch x",
     "11789999|jevpfn-benchmark|RUNNING|100|cpu=8,gres/gpu=1|gpu_b200|a|Unknown|mindwell|sbatch y",
     "11785143|jevpfn-feature-recovery-qa|CANCELLED by 1|60|cpu=3|batch|a|b|mindwell|sbatch z|with|pipes",
@@ -53,7 +53,7 @@ def test_c0_compute_is_separate_from_c2_training():
 
     def accounting_line(job_id, name, arguments):
         return (f"{job_id}|{name}|COMPLETED|3600|cpu=4,gres/gpu=1|gpu_b200|start|end|mindwell|"
-                f"sbatch scripts/slurm/c2_adaptation.slurm {arguments}")
+                f"sbatch scripts/slurm/C2_adaptation.slurm {arguments}")
 
     jobs = parse_sacct("\n".join([
         accounting_line(1, "jevpfn-c0-pilot", "pilot regression head_only"),

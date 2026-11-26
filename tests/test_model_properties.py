@@ -1,4 +1,4 @@
-"""Sourced decision-model properties and their optional use as Exp 8 model-level covariates."""
+"""Sourced decision-model properties and their optional use as B4 model-level covariates."""
 
 import copy
 import math

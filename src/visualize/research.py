@@ -25,10 +25,10 @@ def study_grid_figure(grid):
     counts = grid.set_index("experiment")
     fig, axes = plt.subplots(2, 2, figsize=(style.WIDTH_FULL, 5.0))
     rows = [
-        ("experiment_1", "Decision features", "Selected extractors; per-column, joint or both.\nOne shared non-text reference; seven predictors."),
-        ("experiment_2", "Frozen embeddings", "Three pretrained encoders; seven predictors.\nPer-column PCA32 and joint PCA64."),
-        ("experiment_3", "Supervised TAR", "E5-small-v2 LoRA using training labels.\nSame seven predictors and two PCA recipes."),
-        ("experiment_4", "Native text systems", "TabSTAR v1.1, ConTextTab and AG-MM.\nText and structured inputs, end-to-end."),
+        ("B1", "Decision features", "Selected extractors; per-column, joint or both.\nOne shared non-text reference; seven predictors."),
+        ("B2", "Frozen embeddings", "Three pretrained encoders; seven predictors.\nPer-column PCA32 and joint PCA64."),
+        ("B3", "Supervised TAR", "E5-small-v2 LoRA using training labels.\nSame seven predictors and two PCA recipes."),
+        ("B6", "Native text systems", "TabSTAR v1.1, ConTextTab and AG-MM.\nText and structured inputs, end-to-end."),
     ]
     for ax, (phase, name, detail) in zip(axes.flat, rows):
         ax.set_axis_off()
@@ -108,7 +108,7 @@ def runtime_evidence_figure(table):
     fig.legend(handles=legend, loc="outside lower center", ncols=3, fontsize=7, frameon=False)
     gpus = sorted({g for g in table.gpu_name.dropna()})
     return fig, "runtime_evidence", (
-        "Experiment 0A gates for the selected decision models and three frozen encoders, read from "
+        "Experiment 0 gates for the selected decision models and three frozen encoders, read from "
         "locally held records. The left panel covers runtime checks, questions with known answers, "
         "controlled changes to real inputs, exact token counts for open-weight models, and the "
         "signed extraction review. Jev has a separate hosted pilot. The three panels on the right "
@@ -164,7 +164,7 @@ def pilot_output_figures(shared):
     for tick, provider in zip(axes[0].get_yticklabels(), providers):
         tick.set_color(style.DECISION_COLORS[provider])
     yield fig, "decision_output_profiles", (
-        "Main decision feature returned by each model for the same label-blind 0A pilot inputs "
+        "Main decision feature returned by each model for the same label-blind Experiment 0 pilot inputs "
         "(identical semantic requests across selected models at their pinned versions; per-column "
         "and joint requests from all 18 datasets). Boxes span p25–p75 with the median; lines span "
         "p5–p95; points are individual inputs. A narrow profile means a model returns similar "
@@ -267,7 +267,7 @@ def robustness_matrix_figure(changes):
             label += f" · {source[:8]}"
         labels.append(label)
         if frame.duplicated(["dataset_id", "variant"]).any():
-            raise ValueError("Duplicate dataset and variant in a historical 0A receipt")
+            raise ValueError("Duplicate dataset and variant in a historical Experiment 0 receipt")
         for record in frame[frame.variant.isin(VARIANTS)].itertuples():
             j = columns.index((record.dataset_id, record.variant))
             values[i, j] = record.total_variation_from_base
@@ -300,7 +300,7 @@ def robustness_matrix_figure(changes):
         start += width
     ax.set_ylim(len(receipts) - 0.5, -1.2)
     yield fig, "historical_0a_robustness", (
-        "Historical 0A qualification probes on one deterministically selected input per task. "
+        "Historical Experiment 0 qualification probes on one deterministically selected input per task. "
         "Each row identifies the model in a dated receipt. Cells give total variation between "
         "the original and modified probability vectors (0 = identical, 1 = disjoint). An asterisk "
         "marks a changed top answer. The reversed multiclass options are realigned to their "

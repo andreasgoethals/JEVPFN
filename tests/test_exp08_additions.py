@@ -1,4 +1,4 @@
-"""Exp 8 additions (19 Nov 2026): model axis, statistics, complementarity, data map, figure map.
+"""B4 additions (19 Nov 2026): model axis, statistics, complementarity, data map, figure map.
 
 Synthetic inputs only; no benchmark result exists yet.
 """
@@ -30,8 +30,8 @@ def _paired(datasets=8, *, providers=PROVIDERS):
     rng = np.random.default_rng(4)
     for d in range(datasets):
         base = 0.55 + 0.04 * d
-        arms = [("experiment_1", "non_text_plus_joint", p, None, i) for i, p in enumerate(providers)]
-        arms.append(("experiment_2", "non_text_plus_frozen_e5", None, "e5_small_v2", len(providers)))
+        arms = [("B1", "non_text_plus_joint", p, None, i) for i, p in enumerate(providers)]
+        arms.append(("B2", "non_text_plus_frozen_e5", None, "e5_small_v2", len(providers)))
         for phase, feature_set, provider, encoder, rank in arms:
             for fold in range(5):
                 value = base + 0.01 * rank + 0.002 * d + 0.004 * rng.standard_normal()
@@ -344,18 +344,18 @@ def test_saved_predictions_to_complementarity_export(isolated_output, monkeypatc
     name = ds.metadata.dataset_id
     monkeypatch.setattr(rb, "load_catalog", lambda: {"datasets": [{"id": name}]})
     monkeypatch.setattr(rb, "load_dataset", lambda *a, **kw: ds)
-    spec = shared_splits(ds, seed=load_yaml("experiment_1/main")["random_seed"], folds=5)
+    spec = shared_splits(ds, seed=load_yaml("B1")["random_seed"], folds=5)
     embedding = {"encoder_id": "e5_small_v2", "pca_scope": "per_column",
                  "pca_components_per_column": 32}
     version, = decision_versions(["jev"])
     selector = {k: version[k] for k in ("provider", "model", "version")}
     selector.update(question_bank_id="bank", question_variant="fixture", settings_sha256="settings")
     for phase, feature_set, recipe in [
-        ("experiment_1", "non_text", {"provider": None}),
-        ("experiment_1", "non_text_plus_joint", {"provider": "jev", "selector": selector}),
-        ("experiment_1", "non_text_plus_joint", {"provider": "jev", "selector": {**selector, "version": "older"}}),
-        ("experiment_1", "non_text_plus_joint", {"provider": "jev"}),
-        ("experiment_2", "non_text_plus_frozen_e5", {"provider": None, "embedding": embedding}),
+        ("B1", "non_text", {"provider": None}),
+        ("B1", "non_text_plus_joint", {"provider": "jev", "selector": selector}),
+        ("B1", "non_text_plus_joint", {"provider": "jev", "selector": {**selector, "version": "older"}}),
+        ("B1", "non_text_plus_joint", {"provider": "jev"}),
+        ("B2", "non_text_plus_frozen_e5", {"provider": None, "embedding": embedding}),
     ]:
         evaluate_cv(ds, features, DummyClassifier, specification=spec, model_id="linear",
                     checkpoint_id="fixture", feature_set=feature_set, phase=phase,
@@ -395,7 +395,7 @@ def test_saved_predictions_to_complementarity_export(isolated_output, monkeypatc
     folds = tables["folds"]
     assert folds.metric.eq("roc_auc").sum() == 3 * 5
     assert rb.Pairing(name, cohort="open_weight").arms.keys() == {
-        ("experiment_2", folds.loc[folds.phase.eq("experiment_2"), "recipe_id"].iloc[0])}
+        ("B2", folds.loc[folds.phase.eq("B2"), "recipe_id"].iloc[0])}
     result = tables["complementarity_pairs"]
     assert result.iloc[0].decision_recipe_id == pair["decision_recipe_id"]
     head = group_b.headline(folds)
@@ -451,13 +451,13 @@ def test_paper_figure_map_validates_and_resolves_saved_files(tmp_path):
     assert ids[:4] == ["fig1_headline_gain", "fig2_representation_ladder_and_compute",
                        "fig3_dataset_and_model_explanations", "fig4_fields_and_prediction_in_advance"]
     assert all(f["placement"] == "undecided" for f in raw["figures"])
-    folder = tmp_path / "B" / "exp08_when_text_helps"
+    folder = tmp_path / "B" / "B4"
     folder.mkdir(parents=True)
-    (folder / "03_b3_headroom_and_properties.pdf").write_bytes(b"%PDF")
-    (folder / "04_b3_model_diagnostics_vs_usefulness.pdf").write_bytes(b"%PDF")
+    (folder / "03_b4_headroom_and_properties.pdf").write_bytes(b"%PDF")
+    (folder / "04_b4_model_diagnostics_vs_usefulness.pdf").write_bytes(b"%PDF")
     table = paper_figures.resolve(raw, figures_root=tmp_path).set_index("id")
     assert table.loc["fig3_dataset_and_model_explanations", "saved_figures"] == (
-        "b3_headroom_and_properties, b3_model_diagnostics_vs_usefulness")
+        "b4_headroom_and_properties, b4_model_diagnostics_vs_usefulness")
     assert table.loc["fig4_fields_and_prediction_in_advance", "saved_figures"] == "pending"
     for mutate, message in [
         (lambda r: r["figures"][0].update(notebook="exp99_missing"), "unknown notebook"),
@@ -469,14 +469,3 @@ def test_paper_figure_map_validates_and_resolves_saved_files(tmp_path):
         mutate(broken)
         with pytest.raises(ValueError, match=message):
             paper_figures.load(broken)
-    # A reserved (planned) folder admits only planned figures. No number is reserved since
-    # Group C activated Exp 9 (20-11-2026), so a synthetic reservation is used.
-    from src.utils import structure
-
-    reg = structure.registry()
-    reserved = structure.Registry(reg.entries, reg.paper, (structure.Planned(
-        "exp12", "exp12_future", "Future", "planned_not_implemented"),))
-    broken = copy.deepcopy(raw)
-    broken["figures"][0].update(notebook="exp12_future", status="available_when_results_exist")
-    with pytest.raises(ValueError, match="reserved"):
-        paper_figures.load(broken, registry=reserved)

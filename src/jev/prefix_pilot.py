@@ -99,7 +99,7 @@ def materialize(dataset_id, settings, cache, input_set_id, rows):
         block = materialize_cached_block(
             selected, cfg, cache, question_bank=bank,
             question_variant=recipe["question_variant"], provider_settings=settings,
-            phase="experiment_0",
+            phase="0",
         )
         block.manifest.update(purpose="validation_only", row_selection=identity)
         save_block(block)
@@ -112,7 +112,7 @@ def main(argv=None):
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--config", default="feature_creation/jev.local")
     args = parser.parse_args(argv)
-    policy = load_yaml("experiment_0/jev_prefix_pilot")
+    policy = load_yaml("0/jev_prefix_pilot")
     from src.cluster.token_audit import selected_inputs
 
     plan = [{"dataset_id": i["dataset_id"], "rows": policy["rows"], "unique_requests": len(prefix_numbers(

@@ -179,7 +179,7 @@ def integration_test():
         checks=results,
     )
     write_json(
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / ("control_" + os.environ["SLURM_JOB_ID"] + ".json"),
         result,
@@ -252,7 +252,7 @@ def activate(job_id):
     from src.utils.serialization import write_json
 
     require_idle_vsc()
-    root = paths.manifests_dir("experiment_0")
+    root = paths.manifests_dir("0")
     before = root / "before_extraction"
     manifest = verify(paths.checkpoints_dir().parent / "containers" / LEAF)
     reports = []
@@ -322,7 +322,7 @@ def gpu_test():
         gpu=gpu_check(),
     )
     write_json(
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / ("control_gpu_" + result["job_id"] + ".json"),
         result,
@@ -342,7 +342,7 @@ def retire_legacy(job_id):
     root = paths.checkpoints_dir().parent
     manifest = verify(root / "containers" / LEAF, active=root / "containers/control.active.json")
     evidence = (
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / ("control_gpu_" + job_id + ".json")
     )
@@ -388,7 +388,7 @@ def seal(folder):
     folder = Path(folder)
     if (folder / MARKER).exists():
         raise ValueError("A sealed CPU image cannot be overwritten")
-    cfg = load_yaml("experiment_0/control_runtime")
+    cfg = load_yaml("0/control_runtime")
     code = (
         "import json,sys,importlib.metadata as m; import src; "
         "print('CONTROL_RUNTIME='+json.dumps({'python':sys.version.split()[0],"

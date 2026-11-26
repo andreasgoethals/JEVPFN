@@ -330,7 +330,7 @@ def run(catalog=None, *, execute=False, full=False, dataset_ids=None, transport_
     """Bounded pilot (first/middle/last/longest rows) or, after signed acceptance, full extraction.
 
     Verified responses stay in the Liquid store. Turning them into feature blocks needs
-    roster registration and a signed native 0A review, which this module does not perform.
+    roster registration and a signed native Experiment 0 review, which this module does not perform.
     """
     cand = candidate(catalog)
     if not execute:
@@ -379,7 +379,7 @@ def run(catalog=None, *, execute=False, full=False, dataset_ids=None, transport_
     }
     if not full and sum(map(len, selection.values())) > review["max_pilot_requests"]:
         raise ValueError("Pilot exceeds its approved request ceiling")
-    phase, run_id = ("feature_creation" if full else "experiment_0"), uuid4().hex
+    phase, run_id = ("feature_creation" if full else "0"), uuid4().hex
     timings = TimingJournal(PROVIDER, phase=phase, run_id=run_id,
                             context={"model": cand["model"], "settings_sha256": digest(pinned)})
     report = {

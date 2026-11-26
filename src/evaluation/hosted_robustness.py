@@ -1,4 +1,4 @@
-"""Owner-run RQ1B Jev transport with separate, bounded ledgers for fresh repeats."""
+"""Owner-run A2 Jev transport with separate, bounded ledgers for fresh repeats."""
 
 import argparse
 import hashlib
@@ -42,7 +42,7 @@ class HostedReplay:
             or review.get("workers") != 1
             or not review.get("enabled")
         ):
-            raise ValueError("Use a separately funded local RQ1B configuration with one worker")
+            raise ValueError("Use a separately funded local A2 configuration with one worker")
         if not review.get("accepted_pilot_manifest"):
             raise ValueError("A reviewed local Jev interface pilot is required")
         limits = campaign_limits(cfg)
@@ -65,7 +65,7 @@ class HostedReplay:
         self.factory, self.transport, self.workers = transport_factory, None, {}
         self.design_verified = False
         self.directory = paths.results_dir(
-            "hosted_ledgers", dataset, "pilot" if pilot else "scientific", phase="rq1"
+            "hosted_ledgers", dataset, "pilot" if pilot else "scientific", phase="A2"
         )
 
     def input_signature(self, payload):
@@ -99,7 +99,7 @@ class HostedReplay:
         budget_path = self.directory.parent.parent / "budget.json"
         if budget_path.exists() and json.loads(budget_path.read_text(encoding="utf-8")) != contract:
             raise ValueError(
-                "RQ1B spending allocations changed; review the cumulative ledger before continuing"
+                "A2 spending allocations changed; review the cumulative ledger before continuing"
             )
         write_json(budget_path, contract)
         # Retain all versions in the existing per-variant spending ledger. Its request
@@ -153,7 +153,7 @@ class HostedReplay:
                 self.limit,
                 gate=self.gate,
                 validate_context=self.validator,
-                phase="rq1",
+                phase="A2",
             )
         worker = self.workers[variant]
         # The atomic reservation includes this ledger's previous usage itself.
@@ -174,7 +174,7 @@ class HostedReplay:
 @contextmanager
 def owner_client(cfg, dataset, pilot):
     # Serialize access to this independently budgeted study across restarts/datasets.
-    root = paths.results_dir("hosted_ledgers", phase="rq1")
+    root = paths.results_dir("hosted_ledgers", phase="A2")
     with file_lock(root / ".dispatcher.lock", timeout=1):
         client = HostedReplay(cfg, dataset, pilot=pilot)
         try:
@@ -196,7 +196,7 @@ def main():
     args = parser.parse_args()
     if not args.execute:
         parser.exit(
-            message="Preview only. A dedicated owner-approved RQ1B budget and --execute are required.\n"
+            message="Preview only. A dedicated owner-approved A2 budget and --execute are required.\n"
         )
     with owner_client(load_yaml(args.config), args.dataset, args.pilot) as client:
         print(run(args.dataset, "jev", pilot=args.pilot, acceptance=args.acceptance, client=client))

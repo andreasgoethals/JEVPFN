@@ -33,7 +33,7 @@ def add_releases(steps, *, command_style=False):
                     *exports,
                     "--clusters=" + cpu_cluster(),
                     "--partition=" + ("batch_graniterapids" if cpu_cluster() == "mindwell" else "batch"),
-                    "scripts/slurm/experiment_0_scratch_release.slurm",
+                    "scripts/slurm/0_scratch_release.slurm",
                     runtime,
                     "--apply",
                 ],
@@ -41,7 +41,7 @@ def add_releases(steps, *, command_style=False):
         else:
             release.update(
                 dependencies=[],
-                script="experiment_0_scratch_release.slurm",
+                script="0_scratch_release.slurm",
                 args=[runtime, "--apply"],
                 flags=[arg for arg in stage.get("flags", []) if arg.startswith("--export=")],
             )

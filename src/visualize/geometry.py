@@ -1,4 +1,4 @@
-"""A3 (exp03_geometry) figures: do texts close in frozen-encoder space get similar decisions?
+"""A3 figures: do texts close in frozen-encoder space get similar decisions?
 
 Rows are decision models, one marker per frozen encoder (colour and shape), equal-dataset means
 with dataset-bootstrap intervals. A small lower panel gives the encoder-encoder agreement on the

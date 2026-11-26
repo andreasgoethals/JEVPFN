@@ -110,8 +110,8 @@ def export_bundle(*, include_token_counts=True) -> Path:
                     if not include_token_counts and "token_audit" in relative.parts:
                         continue  # Keep compact token receipts, omit reproducible count databases.
                     # Operational phases and RQ scientific results; notebook intermediates stay local.
-                    # Every registry folder (config/structure.yaml) is a phase tree, either
-                    # top-level (`01_exp0a`) or inside a letter group (`B/exp04_...`).
+                    # Every registry folder (config/structure.yaml) is a phase tree inside one
+                    # of the top-level groups (`general/0`, `B/B1`, ...).
                     if not relative.parts or relative.parts[0] not in paths.layout().top_level:
                         continue
                     if (
@@ -146,7 +146,7 @@ def export_bundle(*, include_token_counts=True) -> Path:
             archive.writestr("manifest.json", json.dumps(manifest, indent=2))
         partial.rename(destination)
     write_json(
-        paths.manifests_dir("experiment_0") / "transfers" / f"export_{bundle_id}.json",
+        paths.manifests_dir("0") / "transfers" / f"export_{bundle_id}.json",
         {
             "bundle_id": bundle_id,
             "bundle": str(destination),
@@ -326,8 +326,8 @@ def import_bundle(bundle: Path) -> dict:
                     merge(source, cache_path(relative.stem, {"encoder_id": encoder_id}))
                 )
             else:
-                # A bundle exported in a previous layout (before 18-11-2026, or flat before
-                # 23-11-2026, e.g. `exp11_data_efficiency/...`) lands in the current folders.
+                # A bundle exported in an earlier layout (config/layout_aliases.yaml, e.g.
+                # `B/exp09_data_efficiency/...`) lands in the current folders.
                 moved = structure.translate_output(PurePosixPath(*relative.parts[1:]))
                 destination = paths.outputs_dir().joinpath(*(moved.parts if moved else relative.parts[1:]))
                 if relative.name == "frozen_revision.json" and relative.parts[-2] == "manifests":
@@ -358,7 +358,7 @@ def import_bundle(bundle: Path) -> dict:
         if token_report:
             _combine_token_reports(*token_report)
         write_json(
-            paths.manifests_dir("experiment_0") / "transfers" / f"import_{bundle_id}.json", report
+            paths.manifests_dir("0") / "transfers" / f"import_{bundle_id}.json", report
         )
         return report
 

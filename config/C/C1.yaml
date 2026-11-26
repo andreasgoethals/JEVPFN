@@ -1,0 +1,59 @@
+# Group C, C1 (owner-approved 20 November 2026): inside the decision model, label-free.
+# Strands only (StrandsAgents/strands-decider-2B-qwen3.5-v1-2610: Qwen3.5-2B-Base torso with 24
+# decoder layers and a pointer head that scores option k by comparing the hidden state at the
+# `<answer>` token with the hidden state at the last token of option k's line).
+# Prompt (read causally, left to right): <state> text </state> -> <question ...> header +
+# question text -> <options> lines </options></question> -> <answer>.
+# No label enters extraction; PCA is fitted on outer-training rows only (as for frozen
+# embeddings). The predictor grid, folds and metrics are Group B's.
+extends: B1
+phase: C1
+name: strands_hidden_states
+enabled: false
+gate_acceptance: null
+extraction:
+  enabled: false
+  provider: strands
+  model: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
+  # Exactly the frozen feature-creation requests: the active prepared input set of every
+  # dataset, per text column and joint, with its deduplication (one vector set per unique input).
+  requests: active_prepared_input_set_per_column_and_joint
+  num_hidden_layers: 24
+  # hidden_states[0] is the embedding output; hidden_states[l] is decoder layer l's output.
+  # hidden_states[24] must equal last_hidden_state, the pointer head's own input (checked).
+  layers: {middle: 12, last: 24}
+  positions:
+    state_end: last token of the state text (before </state>)
+    question_end: last token of the question text (before <options>)
+    answer: the final <answer> token, the pointer head's query
+  # The pointer head's keys, saved only for JOINT requests and only at the last layer: they are
+  # what C2 head-only training needs.
+  option_ends: joint_requests_last_layer
+  dtype: float16
+  # One request per forward, exactly as Strands extraction ran (max_batch 1, no padding).
+  batch_size: 1
+  commit_every: 500
+  # Every request: the head applied to the saved float16 vectors must reproduce the
+  # probabilities of the same forward computed in float32 (Strands' own readout, its fitted
+  # temperatures). The first requests of each dataset are also compared with the publisher's
+  # own SystemOneEngine.evaluate (four-decimal answers).
+  probability_tolerance: 0.005
+  engine_check_requests: 32
+  # Estimated from the 18 local prepared input sets (src.jev.strands_hidden --estimate):
+  # 6 vectors x 2,048 x 2 bytes per unique input plus K x 2,048 x 2 bytes per joint input.
+  storage_estimate_gb: 70
+arms:
+  positions: [state_end, question_end, answer]
+  layers: [12, 24]
+  views:
+    per_column: {pca_scope: per_column, pca_components: 32}
+    joint: {pca_scope: per_column, pca_components: 64}  # one group: the joint request's vector
+  # C1b: the <answer>-last vector together with Strands' own probabilities of the same view.
+  with_probabilities: {position: answer, layer: 24, views: [per_column, joint]}
+# Comparisons computed from saved scores (CPU export); no frozen encoder enters Group C.
+comparisons:
+  - answer_last_vs_strands_probabilities  # C1a answer/L24 vs B1 Strands, same view
+  - answer_last_plus_probabilities_vs_probabilities  # C1b vs B1 Strands, same view
+  - position_path_at_each_layer  # state_end -> question_end -> answer
+  - middle_vs_last_layer  # L12 vs L24 at each position and view
+binary_threshold_policy: inner_oof_f1

@@ -1,6 +1,6 @@
-"""Size bundled benchmark tasks from measured 0B full-fold profiles.
+"""Size bundled benchmark tasks from measured B0 full-fold profiles.
 
-0B profiles measure full-size folds at selected dataset extremes. Fold time is
+B0 profiles measure full-size folds at selected dataset extremes. Fold time is
 estimated from the slowest measured rate. Without qualified evidence, callers fall
 back to fixed defaults and one worker per GPU.
 """
@@ -33,7 +33,7 @@ def profile_records(model, *, phase, cluster, acceptance):
         return []
     current = evaluation_identity()
     approval = reviewed_acceptance(
-        acceptance, stage="after_extraction", expected={"evaluation_identity": current}
+        acceptance, stage="B0", expected={"evaluation_identity": current}
     )
     folds = {}
     for item in approval["evidence"]:
@@ -50,7 +50,7 @@ def profile_records(model, *, phase, cluster, acceptance):
             continue
         outer = next(item for item in report["roles"] if item["role"] == "outer_test")
         record = json.loads(RecordRef(
-            database(arm["dataset_id"], "experiment_0"), outer["record_id"]
+            database(arm["dataset_id"], "0"), outer["record_id"]
         ).read_text())
         meta = record["metadata"]
         measured = record.get("resources", {})
@@ -66,7 +66,7 @@ def profile_records(model, *, phase, cluster, acceptance):
             or measured.get("fit_job_id") != report["job_id"]
             or measured.get("fit_cluster") != report["cluster"]
         ):
-            raise ValueError("Benchmark sizing record differs from its reviewed 0B receipt")
+            raise ValueError("Benchmark sizing record differs from its reviewed B0 receipt")
         wall_seconds = record.get("timing", {}).get("measured_wall_seconds") or 0.0
         if not math.isfinite(wall_seconds) or wall_seconds <= 0:
             continue

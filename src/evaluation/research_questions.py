@@ -24,7 +24,7 @@ def _metadata(entry):
 
 def regression_width_table():
     """Catalog widths, plus conservative Kumo expansion; fits widen Kumo past 500 columns."""
-    cfg = load_yaml("experiment_1/main")
+    cfg = load_yaml("B1")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
     for entry in selected_entries(load_catalog(), cfg):
@@ -61,7 +61,7 @@ def adaptation_prediction_plan():
     from src.evaluation.campaign import benchmark_plan
 
     return [dict(arm, binary_threshold=0.5, execution_enabled=False)
-            for arm in benchmark_plan() if arm["phase"] == "rq3"]
+            for arm in benchmark_plan() if arm["phase"] == "C2"]
 
 
 def random_probe_requests(request_keys, *, dataset_id, limit=500, seed=42, study="wording"):

@@ -65,7 +65,7 @@ def embedding_effect_figures(paired):
         paired.pca_scope.eq(scope) & paired.pca_components.eq(count) for scope, count in recipes
     ])
     for task, (metric, direction, unit) in METRIC_VIEWS.items():
-        selected = paired[current & paired.phase.eq("experiment_2") & paired.task_type.eq(task)
+        selected = paired[current & paired.phase.eq("B2") & paired.task_type.eq(task)
                           & paired.metric.eq(metric)]
         for (model, reference), group in selected.groupby(["model_id", "reference"], sort=False):
             keys = ["dataset_id", "split_id", "checkpoint_id", "encoder", "pca_scope",

@@ -9,8 +9,8 @@ def test_lists_by_default_and_deletes_only_when_asked(isolated_output, capsys) -
     """A listing you meant as a deletion costs one more command; the reverse costs the run."""
     from src.utils.paths import logs_dir
 
-    logs_dir("experiment_1").mkdir(parents=True, exist_ok=True)
-    victim = logs_dir("experiment_1") / "run.log"
+    logs_dir("B1").mkdir(parents=True, exist_ok=True)
+    victim = logs_dir("B1") / "run.log"
     victim.write_text("x" * 100, encoding="utf-8")
 
     clean_run.main([])
@@ -26,17 +26,17 @@ def test_a_wipe_keeps_the_directory_skeleton(isolated_output) -> None:
     nodirectory markers."""
     from src.utils.paths import figures_dir, logs_dir
 
-    for folder in (logs_dir("experiment_1"), figures_dir()):
+    for folder in (logs_dir("B1"), figures_dir()):
         folder.mkdir(parents=True, exist_ok=True)
         (folder / ".gitkeep").write_text("", encoding="utf-8")
     per_notebook = figures_dir("nb")
     per_notebook.mkdir(parents=True, exist_ok=True)
     (per_notebook / "01_x.pdf").write_bytes(b"%PDF")
-    (logs_dir("experiment_1") / "run.log").write_text("x", encoding="utf-8")
+    (logs_dir("B1") / "run.log").write_text("x", encoding="utf-8")
 
     removed = sum(clean_run.wipe(root) for root in clean_run.roots())
     assert removed == 1  # the rebuildable figure only
-    assert (logs_dir("experiment_1") / ".gitkeep").is_file()
+    assert (logs_dir("B1") / ".gitkeep").is_file()
     assert (figures_dir() / ".gitkeep").is_file()
     assert not (per_notebook / "01_x.pdf").exists()
 
@@ -45,8 +45,8 @@ def test_gitkeep_is_never_counted(isolated_output) -> None:
     """A directory holding only structure markers is already clean."""
     from src.utils.paths import logs_dir
 
-    logs_dir("experiment_1").mkdir(parents=True, exist_ok=True)
-    (logs_dir("experiment_1") / ".gitkeep").write_text("", encoding="utf-8")
+    logs_dir("B1").mkdir(parents=True, exist_ok=True)
+    (logs_dir("B1") / ".gitkeep").write_text("", encoding="utf-8")
     assert clean_run.measure(clean_run.roots()[0]) == (0, 0)
 
 
@@ -116,13 +116,13 @@ def test_report_only_cleanup_updates_new_figure_manifest(isolated_output):
 
     from src.utils import paths
     from src.visualize.figures import manifest_path
-    folder = paths.figures_dir("0. exploration/check")
+    folder = paths.figures_dir("exploration/check")
     folder.mkdir(parents=True)
     (folder / "01_plot.pdf").write_text("pdf")
-    manifest = manifest_path("0. exploration/check")
+    manifest = manifest_path("exploration/check")
     assert manifest.parent == folder  # `_figures.json` sits beside the PDFs (TEMPLATE).
     manifest.write_text(json.dumps([{"stem": "01_plot"}]))
-    report = paths.reports_dir("0. exploration/check")
+    report = paths.reports_dir("exploration/check")
     report.parent.mkdir(parents=True)
     report.write_text("old figure description")
     clean_run.main(["--clean"])

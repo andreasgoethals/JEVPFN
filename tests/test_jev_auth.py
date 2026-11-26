@@ -35,7 +35,7 @@ def test_smoke_paste_error_explains_failure_without_creating_a_client(
     assert report["error_type"] == "CredentialFormatError"
     assert "No request was sent" in report["hint"]
     assert "synthetic" not in output
-    assert not (smoke.paths.results_dir("jev_smoke", phase="experiment_0")).exists()
+    assert not (smoke.paths.results_dir("jev_smoke", phase="0")).exists()
 
 
 def test_local_file_is_reloaded_without_prompt_and_environment_takes_precedence(monkeypatch):

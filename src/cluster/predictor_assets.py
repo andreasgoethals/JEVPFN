@@ -42,7 +42,7 @@ def stage_tabstar(*, execute=False, download=None):
         raise ValueError("Stage predictor assets before freezing the tested stage")
     if os.environ.get("SLURM_JOB_GPUS") or os.environ.get("CUDA_VISIBLE_DEVICES") not in {None, "", "-1"}:
         raise ValueError("Download and hash predictor assets on CPU, before GPU allocation")
-    settings = load_yaml("experiment_1/models")["models"]["tabstar"]["runtime"]
+    settings = load_yaml("B1/models")["models"]["tabstar"]["runtime"]
     root = paths.checkpoints_dir()
     marker = manifest_path()
     marker.parent.mkdir(parents=True, exist_ok=True)

@@ -8,12 +8,12 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:20:00
-#SBATCH --output="output_JEVPFN/01_exp0a/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/01_exp0a/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/general/0/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/general/0/logs/%x_%j.log"
 set -euo pipefail
 source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
 cd "${VSC_DATA:?}/JEVPFN"
-export JEVPFN_CONTROL_TEST=1 JEVPFN_CONTROL_LEGACY=0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_PHASE=experiment_0
+export JEVPFN_CONTROL_TEST=1 JEVPFN_CONTROL_LEGACY=0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_PHASE=0
 export JEVPFN_STAGING_ROOT="${JEVPFN_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}"
 source scripts/slurm/_activate_env.sh
 control_status=0

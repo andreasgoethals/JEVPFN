@@ -2,7 +2,7 @@
 
 Publisher API: AutoGluon 1.6.1 MultiModalPredictor. The runtime and all encoder
 files must be staged before this lazy adapter is constructed. Real compatibility
-is established by Experiment 0B, not by the offline adapter tests.
+is established by B0, not by the offline adapter tests.
 """
 
 import os

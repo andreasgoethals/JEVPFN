@@ -24,7 +24,7 @@ def test_shared_immutable_paths_keep_mutable_stores_isolated(tmp_path, monkeypat
     assert paths.dataset_question_path("DATASET") == durable / "JEVPFN/data/decision_inputs/DATASET.sqlite3"
     assert paths.token_audit_dir().is_relative_to(durable)
     assert paths.dataset_cache_path("DATASET").is_relative_to(native)
-    assert paths.results_dir(phase="experiment_1").is_relative_to(native)
+    assert paths.results_dir(phase="B1").is_relative_to(native)
 
 
 def test_cpu_execution_follows_explicit_authority(monkeypatch):

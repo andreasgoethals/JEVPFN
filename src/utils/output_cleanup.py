@@ -2,7 +2,7 @@
 
 Examples (all preview unless --apply --writers-stopped is supplied):
     python -m src.utils.output_cleanup
-    python -m src.utils.output_cleanup --phase experiment_0 --kind logs
+    python -m src.utils.output_cleanup --phase 0 --kind logs
     python -m src.utils.output_cleanup --tier project --kind results --older-than-days 7
     python -m src.utils.output_cleanup --include-archives --apply --writers-stopped
 
@@ -65,8 +65,8 @@ def classify(relative):
         return "reports"
     if parts[0] in KINDS:
         return parts[0]
-    # `<folder>/<kind>/...` or, for a letter group, `<group>/<folder>/<kind>/...`.
-    offset = 2 if parts[0] in structure.GROUPS else 1
+    # `<group>/<folder>/<kind>/...` (groups general, A, B and C).
+    offset = 2 if parts[0] in structure.ALL_GROUPS else 1
     return parts[offset] if len(parts) > offset and parts[offset] in KINDS else "other"
 
 
@@ -77,21 +77,12 @@ def phase_of(relative):
         notebook = structure.registry().notebook("/".join(relative.parts[1:3]))
         if notebook:
             return notebook.phase
-    # Current registry folders (phase trees and figure/notebook-record folders), including
-    # routed sub-trees (03_exp0b -> experiment_0) and letter groups (B/exp04_... -> experiment_1).
+    # Current registry folders (phase trees and figure/notebook-record folders, `B/B1/...`).
+    # Earlier-layout folders are migrated first (src.utils.layout_migration), never cleaned.
     for start in range(len(relative.parts) - 1):
         owned = structure.registry().owner_of(relative.parts[start:-1])
         if owned:
             return owned[0]
-    for part in relative.parts[:-1]:
-        if part[:1].isdigit() and ". " in part:
-            # Old output remains removable after retiring an experiment/renumbering synthesis.
-            # This is cleanup-only compatibility, never an executable experiment route.
-            legacy = {"8. experiment_5": "retired_experiment_5",
-                      "7. synthesis": "synthesis", "9. synthesis": "synthesis"}
-            if part in legacy:
-                return legacy[part]
-            return paths.phase_name(part)
     return None
 
 
@@ -253,7 +244,7 @@ def run(*, apply=False, writers_stopped=False, **selection):
                         folder.chmod(folder.stat().st_mode | stat.S_IWRITE)
                     folder.rmdir()
         if paths.on_vsc():
-            paths.logs_dir("experiment_0").mkdir(parents=True, exist_ok=True)
+            paths.logs_dir("0").mkdir(parents=True, exist_ok=True)
     report.update(status="deleted", files=files, file_count=len(files), bytes=sum(f["bytes"] for f in files),
                   caption_manifests_updated=[str(p) for p in updates])
     return report

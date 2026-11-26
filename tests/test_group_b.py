@@ -144,7 +144,7 @@ def test_tabpfn_declares_categorical_indices_and_lightgbm_is_cpu(monkeypatch, tm
     from src.utils.config import load_yaml
 
     assert "lightgbm" in CPU_ONLY_MODELS
-    runtime = load_yaml("experiment_1/models")["models"]["lightgbm"]["runtime"]
+    runtime = load_yaml("B1/models")["models"]["lightgbm"]["runtime"]
     assert runtime["device"] == "cpu" and runtime["packages"] == {"lightgbm": "4.7.0"}
     assert runtime["parameters"] == {}
 
@@ -315,7 +315,7 @@ def test_b4_fixed_dataset_sets_draws_and_grid():
     from src.data.selection import selected_entries
     from src.utils.config import load_yaml
 
-    entries = selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+    entries = selected_entries(load_catalog(), load_yaml("B1"))
     sizes = data_efficiency.curve_membership(entries)
     extended = [d for d, s in sizes.items() if max(s) == 16384]
     assert sorted(extended) == sorted(data_efficiency.config()["curves"]["extended"]["datasets"])
@@ -333,14 +333,14 @@ def test_group_b_plan_counts():
 
     from src.evaluation.campaign import benchmark_plan
 
-    # Group C phases (representations, rq3) are counted in test_group_c.
-    plan = [a for a in benchmark_plan(cohort="with_jev") if a["phase"] not in ("representations", "rq3")]
+    # Group C phases (C1, C2) are counted in test_group_c.
+    plan = [a for a in benchmark_plan(cohort="with_jev") if a["phase"] not in ("C1", "C2")]
     counts = Counter(a["phase"] for a in plan)
     # B1: (1 + 17 x 3) x 7 x 18; B2: 3 encoders x 2 PCA + 17 decision+frozen (+ TAR 2 + 6 probes);
-    # B3: 17 models x 78 text columns (16 multi-text datasets) x 7; B4: 399 sample cells x 22 x 7.
-    assert counts == {"experiment_1": 6552, "experiment_2": (6 + 17) * 7 * 18,
-                      "experiment_3": (2 + 6) * 7 * 18, "experiment_4": 54, "rq2": 17 * 78 * 7,
-                      "data_efficiency": 399 * 22 * 7}
+    # B4: 17 models x 78 text columns (16 multi-text datasets) x 7; B5: 399 sample cells x 22 x 7.
+    assert counts == {"B1": 6552, "B2": (6 + 17) * 7 * 18,
+                      "B3": (2 + 6) * 7 * 18, "B6": 54, "B4": 17 * 78 * 7,
+                      "B5": 399 * 22 * 7}
     # Kumo's 500-column recipe default is widened, not excluded (owner-approved 23 Nov 2026).
     assert not [a for a in plan if a["width_status"] == "unsupported_width"]
     widened = [a for a in plan if a.get("kumo_max_columns_override")]
@@ -535,7 +535,7 @@ def test_b3_row_cohorts_accept_only_matching_fold_recipes(tmp_path, monkeypatch)
     rows = []
     records = []
     for fold in range(5):
-        base = {"phase": "experiment_1", "dataset_id": "toy", "task_type": "binary_classification",
+        base = {"phase": "B1", "dataset_id": "toy", "task_type": "binary_classification",
                 "model_id": "linear", "split_id": "split", "data_identity": "source", "checkpoint_id": "checkpoint",
                 "outer_fold": fold, "metric": "roc_auc"}
         rows.append({**base, "feature_set": "non_text", "provider": None, "recipe_id": "baseline", "value": 0.5})
@@ -543,7 +543,7 @@ def test_b3_row_cohorts_accept_only_matching_fold_recipes(tmp_path, monkeypatch)
             arm = f"recipe-{provider}"
             rows.append({**base, "feature_set": "non_text_plus_both", "provider": provider, "recipe_id": arm,
                          "value": 0.6})
-            records.append({"fold": fold, "arm": arm, "phase": "experiment_1", "model": "linear",
+            records.append({"fold": fold, "arm": arm, "phase": "B1", "model": "linear",
                             "checkpoint": "checkpoint", "feature_set": "non_text_plus_both", "recipe": {"provider": provider},
                             "cohorts": [{"axis": "length", "cohort": "short", "rows": 5, "defined": 5,
                                          "baseline_loss_sum": 3.0, "augmented_loss_sum": 1.0}]})
@@ -560,13 +560,13 @@ def test_b3_row_cohorts_accept_only_matching_fold_recipes(tmp_path, monkeypatch)
                         lambda **kwargs: (properties, pd.DataFrame()))
     monkeypatch.setattr(benchmark_export, "_group_a_frames", lambda **kwargs: {})
 
-    current = benchmark_export.build_tables("B3", folds, cohort="open_weight")["row_cohorts"]
+    current = benchmark_export.build_tables("B4", folds, cohort="open_weight")["row_cohorts"]
     assert current.benefit.item() == pytest.approx(0.4) and current.decision_models.item() == len(providers)
     for column in ("recipe_id", "split_id", "data_identity", "checkpoint_id"):
         changed = folds.copy()
         changed[column] = "new-" + changed[column]
         with pytest.raises(ValueError, match="Row-benefit source differs"):
-            benchmark_export.build_tables("B3", changed, cohort="open_weight")
+            benchmark_export.build_tables("B4", changed, cohort="open_weight")
 
 
 def test_b3_group_a_inputs_distinguish_superseded_and_corrupt_archives(tmp_path, monkeypatch):
@@ -579,7 +579,7 @@ def test_b3_group_a_inputs_distinguish_superseded_and_corrupt_archives(tmp_path,
     monkeypatch.setattr(comparison_report, "report_path", lambda cohort: tmp_path / "absent-a1.zip")
     monkeypatch.setattr(robustness_export, "export_path", lambda cohort: target)
     assert benchmark_export._group_a_frames(cohort="open_weight") == {}
-    identity = robustness_export.analysis_identity(load_yaml("rq1/behavior"), "open_weight")
+    identity = robustness_export.analysis_identity(load_yaml("A2"), "open_weight")
     tables = {name: pd.DataFrame({"value": [1]}) for name in robustness_export.TABLES}
     study_export.write_export(target, tables, schema=robustness_export.SCHEMA, identity=identity, origin="fixture")
     assert benchmark_export._group_a_frames(cohort="open_weight")["a2_mode_effects"].value.item() == 1
@@ -705,15 +705,16 @@ def test_exports_wait_when_absent(tmp_path):
 
     frames, receipt = benchmark_export.read("B4", target=tmp_path / "absent.zip")
     assert frames == {} and receipt["status"] == study_export.AWAITING
-    assert set(benchmark_export.STUDIES) == {"B1", "B2", "B3", "B4", "B5"}
-    assert benchmark_export.export_path("B4").parts[-5:-3] == ("B", "exp09_data_efficiency")
+    assert set(benchmark_export.STUDIES) == {"B1", "B2", "B3", "B4", "B5", "B6"}
+    for study in benchmark_export.STUDIES:  # One export per experiment, in its own folder.
+        assert benchmark_export.export_path(study).parts[-5:-3] == ("B", study)
 
 
 def test_permutation_attribution_is_disabled_and_row_cohorts_are_pre_treatment():
     from src.evaluation import row_benefit
     from src.utils.config import load_yaml
 
-    assert load_yaml("experiment_1/protocol")["evaluation"]["field_attribution"]["enabled"] is False
+    assert load_yaml("B1/protocol")["evaluation"]["field_attribution"]["enabled"] is False
     assert row_benefit.POST_TREATMENT_AXES == ()
     reference = pd.DataFrame({"row_id": ["a", "b"], "y_true": ["n", "y"], "text_present": [True, False],
                               "joint_text_seen_in_train": [False, False],
@@ -748,13 +749,13 @@ def test_qualified_artifacts_cover_group_b_arms():
     def ids(**arm):
         return sorted(expected_artifacts(evidence, {"dataset_id": "d", "provider": None, **arm})[0])
 
-    assert ids(phase="experiment_2", feature_set="non_text_plus_both_plus_frozen_e5", provider="jev",
+    assert ids(phase="B2", feature_set="non_text_plus_both_plus_frozen_e5", provider="jev",
                encoder="e5_small_v2") == ["emb", "jt", "pc"]
-    assert ids(phase="rq2", feature_set="non_text_plus_per_column_without_one_text", provider="jev") == ["pc"]
-    assert ids(phase="experiment_3", feature_set="non_text_plus_supervised_probe",
+    assert ids(phase="B4", feature_set="non_text_plus_per_column_without_one_text", provider="jev") == ["pc"]
+    assert ids(phase="B3", feature_set="non_text_plus_supervised_probe",
                encoder="e5_small_v2") == ["emb"]
-    assert ids(phase="experiment_3", feature_set="non_text_plus_tar", encoder="e5_small_v2_tar") == ["t0", "t1"]
-    assert ids(phase="data_efficiency", feature_set="non_text_plus_both", provider="jev") == ["jt", "pc"]
+    assert ids(phase="B3", feature_set="non_text_plus_tar", encoder="e5_small_v2_tar") == ["t0", "t1"]
+    assert ids(phase="B5", feature_set="non_text_plus_both", provider="jev") == ["jt", "pc"]
 
 
 def test_headline_accepts_categorical_export_fold_tables():
@@ -769,7 +770,7 @@ def test_headline_accepts_categorical_export_fold_tables():
                 for fs, provider, delta in (("non_text", None, 0.0), ("non_text_plus_both", "m1", 0.02),
                                             ("non_text_plus_both", "m2", 0.01)):
                     for metric, value in (("roc_auc", 0.7 + delta), ("log_loss", 0.5)):
-                        rows.append({**dict.fromkeys(RECIPE_COLUMNS), "phase": "experiment_1",
+                        rows.append({**dict.fromkeys(RECIPE_COLUMNS), "phase": "B1",
                                      "dataset_id": f"d{d}", "task_type": "binary_classification",
                                      "model_id": model, "checkpoint_id": "c", "feature_set": fs,
                                      "provider": provider, "view": "main", "split_id": "s",

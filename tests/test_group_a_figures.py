@@ -169,7 +169,7 @@ def test_group_a_notebooks_are_thin_and_state_the_a1_regression_decision():
         code = "\n".join("".join(c["source"]) for c in cells if c["cell_type"] == "code")
         assert "\ndef " not in "\n" + code and "\nclass " not in "\n" + code, path.name
         assert "finish_report" in "".join(cells[-1]["source"]), path.name
-    exp01 = (NOTEBOOKS / "exp01_outputs.ipynb").read_text(encoding="utf-8")
+    exp01 = (NOTEBOOKS / "A1.ipynb").read_text(encoding="utf-8")
     assert "log loss is undefined" in exp01 and "N = 9" in exp01
-    exp02 = (NOTEBOOKS / "exp02_robustness.ipynb").read_text(encoding="utf-8")
+    exp02 = (NOTEBOOKS / "A2.ipynb").read_text(encoding="utf-8")
     assert "robustness_matrix_figure" not in exp02

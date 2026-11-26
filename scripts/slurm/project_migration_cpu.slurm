@@ -9,13 +9,13 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=01:00:00
-#SBATCH --output="output_JEVPFN/02_feature_creation/manifests/storage_migration/cpu_%j.log"
-#SBATCH --error="output_JEVPFN/02_feature_creation/manifests/storage_migration/cpu_%j.log"
+#SBATCH --output="output_JEVPFN/general/2_feature_creation/manifests/storage_migration/cpu_%j.log"
+#SBATCH --error="output_JEVPFN/general/2_feature_creation/manifests/storage_migration/cpu_%j.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh
 export JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
-export JEVPFN_PHASE=experiment_0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_RUNTIME_PROFILE=blackwell-cu130
+export JEVPFN_PHASE=0 JEVPFN_CONDA_ENV=JEVPFN JEVPFN_RUNTIME_PROFILE=blackwell-cu130
 source scripts/slurm/_activate_env.sh
 python -m src.cluster.control_runtime test
 python -m src.cluster.storage_contracts --execute

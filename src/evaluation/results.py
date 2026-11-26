@@ -15,7 +15,7 @@ from src.utils import paths
 from src.utils.serialization import digest, write_json
 
 
-def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4")):
+def collect(phases=("B1", "B2", "B3", "B6")):
     rows = []
     for phase in phases:
         for recipe in all_recipes(phase):
@@ -165,7 +165,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
         "metric",
     ]
     baseline = chosen.loc[
-        (chosen.phase == "experiment_1") & (chosen.feature_set == "non_text"), keys + ["value"]
+        (chosen.phase == "B1") & (chosen.feature_set == "non_text"), keys + ["value"]
     ]
     if baseline.duplicated(keys).any():
         raise ValueError("Multiple baseline recipes match; select one campaign before comparison")
@@ -204,7 +204,7 @@ def collect(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_
 
 
 
-def collect_for_notebook(phases=("experiment_1", "experiment_2", "experiment_3", "experiment_4")):
+def collect_for_notebook(phases=("B1", "B2", "B3", "B6")):
     """Verify compact prediction stores once per notebook run and share their metric tables."""
     import os
 

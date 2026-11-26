@@ -449,7 +449,7 @@ def _native_scratch_fallback(work, required):
     if not str(scratch).startswith("/gpfs") and paths.on_vsc():
         return None
     _retire_stale_fallbacks(job_root.parent)
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     budget = (settings["scratch_allocation_gib"] - settings["scratch_headroom_gib"]) * GIB
     if tree_bytes(scratch) + required > budget or shutil.disk_usage(scratch).free < required:
         return None
@@ -867,7 +867,7 @@ def publish(runtime):
         counts = _publish(durable, work)
     report = {"runtime": runtime, "status": "published", "durable_root": str(durable), **counts}
     write_json(
-        paths.manifests_dir("experiment_0") / "scratch" / f"{runtime}_publication.json", report
+        paths.manifests_dir("0") / "scratch" / f"{runtime}_publication.json", report
     )
     return report
 
@@ -938,7 +938,7 @@ def stage(runtime, *, datasets=None):
             # unrelated decision checkpoints in every predictor working set.
             from src.utils.config import load_yaml
 
-            runtime_cfg = load_yaml("experiment_1/models")["models"][runtime]["runtime"]
+            runtime_cfg = load_yaml("B1/models")["models"][runtime]["runtime"]
 
             def pinned_paths(value):
                 if isinstance(value, dict):
@@ -971,9 +971,9 @@ def stage(runtime, *, datasets=None):
         inputs += [
             f"output_JEVPFN/{paths.result_relative(p).as_posix()}/{name}"
             for p, name in (
-                *([("experiment_0", "token_audit")] if runtime in containers.SELF_HOSTED else []),
-                ("experiment_2", "pca"),
-                ("experiment_1", "pca"),
+                *([("0", "token_audit")] if runtime in containers.SELF_HOSTED else []),
+                ("B2", "pca"),
+                ("B1", "pca"),
             )
         ]
         candidates = {}
@@ -981,11 +981,11 @@ def stage(runtime, *, datasets=None):
             # Completed fold records and their predictions are resume inputs too.
             # A fresh native workspace must see durable attempts before fitting;
             # otherwise it would refit them and conflict when publishing back.
-            # B3 text-column refits (rq2), B4 (data_efficiency), C1 (representations) and
-            # C2 (rq3) write their own fold stores and must be restored too (22-11-2026).
-            evaluation_phases = ("experiment_0", "experiment_1", "experiment_2", "experiment_3",
-                                 "experiment_4", "synthesis", "regression_readout", "rq2",
-                                 "data_efficiency", "representations", "rq3")
+            # B4 text-column refits, B5 training-size curves, C1 and C2 write their own
+            # fold stores and must be restored too (22-11-2026).
+            evaluation_phases = ("0", "B1", "B2", "B3",
+                                 "B6", "synthesis", "regression_readout", "B4",
+                                 "B5", "C1", "C2")
             for folder in sorted(
                 durable / "output_JEVPFN" / paths.result_relative(p, "evaluation") / "evaluation"
                 for p in evaluation_phases
@@ -999,8 +999,8 @@ def stage(runtime, *, datasets=None):
                 continue  # Decision extraction never consumes predictor PCA parameters.
             if shared_predictor_inputs and folder in {
                 "data/jev_cache", "data/text_embeddings",
-                f"output_JEVPFN/{paths.result_relative('experiment_2').as_posix()}/pca",
-                f"output_JEVPFN/{paths.result_relative('experiment_1').as_posix()}/pca",
+                f"output_JEVPFN/{paths.result_relative('B2').as_posix()}/pca",
+                f"output_JEVPFN/{paths.result_relative('B1').as_posix()}/pca",
             }:
                 continue  # Predictors open accepted, immutable features and PCA directly on PROJECT.
             if shared_assets and (folder.startswith("checkpoints/") or folder in {"data/raw", "data/decision_inputs"}
@@ -1162,7 +1162,7 @@ def stage(runtime, *, datasets=None):
         }
         write_json(work / MARKER, report)
         write_json(
-            paths.manifests_dir("experiment_0") / "scratch" / f"{runtime}_stage.json", report
+            paths.manifests_dir("0") / "scratch" / f"{runtime}_stage.json", report
         )
         return {k: v for k, v in report.items() if k != "files"}
 

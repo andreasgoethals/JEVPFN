@@ -1,0 +1,26 @@
+#!/bin/bash -l
+# Submit from $VSC_DATA/JEVPFN after creating "output_JEVPFN/general/0/logs".
+#SBATCH --job-name=jevpfn-exp0-cpu
+#SBATCH --account=lp_verbekelab
+#SBATCH --clusters=mindwell
+#SBATCH --partition=batch_graniterapids
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=3
+# Use the partition memory-per-core default.
+#SBATCH --time=00:20:00
+#SBATCH --output="output_JEVPFN/general/0/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/general/0/logs/%x_%j.log"
+set -euo pipefail
+source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
+export JEVPFN_PHASE=0
+export JEVPFN_CONDA_ENV=JEVPFN
+export JEVPFN_STAGING_ROOT="${1:-${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}}"
+cd "${VSC_DATA:?}/JEVPFN"
+source scripts/slurm/_activate_env.sh
+jevpfn_failed=0
+python -m src.utils.check_libraries || jevpfn_failed=1
+python -m src.jev.question_audit --phase 0 || jevpfn_failed=1
+python -m src.cluster.preflight --verify-data --tests || jevpfn_failed=1
+echo 'CPU preflight finished; this is not acceptance of the full experiment 0.'
+exit "$jevpfn_failed"

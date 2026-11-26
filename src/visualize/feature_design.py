@@ -8,28 +8,28 @@ from src.visualize import layout, style
 
 
 def predictor_width_figure(plan, summary):
-    """Predictor input columns of every B1 and B2a arm, per dataset, on one log axis.
+    """Predictor input columns of every B1 and B2 arm, per dataset, on one log axis.
 
     Widths are identical across the decision models and across the three encoders, so one
     representative of each is drawn. The figure shows planned columns, not fitted rank.
     """
     order = layout.ordered(summary[["dataset_id", "dataset", "task_type"]])
     rows = plan[plan.model.eq("catboost")]
-    decision = rows[rows.phase.eq("experiment_1")]
+    decision = rows[rows.phase.eq("B1")]
     columns = ["dataset_id", "feature_set", "predictor_columns"]
     width = decision[columns].drop_duplicates().pivot(
         index="dataset_id", columns="feature_set", values="predictor_columns")
     width = width.reindex(columns=["non_text", "non_text_plus_joint", "non_text_plus_per_column", "non_text_plus_both"])
-    embedding = rows[rows.phase.eq("experiment_2") & rows.encoder.eq("e5_small_v2")
+    embedding = rows[rows.phase.eq("B2") & rows.encoder.eq("e5_small_v2")
                      & rows.feature_set.eq("non_text_plus_frozen_e5")]
-    combined = rows.loc[rows.phase.eq("experiment_2") & rows.feature_set.eq("non_text_plus_both_plus_frozen_e5"),
+    combined = rows.loc[rows.phase.eq("B2") & rows.feature_set.eq("non_text_plus_both_plus_frozen_e5"),
                         ["dataset_id", "predictor_columns"]].drop_duplicates().set_index("dataset_id").predictor_columns
     joint = embedding[embedding.pca_scope.eq("joint")].set_index("dataset_id").predictor_columns
     separate = embedding[embedding.pca_scope.eq("per_column")].set_index("dataset_id").predictor_columns
     fig, ax = plt.subplots(figsize=(style.WIDTH_FULL, 4.0))
     y = np.arange(len(order))
     ids = order.dataset_id
-    family = style.FAMILY_COLORS["experiment_2"]
+    family = style.FAMILY_COLORS["B2"]
     ax.scatter(joint.reindex(ids), y - 0.22, marker="|", s=36, color=family, zorder=4)
     ax.scatter(separate.reindex(ids), y, marker="s", s=16, color=family, zorder=3)
     ax.scatter(combined.reindex(ids), y + 0.22, marker="s", s=16, facecolors="none",
@@ -61,7 +61,7 @@ def predictor_width_figure(plan, summary):
     return (
         fig,
         "predictor_input_widths",
-        "Planned number of predictor input columns for each B1 (decision features) and B2a (frozen "
+        "Planned number of predictor input columns for each B1 (decision features) and B2 (frozen "
         "embedding) arm, per dataset. Symbols are staggered vertically to show equal widths. "
         "Joint, per-column and combined decision inputs have the same width on single-text-column "
         "datasets. Every arm includes one missing-text flag per text column. "
@@ -135,7 +135,7 @@ def input_design_figure():
         y -= 0.075 if "\n" not in body else 0.11
     ax.text(0, 0.465, "b  Predictor input for a row with T = 2 text columns (f features per request)",
             weight="bold", fontsize=8, va="top", transform=ax.transAxes)
-    frozen, probe, tar = style.FAMILY_COLORS["experiment_2"], style.PROBE_COLOR, style.TAR_COLOR
+    frozen, probe, tar = style.FAMILY_COLORS["B2"], style.PROBE_COLOR, style.TAR_COLOR
     base = [("non-text", 0.30, style.MISSING_COLOR), ("T flags", 0.06, faint)]
     arms = [
         ("No text (reference)", [("non-text columns", 0.30, style.MISSING_COLOR), ("T flags", 0.06, faint)], "B1"),
@@ -143,10 +143,10 @@ def input_design_figure():
         ("+ per-column", [*base, ("A · f", 0.08, per), ("B · f", 0.08, per)], "B1"),
         ("+ both", [*base, ("A · f", 0.08, per), ("B · f", 0.08, per), ("joint · f", 0.08, joint)], "B1"),
         ("+ both + E5 PCA", [*base, ("A · f", 0.08, per), ("B · f", 0.08, per), ("joint · f", 0.08, joint),
-                             ("E5 PCA 2 × 32", 0.13, frozen)], "B2a"),
-        ("+ frozen embedding", [*base, ("PCA of frozen E5 / Qwen vectors", 0.26, frozen)], "B2a"),
-        ("+ label-trained classifier", [*base, ("A · f", 0.08, probe), ("B · f", 0.08, probe)], "B2b"),
-        ("+ TAR embedding", [*base, ("PCA of label-tuned E5 vectors", 0.26, tar)], "B2b"),
+                             ("E5 PCA 2 × 32", 0.13, frozen)], "B2"),
+        ("+ frozen embedding", [*base, ("PCA of frozen E5 / Qwen vectors", 0.26, frozen)], "B2"),
+        ("+ label-trained classifier", [*base, ("A · f", 0.08, probe), ("B · f", 0.08, probe)], "B3"),
+        ("+ TAR embedding", [*base, ("PCA of label-tuned E5 vectors", 0.26, tar)], "B3"),
     ]
     for i, (name, blocks, study) in enumerate(arms):
         top = 0.415 - i * 0.052

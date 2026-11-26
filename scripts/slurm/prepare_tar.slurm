@@ -9,12 +9,12 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --time=24:00:00
 #SBATCH --array=0-4
-#SBATCH --output="output_JEVPFN/B/exp06_tar/logs/%x_%A_%a.log"
-#SBATCH --error="output_JEVPFN/B/exp06_tar/logs/%x_%A_%a.log"
+#SBATCH --output="output_JEVPFN/B/B3/logs/%x_%A_%a.log"
+#SBATCH --error="output_JEVPFN/B/B3/logs/%x_%A_%a.log"
 set -euo pipefail
 cd "${VSC_DATA:?}/JEVPFN"
 source scripts/storage_environment.sh
-export JEVPFN_PHASE=experiment_3
+export JEVPFN_PHASE=B3
 export JEVPFN_STORAGE_MODE=tar_preparation
 export JEVPFN_CONDA_ENV=e5_tar
 export JEVPFN_RUNTIME_PROFILE=blackwell-cu130

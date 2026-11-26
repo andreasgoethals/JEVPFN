@@ -1,9 +1,9 @@
-"""RQ2-E dataset-level moderators of the headroom-normalised gain; descriptive only.
+"""B4 dataset-level moderators of the headroom-normalised gain; descriptive only.
 
 Covariates are label-free dataset properties (size, text-field composition, text length,
 missing and repeated text, task type and number of classes) plus the predictor's own
 no-text headroom, 1 − baseline headline metric. Optional decision-output properties come
-from RQ1A compact comparison tables when present; otherwise they are reported as pending.
+from A1 compact comparison tables when present; otherwise they are reported as pending.
 
 ``moderator_associations`` computes, per predictor × representation, Spearman's rank
 correlation between per-dataset normalised gain (``aggregate.dataset_gains``) and each
@@ -12,10 +12,10 @@ equal weight. With about eighteen datasets these are associations, never causal 
 a basis for selecting a winning recipe.
 
 Optional model-level covariates (``model_covariates``: verified parameter count, architecture
-family and readout type from `config/02_feature_creation/model_properties.yaml`) describe the
+family and readout type from `config/general/2_feature_creation/model_properties.yaml`) describe the
 decision models rather than the datasets. ``model_level_associations`` relates them to each
 provider's equal-dataset mean gain across decision models, per predictor and decision feature
-set (``model_gain_table`` ranks the decision models by that mean). When Exp 2 compact
+set (``model_gain_table`` ranks the decision models by that mean). When A2 compact
 robustness summaries exist, ``model_robustness`` adds each model's replay noise and
 presentation sensitivity as further covariates; otherwise they are pending. Size, training
 data, readout and robustness are confounded across releases, so these too are descriptive.
@@ -163,7 +163,7 @@ def dataset_moderators(datasets=None, *, gains=None, decision_tables=None, cohor
         from src.data.selection import selected_entries
         from src.utils.config import load_yaml
 
-        entries = selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+        entries = selected_entries(load_catalog(), load_yaml("B1"))
         datasets = (load_dataset(e, allow_download=False) for e in entries)
     table = pd.DataFrame([dataset_covariates(d) for d in datasets])
     properties, status = decision_properties(decision_tables, cohort=cohort)
@@ -319,9 +319,9 @@ MODEL_GAIN_COLUMNS = [
 
 
 def model_robustness(effects=None):
-    """Per decision model, Exp 2 replay noise and presentation sensitivity, or pending.
+    """Per decision model, A2 replay noise and presentation sensitivity, or pending.
 
-    From the compact RQ1B summaries (``study_reports.robustness_tables``; validation pilots
+    From the compact A2 summaries (``study_reports.robustness_tables``; validation pilots
     excluded): ``replay_noise_tv`` is the equal-dataset mean total variation between unchanged
     repeats (``repeat_1``/``repeat_2``); ``sensitivity_excess_tv`` is the equal-dataset mean,
     over the controlled presentation variants, of their matched excess over replay noise.
@@ -336,7 +336,7 @@ def model_robustness(effects=None):
         except (OSError, ValueError, KeyError) as error:
             return pd.DataFrame(columns=columns), f"pending: {error}"
     if effects is None or effects.empty or not {"dataset", "provider", "variant"} <= set(effects):
-        return pd.DataFrame(columns=columns), "pending: no completed Exp 2 robustness summaries"
+        return pd.DataFrame(columns=columns), "pending: no completed A2 robustness summaries"
     repeats = effects[effects.variant.isin(["repeat_1", "repeat_2"])]
     noise = (repeats.groupby(["provider", "dataset"]).mean_tv.mean().groupby("provider").mean()
              .rename("replay_noise_tv"))
@@ -398,7 +398,7 @@ def model_level_associations(gains, covariates=None, *, robustness=None, n_boot=
 
     Per predictor × decision feature set, over ``model_gain_table`` (shared datasets only):
     Spearman rho of mean normalised gain with each numeric covariate (``log10_parameters``
-    and, when Exp 2 summaries exist, ``replay_noise_tv`` and ``sensitivity_excess_tv``), with
+    and, when A2 summaries exist, ``replay_noise_tv`` and ``sensitivity_excess_tv``), with
     a percentile bootstrap over decision models; and the mean gain per architecture family and
     readout type (``level``). Undersized or constant inputs are reported, not dropped. Size,
     data, readout and robustness are confounded across releases: descriptive only.

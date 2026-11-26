@@ -36,7 +36,7 @@ def grid():
 @pytest.fixture
 def campaign(isolated_output, monkeypatch):
     original = grid()
-    base = load_yaml("experiment_0/scheduling")
+    base = load_yaml("0/scheduling")
     frozen = {"frozen": True, "source_sha256": "frozen-source", "git_head": "frozen-commit"}
     legacy = {**base, "test_pool_limits": {**base["test_pool_limits"], **dict.fromkeys(SELF_HOSTED, 2)}}
     identity = digest(dict(frozen=frozen, runtime_pins={}, steps=original, settings=legacy))
@@ -259,10 +259,8 @@ def test_recovery_restages_a_retired_runtime_without_repeating_successful_infere
 
 
 @pytest.mark.parametrize("name", ["src/jev/self_hosted.py", "src/data/text_embeddings.py",
-                                  "config/general/2. feature_creation/embedding_models.yaml",
-                                  "config/general/3. experiment_0/self_hosted.yaml",
-                                  "config/2. feature_creation/embedding_models.yaml",
-                                  "config/3. experiment_0/self_hosted.yaml",
+                                  "config/general/2_feature_creation/embedding_models.yaml",
+                                  "config/general/0/self_hosted.yaml",
                                   "src/cluster/feature_campaign.py"])
 def test_explicit_review_cannot_override_extraction_science(tmp_path, name):
     old = {"files": {name: "a"}, "source_sha256": "old"}

@@ -31,7 +31,7 @@ VENDOR = Path(__file__).parent / "vendor"
 def upstream():
     """Check every copied byte before importing the isolated upstream namespace."""
     receipt = json.loads((VENDOR / "SOURCE.json").read_text())
-    if receipt["commit"] != load_yaml("experiment_3/tar")["upstream_commit"]:
+    if receipt["commit"] != load_yaml("B3")["upstream_commit"]:
         raise ValueError("TAR source pin differs from its approved configuration")
     for name, checksum in receipt["files"].items():
         if file_sha256(VENDOR / name) != checksum:
@@ -46,7 +46,7 @@ def upstream():
 
 
 def recipe(dataset, split, fold):
-    cfg = load_yaml("experiment_3/tar")
+    cfg = load_yaml("B3")
     upstream()
     train = split["folds"][fold]["train"]
     return {
@@ -63,6 +63,32 @@ def recipe(dataset, split, fold):
         "checkpoint": {k: encoder_config(cfg["base_encoder"])[k] for k in ("model", "revision")},
         "adapter_source": file_sha256(Path(__file__)),
     }
+
+
+def rekey_manifest(folder, old_adapter_source, *, apply=False):
+    """Re-key one TAR bundle whose recipe holds an earlier `adapter_source` (layout v4).
+
+    Only `recipe.adapter_source` and the manifest checksum change; the vectors, adapter and
+    file hashes are unchanged. The current value is this file's SHA-256 on this machine.
+    """
+    path = Path(folder) / "manifest.json"
+    body = json.loads(path.read_text())
+    if body["artifact_id"] != digest({k: v for k, v in body.items() if k != "artifact_id"}):
+        raise ValueError("TAR manifest checksum differs before re-keying")
+    current = file_sha256(Path(__file__))
+    before = body["recipe"]["adapter_source"]
+    if before not in {old_adapter_source, current}:
+        raise ValueError("TAR manifest holds an unknown adapter source; review before re-keying")
+    result = {"path": str(path), "old_adapter_source": before, "new_adapter_source": current,
+              "old_artifact_id": body["artifact_id"], "applied": False}
+    if before != current:
+        body["recipe"]["adapter_source"] = current
+        body["artifact_id"] = digest({k: v for k, v in body.items() if k != "artifact_id"})
+        result["new_artifact_id"] = body["artifact_id"]
+        if apply:
+            write_json(path, body)
+            result["applied"] = True
+    return result
 
 
 def directory(dataset_id, fold):
@@ -122,7 +148,7 @@ def check_adapter_replay(raw, texts, folder, token_lengths, encode):
 
 
 def prepare(dataset, fold, *, execute=False):
-    cfg = load_yaml("experiment_3/tar")
+    cfg = load_yaml("B3")
     if not execute or cfg["prepare_enabled"] is not True:
         raise RuntimeError("Explicit TAR preparation authorization/configuration is required")
     from src.cluster.freeze import check_if_present
@@ -190,7 +216,7 @@ def prepare(dataset, fold, *, execute=False):
             encoding[col] = time.perf_counter() - start
             positions = pd.Index(unique).get_indexer(texts[col])
             np.save(temporary / f"text_{number}.npy", vectors[positions], allow_pickle=False)
-        # A real 0B round trip proves the saved adapter reproduces its vectors.
+        # A real B0 round trip proves the saved adapter reproduces its vectors.
         from peft import PeftModel
         from transformers import AutoModel
         restored = PeftModel.from_pretrained(AutoModel.from_pretrained(str(checkpoint)), temporary / "adapter")
@@ -234,7 +260,7 @@ def pca_path(dataset_id):
 
 def prepare_pca(dataset, fold):
     from src.evaluation.design import pca_grid
-    split = shared_splits(dataset, seed=load_yaml("experiment_3/tar")["random_seed"], folds=5)
+    split = shared_splits(dataset, seed=load_yaml("B3")["random_seed"], folds=5)
     body = read_bundle(dataset, split, fold)
     vectors, groups = vector_frame(dataset, fold, split["folds"][fold]["train"])
     for scope, components in pca_grid():
@@ -244,11 +270,11 @@ def prepare_pca(dataset, fold):
 
 
 def validate_dataset(dataset):
-    """0B requires all outer adapters, their real runtime evidence and both PCA recipes."""
+    """B0 requires all outer adapters, their real runtime evidence and both PCA recipes."""
     from src.evaluation import pca_cache
     from src.evaluation.design import pca_grid
 
-    split = shared_splits(dataset, seed=load_yaml("experiment_3/tar")["random_seed"], folds=5)
+    split = shared_splits(dataset, seed=load_yaml("B3")["random_seed"], folds=5)
     artifacts, keys = [], []
     for fold in range(5):
         body = read_bundle(dataset, split, fold)

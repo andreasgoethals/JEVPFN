@@ -1,6 +1,6 @@
-"""0B behaviour expected once the open-weight campaign publishes its stores.
+"""B0 behaviour expected once the open-weight campaign publishes its stores.
 
-Synthetic stores and score tables exercise the real 0B gate and analysis code paths; they do
+Synthetic stores and score tables exercise the real B0 gate and analysis code paths; they do
 not establish checkpoint, GPU or real-provider behaviour.
 """
 
@@ -25,7 +25,7 @@ from src.utils.config import load_config
 from src.utils.serialization import canonical_json, digest
 from tests.test_benchmark_qualification import reports, write_approval  # noqa: F401 (fixture)
 
-# ------------------------------------------------------------- decision stores in 0B preflight
+# ------------------------------------------------------------- decision stores in B0 preflight
 
 
 def _sparse_dataset(rows=40):
@@ -173,7 +173,7 @@ def test_probability_columns_must_follow_the_ordered_class_or_level_schema(task,
         preflight.validate_decision_group(infinite, missing, width, labels)
 
 
-# ------------------------------------------------------------------- 0B acceptance evidence
+# ------------------------------------------------------------------- B0 acceptance evidence
 
 
 @pytest.mark.parametrize("fault", ["subsampled_profile", "partial_training_rows", "no_fixture_records",
@@ -196,7 +196,7 @@ def test_vacuous_or_row_capped_0b_evidence_is_rejected(tmp_path, reports, fault)
         bodies[-1].pop("split_id")
     else:
         bodies[0]["datasets"][0]["outer_folds"] = 4
-    with pytest.raises(ValueError, match="0B"):
+    with pytest.raises(ValueError, match="B0"):
         q.benchmark_evidence(write_approval(tmp_path, bodies), arm)
 
 
@@ -286,7 +286,7 @@ def test_b3_pilot_with_too_few_answered_rows_is_undefined_and_leaves_the_common_
     outcome = pd.DataFrame({"dataset_id": ids, "raw_gain": rng.normal(0, 0.01, 18)})
     from src.utils.config import load_yaml
 
-    sets = load_yaml("rq2/when_text_helps")["predict_in_advance"]["input_sets"]
+    sets = load_yaml("B4")["predict_in_advance"]["input_sets"]
     predictions, summary = group_b.lodo_input_sets(outcome, properties, input_sets=sets, n_shuffles=5)
     assert list(summary.input_set) == ["pre_extraction", "pilot", "post_extraction"]
     assert summary.datasets.eq(17).all() and summary.excluded_datasets.eq("d03").all()

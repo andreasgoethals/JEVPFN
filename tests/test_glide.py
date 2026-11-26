@@ -54,9 +54,9 @@ def test_roster_pins_native_runtime_and_effective_context_limit():
     assert config["input_modalities"] == ["text"]
     assert {"glide/prompt.py", "glide/model.py", "glide/recurrent.py", "LICENSE", "licenses/Qwen3.8-27B-LICENSE"} <= set(glide.asset_urls())
     assert all(glide.REVISION in url for url in glide.asset_urls().values())
-    assert load_yaml("experiment_0/self_hosted")["accepted_before_extraction_manifests"]["glide"].endswith("/before_extraction/accepted_glide.json")
-    assert "glide" in load_yaml("experiment_0/gpu_contracts")["providers"]
-    assert "glide" in load_yaml("experiment_1/main")["candidate_extractors"]
+    assert load_yaml("0/self_hosted")["accepted_before_extraction_manifests"]["glide"].endswith("/before_extraction/accepted_glide.json")
+    assert "glide" in load_yaml("0/gpu_contracts")["providers"]
+    assert "glide" in load_yaml("B1")["candidate_extractors"]
     assert batch_size_for("glide") == 2
 
 
@@ -82,7 +82,7 @@ def test_container_pins_do_not_mix_historical_tokenizer_requirements():
     script = (paths.REPO_ROOT / "scripts/build_decision_container.sh").read_text(encoding="utf-8")
     branch = script.split("elif provider in {'glide', 'mammoth', 'drex_max', 'knowline', 'sieve'}:")[1].split("elif provider in")[0]
     assert ".[dev,{extra}]" in branch and "token-audit" not in branch
-    audit = (paths.REPO_ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text(encoding="utf-8")
+    audit = (paths.REPO_ROOT / "scripts/slurm/0_tokens.slurm").read_text(encoding="utf-8")
     assert 'elif [[ "${2:-}" == glide ||' in audit
 
 

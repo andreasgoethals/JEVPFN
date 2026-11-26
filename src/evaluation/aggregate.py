@@ -26,7 +26,7 @@ DECISION_MODES = {
     "non_text_plus_joint": "joint",
     "non_text_plus_both": "both",
 }
-FAMILIES = {"experiment_1": "decision", "experiment_2": "embedding", "experiment_3": "tar"}
+FAMILIES = {"B1": "decision", "B2": "embedding", "B3": "tar"}
 MEDIAN = "median_over_decision_models"
 PER_MODEL = "per_decision_model"
 RECIPE = "recipe"
@@ -81,8 +81,8 @@ def dataset_gains(paired, *, eps=None, roster=None):
     if "inference_status" in data:
         # Post-selection exploratory combinations never enter a headline summary.
         data = data[data.inference_status.fillna("prespecified").eq("prespecified")]
-    decision = data.phase.eq("experiment_1") & data.feature_set.isin(DECISION_MODES) & data.provider.notna()
-    embedded = data.phase.isin(["experiment_2", "experiment_3"]) & data.encoder.notna()
+    decision = data.phase.eq("B1") & data.feature_set.isin(DECISION_MODES) & data.provider.notna()
+    embedded = data.phase.isin(["B2", "B3"]) & data.encoder.notna()
     data = data[decision | embedded]
     if data.empty:
         return pd.DataFrame(columns=DATASET_COLUMNS)

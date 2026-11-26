@@ -73,7 +73,7 @@ def artifact_coverage():
     from src.data.selection import selected_entries
     from src.evaluation.portable_features import notebook_inventory
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     rows = []
     for entry in selected_entries(load_catalog(), main):
         inventory = notebook_inventory(entry["id"])
@@ -112,9 +112,9 @@ def cross_system_contrasts(folds):
     counts = data.groupby("arm_id").value.count()
     data = data[data.arm_id.isin(counts[counts.eq(5)].index)]
     keys = ["dataset_id", "task_type", "split_id", "outer_fold", "metric"]
-    native = data[data.phase.eq("experiment_4") & data.feature_set.eq("original_features")]
-    other = data[(data.phase.eq("experiment_1") & data.feature_set.isin(DECISION_FEATURE_SETS))
-                 | data.phase.isin(["experiment_2", "experiment_3"])]
+    native = data[data.phase.eq("B6") & data.feature_set.eq("original_features")]
+    other = data[(data.phase.eq("B1") & data.feature_set.isin(DECISION_FEATURE_SETS))
+                 | data.phase.isin(["B2", "B3"])]
     if native.empty or other.empty:
         return pd.DataFrame()
     if native.duplicated(keys + ["model_id"]).any():
@@ -123,7 +123,7 @@ def cross_system_contrasts(folds):
         columns={"model_id": "reference_model", "checkpoint_id": "reference_checkpoint",
                  "value": "reference_value"}), on=keys, how="inner", validate="many_to_many")
     matched["difference"] = matched.value - matched.reference_value
-    matched["family"] = matched.phase.map({"experiment_1": "Decision", "experiment_2": "Embedding", "experiment_3": "TAR"})
+    matched["family"] = matched.phase.map({"B1": "Decision", "B2": "Embedding", "B3": "TAR"})
     matched.loc[matched.feature_set.eq("non_text"), "family"] = "Non-text"
     return matched
 
@@ -158,8 +158,8 @@ def predictor_evidence(*, cohort="open_weight"):
     from src.utils.serialization import digest
 
     current = evaluation_identity()
-    catalog = load_yaml("experiment_1/models")["models"]
-    folder = paths.phase_path("experiment_0", "manifests", "after_extraction")
+    catalog = load_yaml("B1/models")["models"]
+    folder = paths.phase_path("B0", "manifests")
     required = profile_plan(cohort=cohort)
     profiles = {}
     for path in folder.glob("profile_*.json"):
@@ -167,8 +167,8 @@ def predictor_evidence(*, cohort="open_weight"):
         if body.get("evaluation_identity") == current and body.get("status") == "full_fold_profile_passed":
             profiles[digest(body["arm"])] = body
     rows = []
-    for model in (*load_yaml("experiment_1/main")["candidate_models"],
-                  *load_yaml("experiment_4/native_text")["candidate_models"]):
+    for model in (*load_yaml("B1")["candidate_models"],
+                  *load_yaml("B6")["candidate_models"]):
         reports = []
         for filename in folder.glob(f"predictor_{model}_*.json"):
             body = json.loads(filename.read_text(encoding="utf-8"))
@@ -197,7 +197,7 @@ def predictor_evidence(*, cohort="open_weight"):
 
 
 def profile_evidence(predictors=None, profiles=None, plan=None, *, cohort="open_weight"):
-    """0B full-fold profiles per predictor and arm family: required versus passed.
+    """B0 full-fold profiles per predictor and arm family: required versus passed.
 
     A profile passes when a ``full_fold_profile_passed`` record for the current evaluation
     identity and the predictor's contract runtime exists locally. The Kumo override profile
@@ -212,7 +212,7 @@ def profile_evidence(predictors=None, profiles=None, plan=None, *, cohort="open_
     predictors = predictor_evidence(cohort=cohort) if predictors is None else predictors
     if profiles is None:
         current = evaluation_identity()
-        folder = paths.phase_path("experiment_0", "manifests", "after_extraction")
+        folder = paths.phase_path("B0", "manifests")
         profiles = {}
         for path in folder.glob("profile_*.json"):
             body = json.loads(path.read_text(encoding="utf-8"))
@@ -228,7 +228,7 @@ def profile_evidence(predictors=None, profiles=None, plan=None, *, cohort="open_
     for arm in plan:
         key = digest(arm)
         family = FEATURE_FAMILY.get(arm["feature_set"], arm["feature_set"])
-        if arm.get("phase") == "data_efficiency":
+        if arm.get("phase") == "B5":
             family = "training size"
         if key == override_key:
             family = "Kumo override"

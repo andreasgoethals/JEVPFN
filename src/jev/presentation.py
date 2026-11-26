@@ -111,7 +111,7 @@ def throughput_table(requests, tokens, cfg):
     rps = review["account_requests_per_second"]
     from src.utils.config import load_yaml
 
-    bound = load_yaml("experiment_0/jev_smoke")["documented_request_context_tokens"]
+    bound = load_yaml("0/jev_smoke")["documented_request_context_tokens"]
     return pd.DataFrame(
         [
             {

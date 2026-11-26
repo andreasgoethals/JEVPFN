@@ -38,18 +38,18 @@ def _arm(phase, feature_set, effect, **extra):
 
 
 def c1_arms():
-    arms = [_arm("experiment_1", "non_text", 0.0),
-            _arm("experiment_1", "non_text_plus_per_column", 0.030, provider="strands", view="probabilities"),
-            _arm("experiment_1", "non_text_plus_joint", 0.022, provider="strands", view="probabilities")]
+    arms = [_arm("B1", "non_text", 0.0),
+            _arm("B1", "non_text_plus_per_column", 0.030, provider="strands", view="probabilities"),
+            _arm("B1", "non_text_plus_joint", 0.022, provider="strands", view="probabilities")]
     path = {"state_end": 0.008, "question_end": 0.016, "answer": 0.026}
     for view, components in (("per_column", 32), ("joint", 64)):
         for position, base in path.items():
             for layer in (12, 24):
-                arms.append(_arm("representations", HIDDEN, base + (0.006 if layer == 24 else 0.0)
+                arms.append(_arm("C1", HIDDEN, base + (0.006 if layer == 24 else 0.0)
                                  + (0.004 if view == "per_column" else 0.0),
                                  pca_scope="per_column", pca_components=components, hidden_view=view,
                                  hidden_position=position, hidden_layer=layer))
-        arms.append(_arm("representations", PER_COLUMN_PLUS_HIDDEN if view == "per_column" else JOINT_PLUS_HIDDEN,
+        arms.append(_arm("C1", PER_COLUMN_PLUS_HIDDEN if view == "per_column" else JOINT_PLUS_HIDDEN,
                          0.036 if view == "per_column" else 0.030, provider="strands", view="probabilities",
                          pca_scope="per_column", pca_components=components, hidden_view=view,
                          hidden_position="answer", hidden_layer=24))
@@ -57,16 +57,16 @@ def c1_arms():
 
 
 def c2_arms():
-    arms = [_arm("experiment_1", "non_text", 0.0),
-            _arm("experiment_1", "non_text_plus_joint", 0.022, provider="strands", view="probabilities")]
+    arms = [_arm("B1", "non_text", 0.0),
+            _arm("B1", "non_text_plus_joint", 0.022, provider="strands", view="probabilities")]
     for cell, effect in (("head_only", 0.032), ("lora_only", 0.040), ("lora_head", 0.046)):
-        arms.append(_arm("rq3", ADAPTED, effect, adaptation_cell=cell))
-    arms += [_arm("experiment_3", "non_text_plus_tar", 0.050, encoder="e5_small_v2_tar", pca_scope="per_column",
+        arms.append(_arm("C2", ADAPTED, effect, adaptation_cell=cell))
+    arms += [_arm("B3", "non_text_plus_tar", 0.050, encoder="e5_small_v2_tar", pca_scope="per_column",
                   pca_components=32),
-             _arm("experiment_3", "non_text_plus_tar", 0.044, encoder="e5_small_v2_tar", pca_scope="joint",
+             _arm("B3", "non_text_plus_tar", 0.044, encoder="e5_small_v2_tar", pca_scope="joint",
                   pca_components=64)]
     for encoder, effect in (("e5_small_v2", 0.038), ("e5_large_v2", 0.041), ("qwen3_embedding_0_6b", 0.043)):
-        arms.append(_arm("experiment_3", SUPERVISED_PROBE, effect, encoder=encoder, probe_view="joint"))
+        arms.append(_arm("B3", SUPERVISED_PROBE, effect, encoder=encoder, probe_view="joint"))
     return arms
 
 

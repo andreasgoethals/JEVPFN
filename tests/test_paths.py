@@ -40,22 +40,22 @@ def test_on_cluster_output_splits_across_two_tiers(tmp_path, monkeypatch) -> Non
     assert paths.on_vsc() is True
     assert paths.outputs_dir() == tmp_path / "data" / paths.PROJECT_NAME / "output_JEVPFN"
     assert (
-        paths.results_dir(phase="experiment_1")
+        paths.results_dir(phase="B1")
         == tmp_path
         / "staging"
         / paths.PROJECT_NAME
         / "output_JEVPFN"
         / "B"
-        / "exp04_decision_features"
+        / "B1"
         / "results"
     )
     # Figures and complete reports can be large; only compact records belong on DATA.
-    assert paths.logs_dir("experiment_1").is_relative_to(tmp_path / "data")
-    assert paths.figures_dir("B/exp04_decision_features").is_relative_to(paths.REPO_ROOT)
-    assert paths.reports_dir("B/exp04_decision_features").is_relative_to(paths.REPO_ROOT)
+    assert paths.logs_dir("B1").is_relative_to(tmp_path / "data")
+    assert paths.figures_dir("B/B1").is_relative_to(paths.REPO_ROOT)
+    assert paths.reports_dir("B/B1").is_relative_to(paths.REPO_ROOT)
     assert paths.all_results_path().is_relative_to(paths.REPO_ROOT)
     assert paths.captions_path().is_relative_to(paths.REPO_ROOT)
-    assert paths.manifests_dir("experiment_1").is_relative_to(tmp_path / "data")
+    assert paths.manifests_dir("B1").is_relative_to(tmp_path / "data")
 
 
 @pytest.mark.real_repository_roots
@@ -85,30 +85,25 @@ def test_figures_dir_is_per_notebook() -> None:
     assert figures == root / "figures"  # ONE figures folder, one sub-folder per notebook.
     data = figures / "general" / "1_data_and_questions"
     assert paths.figures_dir("general/1_data_and_questions") == data
-    assert paths.figures_dir("00_data") == data  # The flat-layout ID stays an alias.
     assert paths.figures_dir("some_notebook") == data / "some_notebook"
     assert paths.captions_path() == figures / "CAPTIONS.md"
     assert paths.all_results_path() == root / "All_Results.md"
     assert paths.archive_dir() == root.parent / "archive"
-    assert paths.figures_dir(phase="experiment_1") == figures / "B" / "exp04_decision_features"
-    assert (
-        paths.figures_dir("experiment_1_models")
-        == figures / "B" / "exp04_decision_features" / "experiment_1_models"
-    )
-    assert paths.notebook_artifacts("B/exp04_decision_features", kind="logs") == (
-        root / "B" / "exp04_decision_features" / "logs" / "notebook")
-    assert paths.notebook_artifacts("exp04_decision_features", kind="logs") == (
-        paths.notebook_artifacts("B/exp04_decision_features", kind="logs"))
+    assert paths.figures_dir(phase="B1") == figures / "B" / "B1"
+    assert paths.figures_dir("B1/models") == figures / "B" / "B1" / "models"
+    assert paths.notebook_artifacts("B/B1", kind="logs") == root / "B" / "B1" / "logs" / "notebook"
+    assert paths.notebook_artifacts("B1", kind="logs") == paths.notebook_artifacts("B/B1", kind="logs")
 
 
 def test_phase_notebook_ids_keep_output_layout_and_cannot_escape():
     import pytest
 
-    assert paths.figures_dir("feature_creation/03_feature_creation") == paths.figures_dir(
-        "03_feature_creation"
-    )
-    assert paths.reports_dir("experiment_2/01_results").name == "_report.txt"
-    assert paths.notebook_phase("experiment_2/01_results") == "experiment_2"
+    assert paths.figures_dir("feature_creation/03_feature_creation").parts[-3:] == (
+        "general", "2_feature_creation", "03_feature_creation")
+    assert paths.reports_dir("B2/01_results").name == "_report.txt"
+    assert paths.notebook_phase("B2/01_results") == "B2"
+    with pytest.raises(ValueError):
+        paths.notebook_phase("experiment_2/01_results")  # Earlier phase IDs are not accepted.
     for name in ("../escape", "exploration/../escape", "/escape", "C:/escape", "exploration\\bad"):
         with pytest.raises(ValueError):
             paths.figures_dir(name)
@@ -122,24 +117,22 @@ def test_config_path_appends_the_suffix_once() -> None:
 def test_numbered_phases_keep_logical_config_ids_and_valid_folder_numbers(monkeypatch):
     import pytest
 
-    assert paths.phase_folder("question_preparation") == "00_data"
-    assert paths.phase_folder("synthesis") == "05_synthesis"
+    assert paths.phase_folder("question_preparation") == "general/1_data_and_questions"
+    assert paths.phase_folder("synthesis") == "general/4_synthesis"
     for retired in ("experiment_5", "experiment_6"):
         with pytest.raises(ValueError, match="Unknown research phase"):
             paths.phase_folder(retired)
-    assert (
-        paths.notebook_phase("1. question_preparation/01_prepare_questions")
-        == "question_preparation"
-    )
+    assert paths.notebook_phase("question_preparation/01_prepare_questions") == "question_preparation"
     assert paths.config_path("question_preparation") == paths.config_path(
-        "1. question_preparation/question_preparation"
-    )
-    assert paths.config_path("experiment_1/main") == paths.config_path("4. experiment_1/main")
+        "question_preparation/question_preparation")
     assert paths.config_path("audit").is_file()
-    monkeypatch.setenv("JEVPFN_PHASE", "3. experiment_0")
-    assert paths.phase_name() == "experiment_0"
-    with pytest.raises(ValueError, match="Incorrect phase"):
-        paths.phase_name("0. experiment_0")
+    monkeypatch.setenv("JEVPFN_PHASE", "0")
+    assert paths.phase_name() == "0"
+    monkeypatch.setenv("JEVPFN_PHASE", "general/0")
+    assert paths.phase_name() == "0"
+    for old in ("3. experiment_0", "experiment_0"):
+        with pytest.raises(ValueError, match="Unknown research phase"):
+            paths.phase_name(old)
 
 
 def test_data_search_paths_look_in_the_repo_first(tmp_path, monkeypatch) -> None:
@@ -197,17 +190,18 @@ def test_touch_tree_refreshes_access_times(tmp_path) -> None:
 
 
 def test_phases_separate_large_results_and_small_logs(isolated_output):
-    assert paths.results_dir(phase="experiment_1").parts[-3:] == ("B", "exp04_decision_features", "results")
-    assert "staging" in str(paths.results_dir(phase="experiment_1"))
-    assert "vsc_data" in str(paths.logs_dir("experiment_0"))
-    assert paths.figures_dir("03_feature_creation").parts[-4:] == (
+    assert paths.results_dir(phase="B1").parts[-3:] == ("B", "B1", "results")
+    assert "staging" in str(paths.results_dir(phase="B1"))
+    assert "vsc_data" in str(paths.logs_dir("0"))
+    assert paths.figures_dir("feature_creation/03_feature_creation").parts[-4:] == (
         "figures",
         "general",
         "2_feature_creation",
         "03_feature_creation",
     )
-    assert paths.reports_dir("01_data_exploration").parts[-5:] == (
-        "00_data",
+    assert paths.reports_dir("01_data_exploration").parts[-6:] == (
+        "general",
+        "1_data_and_questions",
         "results",
         "notebook",
         "01_data_exploration",
@@ -219,7 +213,7 @@ def test_unapproved_experiment_numbers_are_rejected():
     import pytest
 
     with pytest.raises(ValueError):
-        paths.notebook_phase("experiment_12_comparison")
+        paths.notebook_phase("experiment_12/comparison")
     with pytest.raises(ValueError):
         paths.results_dir(phase="experiment_12")
     with pytest.raises(ValueError):
@@ -235,7 +229,7 @@ def test_existing_project_folder_is_not_inserted_twice(tmp_path, monkeypatch):
         == tmp_path / "project" / "JEVPFN" / "data" / "decision_inputs" / "sample.sqlite3"
     )
     assert paths.token_audit_dir().is_relative_to(tmp_path / "project" / "JEVPFN" / "output_JEVPFN")
-    assert paths.logs_dir("experiment_0").is_relative_to(
+    assert paths.logs_dir("0").is_relative_to(
         tmp_path / "personal" / "JEVPFN" / "output_JEVPFN"
     )
 
@@ -256,7 +250,7 @@ def test_windows_extended_alias_preserves_storage_boundaries(isolated_output):
 
     if os.name != "nt":
         pytest.skip("Windows extended path aliases require the Windows filesystem")
-    target = paths.results_dir("evaluation", "dataset.sqlite3", phase="experiment_1")
+    target = paths.results_dir("evaluation", "dataset.sqlite3", phase="B1")
     extended = Path("\\\\?\\" + str(target))
     assert paths.require_project_output(extended) == target.resolve()
     # Alias normalization must not allow personal DATA or a sibling of PROJECT.
@@ -272,12 +266,12 @@ def test_non_experiment_outputs_never_create_output_phase_folders(isolated_outpu
     # Preparation folders get no report index; experiment folders index the one report.
     assert paths.report_index_path("exploration") is None
     assert paths.report_index_path("feature_creation") is None
-    assert paths.report_index_path("experiment_0") == (
-        paths.notebook_outputs_dir() / "01_exp0a" / "manifests" / "reports.json")
-    assert paths.report_index_path("03_exp0b") == (
-        paths.notebook_outputs_dir() / "03_exp0b" / "manifests" / "reports.json")
+    assert paths.report_index_path("0") == (
+        paths.notebook_outputs_dir() / "general/0" / "manifests" / "reports.json")
+    assert paths.report_index_path("B/B0") == (
+        paths.notebook_outputs_dir() / "B/B0" / "manifests" / "reports.json")
     assert (
-        paths.logs_dir("feature_creation") == paths.outputs_dir() / "02_feature_creation" / "logs"
+        paths.logs_dir("feature_creation") == paths.outputs_dir() / "general/2_feature_creation" / "logs"
     )
 
 
@@ -293,6 +287,6 @@ def test_project_root_aliases_and_explicit_native_working_set(tmp_path, monkeypa
 
 
 def test_direct_research_results_do_not_repeat_the_research_folder():
-    for group, folder in (("rq1", "A/exp01_outputs"), ("rq2", "B/exp08_when_text_helps"),
-                          ("rq3", "C/exp11_adaptation")):
+    for group, folder in (("A1", "A/A1"), ("B4", "B/B4"),
+                          ("C2", "C/C2")):
         assert paths.result_relative(group) == Path(folder) / "results"

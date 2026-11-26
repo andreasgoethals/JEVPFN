@@ -307,7 +307,7 @@ class SelfHostedClient:
 
 
 def batch_size_for(provider):
-    cfg = load_yaml("experiment_0/self_hosted")
+    cfg = load_yaml("0/self_hosted")
     size = cfg.get("provider_batch_sizes", {}).get(provider, cfg["batch_size"])
     if type(size) is not int or not 1 <= size <= 8:
         raise ValueError("Bounded inference batch size must be between 1 and 8")
@@ -458,13 +458,13 @@ def locked_datasets(items, provider, *, timeout=3600, sleep=time.sleep):
 def token_evidence(provider, counter):
     if counter.limit != load_yaml("extractors")["candidates"][provider]["context_tokens"]:
         raise ValueError("Configured context window differs from the pinned tokenizer")
-    path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
+    path = paths.manifests_dir("0") / "before_extraction" / "token_audit.json"
     try:
         combined = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise ValueError(
             f"Exact token audit report is missing: {path}. "
-            "From the VSC checkout, run sbatch scripts/slurm/experiment_0_tokens.slurm "
+            "From the VSC checkout, run sbatch scripts/slurm/0_tokens.slurm "
             "and wait for COMPLETED 0:0 before retrying GPU inference. "
             "The CPU audit reuses matching counts still on PROJECT, or recounts if absent. "
             "Do not rebuild the container or bypass this check."
@@ -491,7 +491,7 @@ def token_evidence(provider, counter):
     if not database.is_file():
         raise ValueError(
             "Detailed exact counts are missing from PROJECT. Run "
-            "sbatch scripts/slurm/experiment_0_tokens.slurm and wait for COMPLETED 0:0."
+            "sbatch scripts/slurm/0_tokens.slurm and wait for COMPLETED 0:0."
         )
     with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         saved = db.execute("SELECT recipe_json FROM identity WHERE id=1").fetchone()
@@ -534,7 +534,7 @@ def pilot_numbers(source, counts, dataset_id):
 def run(provider, *, execute=False, full=False, continue_on_error=False, retry_failed=False, dataset_id=None):
     if dataset_id is not None and not full:
         raise ValueError("Dataset partitioning is for accepted full extraction; pilots cover all datasets")
-    cfg = load_yaml("experiment_0/self_hosted")
+    cfg = load_yaml("0/self_hosted")
     if not execute or cfg["enabled"] is not True:
         raise RuntimeError("GPU pilot is disabled; explicitly enable its config and pass --execute")
     if provider not in cfg["providers"]:
@@ -547,7 +547,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
     )
     if full and (cfg["full_feature_creation_enabled"] is not True or not accepted_file):
         raise RuntimeError(
-            "Full extraction requires reviewed Experiment 0A acceptance and its own enable switch"
+            "Full extraction requires reviewed Experiment 0 acceptance and its own enable switch"
         )
     inference_environment()  # Must precede the first Transformers/HF import in this process.
     counter = ExactCounter(provider)
@@ -585,7 +585,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
                 "token_audit_id": evidence["audit_id"],
             },
         )
-    phase = "feature_creation" if full else "experiment_0"
+    phase = "feature_creation" if full else "0"
     run_id = uuid4().hex
     from src.utils.timing import TimingJournal
 
@@ -609,7 +609,7 @@ def run(provider, *, execute=False, full=False, continue_on_error=False, retry_f
         "load_seconds": client.load_seconds,
         "datasets": [],
         "status": "running",
-        "full_experiment_0_passed": False,
+        "full_qualification_passed": False,
     }
     from src.cluster.evidence import current_identity
 
@@ -748,7 +748,7 @@ def main():
     args = parser.parse_args()
     if not args.execute:
         print(
-            "Prepared GPU pilot. Stage weights, run exact tokens, enable experiment_0/self_hosted, then submit the pilot Slurm job. No inference performed."
+            "Prepared GPU pilot. Stage weights, run exact tokens, enable 0/self_hosted, then submit the pilot Slurm job. No inference performed."
         )
         return 0
     report = run(

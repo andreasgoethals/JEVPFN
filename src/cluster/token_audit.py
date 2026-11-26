@@ -1,4 +1,4 @@
-"""Experiment 0A: exact, resumable CPU token counting over every selected prepared input.
+"""Experiment 0: exact, resumable CPU token counting over every selected prepared input.
 
 python -m src.cluster.token_audit --stage-tokenizers  # small public files, then count
 python -m src.cluster.token_audit                     # offline; resume saved counts
@@ -86,7 +86,7 @@ def saved_exact_token_tables():
     """Notebook view of verified saved counts; no tokenizer dependency or recounting."""
     import pandas as pd
 
-    path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
+    path = paths.manifests_dir("0") / "before_extraction" / "token_audit.json"
     if not path.is_file():
         return {
             "status": "not_counted",
@@ -205,7 +205,7 @@ def audit_provider(
         destination = shard_path(original, *shard)
     destination.parent.mkdir(parents=True, exist_ok=True)
     log = (
-        paths.logs_dir("experiment_0")
+        paths.logs_dir("0")
         / "before_extraction"
         / (
             f"tokens_{provider}_{audit_id[:12]}"
@@ -402,7 +402,7 @@ def audit_provider(
         "overflow_source_rows": sum(s["overflow_source_rows"] for s in summaries),
     }
     write_json(
-        paths.manifests_dir("experiment_0")
+        paths.manifests_dir("0")
         / "before_extraction"
         / f"tokens_{provider}_{audit_id[:12]}.json",
         report,
@@ -455,7 +455,7 @@ def check_tokenizers(providers):
 
 def save_reports(reports):
     """Publish completed providers even if a different worker subsequently fails."""
-    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
+    report_path = paths.manifests_dir("0") / "before_extraction" / "token_audit.json"
     # Atomic replacement prevents torn JSON; the lock also prevents lost updates.
     with file_lock(report_path.with_suffix(".lock"), timeout=60):
         retained = {}
@@ -469,7 +469,7 @@ def save_reports(reports):
             report_path,
             {
                 "created_utc": datetime.now(UTC).isoformat(),
-                "stage": "experiment_0_before_extraction",
+                "stage": "0_before_extraction",
                 "self_hosted": list(retained.values()),
                 "hosted_unverified": HOSTED_UNAVAILABLE,
                 "all_selected_models_verified": False,
@@ -583,7 +583,7 @@ def _count_selected(providers):
                 print(f"Tokenizer worker failed: {failure}", flush=True)
     if failures:
         write_json(
-            paths.manifests_dir("experiment_0")
+            paths.manifests_dir("0")
             / "before_extraction"
             / f"token_audit_failure_{uuid4().hex}.json",
             {

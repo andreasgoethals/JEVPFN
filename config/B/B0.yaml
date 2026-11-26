@@ -1,0 +1,29 @@
+# B0: Group B qualification (formerly the Group B part of B0), after feature creation and
+# before any B1-B6 fit: predictor contracts, full-fold profiles, resume and publication,
+# B4/B5 profiles and the Kumo width check. Its preflight is `0/debug` stage `B0`.
+phase: B0
+status: local_contracts_plus_pending_real_gates
+required_local_tests:
+- tests/test_comparison_report.py
+- tests/test_research_questions.py
+- tests/test_geometry.py
+- tests/test_downstream_studies.py
+- tests/test_feature_selection.py
+- tests/test_benchmark_qualification.py
+checks:
+- training_only_pca_and_thresholds
+- tar_outer_fold_identity
+- shared_baseline_and_splits
+- training_defined_subgroups
+- full_fold_profiles_for_each_task_and_largest_class_vocabulary
+- kumo_max_columns_override_b200_profile
+- both_supervised_probe_views_every_encoder_and_outer_fold
+- real_dropped_field_and_size_draw_profiles
+regression_feature_checks:
+- nine_probability_order
+- primary_probability_view_identity
+- all_missing_block
+- distinct_record_identity
+- legacy_mean_cannot_complete_primary_probability_plan
+- largest_regression_width_profile
+scientific_execution_enabled: false

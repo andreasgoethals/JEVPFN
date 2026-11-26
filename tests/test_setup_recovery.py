@@ -22,7 +22,7 @@ def scenario(tmp_path, monkeypatch):
         "--parsable",
         "--clusters=mindwell",
         "--account=lp_verbekelab",
-        "scripts/slurm/experiment_0_storage_gpfs.slurm",
+        "scripts/slurm/0_storage_gpfs.slurm",
         "liquid",
     ]
     report = {

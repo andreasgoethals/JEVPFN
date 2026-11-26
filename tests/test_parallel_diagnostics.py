@@ -11,7 +11,7 @@ from src.utils.config import load_yaml
 
 def test_all_provider_graph_finishes_independent_branches_after_multiple_failures():
     steps = setup_extractors.plan(list(SELF_HOSTED))
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     jobs, states = {}, {}
     failures = {"liquid_stage", "sii_build", "cloudflare_contracts"}
 
@@ -47,7 +47,7 @@ def test_long_cpu_audits_do_not_starve_ready_gpu_or_builds():
     steps += [dict(name="ready_contracts", dependencies=[], cluster="mindwell"),
               dict(name="ready_build", dependencies=[], cluster="wice")]
     submitted = []
-    job_graph.advance(steps, settings=load_yaml("experiment_0/scheduling"), state=lambda *a, **k: None,
+    job_graph.advance(steps, settings=load_yaml("0/scheduling"), state=lambda *a, **k: None,
                       submit=lambda s: submitted.append(s["name"]), save=lambda: None)
     assert submitted == ["ready_contracts", "ready_build"]
 
@@ -55,7 +55,7 @@ def test_long_cpu_audits_do_not_starve_ready_gpu_or_builds():
 @pytest.mark.parametrize("bad", ["unknown", "cycle", "duplicate", "limit"])
 def test_invalid_graph_rejected_before_accounting_or_submitting(bad):
     steps = [dict(name="a", dependencies=[]), dict(name="b", dependencies=["a"])]
-    cfg = deepcopy(load_yaml("experiment_0/scheduling"))
+    cfg = deepcopy(load_yaml("0/scheduling"))
     if bad == "unknown":
         steps[0]["dependencies"] = ["absent"]
     elif bad == "cycle":

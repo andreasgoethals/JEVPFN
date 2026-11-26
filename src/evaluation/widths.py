@@ -2,7 +2,7 @@
 
 Kumo's default recipe keeps 500 columns per estimator. Since 23 November 2026 (owner
 approval) wider Kumo arms widen that recipe limit to their full width instead of being
-excluded (`KumoBackend`); B200 memory and time are a 0B full-fold profile check.
+excluded (`KumoBackend`); B200 memory and time are a B0 full-fold profile check.
 """
 
 from src.evaluation.features import (
@@ -97,7 +97,7 @@ def pca_width_table():
     from src.evaluation.design import pca_grid
     from src.utils.config import load_yaml
 
-    cfg, semantics = load_yaml("experiment_1/main"), load_yaml("dataset_semantics")["datasets"]
+    cfg, semantics = load_yaml("B1"), load_yaml("dataset_semantics")["datasets"]
     rows = []
     for entry in selected_entries(load_catalog(), cfg):
         stats, task = entry["paper_summary"], semantics[entry["id"]]

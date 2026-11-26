@@ -144,8 +144,8 @@ PREDICTOR_LABELS = {"catboost": "CatBoost", "tabpfn_3_5": "TabPFN-3.5", "tabicl_
                     "tabstar": "TabSTAR v1.1", "contexttab": "ConTextTab", "ag_mm": "AG-MM"}
 NATIVE_COLORS = {"tabstar": "#473B78", "contexttab": "#26736C", "ag_mm": "#9B6034"}
 NATIVE_MARKERS = {"tabstar": "o", "contexttab": "s", "ag_mm": "^"}
-FAMILY_COLORS = dict(zip(("experiment_1", "experiment_2", "experiment_4"), METHOD_COLORS))
-FAMILY_COLORS["experiment_3"] = "#9467BD"
+FAMILY_COLORS = dict(zip(("B1", "B2", "B6"), METHOD_COLORS))
+FAMILY_COLORS["B3"] = "#9467BD"
 EMBEDDING_COLORS = {"e5_small_v2_tar": "#9467BD", "e5_small_v2": "#A64B72", "e5_large_v2": "#4E79A7",
                     "qwen3_embedding_0_6b": "#558B2F"}
 EFFECT_CMAP = "BrBG"  # Positive effect means improvement in the explicitly named contrast.
@@ -153,7 +153,7 @@ EFFECT_CMAP = "BrBG"  # Positive effect means improvement in the explicitly name
 # representation (decision view, encoder, label-trained route, native system).
 PREDICTOR_MARKERS = dict(zip(MAIN_PREDICTORS, ("o", "s", "D", "^", "v", "P", "X")))
 PREDICTOR_INK = "#3D4248"
-PROBE_COLOR = "#D6604D"  # The label-trained classifier on E5-small (B2b, B4).
+PROBE_COLOR = "#D6604D"  # The label-trained classifier on E5-small (B3, B5).
 TAR_COLOR = EMBEDDING_COLORS["e5_small_v2_tar"]
 NON_TEXT_COLOR = "#8A8F96"  # The same predictor without text: the reference of every gain.
 DECISION_POOL_COLOR = "#B4BAC1"  # One grey dot per decision model; never a provider colour.
@@ -166,7 +166,7 @@ TASK_FAMILIES = ("classification", "regression")
 TASK_FAMILY_LABELS = {"classification": "Classification (ΔAUC, 9 datasets)",
                       "regression": "Regression (ΔR², 9 datasets)"}
 EXCLUDED_HATCH = "////"  # Cells excluded by design (not missing results).
-# Group B: decision both + E5-small PCA32 (B2a), and label-free text-column field types (B3).
+# Group B: decision both + E5-small PCA32 (B2), and label-free text-column field types (B4).
 DECISION_EMBEDDING_COLOR = "#0B4F2A"
 FIELD_TYPE_COLORS = {"numeric_text": "#8C6D31", "categorical": "#2166AC",
                      "identifier_or_code": "#7C858E", "short_text": "#C1447E",
@@ -216,7 +216,7 @@ DECISION_SHORT = {
 EVIDENCE_MARKS = {"observed": "#2E7D4F", "failed": "#B03A2E", "unknown": "#FFFFFF",
                   "not_applicable": "#E6E9EC", "review": "#D8A23A"}
 AGREEMENT_DIVERGING = "RdBu"  # Rank agreement in [-1, 1]; 0 is white.
-# Exp 8 row-level views: benefit is centred at zero (EFFECT_CMAP); sparse cells are masked.
+# B4 row-level views: benefit is centred at zero (EFFECT_CMAP); sparse cells are masked.
 DATA_MAP_MIN_ROWS = 5
 DATA_MAP_PANELS = (3, 3)  # Datasets per page (rows, columns) at full width.
 POST_TREATMENT_COLOR = "#8A8F96"  # Prediction-shift cohorts: descriptive, post-treatment.

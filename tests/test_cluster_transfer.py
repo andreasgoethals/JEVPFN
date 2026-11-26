@@ -20,7 +20,7 @@ def test_project_and_data_roundtrip(tmp_path, monkeypatch):
     log = paths.logs_dir("feature_creation") / "run.log"
     log.parent.mkdir(parents=True)
     log.write_text("finished")
-    prediction = paths.results_dir("experiment_1") / "predictions.parquet"
+    prediction = paths.results_dir("B1") / "predictions.parquet"
     prediction.parent.mkdir(parents=True)
     prediction.write_bytes(b"synthetic result")
     bundle = export_bundle()
@@ -41,7 +41,7 @@ def test_project_and_data_roundtrip(tmp_path, monkeypatch):
     assert local_log.read_text() == "local log must survive"
     assert len(list(local_log.parent.glob("run__vsc_*.log"))) == 1
     assert (
-        paths.results_dir("experiment_1") / prediction.name
+        paths.results_dir("B1") / prediction.name
     ).read_bytes() == prediction.read_bytes()
     again = import_bundle(bundle)
     assert again["caches"][0]["responses_added"] == 0
@@ -55,7 +55,7 @@ def test_compact_backup_omits_only_rebuildable_counts_and_keeps_responses(tmp_pa
     counts.parent.mkdir(parents=True)
     # Not opened as SQLite when explicitly omitted.
     counts.write_bytes(b"rebuildable token database")
-    evidence = paths.manifests_dir("experiment_0") / "before_extraction/tokens_liquid.json"
+    evidence = paths.manifests_dir("0") / "before_extraction/tokens_liquid.json"
     evidence.parent.mkdir(parents=True)
     evidence.write_text('{"status":"token evidence"}')
     with zipfile.ZipFile(export_bundle(include_token_counts=False)) as archive:
@@ -92,7 +92,7 @@ def test_bad_bundle_never_writes_research_files(tmp_path, monkeypatch, path, bod
         archive.writestr("files/file", body)
     with pytest.raises(ValueError):
         import_bundle(bundle)
-    assert not paths.logs_dir("experiment_0").exists()
+    assert not paths.logs_dir("0").exists()
 
 
 def test_import_not_allowed_on_vsc(isolated_output, tmp_path):
@@ -107,7 +107,7 @@ def test_remote_freeze_is_history_and_cannot_activate_or_replace_local_freeze(
     import hashlib
 
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
-    active = paths.manifests_dir("experiment_0") / "frozen_revision.json"
+    active = paths.manifests_dir("0") / "frozen_revision.json"
     if local_is_frozen:
         active.parent.mkdir(parents=True)
         active.write_text('local frozen stage', encoding="utf-8")

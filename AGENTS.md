@@ -8,7 +8,7 @@ Start with the [README](README.md) and [study configuration](config/). When work
   Later read-only/no-publication instructions take precedence. Publish only relevant
   changes; do not change branches, remotes or history without explicit instruction.
 - The authorized campaign includes CPU-container cutover, verified output reset, fresh
-  local/VSC 0A, review/acceptance and open-weight/encoder feature creation. The CPU and
+  local/VSC Experiment 0 (then called 0A), review/acceptance and open-weight/encoder feature creation. The CPU and
   GPFS migrations passed; old DATA runtime and Lustre PROJECT copies were retired.
 - Complete models may be downloaded as verified snapshots and merged locally, preserving
   existing Jev responses and the durable VSC copy. Partial models do not count as complete.
@@ -16,9 +16,9 @@ Start with the [README](README.md) and [study configuration](config/). When work
   under the cumulative USD 5.50 ceiling and existing dataset allocations. Preserve all
   historical charges/reservations. No top-up or larger budget is approved. Test credit
   exhaustion and shared rate backoff before changing dispatch behavior.
-- On 12 November, the owner authorized independent 0B predictor contracts and TAR
+- On 12 November, the owner authorized independent B0 (then part of 0B) predictor contracts and TAR
   preparation at a safe handover, alongside recovery of remaining extraction. Full
-  benchmark execution still requires separate authorization and reviewed 0B. Cleanup does not
+  benchmark execution still requires separate authorization and reviewed B0. Cleanup does not
   authorize jobs or paid calls. Access alone does not authorize cancellation or migration.
 - Existing environment-setup authorization persists within JEVPFN. Verify the actual
   interpreter; never change another project's jobs, files or shared environment.
@@ -26,11 +26,11 @@ Start with the [README](README.md) and [study configuration](config/). When work
 
 ## Scientific constraints
 
-- The approved scope is RQ1A outputs/context, RQ1B controlled robustness, RQ1C geometry,
-  RQ2 predictive utility (historical
-  Experiments 1–4) and RQ3 Strands adaptation, with general preparation and 0A/0B.
-  Production extraction requires a signed native 0A review for each added provider.
-  Compute full-store RQ1A reports on native Mindwell CPU and render their compact tables locally.
+- The approved scope is A1 outputs/context, A2 controlled robustness, A3 geometry, B1–B6
+  predictive utility and C1–C2 Strands, with general preparation and the qualification gates
+  0 (before feature creation), A0, B0 and C0 (each before its group).
+  Production extraction requires a signed native Experiment 0 review for each added provider.
+  Compute full-store A1 reports on native Mindwell CPU and render their compact tables locally.
   The 20 November Strands 2B adaptation design is approved. C0 qualifies the pinned Strands v1 training recipes on B200. Production C2 requires reviewed C0 evidence. Do not add grouped sensitivity,
   lexical baselines or selected-winner combinations. Microsoft remains excluded.
 - Decision requests are deterministic and label-free: no generated questions, non-text
@@ -115,17 +115,21 @@ Retirement requires consumer checks, verified publication/recovery and scoped au
 Preserve resumable failures, referenced images and other projects. Check byte/file quotas;
 never wipe shared scratch. Historical retention exceptions are documented in the VSC runbook.
 
-Reusable Python belongs in `src/`. `config/structure.yaml` is the one layout registry (v3,
-owner-approved 23 November 2026). General folders (`00_data` … `05_synthesis`) sit at the top of
-`config/` and `output_JEVPFN/`; experiments sit in letter groups (`A/exp01_outputs` …,
-`B/exp04_decision_features` … `B/exp09_data_efficiency`, `C/exp10_representations`,
-`C/exp11_adaptation`), with configs flat in `config/<group>/`. Notebooks live only in
-`notebooks/{general,A,B,C,paper}/` as declared there: one notebook per experiment with its
-statistics inside, one `<letter>_synthesis` per group, and in `general/` data and questions,
-feature creation, 0A+0B qualification, study audit and synthesis. Add folders and notebooks only
-through the registry, and record paper placement under its `paper:` mapping, never in folder names. Internal phase IDs (`experiment_0`…`4`, `rq1`…`rq3`, …)
-remain hash/recipe/receipt keys and config aliases; never rename them. Move existing output trees only
-with `src.utils.layout_migration` at a verified idle handover.
+Reusable Python belongs in `src/`. `config/structure.yaml` is the one layout registry (v4,
+owner-approved 26 November 2026). Every experiment and gate has exactly ONE name, used literally
+as its phase ID, config file, output folder and notebook (`B3`: `config/B/B3.yaml`,
+`output_JEVPFN/B/B3/`, `notebooks/B/B3.ipynb`); the owner authorized renaming the earlier phase
+IDs. Four top-level groups in study order: `general` (`0`, `1_data_and_questions`,
+`2_feature_creation`, `3_study_audit`, `4_synthesis`), `A` (A0–A3), `B` (B0–B6) and `C` (C0–C2),
+each letter group with one `<letter>_synthesis`. The gates are 0 (before feature creation),
+A0, B0 and C0; 0B no longer exists. Notebooks live only in `notebooks/{general,A,B,C,paper}/`:
+one per experiment or gate with its statistics inside. General stages keep descriptive phase IDs and a config folder
+`config/general/<folder>/`; an experiment has one config file whose `sections:` hold further
+named configurations (`B1/models`). Earlier names live only in the checksummed
+`config/layout_aliases.yaml`, consulted for recorded paths, migration and re-keying; never
+reintroduce them elsewhere or edit an alias version. Add folders and notebooks only through the
+registry, and record paper placement under its `paper:` mapping, never in folder names. Move
+existing output trees only with `src.utils.layout_migration` at a verified idle handover.
 Do not create empty phase folders or duplicate question files. Permanent questions and
 response/features use per-dataset SQLite stores. PowerShell must work on Windows
 PowerShell 5.1; Bash/Slurm files use LF. Editable text is UTF-8.

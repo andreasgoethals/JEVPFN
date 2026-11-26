@@ -89,10 +89,10 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder, encoder_id="e5_s
     cfg = embeddings.encoder_config(encoder_id)
     run_id = uuid4().hex
     manifest = (
-        paths.manifests_dir("experiment_0") / "before_extraction" / "embeddings" / f"{run_id}.json"
+        paths.manifests_dir("0") / "before_extraction" / "embeddings" / f"{run_id}.json"
     )
     destination = (
-        paths.results_dir("embedding_contracts", phase="experiment_0") / run_id / "EXP0_E5.sqlite3"
+        paths.results_dir("embedding_contracts", phase="0") / run_id / "EXP0_E5.sqlite3"
     )
     report = {
         "status": "running",
@@ -109,7 +109,7 @@ def run(*, execute=False, encoder_factory=embeddings.E5Encoder, encoder_id="e5_s
 
     report["validation_identity"] = current_identity()
     report["git_head"] = source_snapshot()["git_head"]
-    log = paths.logs_dir("experiment_0") / "embeddings.log"
+    log = paths.logs_dir("0") / "embeddings.log"
     write_json(manifest, report)
     append_event(log, "embedding_contract_started", run_id=run_id)
     encoder = None

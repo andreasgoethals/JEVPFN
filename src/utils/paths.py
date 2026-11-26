@@ -139,31 +139,16 @@ def _under(root: Path, *parts: str) -> Path:
 
 
 OUTPUT_DIR_NAME = "output_JEVPFN"
-#: Internal phase identities, unchanged by the 18-11-2026 layout (hash/recipe/receipt keys).
+#: Internal phase identities (config/structure.yaml v4): one name per experiment.
 PHASES = structure.PHASES
 
-# Physical folders come from config/structure.yaml; phase identities never change.
-#: Phase -> config directory of its home entry (`config/<folder>/` or `config/<group>/`).
+#: Phase -> config directory of its home entry (`config/general/<folder>/` or `config/<group>/`).
 CONFIG_GROUPS = {phase: structure.registry().home_entry(phase).config_dir for phase in PHASES}
-#: Notebook ID (current and previous) -> internal phase.
-NOTEBOOK_PHASES = {
-    **{n.id: n.phase for n in structure.registry().notebooks},
-    **{alias: n.phase for n in structure.registry().notebooks for alias in n.aliases},
-}
-#: Retired pre-research notebook stems, still accepted as `<phase folder>/<stem>`.
-_RETIRED_NOTEBOOK_STEMS = {
-    "01_data_exploration": "exploration", "02_jev_input_design": "exploration",
-    "01_prepare_questions": "question_preparation", "03_feature_creation": "feature_creation",
-    "04_decision_feature_comparison": "feature_creation",
-    "01_before_feature_creation": "experiment_0", "02_after_feature_creation": "experiment_0",
-    "01_paired_representation_effects": "experiment_1", "01_frozen_embeddings": "experiment_2",
-    "01_target_aware_embeddings": "experiment_3", "01_native_text_systems": "experiment_4",
-    "01_representation_comparison": "synthesis",
-}
-
+#: Notebook ID -> internal phase.
+NOTEBOOK_PHASES = {n.id: n.phase for n in structure.registry().notebooks}
 
 #: Folders without a per-experiment report index (`<folder>/manifests/reports.json`).
-PREPARATION_FOLDERS = ("00_data", "02_feature_creation")
+PREPARATION_FOLDERS = ("1_data_and_questions", "2_feature_creation")
 
 
 def layout():
@@ -172,40 +157,30 @@ def layout():
 
 
 def phase_name(phase: str | None = None) -> str:
-    """Validate an internal phase; previous numbered folders and owning folders are aliases."""
+    """Validate an internal phase ID; an entry's folder or path names its owning phase."""
     value = phase or os.environ.get("JEVPFN_PHASE", "exploration")
     if value in PHASES:
         return value
-    numbered = re.fullmatch(r"([0-9]+)\. (.+)", value)
-    if numbered:
-        if structure.legacy_phase(value) is None:
-            raise ValueError(f"Incorrect phase number: {value}")
-        return numbered[2]
     owners = {e.owner_phase for e in layout().entries
-              if not e.notebook_only and value in {e.folder, e.path, *e.previous_folders}}
+              if not e.notebook_only and value in {e.folder, e.path}}
     if len(owners) == 1:
         return owners.pop()
     raise ValueError(f"Unknown research phase: {value}")
 
 
 def phase_folder(phase: str) -> str:
-    """The home folder path of an internal phase, e.g. experiment_1 -> B/exp04_decision_features."""
+    """The home folder path of an internal phase, e.g. B1 -> B/B1."""
     return layout().home(phase_name(phase))
 
 
 def routed_folder(phase: str, *parts: str) -> str:
-    """The folder of `<phase>/<parts>`; registry routes split one phase across folders."""
+    """The folder of `<phase>/<parts>`: every phase owns exactly one folder."""
     return layout().folder_for(phase_name(phase), parts)
 
 
 def research_group(phase: str) -> str:
-    """Research question of an internal phase (human grouping; not a folder)."""
-    phase = phase_name(phase)
-    if phase in {"rq1", "rq2", "rq3"}:
-        return phase
-    if phase in {"data_efficiency", "representations"}:  # B4 (B/exp09) and C1 (C/exp10): RQ2 studies
-        return "rq2"
-    return "rq2" if phase.startswith("experiment_") and phase != "experiment_0" or phase in {"synthesis", "regression_readout"} else "general"
+    """Group of an internal phase: `general`, `A`, `B` or `C`."""
+    return layout().home_entry(phase_name(phase)).group
 
 
 def result_relative(phase: str, *parts: str) -> Path:
@@ -228,44 +203,29 @@ def _validate_notebook_name(notebook: str) -> list[str]:
 
 
 def notebook_phase(notebook: str) -> str:
-    if notebook in {"rq1_behavior", "rq2_prediction", "rq3_adaptation"}:
-        return notebook.split("_")[0]
+    """Phase of a registered notebook; `<phase or folder>/<name>` for an ad-hoc notebook in a
+    phase tree; an unregistered bare name (scratch analysis) belongs to exploration."""
     parts = _validate_notebook_name(notebook)
     found = layout().notebook(notebook)
-    if found:
+    if found is not None:
         return found.phase
     if len(parts) == 2:
-        if parts[-1] in _RETIRED_NOTEBOOK_STEMS and parts[0] in {"general", "rq1", "rq2", "rq3"}:
-            return _RETIRED_NOTEBOOK_STEMS[parts[-1]]
-        if parts[0] in {"general", "rq2"}:
-            raise ValueError("Unknown notebook in research layout")
-        if parts[0] in {"rq1", "rq3"}:
-            return parts[0]
+        if parts[0] in layout().notebook_groups:
+            raise ValueError(f"Unknown notebook: {notebook}")
         return phase_name(parts[0])
-    if notebook == "03_feature_creation":
-        return "feature_creation"
-    match = re.match(r"(experiment_[0-9]+)_", notebook)
-    if match:
-        return phase_name(match.group(1))
     return "exploration"
 
 
 def notebook_folder(notebook: str) -> str:
-    """Physical folder path of a notebook's records (e.g. `B/exp04_decision_features`)."""
+    """Physical folder path of a notebook's records (e.g. `B/B1`)."""
     found = layout().notebook(notebook)
-    if found:
-        return found.folder
-    parts = notebook.split("/")
-    entry = layout().flat_entry(parts[0]) if len(parts) == 2 else None
-    if entry is not None:
-        return entry.path
-    return phase_folder(notebook_phase(notebook))
+    return found.folder if found is not None else phase_folder(notebook_phase(notebook))
 
 
 def notebook_stem(notebook: str) -> str:
     notebook_phase(notebook)
     found = layout().notebook(notebook)
-    return found.name if found else notebook.split("/")[-1]
+    return found.name if found is not None else notebook.split("/")[-1]
 
 
 def outputs_dir() -> Path:
@@ -286,16 +246,12 @@ def phase_dir(phase: str | None = None) -> Path:
 
 
 def phase_path(phase: str, *parts: str) -> Path:
-    """A DATA-tier path inside a phase tree, honouring registry routes (e.g. 0B manifests)."""
+    """A DATA-tier path inside a phase tree (`<group>/<folder>/<parts>`)."""
     selected = phase_name(phase)
     if selected == "exploration":
         return notebook_cache_dir("exploration", *parts)
     if not parts:
         return phase_dir(selected)
-    folder = routed_folder(selected, *parts)
-    if folder != phase_folder(selected):
-        return outputs_dir() / folder / Path(*parts)
-    # Unrouted: exactly the phase's own manifests/logs helpers.
     kind, *rest = parts
     base = {"manifests": manifests_dir, "logs": logs_dir}.get(kind)
     return base(selected).joinpath(*rest) if base else phase_dir(selected).joinpath(*parts)
@@ -305,13 +261,14 @@ def results_dir(*parts: str, phase: str | None = None) -> Path:
     selected = phase_name(phase)
     if selected in {"exploration", "feature_creation"}:
         return notebook_cache_dir(selected, "results", *parts)
-    if selected in {"rq1", "rq2", "rq3", "representations"} and on_vsc():
+    if selected in {"A0", "A1", "A2", "A3", "B4", "C0", "C1", "C2"} and on_vsc():
         durable = durable_project_override()
         if durable is None:
             raise ValueError("Research study results require an allocated durable PROJECT root")
-        # The B3/C predictors write folds in the same working set as the other benchmark
+        # The B4/C predictors write folds in the same working set as the other benchmark
         # arms. Their analysis exports and producer assets are shared directly from PROJECT.
-        if selected == "rq1" or not parts or parts[0] not in {"evaluation", "splits", "cv_locks"}:
+        if layout().home_entry(selected).group == "A" or not parts or parts[0] not in {
+                "evaluation", "splits", "cv_locks"}:
             return _under(durable, OUTPUT_DIR_NAME, str(result_relative(selected, *parts)), *parts)
     return large_outputs_dir().joinpath(result_relative(selected, *parts), *parts)
 
@@ -322,8 +279,8 @@ def tar_results_dir(*parts: str) -> Path:
         root = durable_project_override()
         if root is None or not root.as_posix().startswith("/gpfs") or "/project/" not in root.as_posix():
             raise ValueError("TAR requires an allocated native GPFS PROJECT root")
-        return _under(root, OUTPUT_DIR_NAME, str(result_relative("experiment_3", *parts)), *parts)
-    return results_dir(*parts, phase="experiment_3")
+        return _under(root, OUTPUT_DIR_NAME, str(result_relative("B3", *parts)), *parts)
+    return results_dir(*parts, phase="B3")
 
 
 def group_c_dir(phase: str, *parts: str) -> Path:
@@ -332,8 +289,8 @@ def group_c_dir(phase: str, *parts: str) -> Path:
     Large immutable vectors and fold bundles are shared from PROJECT exactly like TAR bundles;
     there is no DATA fallback on VSC.
     """
-    if phase_name(phase) not in {"representations", "rq3"}:
-        raise ValueError("Group C stores belong to the representations or rq3 phase")
+    if phase_name(phase) not in {"C0", "C1", "C2"}:
+        raise ValueError("Group C stores belong to C0, C1 or C2")
     if on_vsc():
         root = durable_project_override()
         if root is None or not root.as_posix().startswith("/gpfs") or "/project/" not in root.as_posix():
@@ -419,7 +376,7 @@ def reports_dir(notebook: str | None = None, *, phase: str | None = None) -> Pat
 
 
 def report_folder(selection: str | None) -> str | None:
-    """The experiment folder (0A/0B, exp01...) with a report index; None otherwise.
+    """The experiment folder (general/0, A/A1, ...) with a report index; None otherwise.
 
     Preparation folders (data, feature creation) only appear in the project-wide documents.
     """
@@ -576,60 +533,39 @@ def tokenizer_dir(provider: str) -> Path:
 
 def token_audit_dir() -> Path:
     if os.environ.get("JEVPFN_SHARED_IMMUTABLES") == "1" and durable_project_override():
-        return _under(durable_project_override(), OUTPUT_DIR_NAME, phase_folder("experiment_0"),
+        return _under(durable_project_override(), OUTPUT_DIR_NAME, phase_folder("0"),
                       "results", "token_audit")
-    return results_dir("token_audit", phase="experiment_0")
+    return results_dir("token_audit", phase="0")
 
 
 def config_path(name: str) -> Path:
-    """Resolve a logical config key through the layout registry.
+    """The file holding a logical config key (config/structure.yaml v4).
 
-    Current keys (`B/main`), internal-phase keys (`experiment_1/main`), registered stems
-    (`main`), flat-layout keys (`exp04_decision_features/main`) and older folders
-    (`rq2/4. experiment_1/main`) all resolve to the same file. Previous locations are read only when the current file is absent, so an
-    archived checkout or fixture keeps working.
+    An experiment's one file (`B1`, also for its sections such as `B1/models`), a general
+    stage's file (`0/debug`, `feature_creation/extractors`, a registered stem such as
+    `datasets`) or a literal path under config/. Earlier keys are not accepted; the alias
+    map (config/layout_aliases.yaml) records them for provenance.
     """
     stem = name[:-5] if name.endswith(".yaml") else name
-    if re.match(r"experiment_[0-9]+/", stem):
-        phase_name(stem.split("/")[0])  # Retired experiment numbers have no configuration.
     root = (REPO_ROOT / "config").resolve()
-    current = structure.config_relative(stem)
-    candidates = [current, stem, *_legacy_config_locations(stem, current)]
-    path = next(
-        (root / f"{c}.yaml" for c in candidates if (root / f"{c}.yaml").is_file()),
-        root / f"{current}.yaml",
-    ).resolve()
+    path = (root / f"{structure.config_relative(stem)}.yaml").resolve()
     if not path.is_relative_to(root):
         raise ValueError("Configuration must remain under config/.")
     return path
 
 
+def config_section(name: str) -> str | None:
+    """The section of an experiment config key (`B1/models` -> `models`), else None."""
+    stem = name[:-5] if name.endswith(".yaml") else name
+    return structure.config_location(stem)[1]
+
+
 def config_file(filename: str) -> Path:
-    """A registered non-YAML config file (e.g. `question_versions.csv`)."""
+    """A registered non-YAML config file (e.g. `A2_A2_question_versions.csv`)."""
     folder = structure.registry().config_index().get(filename)
     if folder is None or Path(filename).name != filename:
         raise ValueError(f"Unregistered config file: {filename}")
-    return REPO_ROOT / "config" / folder / filename  # `config/<folder>/` or `config/<group>/`
-
-
-def _legacy_config_locations(stem: str, current: str) -> list[str]:
-    """Previous homes of a config file, read only when its registry file is absent."""
-    folder, _, rest = current.partition("/")
-    if not rest:
-        return []
-    entry = layout().config_entry(rest) or next(
-        (e for e in layout().entries if e.config_dir == folder and not e.group), None)
-    if entry is None:
-        return []
-    found = []
-    for phase in (*entry.phases, *entry.nested):
-        legacy = structure.LEGACY_PHASE_FOLDERS.get(phase)
-        if legacy:
-            found += [f"general/{legacy}/{rest}", f"rq2/{legacy}/{rest}", f"{legacy}/{rest}"]
-    found += [f"{group}/{rest}" for group in ("rq1", "rq3")]
-    # The flat layout (18-23-11-2026) and earlier folder names of the same entry.
-    found += [f"{old}/{rest}" for old in (entry.folder, *entry.previous_folders) if old != folder]
-    return found
+    return REPO_ROOT / "config" / folder / filename
 
 
 def jev_cache_path(relative: str = "jev_cache") -> Path:

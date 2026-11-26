@@ -27,8 +27,8 @@ def setup_storage(cluster):
         "permanent_features": paths.jev_cache_path(),
         "checkpoints": paths.checkpoints_dir(),
         "token_counts": paths.token_audit_dir(),
-        "small_manifests": paths.manifests_dir("experiment_0") / "before_extraction",
-        "small_logs": paths.logs_dir("experiment_0"),
+        "small_manifests": paths.manifests_dir("0") / "before_extraction",
+        "small_logs": paths.logs_dir("0"),
         "feature_creation_logs": paths.logs_dir("feature_creation"),
     }
     access_verified = {}
@@ -62,7 +62,7 @@ def setup_storage(cluster):
         "jobs_submitted": False,
     }
     write_json(
-        paths.manifests_dir("experiment_0") / "before_extraction" / "storage_setup.json", report
+        paths.manifests_dir("0") / "before_extraction" / "storage_setup.json", report
     )
     return report
 

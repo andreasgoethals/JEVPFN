@@ -1,0 +1,46 @@
+extends: feature_creation
+name: saved_decision_feature_comparison
+comparison:
+  complete_providers_only: true
+  providers:
+  - jev
+  - liquid
+  - liquid_lfm3
+  - perplexity
+  - cloudflare
+  - strands
+  - intern
+  - h2o
+  - sii
+  - kev
+  - decision3
+  - nimble
+  - glide
+  - mammoth
+  - drex_max
+  - knowline
+  - sieve
+  representations:
+  - per_column
+  - joint
+  artifacts: {}
+  weightings:
+  - rows
+  - unique_inputs
+  regression_agreement_tolerance: 0.5
+  regression_neutral_band: 0.0
+  scatter_rows_per_group: 150
+  disagreement_examples_per_group: 3
+  random_seed: 42
+  require_complete_roster_for_consensus: true
+  uses_target_labels: false
+  # A1 (20 November 2026). Output shape, leave-one-out consensus and the
+  # model profile; stand-alone quality uses joint requests and target labels for scoring only.
+  confident_threshold: 0.95
+  expected_level_bin_width: 0.5
+  consensus_minimum_other_models: 2
+  compute_ledger: compute_ledger.json
+  standalone_quality:
+    representation: joint
+    calibration_bins: 10
+    uses_target_labels_for_scoring_only: true

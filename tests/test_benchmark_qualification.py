@@ -1,4 +1,4 @@
-"""Exercise the real 0B gate without allocating models or using synthetic evidence as approval."""
+"""Exercise the real B0 gate without allocating models or using synthetic evidence as approval."""
 
 from copy import deepcopy
 from types import SimpleNamespace
@@ -25,7 +25,7 @@ def reports(monkeypatch):
     model = MAIN_MODELS[0]
     arm = {
         "model": model,
-        "phase": "experiment_1",
+        "phase": "B1",
         "dataset_id": "data",
         "provider": "provider",
         "feature_set": "non_text_plus_both",
@@ -40,8 +40,8 @@ def reports(monkeypatch):
         lambda name: {"candidate_extractors": ["provider"], "encoders": ["encoder"]},
     )
     preflight = {
-        "phase": "experiment_0_preflight",
-        "stage": "after_extraction",
+        "phase": "preflight",
+        "stage": "B0",
         "execution_site": "vsc_compute_node",
         "status": "preflight_passed",
         "contract_tests": {"status": "passed"},
@@ -131,7 +131,7 @@ def write_approval(tmp_path, bodies, **scope):
         accepted,
         {
             "accepted": True,
-            "stage": "after_extraction",
+            "stage": "B0",
             "reviewed_by": "reviewer",
             "evaluation_identity": "current",
             "evidence": evidence,
@@ -148,7 +148,7 @@ def test_real_profile_plan_covers_inner_oof_for_each_applicable_recipe():
         return arm["phase"], arm["model"], arm.get("pca_scope")
 
     def needs_inner_oof(arm):
-        return arm["dataset_id"].startswith("BIN_") and arm["phase"] != "experiment_3"
+        return arm["dataset_id"].startswith("BIN_") and arm["phase"] != "B3"
 
     # B3 refits and B4 samples are covered by the profiles of the full-size pipelines.
     arms = [a for a in benchmark_plan() if a["phase"] in q.PROFILED_PHASES]
@@ -195,15 +195,15 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     _, features, _ = next(feature_cases(dataset, "linear"))
     features.attrs["decision_artifact_checksums"] = {}
     arm = {
-        "phase": "experiment_1", "model": "linear", "feature_set": "non_text",
+        "phase": "B1", "model": "linear", "feature_set": "non_text",
         "dataset_id": dataset.metadata.dataset_id,
         "predictor_columns": features.shape[1],
     }
-    split = shared_splits(dataset, seed=q.load_yaml("experiment_1/main")["random_seed"])
+    split = shared_splits(dataset, seed=q.load_yaml("B1")["random_seed"])
     records = evaluate_cv(
         dataset, features, DummyClassifier, specification=split,
         model_id="linear", checkpoint_id="test", feature_set="non_text",
-        phase="experiment_0", allow_model_runs=True, fold_numbers=[0],
+        phase="0", allow_model_runs=True, fold_numbers=[0],
         estimator_settings={"fixture": "dummy", "execution_runtime": {"container_id": "test"}},
         representation_recipe={"provider": None, "embedding": None},
     )
@@ -212,7 +212,7 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     with pytest.raises(ValueError, match="predictor width"):
         q.save_profile(arm | {"predictor_columns": 1}, dataset, features, {}, records)
     q.save_profile(arm, dataset, features, {"container_id": "test"}, records)
-    path, = (paths.phase_path("experiment_0", "manifests", "after_extraction")).glob("profile_*.json")
+    path, = (paths.phase_path("B0", "manifests")).glob("profile_*.json")
     report = json.loads(path.read_text(encoding="utf-8"))
     assert {r["role"]: r["rows"] for r in report["roles"]} == {
         "outer_test": len(split["folds"][0]["test"]),
@@ -223,7 +223,7 @@ def test_full_fold_profile_reads_saved_binary_outer_and_oof_predictions(
     durable = paths.staging_override()
     monkeypatch.setattr(paths, "durable_project_override", lambda: durable)
     q.verify_published_profile(report)
-    with pytest.raises(ValueError, match="Published 0B predictions differ"):
+    with pytest.raises(ValueError, match="Published B0 predictions differ"):
         q.verify_published_profile(report | {"arm": report["arm"] | {"model": "different"}})
     with pytest.raises(ValueError, match="completed fold recipe"):
         q.verify_published_profile(report | {"fold_recipe_id": "wrong"})
@@ -275,7 +275,7 @@ def test_qualified_content_and_runtime_checked_before_benchmark_fit(tmp_path, re
     runtime = {"container_id": "seal"}
     split = {"split_id": "split"}
     q.verify_inputs(evidence, dataset, features, arm, runtime, specification=split)
-    with pytest.raises(ValueError, match="qualified 0B partition"):
+    with pytest.raises(ValueError, match="qualified B0 partition"):
         q.verify_inputs(
             evidence, dataset, features, arm, runtime, specification={"split_id": "other"}
         )
@@ -289,9 +289,9 @@ def test_0b_verifier_reopens_relative_evidence_across_a_layout_move(tmp_path, re
 
     arm, bodies = reports
     root = tmp_path / "output_JEVPFN"
-    current = root / "03_exp0b/manifests/after_extraction"
+    current = root / "B/B0/manifests"
     review = write_approval(current, bodies)
-    moved = root / "01_exp0a/manifests/preflight.json"
+    moved = root / "general/0/manifests/preflight.json"
     moved.parent.mkdir(parents=True)
     moved.write_bytes((current / "report_0.json").read_bytes())
     body = json.loads(review.read_text(encoding="utf-8"))
@@ -339,7 +339,7 @@ def test_benchmark_publication_copies_only_selected_evaluation_store(tmp_path):
     from src.evaluation.store import connect
 
     work, durable = tmp_path / "scratch" / "JEVPFN", tmp_path / "project" / "JEVPFN"
-    results = work / "output_JEVPFN" / "4. experiment_1" / "results"
+    results = work / "output_JEVPFN" / "B" / "B1" / "results"
     evaluation = results / "evaluation"
     evaluation.mkdir(parents=True)
     for dataset in ("DATA1", "DATA2"):
@@ -378,18 +378,17 @@ def test_widest_kumo_override_arm_is_a_declared_full_fold_profile():
     arms = [a for a in benchmark_plan() if a["phase"] in q.PROFILED_PHASES]
     wide = q.kumo_override_arm(arms)
     assert (wide["model"], wide["phase"], wide["dataset_id"], wide["feature_set"]) == (
-        "kumo_tabular", "experiment_2", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_both_plus_frozen_e5")
+        "kumo_tabular", "B2", "REG_TEXT_ROTTEN_TOMATOES", "non_text_plus_both_plus_frozen_e5")
     assert wide["predictor_columns"] == wide["kumo_max_columns_override"] == 557
     profiles = q.profile_plan(arms)
     assert wide in profiles
     # The declared case reuses the width extreme rather than adding a second 557 profile.
     assert [a for a in profiles if a.get("kumo_max_columns_override")] == [wide]
     # The phase/model profile job (benchmark_jobs.plan(profile_fold=True)) also selects it.
-    kumo = [a for a in arms if a["model"] == "kumo_tabular" and a["phase"] == "experiment_2"]
+    kumo = [a for a in arms if a["model"] == "kumo_tabular" and a["phase"] == "B2"]
     assert wide in q.profile_plan(kumo)
     assert q.kumo_override_arm([a for a in arms if a["predictor_columns"] <= 500]) is None
-    assert "kumo_max_columns_override_b200_profile" in q.load_yaml(
-        "experiment_0/research_questions")["rq2"]
+    assert "kumo_max_columns_override_b200_profile" in q.load_yaml("B0")["checks"]
 
 
 def _b200_report(**changes):
@@ -440,7 +439,7 @@ def test_signed_open_provider_scope_excludes_paid_arms_and_binds_selectors(repor
     q.benchmark_evidence(signed, arm | {"provider": None})
     with pytest.raises(ValueError, match="outside the signed"):
         q.benchmark_evidence(signed, arm | {"provider": "jev"})
-    with pytest.raises(ValueError, match="signed 0B decision providers"):
+    with pytest.raises(ValueError, match="signed B0 decision providers"):
         q.benchmark_evidence(write_approval(tmp_path, bodies), arm)
     signed = write_approval(tmp_path, bodies, **scope)
     monkeypatch.setattr(acceptance, "decision_input_identity", lambda providers: "changed")
@@ -578,9 +577,9 @@ def test_later_phase_coverage_and_independent_c_release():
 
     arms = benchmark_plan(cohort="open_weight")
     core = q.profile_plan([a for a in arms if a["phase"] not in q.GROUP_C_PHASES])
-    probes = {(a["encoder"], a.get("probe_view")) for a in core if a["phase"] == "experiment_3" and a.get("probe_view")}
+    probes = {(a["encoder"], a.get("probe_view")) for a in core if a["phase"] == "B3" and a.get("probe_view")}
     assert len(probes) == 6 and all(view in {"per_column", "joint"} for _, view in probes)
-    b4 = [a for a in core if a["phase"] == "data_efficiency"]
+    b4 = [a for a in core if a["phase"] == "B5"]
     assert {a["training_size"] for a in b4} == {128, 16384}
     assert {q.profile_fold_number(a) for a in b4} == {0, 1}
     assert {a["model"] for a in b4} == set(MAIN_MODELS)
@@ -589,7 +588,7 @@ def test_later_phase_coverage_and_independent_c_release():
         later = q.profile_plan([a for a in arms if a["phase"] == phase])
         assert {a["model"] for a in later} == set(MAIN_MODELS)
         assert {"BIN", "MUL", "REG"} == {a["dataset_id"].split("_")[0] for a in later}
-        if phase == "representations":
+        if phase == "C1":
             assert len({(a["hidden_view"], a["hidden_position"], a["hidden_layer"]) for a in later}) == 12
         else:
             assert {a["adaptation_cell"] for a in later} == {"head_only", "lora_head", "lora_only"}
@@ -668,16 +667,16 @@ def test_real_b4_profile_binds_sample_size_parent_and_whole_test_fold(isolated_o
     parent = shared_splits(data)
     labels = data.frame[data.metadata.target].to_numpy()
     sample = subsample_specification(parent, labels, 128, 0, seed=17, classes=list(data.metadata.classes))
-    arm = dict(phase="data_efficiency", model="linear", feature_set="non_text", dataset_id=data.metadata.dataset_id,
+    arm = dict(phase="B5", model="linear", feature_set="non_text", dataset_id=data.metadata.dataset_id,
                training_size=128, draw=0, predictor_columns=matrix.shape[1])
     runtime = {"container_id": "test"}
     records = evaluate_cv(data, matrix, DummyClassifier, specification=sample,
-                          model_id="linear", checkpoint_id="test", feature_set="non_text", phase="experiment_0",
+                          model_id="linear", checkpoint_id="test", feature_set="non_text", phase="0",
                           allow_model_runs=True, fold_numbers=[1], binary_threshold_policy="fixed_0_5",
                           estimator_settings={"execution_runtime": runtime},
                           representation_recipe={"subsample": sample["subsample"]})
     q.save_profile(arm, data, matrix, runtime, records, specification=sample)
-    file, = paths.phase_path("experiment_0", "manifests", "after_extraction").glob("profile_*.json")
+    file, = paths.phase_path("B0", "manifests").glob("profile_*.json")
     report = json.loads(file.read_text(encoding="utf-8"))
     assert (report["training_rows"], report["outer_fold"], report["parent_split_id"]) == (128, 1, parent["split_id"])
     assert [(r["role"], r["rows"]) for r in report["roles"]] == [("outer_test", len(sample["folds"][1]["test"]))]
@@ -700,7 +699,7 @@ def test_both_prepared_probe_layouts_are_read_for_the_exact_five_folds(isolated_
     from src.utils.serialization import text_value
 
     data = next(iter(fixtures()))
-    seed = q.load_yaml("experiment_3/tar")["random_seed"]
+    seed = q.load_yaml("B3")["random_seed"]
     rows = pd.Index([f"csv:{i}" for i in range(len(data.frame))])
     masks = [data.frame[c].map(text_value).notna().to_numpy() for c in data.metadata.text_columns]
     groups = [[f"frozen_e5__text_{i:03d}__000"] for i in range(len(masks))]

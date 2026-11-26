@@ -10,7 +10,7 @@ computation of the export; it regroups the exported per-dataset gains for the no
   gains (only where every predictor of that arm is present), so its interval still resamples
   datasets;
 * the C1 head-reproduction contract and the C2 fit diagnostics are exposed as tables for the
-  study audit (`general/4_study_audit`).
+  study audit (`general/3_study_audit`).
 
 References (Strands' own probabilities = B1 Strands arm, TAR, the B2 label-trained classifier)
 are read from the Group C exports themselves, which carry those B arms on identical folds.
@@ -106,7 +106,7 @@ def dataset_names() -> dict[str, str]:
     from src.utils.config import load_yaml
 
     return {e["id"]: e.get("name") or e["id"]
-            for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))}
+            for e in selected_entries(load_catalog(), load_yaml("B1"))}
 
 
 def coverage_summary(coverage: pd.DataFrame) -> pd.DataFrame:
@@ -131,7 +131,7 @@ def head_reproduction_contract(extraction: pd.DataFrame, *, tolerance: float | N
     if tolerance is None:
         from src.utils.config import load_yaml
 
-        tolerance = float(load_yaml("representations/representations")["extraction"]["probability_tolerance"])
+        tolerance = float(load_yaml("C1")["extraction"]["probability_tolerance"])
     columns = ["dataset_id", "status", "unique_inputs", "joint_inputs", "max_probability_deviation",
                "engine_check_max_difference", "tolerance", "passed", "store_gb"]
     if extraction is None or extraction.empty:

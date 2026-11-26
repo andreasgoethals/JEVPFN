@@ -1,7 +1,7 @@
 """Run every notebook in parallel, then rebuild the two summary documents.
 
     python -m src.utils.run_notebooks                     every notebook in notebooks/
-    python -m src.utils.run_notebooks --only B/exp04_decision_features
+    python -m src.utils.run_notebooks --only B/B1
     python -m src.utils.run_notebooks --summaries-only    rebuild the two .md files only
 
     notebooks/<group>/<name>.ipynb                   group: general, A, B, C (paper/ reserved)
@@ -11,9 +11,7 @@
     output_JEVPFN/[<group>/]<folder>/{logs,manifests,results}/notebook/   _run.json, _report.txt, logs
     output_JEVPFN/[<group>/]<exp folder>/manifests/reports.json   pointers into the two documents
 
-Folders and notebook IDs (`<group>/<name>`) come from config/structure.yaml; previous IDs such
-as `exp04_decision_features`, `exp04_decision_features/decisions` or `rq2/01_decisions` remain
-accepted aliases.
+Folders and notebook IDs (`<group>/<name>`, e.g. `B/B1`) come from config/structure.yaml.
 
 Each notebook executes in a separate Python subprocess: matplotlib's figure registry must
 never be shared between notebooks. Lightweight coordinator threads launch those subprocesses,
@@ -241,7 +239,7 @@ def run_one(
 
 
 def _experiment_folders(notebooks: tuple[str, ...]) -> set[str]:
-    """Experiment folders (0A/0B, exp01...) with notebooks; each gets a report index."""
+    """Experiment folders (general/0, A/A1, ...) with notebooks; each gets a report index."""
     return {notebook_folder(name) for name in notebooks
             if notebook_folder(name) in layout().folders and report_folder(notebook_folder(name))}
 
@@ -320,7 +318,7 @@ def write_all_results(notebooks: tuple[str, ...]) -> Path:
     atomic_text(path, "\n".join(lines))
     for group in sorted(_experiment_folders(notebooks)):
         members = tuple(name for name in names if notebook_folder(name) == group)
-        # No per-folder report copies: each experiment folder (e.g. B/exp04_...) indexes the
+        # No per-folder report copies: each experiment folder (e.g. B/B1) indexes the
         # project documents and its notebook's own complete `_report.txt` and figures.
         write_json(
             report_index_path(group),
@@ -359,7 +357,7 @@ def run_all(
         tempfile.TemporaryDirectory(prefix="jevpfn-run-") as scratch,
         ThreadPoolExecutor(max_workers=workers) as pool,
     ):
-        synthesis = "general/5_synthesis"
+        synthesis = "general/4_synthesis"
         futures = {pool.submit(run_one, name, timeout, scratch): name for name in names
                    if name != synthesis}
         for fut in as_completed(futures):

@@ -64,7 +64,7 @@ def test_prefix_materialization_missingness_resume_and_full_data_rejection(isola
         return {"model": cfg["jev"]["model"], "answers": {"semantic": {"type": "noul", "noul": .4}},
                 "usage": {"input_tokens": 10}}
 
-    policy = load_yaml("experiment_0/jev_prefix_pilot")
+    policy = load_yaml("0/jev_prefix_pilot")
     first = hosted.run(cfg, execute=True, prefix_policy=policy,
                        transport_factory=lambda *a, **kw: SimpleNamespace(evaluate=evaluate))
     assert first["status"] == "completed_prefix_pilot_requires_review"

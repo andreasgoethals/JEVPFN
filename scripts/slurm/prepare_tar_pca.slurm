@@ -9,11 +9,11 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=24:00:00
-#SBATCH --output="output_JEVPFN/B/exp06_tar/logs/%x_%A_%a.log"
-#SBATCH --error="output_JEVPFN/B/exp06_tar/logs/%x_%A_%a.log"
+#SBATCH --output="output_JEVPFN/B/B3/logs/%x_%A_%a.log"
+#SBATCH --error="output_JEVPFN/B/B3/logs/%x_%A_%a.log"
 set -euo pipefail
 source "${VSC_DATA:?}/JEVPFN/scripts/storage_environment.sh"
-export JEVPFN_PHASE=experiment_3
+export JEVPFN_PHASE=B3
 export JEVPFN_CONDA_ENV=JEVPFN
 export JEVPFN_STAGING_ROOT="${JEVPFN_DURABLE_ROOT:?Select allocated GPFS PROJECT}"
 cd "${VSC_DATA:?}/JEVPFN"

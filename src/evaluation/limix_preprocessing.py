@@ -4,7 +4,7 @@ The publisher passes a concatenated support/query matrix to each preprocessing
 step. Its distribution transformer already fits on support, but column filtering,
 category encoding and polynomial scaling also inspect query rows by default.
 Keep the publisher's encoders and randomization, restricting those fits to support.
-This adapter is validated synthetically; its checkpoint still requires Experiment 0B.
+This adapter is validated synthetically; its checkpoint still requires B0.
 """
 
 from __future__ import annotations

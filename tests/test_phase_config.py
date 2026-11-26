@@ -24,15 +24,9 @@ def test_phase_inheritance_preserves_defaults():
     assert cfg["jev"]["model"] == "jev-1.14.0"
     assert cfg["jev"]["regression_scores"] == list(range(-4, 5))
     assert cfg["provider_reference"]["state_plus_longest_question_tokens"] == 32000
-    assert load_yaml("experiment_0/debug")["cluster"]["account"] == "lp_verbekelab"
-    for number, name in [
-        (0, "debug"),
-        (1, "main"),
-        (2, "embeddings"),
-        (3, "tar"),
-        (4, "native_text"),
-    ]:
-        assert load_yaml(f"experiment_{number}/{name}")["enabled"] is False
+    assert load_yaml("0/debug")["cluster"]["account"] == "lp_verbekelab"
+    for name in ("0/debug", "B1", "B2", "B3", "B6"):
+        assert load_yaml(name)["enabled"] is False
 
 
 def test_inheritance_cycle_and_escape_fail(tmp_path, monkeypatch):
@@ -57,8 +51,8 @@ def test_cannot_enable_live_features():
 
 
 def test_shared_experiment_proposals_preserve_validation_boundary_and_catalog():
-    models = load_yaml("experiment_1/models")["models"]
-    for name in ("experiment_1/main", "experiment_4/native_text"):
+    models = load_yaml("B1/models")["models"]
+    for name in ("B1", "B6"):
         cfg = load_yaml(name)
         assert cfg["enabled"] is False
         assert set(cfg["candidate_models"]) <= set(models)
@@ -77,7 +71,7 @@ def test_shared_experiment_proposals_preserve_validation_boundary_and_catalog():
         assert evaluation["binary"]["threshold_objective"] == "f1"
         assert evaluation["regression"]["classification_threshold"] == "not_applicable"
         assert evaluation["preprocessing_fit_scope"] == "training_partition_only"
-    assert set(load_yaml("experiment_1/main")["candidate_models"]) == {
+    assert set(load_yaml("B1")["candidate_models"]) == {
         "tabpfn_3_5",
         "catboost",
         "linear",
@@ -97,9 +91,9 @@ def test_experiment_selection_excludes_zomato_but_audit_keeps_it():
     assert len(catalog["datasets"]) == 20
     for name in (
         "feature_creation",
-        "experiment_0/debug",
-        "experiment_1/main",
-        "experiment_4/native_text",
+        "0/debug",
+        "B1",
+        "B6",
     ):
         entries = selected_entries(catalog, load_yaml(name))
         assert len(entries) == 18

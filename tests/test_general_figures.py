@@ -28,7 +28,7 @@ def roster():
     from src.data.loaders import load_catalog
     from src.data.selection import selected_entries
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     datasets = [e["id"] for e in selected_entries(load_catalog(), main)]
     tasks = {d: load_yaml("dataset_semantics")["datasets"][d]["task_type"] for d in datasets}
     return datasets, tasks, list(main["candidate_extractors"])
@@ -95,7 +95,7 @@ def fixture_folds(plan, *, drop_models=("sieve",), drop_dataset_family=None):
     return pd.DataFrame(rows)
 
 
-def fixture_plan(phases=("experiment_1", "experiment_2", "experiment_3")):
+def fixture_plan(phases=("B1", "B2", "B3")):
     from src.evaluation.campaign import benchmark_plan
 
     _, tasks, _ = roster()
@@ -109,7 +109,7 @@ def fixture_gains():
     """Group B/C export tables with dataset x predictor gains for the glance arms."""
     datasets, tasks, models = roster()
     rng = np.random.default_rng(1)
-    frames = {"B1": {}, "B2": {}, "C2": {}}
+    frames = {"B1": {}, "B2": {}, "B3": {}, "C2": {}}
     from src.evaluation.synthesis_overview import GLANCE_ARMS
 
     for k, (_, study, table, representation) in enumerate(GLANCE_ARMS):
@@ -240,7 +240,7 @@ def test_jev_spend_counts_each_request_once_across_snapshots(tmp_path):
 
 
 def test_arm_completeness_separates_roster_gaps_missing_and_excluded():
-    plan = fixture_plan(("experiment_1",))
+    plan = fixture_plan(("B1",))
     datasets = plan.dataset_id.unique()
     folds = fixture_folds(plan, drop_dataset_family=(datasets[0], "no text"))
     table = study_audit.arm_completeness(folds, plan, roster=roster()[2])
@@ -280,7 +280,7 @@ def test_ledger_views_classify_group_b_and_c_jobs_and_draw():
 
 
 def test_runtime_table_and_figure_from_export_folds():
-    plan = fixture_plan(("experiment_1", "experiment_2"))
+    plan = fixture_plan(("B1", "B2"))
     plan = plan[plan.provider.isna() | plan.provider.isin(["jev", "strands"])]
     fits = study_audit.fit_seconds(fixture_folds(plan, drop_models=()))
     assert set(fits.family) >= {"no text", "decision", "frozen", "decision+frozen"}

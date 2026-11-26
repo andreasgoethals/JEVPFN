@@ -1,4 +1,4 @@
-"""B4: how much labelled data do decision features replace? (B/exp09_data_efficiency)
+"""B5: how much labelled data do decision features replace?
 
 This study DELIBERATELY subsamples outer-training rows, as an explicit owner-approved design
 (20 November 2026); AGENTS.md forbids only *silent* caps. Every subsample is recorded in its
@@ -26,7 +26,7 @@ import pandas as pd
 from src.utils.config import load_yaml
 from src.utils.serialization import canonical_json, digest, scalar
 
-CONFIG = "data_efficiency/data_efficiency"
+CONFIG = "B5"
 
 
 def config():
@@ -144,7 +144,7 @@ def data_efficiency_arms(entries, models, providers, cfg=None):
             for draw in range(draws_for(size, cfg)):
                 extra = dict(training_size=size, draw=draw, curve=curve_of(entry["id"], size, cfg))
                 for model in models:
-                    base = dict(dataset_id=entry["id"], model=model, phase="data_efficiency", **extra)
+                    base = dict(dataset_id=entry["id"], model=model, phase="B5", **extra)
                     rows.append({**base, "feature_set": "non_text", "provider": None})
                     for provider in providers:
                         rows.append({**base, "feature_set": arms_cfg["decision_feature_set"],
@@ -218,7 +218,7 @@ def cohort_gains(gains, curves):
             from src.data.loaders import load_catalog
             from src.data.selection import selected_entries
 
-            expected = [e["id"] for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))]
+            expected = [e["id"] for e in selected_entries(load_catalog(), load_yaml("B1"))]
         rows = rows[rows.dataset_id.isin(expected)]
         cell = ["model_id", "representation", "training_size"]
         if rows.duplicated([*cell, "dataset_id"]).any():

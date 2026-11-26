@@ -29,7 +29,7 @@ def study_grid(plan):
         rows.append({"experiment": phase, "datasets": part.dataset_id.nunique(),
                      "predictors": part.model.nunique(), "configurations": len(part),
                      "outer_fits": 5 * len(part), "binary_inner_fits":
-                     0 if phase in {"experiment_3", "data_efficiency", "rq3"} else 15 * binary})
+                     0 if phase in {"B3", "B5", "C2"} else 15 * binary})
     return pd.DataFrame(rows)
 
 
@@ -49,7 +49,7 @@ def local_runtime_evidence(inventory=None):
     """
     from src.cluster.token_audit import saved_exact_token_tables
 
-    folder = paths.manifests_dir("experiment_0") / "before_extraction"
+    folder = paths.manifests_dir("0") / "before_extraction"
     token_scope, tokens = saved_exact_token_tables()
     token_providers = set(tokens.provider) if not tokens.empty else set()
     candidates = load_yaml("extractors")["candidates"]
@@ -150,7 +150,7 @@ def prompt_evidence(report_paths=None):
     """
     from src.evaluation.diagnostic_reports import analyze
 
-    folder = paths.manifests_dir("experiment_0") / "before_extraction"
+    folder = paths.manifests_dir("0") / "before_extraction"
     if report_paths is None:
         jev = folder / "jev_dataset_robustness.json"
         report_paths = [jev] if jev.is_file() else []

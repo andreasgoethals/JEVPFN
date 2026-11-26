@@ -19,7 +19,7 @@ from src.utils.serialization import digest, file_sha256, write_json
 
 
 def receipt_path():
-    return paths.manifests_dir("experiment_0") / "frozen_revision.json"
+    return paths.manifests_dir("0") / "frozen_revision.json"
 
 
 def runtime_pins():

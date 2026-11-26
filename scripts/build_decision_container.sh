@@ -141,7 +141,7 @@ if provider=='e5_tar':
 elif provider not in {'tabstar', 'catboost', 'linear', 'lightgbm'}:
     lines += [f'python -m src.cluster.token_audit --check-only --provider {q(provider)}']
 else:
-    lines += [f"python -c 'from src.utils.config import load_yaml; from src.evaluation.models import verify_runtime; verify_runtime(load_yaml(\"experiment_1/models\")[\"models\"][\"{provider}\"][\"runtime\"])'"]
+    lines += [f"python -c 'from src.utils.config import load_yaml; from src.evaluation.models import verify_runtime; verify_runtime(load_yaml(\"B1/models\")[\"models\"][\"{provider}\"][\"runtime\"])'"]
 Path(work,'post_install.sh').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 PY
     # Name-based creation/activation can resolve an existing host env1 despite envs_dirs.

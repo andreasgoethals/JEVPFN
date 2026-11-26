@@ -1,4 +1,4 @@
-"""Bounded open-weight feature creation after reviewed 0A; preview by default.
+"""Bounded open-weight feature creation after reviewed Experiment 0; preview by default.
 
 Each GPU allocation handles one dataset. The scheduling configuration sets both the
 per-provider job limit and the number of resident workspaces. Workspace leases, quota
@@ -82,7 +82,7 @@ def plan(providers=None):
                     export,
                     "--clusters=" + cpu_cluster(),
                     "--partition=" + ("batch_graniterapids" if cpu_cluster() == "mindwell" else "batch"),
-                    "scripts/slurm/experiment_0_scratch_stage.slurm",
+                    "scripts/slurm/0_scratch_stage.slurm",
                     provider,
                 ],
             )
@@ -139,7 +139,7 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
     steps = plan() if providers is None else plan(selected)
     receipt = campaign_receipt(providers)
     if not execute:
-        settings = load_yaml("experiment_0/scheduling")
+        settings = load_yaml("0/scheduling")
         return dict(
             status="preview",
             providers=list(selected),
@@ -155,7 +155,7 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
     frozen = check_if_present()
     if not frozen["frozen"]:
         raise ValueError("Freeze accepted extraction configuration before starting")
-    cfg = load_yaml("experiment_0/self_hosted")
+    cfg = load_yaml("0/self_hosted")
     if cfg["full_feature_creation_enabled"] is not True:
         raise ValueError("Full extraction is disabled")
     for provider in selected:
@@ -168,7 +168,7 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
 
         if encoder_config(encoder)["enabled"] is not True:
             raise ValueError("Enable the reviewed encoder configuration first")
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     settings["test_pool_limits"] = {**settings["test_pool_limits"], **dict.fromkeys(selected, settings.get("feature_jobs_per_provider", 2))}
     identity = digest(
         dict(frozen=frozen, runtime_pins=runtime_pins(), steps=steps, settings=settings)
@@ -246,7 +246,7 @@ def run(*, execute=False, recover=False, reviewed_by=None, providers=None):
         report = dict(identity=identity, steps=steps)
     if providers is not None:
         report["provider_scope"] = list(selected)
-    for phase in ("experiment_0", "feature_creation"):
+    for phase in ("0", "feature_creation"):
         paths.logs_dir(phase).mkdir(parents=True, exist_ok=True)
 
     def save():

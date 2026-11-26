@@ -180,7 +180,7 @@ def evaluate_cv(
     allow_model_runs: bool = False,
     inner_folds: int = 3,
     binary_threshold_policy: str = "inner_oof_f1",
-    phase: str = "experiment_1",
+    phase: str = "B1",
     synchronize=None,
     device: str = "cpu",
     estimator_settings: dict | None = None,
@@ -206,15 +206,15 @@ def evaluate_cv(
         raise RuntimeError("Model execution is disabled; an explicit opt-in is required")
     validate_splits(dataset, specification)
     if phase not in {
-        "experiment_0",
-        "experiment_1",
-        "experiment_2",
-        "experiment_3",
-        "experiment_4",
-        "rq2",  # B3 text-column refits
-        "data_efficiency",  # B4 training-size curves
-        "representations",  # C1 Strands hidden states
-        "rq3",  # C2 Strands learning from labels
+        "0",
+        "B1",
+        "B2",
+        "B3",
+        "B6",
+        "B4",  # text-column refits
+        "B5",  # training-size curves
+        "C1",  # C1 Strands hidden states
+        "C2",  # C2 Strands learning from labels
     }:
         raise ValueError("Evaluation requires an experiment phase")
     row_ids = [f"csv:{i}" for i in range(len(dataset.frame))]

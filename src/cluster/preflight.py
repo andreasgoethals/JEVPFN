@@ -197,7 +197,7 @@ def contract_tests(run_id: str) -> dict:
         text=True,
         check=False,
     )
-    log = paths.logs_dir("experiment_0") / f"contracts_{run_id}.log"
+    log = paths.logs_dir("0") / f"contracts_{run_id}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("x", encoding="utf-8") as handle:
         handle.write(result.stdout + result.stderr)
@@ -212,7 +212,7 @@ def contract_tests(run_id: str) -> dict:
 
 def runtime_parity():
     """Compare the shared scientific stack against the installed-control lock."""
-    lock = load_yaml("experiment_0/control_runtime")
+    lock = load_yaml("0/control_runtime")
     expected = lock["packages"]
     actual = {}
     for name in expected:
@@ -346,7 +346,7 @@ def decision_feature_checks(cfg):
 
 
 def embedding_checks(cfg: dict, *, bind_artifact_ids=False) -> list[dict]:
-    """Experiment 0B must validate all saved encoder/dataset stores, not just an encoder smoke test."""
+    """B0 must validate all saved encoder/dataset stores, not just an encoder smoke test."""
     from src.data.text_embeddings import cache_path, encoder_config, validate_dataset
 
     results = []
@@ -408,7 +408,7 @@ def run_preflight(
     stage: str = "before_extraction",
     cohort: str = "all",
     predictor_imports: bool = False,
-    config: str = "experiment_0/debug",
+    config: str = "0/debug",
 ) -> dict:
     if local and (paths.on_vsc() or os.environ.get("SLURM_JOB_ID")):
         raise RuntimeError("--local must run off VSC; use a VSC compute allocation there.")
@@ -417,9 +417,9 @@ def run_preflight(
     cfg = load_yaml(config)
     if stage not in cfg["stages"]:
         raise ValueError("Unknown Experiment 0 stage")
-    os.environ["JEVPFN_PHASE"] = "experiment_0"
+    os.environ["JEVPFN_PHASE"] = "0"
     report = {
-        "phase": "experiment_0_preflight",
+        "phase": "preflight",
         "stage": stage,
         "run_id": uuid4().hex,
         "execution_site": "local" if local else "vsc_compute_node",
@@ -432,7 +432,7 @@ def run_preflight(
         "paths": paths.describe(),
         "packages": {},
         "failures": [],
-        "full_experiment_0_passed": False,
+        "full_qualification_passed": False,
         "pending_acceptance": cfg["acceptance_checks"],
         "feature_artifacts": [],
         "datasets": [],
@@ -512,8 +512,8 @@ def run_preflight(
             }
         except (ImportError, RuntimeError, AttributeError, OSError) as exc:
             report["failures"].append(f"GPU/package preflight: {type(exc).__name__}")
-    benchmark_cfg = load_yaml("experiment_1/main") if stage == "after_extraction" else cfg
-    if stage == "after_extraction":
+    benchmark_cfg = load_yaml("B1") if stage == "B0" else cfg
+    if stage == "B0":
         from src.evaluation.acceptance import decision_input_identity
         from src.evaluation.design import decision_providers, decision_versions
 
@@ -523,9 +523,9 @@ def run_preflight(
         report["decision_model_versions"] = decision_versions(providers) if providers else []
         report["decision_input_identity"] = decision_input_identity(providers)
         benchmark_cfg = {**benchmark_cfg, "candidate_extractors": providers}
-    if verify_data or stage == "after_extraction":
+    if verify_data or stage == "B0":
         report["datasets"] = dataset_checks(
-            benchmark_cfg, review_overlap=stage == "after_extraction"
+            benchmark_cfg, review_overlap=stage == "B0"
         )
         failed = sum(item["status"] != "passed" for item in report["datasets"])
         if failed:
@@ -533,7 +533,7 @@ def run_preflight(
                 f"{failed} selected dataset(s) failed offline data/CV checks."
             )
     _validate_artifacts(cfg, report)
-    if stage == "after_extraction":
+    if stage == "B0":
         from src.evaluation.acceptance import evaluation_identity
         from src.evaluation.qualification import feature_evidence
 
@@ -573,7 +573,7 @@ def run_preflight(
                     raise ValueError("Explicit feature list differs from benchmark selectors")
             report["feature_validation"] = "complete_benchmark_inputs"
         except ValueError as exc:
-            report["failures"].append(f"Experiment 0B requires complete benchmark inputs. {exc}")
+            report["failures"].append(f"B0 requires complete benchmark inputs. {exc}")
     else:
         report["feature_validation"] = (
             "see_per_artifact_results_not_full_campaign_acceptance"
@@ -587,7 +587,7 @@ def run_preflight(
     report["performed_checks"] = {
         "package_metadata_and_output_writes": True,
         "selected_dataset_hashes_schema_and_cv_feasibility": verify_data
-        or stage == "after_extraction",
+        or stage == "B0",
         "synthetic_contract_suite": tests,
         "unauthenticated_https_head": network,
         "cuda_tensor_and_tabpfn_import": gpu and predictor_imports,
@@ -620,7 +620,7 @@ def main() -> int:
     parser.add_argument("--tests", action="store_true", help="Run the deterministic pytest suite")
     parser.add_argument("--cohort", choices=decision_scopes(), default="open_weight")
     parser.add_argument(
-        "--stage", choices=["before_extraction", "after_extraction"], default="before_extraction"
+        "--stage", choices=["before_extraction", "B0"], default="before_extraction"
     )
     parser.add_argument(
         "--predictor-imports",
@@ -644,7 +644,7 @@ def main() -> int:
         cohort=args.cohort,
         predictor_imports=args.predictor_imports,
     )
-    write_json(paths.manifests_dir("experiment_0") / f"preflight_{report['run_id']}.json", report)
+    write_json(paths.manifests_dir("B0" if args.stage == "B0" else "0") / f"preflight_{report['run_id']}.json", report)
     print(json.dumps(report, indent=2))
     tests = report.get("contract_tests", {})
     if tests.get("status") == "failed":

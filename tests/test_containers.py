@@ -112,7 +112,7 @@ def test_retirement_needs_matching_gpu_evidence_and_never_touches_other_data(pac
     settings = {
         "request_configuration": {"execution_container": {"container_id": marker["container_id"]}}
     }
-    evidence = paths.manifests_dir("experiment_0") / "before_extraction/gpu_contracts/fixture.json"
+    evidence = paths.manifests_dir("0") / "before_extraction/gpu_contracts/fixture.json"
     write_json(
         evidence,
         {

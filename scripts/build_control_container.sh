@@ -16,7 +16,7 @@ elif [[ -f "$control_parent/control.active.json" ]]; then
 else
     control_python="$(command -v python3)"
 fi
-"$control_python" -c 'from src.utils.config import load_yaml; load_yaml("experiment_0/control_runtime")' || {
+"$control_python" -c 'from src.utils.config import load_yaml; load_yaml("0/control_runtime")' || {
     echo 'Choose a build Python with the project control dependencies using JEVPFN_BUILD_PYTHON.' >&2; exit 2; }
 source scripts/check_container_tools.sh
 if [[ -n "${JEVPFN_CONTROL_IMAGE:-}" ]]; then
@@ -41,7 +41,7 @@ import shlex,sys,yaml,shutil
 from pathlib import Path
 from src.cluster.container_templates import explicit_conda_prefix,pinned_miniforge
 from src.utils.config import load_yaml
-work,repo,site=map(Path,sys.argv[1:]); cfg=load_yaml('experiment_0/control_runtime')
+work,repo,site=map(Path,sys.argv[1:]); cfg=load_yaml('0/control_runtime')
 settings=yaml.safe_load(site.read_text())
 settings.setdefault('force',{}).update(build_tmpdir_base=str(work),workdir=str(work),share_container=False,
     max_num_cpus=4,num_cpus=4,sqfs_options='-noappend -mem 2G -processors 4',singularity_executable_path=shutil.which('apptainer'))

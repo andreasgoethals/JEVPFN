@@ -6,7 +6,7 @@ predictor's no-text baseline" in the fixed headline metric; raw gains stay withi
 family (classification: ROC-AUC/macro AUC, N = 9; regression: R², N = 9) in separate panels,
 and only the headroom share pools all 18 datasets. Colour = representation, marker shape =
 predictor (one ink), grey dots = individual decision models. Tables come from
-`src.evaluation.group_b_views`; B3 lives in `when_text_helps`, the synthesis in
+`src.evaluation.group_b_views`; B4 lives in `when_text_helps`, the synthesis in
 `group_b_synthesis`.
 """
 

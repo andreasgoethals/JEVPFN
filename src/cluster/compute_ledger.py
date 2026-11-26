@@ -31,7 +31,8 @@ STAGES = (
     ("jevpfn-tar-pca", "tar"),
     ("jevpfn-tar", "tar"),
     ("jevpfn-benchmark", "benchmark"),
-    ("jevpfn-rq1", "label_free_studies"),
+    ("jevpfn-A", "label_free_studies"),  # A0 pilots and A1-A3 exports (26-11-2026 onwards)
+    ("jevpfn-rq1", "label_free_studies"),  # Job names of Group A jobs before 26-11-2026.
     ("jevpfn-0b-replay", "label_free_studies"),
     ("jevpfn-exp0", "qualification"),
     ("jevpfn-control", "infrastructure"),
@@ -50,9 +51,9 @@ STAGES = (
 #: The study each stage serves, for per-experiment compute in the study audit.
 STAGE_STUDY = {
     "decision_feature_creation": "Feature creation", "frozen_embedding_creation": "Feature creation",
-    "qualification": "0A/0B qualification", "infrastructure": "Infrastructure",
-    "fold_pca": "B2a frozen embeddings", "tar": "B2b TAR",
-    "label_trained_classifier": "B2b label-trained classifier", "benchmark": "Group B/C benchmark fits",
+    "qualification": "0 and B0 qualification", "infrastructure": "Infrastructure",
+    "fold_pca": "B2 frozen embeddings", "tar": "B3 TAR",
+    "label_trained_classifier": "B3 label-trained classifier", "benchmark": "Group B/C benchmark fits",
     "label_free_studies": "Group A", "strands_hidden_states": "C1 hidden states",
     "strands_qualification": "C0 Strands qualification", "strands_adaptation": "C2 adaptation", "result_export": "Result exports", "other": "Other",
 }
@@ -98,7 +99,7 @@ def parse_sacct(text: str) -> list[dict]:
                 tokens = shlex.split(record["SubmitLine"])
             except ValueError:
                 tokens = []
-            if any(Path(script).name == "c2_adaptation.slurm" and mode == "pilot"
+            if any(Path(script).name == "C2_adaptation.slurm" and mode == "pilot"
                    for script, mode in zip(tokens, tokens[1:])):
                 stage = "strands_qualification"
         state = record["State"].split(" ")[0]

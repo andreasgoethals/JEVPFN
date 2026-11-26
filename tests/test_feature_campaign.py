@@ -12,7 +12,7 @@ from src.utils.config import load_yaml
 
 def test_complete_open_weight_grid_and_workspace_lifetimes():
     steps = plan()
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     assert run()["decision_gpu_jobs_per_runtime"] == settings["feature_jobs_per_provider"]
     settings["test_pool_limits"].update(dict.fromkeys(SELF_HOSTED, 2))
     validate(steps, settings)
@@ -47,7 +47,7 @@ def test_ambiguous_submission_retains_diagnostics_and_cannot_duplicate(isolated_
     from src.data import text_embeddings
     from src.utils import paths
 
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     monkeypatch.setattr(campaign, "check_if_present", lambda: {"frozen": True})
@@ -96,7 +96,7 @@ def test_full_account_defers_admission_without_abandoning_the_graph():
     from src.cluster.job_graph import SubmissionDeferred, advance
 
     steps = [dict(name=name, cluster="mindwell", pool="gpu") for name in ("first", "second")]
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     calls = []
 
     def submit(step):
@@ -120,7 +120,7 @@ def test_recovery_reuses_completed_jobs_and_retries_only_terminal_failures(isola
     from src.utils import paths
     from src.utils.serialization import write_json
 
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
     monkeypatch.setattr(campaign, "check_if_present", lambda: {"frozen": True})
@@ -165,7 +165,7 @@ def test_named_admission_ceiling_leaves_campaign_pending(isolated_output, monkey
     from src.cluster import feature_campaign as campaign
     from src.data import text_embeddings
 
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     monkeypatch.setattr(campaign.paths, "on_vsc", lambda: True)
     monkeypatch.setattr(campaign, "check_if_present", lambda: {"frozen": True})

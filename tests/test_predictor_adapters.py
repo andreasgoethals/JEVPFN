@@ -147,7 +147,7 @@ def test_no_raw_text_in_main_arm_and_no_model_import_without_permission(dataset)
 
 def test_plan_four_families_seven_engines_three_original_text_baselines():
     plan = [a for a in benchmark_plan()
-            if a["phase"] in ("experiment_1", "experiment_2", "experiment_3", "experiment_4")
+            if a["phase"] in ("B1", "B2", "B3", "B6")
             and a["feature_set"] in ("non_text", "non_text_plus_joint", "non_text_plus_per_column",
                                      "non_text_plus_both", "non_text_plus_frozen_e5",
                                      "non_text_plus_tar", "original_features")]
@@ -218,15 +218,18 @@ def test_constructor_contracts_and_full_context(monkeypatch, tmp_path):
     output_one = calls[-1]["output_dir"]
     _backend("tabstar", "binary_classification", settings, encoder, 9000)
     assert calls[-1]["output_dir"] != output_one
-    assert "exp07_native_text" in output_one
+    assert "B6" in output_one
     _backend(
         "tabstar",
         "binary_classification",
-        settings | {"output_phase": "experiment_0"},
+        settings | {"output_phase": "0"},
         encoder,
         9000,
     )
-    assert "01_exp0a" in calls[-1]["output_dir"]
+    from pathlib import Path
+
+    parts = Path(calls[-1]["output_dir"]).parts
+    assert parts[parts.index("general") + 1] == "0"
     checkpoint.write_bytes(b"changed checkpoint")
     with pytest.raises(ValueError, match="SHA256"):
         _backend("tabicl_v2", "binary_classification", settings, encoder, 9000)

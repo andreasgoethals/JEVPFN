@@ -447,7 +447,7 @@ def _pooled_values(pooled, contrast):
 def pooled_confirmatory_tests(pooled, plan, *, datasets=None):
     """The declared confirmatory family with pooled contrasts; Holm over all of it.
 
-    `plan` is the whole analysis plan (`config/05_synthesis/analysis.yaml`). Contrasts with a
+    `plan` is the whole analysis plan (`config/general/4_synthesis/analysis.yaml`). Contrasts with a
     ``type`` in `POOLED_CONTRASTS` declare ``application``, ``group``, ``learner``, ``versus``,
     ``datasets`` and ``direction`` and read `pooled` (columns `POOLED_SCORE_COLUMNS`, from
     `learner_scores.pooled_scores`); every other contrast runs through `confirmatory_tests` on

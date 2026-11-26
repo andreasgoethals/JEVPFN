@@ -44,7 +44,7 @@ def text_column_counts() -> dict[str, int]:
     from src.utils.config import load_yaml
 
     return {e["id"]: int(e["paper_summary"]["text_columns"])
-            for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))}
+            for e in selected_entries(load_catalog(), load_yaml("B1"))}
 
 
 def dataset_rows() -> dict[str, int]:
@@ -54,7 +54,7 @@ def dataset_rows() -> dict[str, int]:
     from src.utils.config import load_yaml
 
     return {e["id"]: int(e["paper_summary"]["rows"])
-            for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))}
+            for e in selected_entries(load_catalog(), load_yaml("B1"))}
 
 
 def _spread(frame, keys, outcome):
@@ -422,7 +422,7 @@ def row_cohort_cells(measured: pd.DataFrame, *, roster, headline_folds=None) -> 
     columns = [*keys, "benefit", "decision_models"]
     if measured.empty:
         return pd.DataFrame(columns=columns)
-    data = measured[measured.phase.eq("experiment_1") & measured.axis.isin(COHORT_AXES)
+    data = measured[measured.phase.eq("B1") & measured.axis.isin(COHORT_AXES)
                     & measured.features.isin(group_b.MODE_LABELS)].copy()
     data["provider"] = data.representation.map(lambda rep: json.loads(rep)["provider"])
     data = data[data.provider.isin(roster)]
@@ -486,7 +486,7 @@ def size_draw_gains(head: pd.DataFrame, *, roster) -> pd.DataFrame:
 
 
 def size_curves(head: pd.DataFrame, *, roster, curves, representations, outcome="raw_gain"):
-    """B4 curves per task family: DerSimonian-Laird pooled gain over datasets per size, for each
+    """B5 curves per task family: DerSimonian-Laird pooled gain over datasets per size, for each
     predictor and for the mean over predictors (``model_id = "all"``: per dataset and draw the
     mean over the seven predictors, so its draw variance is that of the average). Each curve
     keeps one fixed dataset cohort (`data_efficiency.cohort_gains`)."""
@@ -595,20 +595,37 @@ def native_gains(head: pd.DataFrame) -> pd.DataFrame:
     return native.drop(columns=["value", "folds"])
 
 
-def ladder(b1: dict, b2: dict, b5: dict, *, n_boot=N_BOOT) -> pd.DataFrame:
+def representations(*exports: dict) -> dict:
+    """One frame set from the B2 and B3 exports (alternatives to decision features).
+
+    Both exports carry the B1 control arms; identical rows appear once."""
+    present = [e for e in exports if e]
+    if not present:
+        return {}
+    combined = {}
+    for name in dict.fromkeys(k for e in present for k in e):
+        parts = [e[name] for e in present if isinstance(e.get(name), pd.DataFrame) and not e[name].empty]
+        if parts:
+            combined[name] = pd.concat(parts, ignore_index=True).drop_duplicates().reset_index(drop=True)
+        else:
+            combined[name] = next(e[name] for e in present if name in e)
+    return combined
+
+
+def ladder(b1: dict, b2: dict, b6: dict, *, n_boot=N_BOOT) -> pd.DataFrame:
     """Every main arm's per-family raw gain and pooled headroom share (`family_summaries`),
-    from the B1, B2 and B5 exports that exist (absent exports contribute nothing)."""
+    from the B1, the combined B2/B3 (`representations`) and B6 exports that exist."""
     parts = []
     if b1:
         parts.append(b1["median_gains"])
     if b2:
         parts += [b2["dataset_gains"], b2["median_gains"]]
-    if b5:
-        parts.append(native_gains(group_b.headline(b5["folds"])))
+    if b6:
+        parts.append(native_gains(group_b.headline(b6["folds"])))
     parts = [p for p in parts if p is not None and not p.empty]
     if not parts:
         return pd.DataFrame()
-    merged_heads(*((frames or {}).get("folds") for frames in (b1, b2, b5)))
+    merged_heads(*((frames or {}).get("folds") for frames in (b1, b2, b6)))
     gains = pd.concat(parts, ignore_index=True)
     keys = ["dataset_id", "task_type", "model_id", "representation"]
     gains = gains[[*keys, "raw_gain", "headroom_share", "baseline", "family"]].drop_duplicates()
@@ -702,7 +719,7 @@ def compute_costs(folds: pd.DataFrame, *, rows: dict | None = None, extraction: 
         # Legacy B1 exports use all rows and five balanced outer folds. The first N%5
         # folds contain one extra test row. Use an exact count supplied by the caller.
         n = fit.dataset_id.map(rows).astype(float)
-        training = training.fillna((n - n // 5 - fit.outer_fold.lt(n % 5)).where(fit.phase.eq("experiment_1")))
+        training = training.fillna((n - n // 5 - fit.outer_fold.lt(n % 5)).where(fit.phase.eq("B1")))
     fit = fit.assign(hours_per_1000=fit.value.astype(float) / training.where(training.gt(0)) * 1000 / 3600)
     out = fit.groupby("representation", as_index=False).hours_per_1000.median().rename(
         columns={"hours_per_1000": "fit_hours_per_1000_rows"})
@@ -744,10 +761,10 @@ def pareto_points(summaries, costs: pd.DataFrame) -> pd.DataFrame:
     return points.merge(costs, on="representation", how="left")
 
 
-def normalized_ladder(b1: dict, b2: dict, b5: dict, *, roster, n_boot=N_BOOT):
+def normalized_ladder(b1: dict, b2: dict, b6: dict, *, roster, n_boot=N_BOOT):
     """The B synthesis ladder (no-text baseline, every main arm, each native system) on the
-    normalised score, from the B1, B2 and B5 fold tables that exist (B1 arms first, then B2,
-    then B5; `merged_heads`). Returns ``(per_dataset, summary)``; relative to this set."""
-    head = merged_heads(*((f or {}).get("folds") for f in (b1, b2, b5)))
+    normalised score, from the B1, combined B2/B3 and B6 fold tables that exist (B1 arms first;
+    `merged_heads`). Returns ``(per_dataset, summary)``; relative to this set."""
+    head = merged_heads(*((f or {}).get("folds") for f in (b1, b2, b6)))
     natives = sorted(r for r in set(head.representation) if str(r).startswith("native/"))
     return normalized_view(head, [*NORMALIZED_LADDER, *natives], roster=roster, n_boot=n_boot)

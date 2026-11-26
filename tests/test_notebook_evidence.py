@@ -14,7 +14,7 @@ def test_fit_counts_use_dataset_tasks_not_provider_count(monkeypatch):
     monkeypatch.setattr(evidence, "load_yaml", lambda _: {"datasets": {
         "binary": {"task_type": "binary_classification"},
         "reg": {"task_type": "regression"}}})
-    plan = [{"phase": "experiment_1", "dataset_id": dataset, "model": "catboost"}
+    plan = [{"phase": "B1", "dataset_id": dataset, "model": "catboost"}
             for dataset in ("binary", "reg", "binary")]
     row = evidence.study_grid(plan).iloc[0]
     assert row.configurations == 3 and row.outer_fits == 15
@@ -73,7 +73,7 @@ def test_historical_jev_probes_keep_each_observed_release_and_do_not_qualify_a_n
     from src.visualize.research import robustness_matrix_figure
 
     monkeypatch.setattr(token_audit, "saved_exact_token_tables", lambda: ({}, pd.DataFrame()))
-    folder = evidence.paths.manifests_dir("experiment_0") / "before_extraction"
+    folder = evidence.paths.manifests_dir("0") / "before_extraction"
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "jev_dataset_robustness.json"
     reports = []
@@ -179,7 +179,7 @@ def test_embedding_plot_preserves_metric_direction_and_complete_paired_folds(tas
     for scope, width in [("joint", 64), ("per_column", 32)]:
         for dataset in ["complete", "incomplete"]:
             for fold in range(5 if dataset == "complete" else 4):
-                rows.append({"task_type": task, "metric": metric, "phase": "experiment_2",
+                rows.append({"task_type": task, "metric": metric, "phase": "B2",
                              "model_id": "catboost", "reference": "non_text", "dataset_id": dataset,
                              "split_id": "shared", "checkpoint_id": "pin", "encoder": "e5_small_v2",
                              "pca_scope": scope,
@@ -208,7 +208,7 @@ def test_embedding_panels_require_the_same_dataset_coverage_for_both_recipes():
         for scope, width in recipes:
             for fold in range(5):
                 rows.append({"task_type": "binary_classification", "metric": "roc_auc",
-                             "phase": "experiment_2", "model_id": "catboost",
+                             "phase": "B2", "model_id": "catboost",
                              "reference": "non_text", "dataset_id": dataset,
                              "split_id": "shared", "encoder": "e5_small_v2", "pca_scope": scope,
                              "checkpoint_id": scope if dataset == "changed_checkpoint" else "pin",

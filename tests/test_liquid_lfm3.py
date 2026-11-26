@@ -71,7 +71,7 @@ def test_new_container_avoids_conflicting_historical_tokenizer_extra():
     assert match is not None
     branch = match.group(1)
     assert "token-audit" not in branch and ".[dev,{extra}]" in branch
-    audit = (paths.REPO_ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text(encoding="utf-8")
+    audit = (paths.REPO_ROOT / "scripts/slurm/0_tokens.slurm").read_text(encoding="utf-8")
     assert 'if [[ "${2:-}" == liquid_lfm3 ]]' in audit
     assert "source scripts/activate_runtime.sh" in audit
 

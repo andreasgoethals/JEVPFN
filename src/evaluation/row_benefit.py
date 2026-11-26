@@ -1,4 +1,4 @@
-"""RQ2E. Pair saved held-out predictions with the structured baseline, without fitting."""
+"""B4. Pair saved held-out predictions with the structured baseline, without fitting."""
 
 import argparse
 import json
@@ -179,7 +179,7 @@ def decision_modes(recipe, feature_set, phase):
     from src.evaluation.aggregate import DECISION_MODES
 
     mode = DECISION_MODES.get(feature_set)
-    if phase != "experiment_1" or mode is None or not (recipe or {}).get("provider"):
+    if phase != "B1" or mode is None or not (recipe or {}).get("provider"):
         return None
     return ("per_column", "joint") if mode == "both" else (mode,)
 
@@ -354,7 +354,7 @@ class Pairing:
         entry = next(e for e in load_catalog()["datasets"] if e["id"] == dataset_id)
         self.dataset_id = dataset_id
         self.ds = ds = load_dataset(entry, allow_download=False)
-        main = load_yaml("experiment_1/main")
+        main = load_yaml("B1")
         self.spec = spec = shared_splits(ds, seed=main["random_seed"], folds=5)
         self.cohort = cohort_record(cohort, main=main)
         self.inputs = DecisionInputs(ds, {**main, "candidate_extractors": self.cohort["decision_roster"]},
@@ -368,7 +368,7 @@ class Pairing:
         lengths[~present] = np.nan
         self.lengths = lengths
         arms, baselines = {}, {}
-        for phase in ("experiment_1", "experiment_2", "experiment_3"):
+        for phase in ("B1", "B2", "B3"):
             recipes = all_recipes(phase, dataset_id=dataset_id)
             for r in cohort_recipes(recipes, self.cohort, main):
                 if r["dataset_id"] != dataset_id:
@@ -380,7 +380,7 @@ class Pairing:
                     raise ValueError(
                         "Select a single campaign matching the current source rows and splits"
                     )
-                if phase == "experiment_1" and r["feature_set"] == "non_text":
+                if phase == "B1" and r["feature_set"] == "non_text":
                     key = self.matching_key(r)
                     if key in baselines:
                         raise ValueError("Ambiguous structured baseline")
@@ -427,7 +427,7 @@ class Pairing:
         if key not in self._baseline_cache:
             if len(self._baseline_cache) >= 5:
                 self._baseline_cache.pop(next(iter(self._baseline_cache)))
-            self._baseline_cache[key] = outer_record(self.baselines[key], "experiment_1")
+            self._baseline_cache[key] = outer_record(self.baselines[key], "B1")
         return self._baseline_cache[key]
 
     def folds(self, arms=None):
@@ -459,7 +459,7 @@ class Pairing:
 def report_folder(kind, cohort=None):
     from src.evaluation.benchmark_export import cohort_key
 
-    return paths.results_dir(kind, cohort_key(cohort, main=load_yaml("experiment_1/main")), phase="rq2")
+    return paths.results_dir(kind, cohort_key(cohort, main=load_yaml("B1")), phase="B4")
 
 
 def run(dataset_id, *, decision_loader=load_decision_block, cohort=None):
@@ -533,7 +533,7 @@ def summaries(*, cohort=None):
     frames = []
     from src.evaluation.benchmark_export import cohort_record
 
-    scope = cohort_record(cohort, main=load_yaml("experiment_1/main"))
+    scope = cohort_record(cohort, main=load_yaml("B1"))
     for path in report_folder("row_benefit", cohort).glob("*.json"):
         data = json.loads(path.read_text(encoding="utf-8"))
         if any(data.get(k) != v for k, v in scope.items()):
@@ -564,7 +564,7 @@ def summaries(*, cohort=None):
     by["augmented_loss"] = by.augmented_loss_sum / by.defined.replace(0, np.nan)
     by["interpretation"] = by.axis.map(axis_interpretation)
     if by.duplicated(["dataset", *keys]).any():
-        raise ValueError("Multiple arms map to the same RQ2E comparison")
+        raise ValueError("Multiple arms map to the same B4 comparison")
     balanced = by.groupby([*keys, "interpretation"], as_index=False).agg(
         mean_benefit=("benefit", "mean"), datasets=("benefit", "count")
     )

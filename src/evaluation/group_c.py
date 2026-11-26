@@ -1,10 +1,10 @@
 """Group C (owner-approved 20 November 2026; Strands only): arms, features, comparisons, exports.
 
-* C1, inside the decision model (C/exp10_representations, internal phase ``representations``):
+* C1, inside the decision model (C/C1, internal phase ``representations``):
   C1a = 3 positions x 2 layers x {per text column, joint} = 12 hidden-state arms (PCA 32 per
   column / 64 joint on outer-training rows); C1b = the ``<answer>``-last vector plus Strands'
   own probabilities, per column and joint (2 arms). Label-free.
-* C2, learning from labels (C/exp11_adaptation, internal phase ``rq3``): head-only, LoRA-only and
+* C2, learning from labels (C/C2): head-only, LoRA-only and
   LoRA + head cross-fitted probabilities for the joint question (3 arms); zero-shot is B1's
   Strands joint arm.
 
@@ -42,9 +42,9 @@ SCHEMA = "jevpfn.group_c.export.v1"
 PROVIDER = "strands"
 VIEWS = ("per_column", "joint")
 STUDIES = {
-    "C1": {"phase": "representations", "file": "c1_representations.zip",
-           "phases": ("experiment_1", "representations")},
-    "C2": {"phase": "rq3", "file": "c2_adaptation.zip", "phases": ("experiment_1", "experiment_3", "rq3")},
+    "C1": {"phase": "C1", "file": "c1_representations.zip",
+           "phases": ("B1", "C1")},
+    "C2": {"phase": "C2", "file": "c2_adaptation.zip", "phases": ("B1", "B3", "C2")},
 }
 TABLES = {
     "C1": ("coverage", "folds", "dataset_gains", "summary", "contrasts", "contrast_summary", "extraction"),
@@ -60,7 +60,7 @@ ENCODERS = ("e5_small_v2", "e5_large_v2", "qwen3_embedding_0_6b")
 
 def arms(selected, models) -> list[dict]:
     """C1a (12), C1b (2) and C2 (3) arms per dataset and predictor."""
-    c1 = load_yaml("representations/representations")["arms"]
+    c1 = load_yaml("C1")["arms"]
     from src.evaluation.strands_adaptation import CELLS
 
     rows = []
@@ -71,17 +71,17 @@ def arms(selected, models) -> list[dict]:
                 for position in c1["positions"]:
                     for layer in c1["layers"]:
                         rows.append(dict(dataset_id=entry["id"], model=model, feature_set=HIDDEN,
-                                         provider=None, phase="representations", hidden_view=view,
+                                         provider=None, phase="C1", hidden_view=view,
                                          hidden_position=position, hidden_layer=layer, **spec))
             both = c1["with_probabilities"]
             for view in both["views"]:
                 rows.append(dict(dataset_id=entry["id"], model=model, feature_set=PLUS_HIDDEN[view],
-                                 provider=PROVIDER, phase="representations", hidden_view=view,
+                                 provider=PROVIDER, phase="C1", hidden_view=view,
                                  hidden_position=both["position"], hidden_layer=both["layer"],
                                  **c1["views"][view]))
             for cell in CELLS:
                 rows.append(dict(dataset_id=entry["id"], model=model, feature_set=ADAPTED,
-                                 provider=None, phase="rq3", adaptation_cell=cell))
+                                 provider=None, phase="C2", adaptation_cell=cell))
     return rows
 
 
@@ -139,7 +139,7 @@ def expected_artifacts(arm, dataset, specification=None) -> list[str]:
 
 def c1_contrasts() -> list[dict]:
     """(name, A, B): positive values favour A. Exactly the approved C1 comparisons."""
-    c1 = load_yaml("representations/representations")["arms"]
+    c1 = load_yaml("C1")["arms"]
     out = []
     for view in VIEWS:
         answer = hidden_label(view, "answer", 24)
@@ -225,8 +225,8 @@ def analysis_identity(study) -> str:
     from src.evaluation.design import decision_versions
     from src.utils.provenance import code_identity
 
-    configs = scientific_configs(("experiment_1/main", "experiment_1/protocol", "representations/representations",
-                                  "experiment_3/tar", "rq3/adaptation"), roster=(PROVIDER,))
+    configs = scientific_configs(("B1", "B1/protocol", "C1",
+                                  "B3", "C2"), roster=(PROVIDER,))
     modules = ["group_c", "group_b", "benchmark_export", "study_export", "records", "endpoints",
                "strands_adaptation", "campaign", "design"]
     return digest({"schema": SCHEMA, "study": study, "configs": configs,
@@ -253,7 +253,7 @@ def extraction_table() -> pd.DataFrame:
     from src.jev import strands_hidden
 
     rows = []
-    for entry in selected_entries(load_catalog(), load_yaml("experiment_1/main")):
+    for entry in selected_entries(load_catalog(), load_yaml("B1")):
         try:
             body = strands_hidden.read_manifest(entry["id"], verify=False)
         except (FileNotFoundError, ValueError) as error:
@@ -275,7 +275,7 @@ def fits_table() -> pd.DataFrame:
     from src.evaluation.strands_adaptation import CELLS, bundle_dir
 
     rows = []
-    for entry in selected_entries(load_catalog(), load_yaml("experiment_1/main")):
+    for entry in selected_entries(load_catalog(), load_yaml("B1")):
         for fold in range(5):
             for cell in CELLS:
                 target = bundle_dir(entry["id"], fold, cell) / "manifest.json"
@@ -339,7 +339,7 @@ def design_counts() -> dict:
     from src.evaluation.campaign import benchmark_plan
     from src.evaluation.strands_adaptation import training_plan
 
-    plan = [a for a in benchmark_plan() if a["phase"] in ("representations", "rq3")]
+    plan = [a for a in benchmark_plan() if a["phase"] in ("C1", "C2")]
     frame = pd.DataFrame(plan)
     fits = pd.DataFrame(training_plan())
     return {

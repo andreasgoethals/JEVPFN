@@ -24,15 +24,15 @@ def design(**changes):
     rows = []
     for dataset in DATASETS:
         for model in MODELS:
-            rows.append(dict(phase="experiment_1", dataset_id=dataset, model_id=model,
+            rows.append(dict(phase="B1", dataset_id=dataset, model_id=model,
                              representation="baseline", width_status="within_known_width_limit"))
             for mode in EFFECT:
                 for provider in ROSTER:
-                    rows.append(dict(phase="experiment_1", dataset_id=dataset, model_id=model,
+                    rows.append(dict(phase="B1", dataset_id=dataset, model_id=model,
                                      representation=f"decision/{mode}/{provider}",
                                      width_status="within_known_width_limit"))
             for scope in ("per_column32", "joint64"):
-                rows.append(dict(phase="experiment_2", dataset_id=dataset, model_id=model,
+                rows.append(dict(phase="B2", dataset_id=dataset, model_id=model,
                                  representation=f"frozen/e5_small_v2/{scope}",
                                  width_status="within_known_width_limit"))
     multiclass = [d for d, t in DATASETS.items() if t == "multiclass_classification"]
@@ -45,7 +45,7 @@ def design(**changes):
 def fold_rows(dataset, task, model, feature_set, value, *, provider=None, folds=5, **extra):
     metric = {"binary_classification": "roc_auc", "multiclass_classification": "roc_auc_ovr_macro",
               "regression": "r2"}[task]
-    return [dict(phase="experiment_1", dataset_id=dataset, task_type=task, model_id=model,
+    return [dict(phase="B1", dataset_id=dataset, task_type=task, model_id=model,
                  checkpoint_id="ck", feature_set=feature_set, provider=provider, view="main",
                  encoder=extra.get("encoder"), pca_scope=extra.get("pca_scope"),
                  pca_components=extra.get("pca_components"), probe_view=None, dropped_text_column=None,
@@ -88,25 +88,25 @@ def test_normalised_gain_is_undefined_without_headroom():
 def test_b5_compares_native_systems_with_structured_references_in_the_export():
     datasets = {"toy-a": "binary_classification", "toy-b": "regression"}
     systems = ("tabstar", "contexttab", "ag_mm")
-    plan = pd.DataFrame([{"phase": "experiment_4", "model_id": model, "representation": f"native/{model}"}
+    plan = pd.DataFrame([{"phase": "B6", "model_id": model, "representation": f"native/{model}"}
                          for model in systems])
     rows = []
     for dataset, task in datasets.items():
         for model in MODELS:
             rows.extend(fold_rows(dataset, task, model, "non_text", 0.5))
         for i, model in enumerate(systems):
-            rows.extend({**r, "phase": "experiment_4"} for r in
+            rows.extend({**r, "phase": "B6"} for r in
                         fold_rows(dataset, task, model, "original_features", 0.7 + 0.01 * i))
     folds = pd.DataFrame(rows)
     study = design(datasets=datasets, plan=plan)
-    result = learner_scores.run_application("B5_native_text_systems", {"folds": folds},
+    result = learner_scores.run_application("B6_native_text_systems", {"folds": folds},
                                             analysis=approved_analysis(), design=study)
     group = result["groups"][0]
     assert group["status"] == "compared" and group["table"].empty
     assert group["omnibus"]["mean_ranks"] == {f"native/{model}": 3 - i for i, model in enumerate(systems)}
-    native_row = folds[folds.phase.eq("experiment_4")].iloc[[0]]
+    native_row = folds[folds.phase.eq("B6")].iloc[[0]]
     with pytest.raises(ValueError, match="Several fold records"):
-        learner_scores.b5_groups({"folds": pd.concat([folds, native_row])}, study)
+        learner_scores.b6_groups({"folds": pd.concat([folds, native_row])}, study)
 
 
 def test_application_names_match_the_framework_entries():
@@ -153,7 +153,7 @@ def test_approved_framework_waits_for_absent_exports(monkeypatch):
     assert state["status"] == "ready_to_run" and state["pooled_contrasts"] == 21
     family = learner_scores.run_confirmatory_family()
     assert family["status"] == "awaiting_export"
-    assert family["missing"] == ["B1_decision_features", "B2_representations"]
+    assert family["missing"] == ["B1_decision_features", "B2_frozen_embeddings", "B3_label_trained"]
 
 
 def test_declared_contrasts_are_the_proposal_per_predictor_on_planned_learners():
@@ -162,10 +162,10 @@ def test_declared_contrasts_are_the_proposal_per_predictor_on_planned_learners()
     plan = learner_scores.planned_design()
     models = learner_scores._main_models(plan)
     b2 = ["decision/both/median", "decision+frozen/both/median",
-          *learner_scores._planned(plan, "experiment_2", ("frozen",)),
-          *learner_scores._planned(plan, "experiment_3", ("tar", "probe"))]
+          *learner_scores._planned(plan, "B2", ("frozen",))]
+    b3 = ["decision/both/median", *learner_scores._planned(plan, "B3", ("tar", "probe"))]
     learners = {"B1_decision_features": ["baseline", *(f"decision/{m}/median" for m in learner_scores.MODES)],
-                "B2_representations": b2}
+                "B2_frozen_embeddings": b2, "B3_label_trained": b3}
     assert len(contrasts) == 3 * len(models) == 21
     references = []
     for contrast in contrasts:
@@ -271,7 +271,7 @@ def test_b4_fold_level_averages_each_fold_over_the_planned_draws():
             for representation, feature_set, value in (("baseline", "non_text", 0.6),
                                                        ("decision/joint/m1", "non_text_plus_joint", 0.65)):
                 for draw in (0, 1):
-                    plan.append(dict(phase="data_efficiency", dataset_id=dataset, model_id=model,
+                    plan.append(dict(phase="B5", dataset_id=dataset, model_id=model,
                                      representation=representation, width_status="within_known_width_limit",
                                      training_size=100, draw=draw))
                     if (dataset, model, representation, draw) == ("D01", "linear", "baseline", 1):
@@ -281,7 +281,7 @@ def test_b4_fold_level_averages_each_fold_over_the_planned_draws():
                         rows.append(row | {"training_size": 100, "draw": draw})
     base = design().plan
     full = design(plan=pd.concat([base, pd.DataFrame(plan)], ignore_index=True))
-    groups = learner_scores.application_groups("B4_data_efficiency", {"folds": pd.DataFrame(rows)}, full)
+    groups = learner_scores.application_groups("B5_data_efficiency", {"folds": pd.DataFrame(rows)}, full)
     catboost, linear = groups
     assert catboost.group == "catboost/n100" and catboost.folds.score.notna().all()
     first = catboost.folds.set_index(["dataset_id", "outer_fold", "learner"]).score
@@ -315,7 +315,7 @@ def test_unsupported_width_arms_are_excluded_by_design_and_listed():
                 extra += fold_rows(dataset, task, model, "non_text_plus_frozen_e5", 0.62, encoder="e5_small_v2",
                                    pca_scope=scope, pca_components=components)
     folds = pd.concat([folds, pd.DataFrame(extra)], ignore_index=True)
-    groups = learner_scores.application_groups("B2_representations", {"folds": folds}, design(plan=plan))
+    groups = learner_scores.application_groups("B2_frozen_embeddings", {"folds": folds}, design(plan=plan))
     linear = next(g for g in groups if g.group == "linear")
     assert linear.excluded_by_design == ["frozen/e5_small_v2/joint64"]
     assert "frozen/e5_small_v2/joint64" not in linear.learners
@@ -372,10 +372,10 @@ def test_b3_regret_matches_the_lodo_evaluation_policy_regret():
             rows += [dict(dataset_id=d, actual=a, predicted=p, input_set=name, model_id=model)
                      for d, a, p in zip(DATASETS, actual, predicted)]
     table = pd.DataFrame(rows).assign(outcome="headroom_share")
-    groups = learner_scores.application_groups("B3_when_text_helps", {"lodo_predictions": table}, design())
+    groups = learner_scores.application_groups("B4_when_text_helps", {"lodo_predictions": table}, design())
     for incompatible in (table.drop(columns="outcome"), table.assign(outcome="raw_gain")):
         with pytest.raises(ValueError, match="headroom-share outcomes"):
-            learner_scores.application_groups("B3_when_text_helps", {"lodo_predictions": incompatible}, design())
+            learner_scores.application_groups("B4_when_text_helps", {"lodo_predictions": incompatible}, design())
     assert learner_scores.rope_for(learner_scores.REGRET, {"rope": {learner_scores.NORMALISED_GAIN: 0.02,
         "roc_auc": 0.1, "roc_auc_ovr_macro": 0.1, "r2": 0.1}}) == 0.02
     scores = groups[0].scores.set_index("learner")
@@ -384,7 +384,7 @@ def test_b3_regret_matches_the_lodo_evaluation_policy_regret():
     assert scores.loc["rule/pilot", "score"].mean() == pytest.approx(expected["regret"])
     assert scores.loc["always", "score"].mean() == pytest.approx(expected["regret_always"])
     assert scores.loc["never", "score"].mean() == pytest.approx(expected["regret_never"])
-    result = learner_scores.run_application("B3_when_text_helps", {"lodo_predictions": table},
+    result = learner_scores.run_application("B4_when_text_helps", {"lodo_predictions": table},
                                             analysis=approved_analysis(), design=design())
     assert result["groups"][0]["status"] == "compared" and result["rope"] == 0.01
     assert not result["higher_is_better"] and result["groups"][0]["table"].comparison.eq("all_pairwise").all()
@@ -509,8 +509,8 @@ def test_planned_design_reads_the_configuration_only():
     assert len(real.datasets) == 18 and len(real.roster) == 16 and "jev" not in real.roster
     assert len(learner_scores.planned_design("with_jev").roster) == 17
     assert sum(t == "regression" for t in real.datasets.values()) == 9
-    assert set(real.plan.phase) >= {"experiment_1", "experiment_2", "experiment_3", "experiment_4",
-                                    "representations", "rq3", "data_efficiency"}
+    assert set(real.plan.phase) >= {"B1", "B2", "B3", "B6",
+                                    "C1", "C2", "B5"}
     # Field order is declared from the catalog before results: two or more text columns.
     assert len(real.a2_datasets["field_order"]) == 16
     assert not {"BIN_TEXT_JIGSAW_TOXICITY", "MUL_TEXT_PRODUCT_SENTIMENT"} & set(real.a2_datasets["field_order"])

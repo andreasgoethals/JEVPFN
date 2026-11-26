@@ -1,0 +1,27 @@
+# A0: Group A qualification (formerly the Group A part of B0). Before A1-A3 run on real
+# models, each provider passes the native replay, presentation and geometry pilots below.
+# Hashed into the B0 evaluation identity with the A2 and A3 configs.
+phase: A0
+status: local_contracts_plus_pending_real_gates
+checks:
+- compact_outputs_retain_artifact_identity_and_report_checksums
+- uniform_distinct_request_sampling_shared_across_models
+- independent_500_applicable_field_order_sample
+- three_reviewed_paraphrases_frozen_original_unchanged
+- option_permutation_inverse_alignment
+- paired_missingness
+- native_field_order_reaches_model
+- three_fresh_originals_bypass_cache
+- geometry_raw_vectors_same_ordered_text_ids
+- geometry_constant_outputs_undefined_not_zero
+- geometry_uncertainty_resamples_texts_not_pairs
+native_robustness_qualification:
+  script: scripts/slurm/A0_robustness.slurm
+  scope: each_qualified_open_weight_provider
+  evidence: frozen_input_ids_and_settings_match_before_scientific_dispatch
+native_geometry_qualification:
+  entry_point: src.evaluation.geometry_study
+  invocation: --dataset DATASET --pilot
+  coverage: complete_selected_providers_and_three_frozen_encoders
+  max_distinct_texts_per_field: 12
+scientific_execution_enabled: false

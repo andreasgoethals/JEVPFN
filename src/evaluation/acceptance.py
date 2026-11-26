@@ -1,6 +1,6 @@
 """Identity of the tested evaluation pipeline, independent of execution switches.
 
-Experiment 0B reports this identity. Its reviewed acceptance must carry the same
+B0 reports this identity. Its reviewed acceptance must carry the same
 value when benchmarking starts. Printing it never grants approval or runs models.
 """
 
@@ -11,12 +11,12 @@ from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest
 
-GROUP_B_C_CONFIGS = ("rq2/text_column_refits", "data_efficiency/data_efficiency",
-                     "representations/representations", "rq3/adaptation")
+GROUP_B_C_CONFIGS = ("B4/text_column_refits", "B5",
+                     "C1", "C2")
 PROVIDER_FIELDS = frozenset({"candidate_extractors", "initial_decision_providers", "decision_extensions",
                              "feature_selectors", "dataset_feature_artifacts"})
 EXECUTION_FIELDS = frozenset({"enabled", "prepare_enabled", "training_enabled", "pilot_enabled",
-                              "experiment_0_acceptance", "pilot_acceptance", "status"})
+                              "gate_acceptance", "pilot_acceptance", "status"})
 
 # Code that constructs, fits, scores, stores, or verifies accepted benchmark folds.
 # Decision extraction backends are identified by the producer artifacts and selectors.
@@ -47,15 +47,11 @@ def pipeline_sources():
 
 
 def evaluation_identity():
-    main = load_yaml("experiment_1/main")
-    catalog = load_yaml("experiment_1/models")["models"]
-    phases = {"experiment_1": main}
-    for phase, name in (
-        ("experiment_2", "embeddings"),
-        ("experiment_3", "tar"),
-        ("experiment_4", "native_text"),
-    ):
-        phases[phase] = load_yaml(phase + "/" + name)
+    main = load_yaml("B1")
+    catalog = load_yaml("B1/models")["models"]
+    phases = {"B1": main}
+    for phase in ("B2", "B3", "B6"):
+        phases[phase] = load_yaml(phase)
     feature_fields = (
         "random_seed",
         "candidate_models",
@@ -74,24 +70,24 @@ def evaluation_identity():
             name: {key: cfg.get(key) for key in ("runtime", "interface", "model_generation")}
             for name, cfg in catalog.items()
         },
-        "evaluation": load_yaml("experiment_1/protocol")["evaluation"],
+        "evaluation": load_yaml("B1/protocol")["evaluation"],
         "features": {
             phase: {key: cfg.get(key) for key in feature_fields} for phase, cfg in phases.items()
         },
         "embeddings": {
-            key: load_yaml("experiment_2/embeddings")[key] for key in ("encoders", "pca_grid")
+            key: load_yaml("B2")[key] for key in ("encoders", "pca_grid")
         },
 
-        "rq1_questions": source_hash(paths.config_file("question_versions.csv")),
+        "a2_questions": source_hash(paths.config_file("A2_question_versions.csv")),
 
         "downstream_contracts": {
             name: {k:v for k,v in load_yaml(name).items() if k not in EXECUTION_FIELDS | PROVIDER_FIELDS}
-            for name in ("rq1/behavior","rq1/geometry","experiment_0/research_questions")
+            for name in ("A0", "A2", "A3", "B0", "C0")
         },
-        "tar": {k: v for k, v in load_yaml("experiment_3/tar").items()
+        "tar": {k: v for k, v in load_yaml("B3").items()
                 if k not in EXECUTION_FIELDS | PROVIDER_FIELDS},
-        "native_models": load_yaml("experiment_4/native_text")["candidate_models"],
-        # Group B3/B4 and Group C scientific settings (e.g. C2 regression bins); execution
+        "native_models": load_yaml("B6")["candidate_models"],
+        # B4/B5 and Group C scientific settings (e.g. C2 regression bins); execution
         # switches and status labels stay outside, as for the other phases.
         "group_b_c": {
             name: {k: v for k, v in load_yaml(name).items() if k not in EXECUTION_FIELDS | PROVIDER_FIELDS}
@@ -102,9 +98,9 @@ def evaluation_identity():
             for name, cfg in load_yaml("feature_creation/embedding_models")["models"].items()
         },
     }
-    # C1 can start after the core 0B review. Keep its extraction recipe bound
+    # C1 can start after the core B0 review. Keep its extraction recipe bound
     # when the owner turns on the separate producer.
-    c1 = body["group_b_c"]["representations/representations"]
+    c1 = body["group_b_c"]["C1"]
     c1["extraction"] = {key: value for key, value in c1["extraction"].items() if key != "enabled"}
     return digest(body)
 
@@ -114,8 +110,8 @@ def decision_input_identity(providers):
     from src.evaluation.design import decision_versions
 
     scoped = {}
-    for phase in ("experiment_1/main", "experiment_2/embeddings", "experiment_3/tar",
-                  "experiment_4/native_text", *GROUP_B_C_CONFIGS):
+    for phase in ("B1", "B2", "B3",
+                  "B6", *GROUP_B_C_CONFIGS):
         config = load_yaml(phase)
         selectors = config.get("feature_selectors", {})
         pins = config.get("dataset_feature_artifacts", {})

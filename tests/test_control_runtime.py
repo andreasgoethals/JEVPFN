@@ -147,7 +147,7 @@ def test_retirement_requires_matching_b200_evidence_and_preserves_other_environm
     body["container_id"] = control.digest(body)
     write_json(image / control.MARKER, body)
     write_json(image.parent / "control.active.json", dict(container_id=body["container_id"]))
-    receipt = paths.manifests_dir("experiment_0") / "before_extraction/control_gpu_777.json"
+    receipt = paths.manifests_dir("0") / "before_extraction/control_gpu_777.json"
     report = dict(
         status="control_b200_passed",
         job_id="777",

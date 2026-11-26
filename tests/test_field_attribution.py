@@ -1,4 +1,4 @@
-"""RQ2-E field attribution: grouping, deterministic permutations, loss math and isolation."""
+"""B4 field attribution: grouping, deterministic permutations, loss math and isolation."""
 
 from types import SimpleNamespace
 
@@ -236,19 +236,19 @@ def test_conditional_attribution_ignores_missingness_signal_unconditional_does_n
 
 def test_settings_skip_native_text_and_validate():
     on = attribution.settings_for_phase({"enabled": True, "repeats": 3, "max_test_rows": None},
-                                        "experiment_2")
+                                        "B2")
     assert on["enabled"] and on["skip_reason"] is None
     assert on["permutation"] == attribution.CONDITIONAL and on["version"].endswith("v2")
     plain = attribution.settings_for_phase({"enabled": True, "permutation": "unconditional"},
-                                           "experiment_1")
+                                           "B1")
     assert plain["permutation"] == "unconditional"
     with pytest.raises(ValueError, match="permutation"):
-        attribution.settings_for_phase({"permutation": "within_class"}, "experiment_1")
-    native = attribution.settings_for_phase({"enabled": True}, "experiment_4")
+        attribution.settings_for_phase({"permutation": "within_class"}, "B1")
+    native = attribution.settings_for_phase({"enabled": True}, "B6")
     assert not native["enabled"] and native["skip_reason"].startswith("native_text_system")
     for bad in ({"repeats": 0}, {"max_test_rows": 1}, {"enabled": "yes"}, {"extra": 1}):
         with pytest.raises(ValueError):
-            attribution.settings_for_phase(bad, "experiment_1")
+            attribution.settings_for_phase(bad, "B1")
 
 
 class _Model:
@@ -282,9 +282,9 @@ def test_attribution_leaves_primary_records_unchanged_and_outside_collection(iso
 
     dataset = _dataset()
     features = _features(dataset)
-    off = _run(dataset, features, "experiment_1", None)
-    on_settings = attribution.settings_for_phase({"enabled": True, "repeats": 2}, "experiment_2")
-    on = _run(dataset, features, "experiment_2", on_settings)
+    off = _run(dataset, features, "B1", None)
+    on_settings = attribution.settings_for_phase({"enabled": True, "repeats": 2}, "B2")
+    on = _run(dataset, features, "B2", on_settings)
     assert len(on) == len(off) == 10
     for left, right in zip(off, on, strict=True):
         a, b = json.loads(left.read_text()), json.loads(right.read_text())
@@ -293,23 +293,23 @@ def test_attribution_leaves_primary_records_unchanged_and_outside_collection(iso
         assert set(a["timing"]["stages"]) == set(b["timing"]["stages"])
         assert "field_attribution" not in b["timing"]["stages"]
         pd.testing.assert_frame_equal(store.read_predictions(left), store.read_predictions(right))
-    bodies = list(store.attribution_bodies("experiment_2"))
+    bodies = list(store.attribution_bodies("B2"))
     assert len(bodies) == 5 and all(b["status"] == "complete" for b in bodies)
     assert {b["outer_test_record"] for b in bodies} <= {r.key for r in on}
     assert "field_attribution" in bodies[0]["timing"]["stages"]
     joint = next(g for g in bodies[0]["groups"] if g["group"] == "decision__jev__joint__all_text")
     assert joint["mean_loss_increase"] > 0 and len(joint["repeat_loss_increases"]) == 2
     # Headline collection reads the same records whether or not attribution exists.
-    _, folds_off, _, _ = results.collect(("experiment_1",))
-    _, folds_on, _, _ = results.collect(("experiment_2",))
+    _, folds_off, _, _ = results.collect(("B1",))
+    _, folds_on, _, _ = results.collect(("B2",))
     assert set(folds_off.metric) == set(folds_on.metric)
     # Resume reuses completed folds without new fits or duplicate attribution.
-    assert _run(dataset, features, "experiment_2", on_settings) == on
-    status, counts = attribution.attribution_status(("experiment_1", "experiment_2"))
+    assert _run(dataset, features, "B2", on_settings) == on
+    status, counts = attribution.attribution_status(("B1", "B2"))
     assert counts.set_index(["phase", "status"]).folds.to_dict() == {
-        ("experiment_1", "missing"): 5, ("experiment_2", "complete"): 5}
+        ("B1", "missing"): 5, ("B2", "complete"): 5}
     by_group, by_type, _ = attribution.attribution_summary(
-        ("experiment_2",), field_types=pd.DataFrame(
+        ("B2",), field_types=pd.DataFrame(
             {"dataset_id": ["attr", "attr"], "field": ["body", "title"],
              "field_type": ["short_text", "categorical"]}))
     assert set(by_group.field_type) == {"non_text", "text_availability", "joint_all_text",
@@ -324,9 +324,9 @@ def test_native_text_records_skip_reason(isolated_output):
 
     dataset = _dataset()
     features = _features(dataset)
-    _run(dataset, features, "experiment_4",
-         attribution.settings_for_phase({"enabled": True}, "experiment_4"))
-    bodies = list(store.attribution_bodies("experiment_4"))
+    _run(dataset, features, "B6",
+         attribution.settings_for_phase({"enabled": True}, "B6"))
+    bodies = list(store.attribution_bodies("B6"))
     assert len(bodies) == 5 and {b["status"] for b in bodies} == {"skipped"}
     assert bodies[0]["reason"].startswith("native_text_system")
 
@@ -335,8 +335,8 @@ def test_store_merge_carries_attribution(isolated_output, tmp_path):
     from src.evaluation import store
 
     dataset = _dataset()
-    records = _run(dataset, _features(dataset), "experiment_1",
-                   attribution.settings_for_phase({"enabled": True, "repeats": 1}, "experiment_1"))
+    records = _run(dataset, _features(dataset), "B1",
+                   attribution.settings_for_phase({"enabled": True, "repeats": 1}, "B1"))
     destination = tmp_path / "merged" / "attr.sqlite3"
     destination.parent.mkdir()
     assert store.merge(records[0].database, destination) == "merged"
@@ -360,6 +360,6 @@ def test_unassignable_column_fails_before_any_fit(isolated_output):
             dataset, _features(dataset).assign(stray=1.0), Recording,
             specification=protocol.shared_splits(dataset), model_id="fixture",
             checkpoint_id="pinned", feature_set="non_text_plus_joint", allow_model_runs=True,
-            phase="experiment_1", estimator_settings={}, feature_artifact_ids=[],
-            field_attribution=attribution.settings_for_phase({"enabled": True}, "experiment_1"))
+            phase="B1", estimator_settings={}, feature_artifact_ids=[],
+            field_attribution=attribution.settings_for_phase({"enabled": True}, "B1"))
     assert not calls

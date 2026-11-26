@@ -1,4 +1,4 @@
-"""Explicit Experiment 0A local/VSC entrypoint. Preview by default; never enables extraction.
+"""Explicit Experiment 0 local/VSC entrypoint. Preview by default; never enables extraction.
 
 VSC submits independent ready jobs concurrently, resuming its receipt after a disconnect.
 Local smoke responses reuse their durable cache. --dataset-pilot additionally requires
@@ -34,7 +34,7 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
         items = [
             ("libraries", ["src.utils.check_libraries"]),
             ("dependencies", ["pip", "check"]),
-            ("questions", ["src.jev.question_audit", "--phase", "experiment_0"]),
+            ("questions", ["src.jev.question_audit", "--phase", "0"]),
             ("cpu", ["src.cluster.preflight", "--local", "--verify-data", "--tests"]),
             ("jev_contracts", ["src.jev.smoke", "--execute"]),
             ("jev_robustness", ["src.jev.smoke", "--robustness", "--execute"]),
@@ -58,32 +58,32 @@ def steps(site, *, dataset_pilot=False, config="feature_creation/jev.local"):
     durable = default_profile.get("durable_root", default_profile["staging_root"])
     export_root = project_export(durable)
     items = [
-        ("cpu", "experiment_0_cpu.slurm", [durable]),
-        ("storage", "experiment_0_storage.slurm", [durable]),
+        ("cpu", "0_cpu.slurm", [durable]),
+        ("storage", "0_storage.slurm", [durable]),
     ]
     from src.utils.config import load_yaml
 
     # Fresh CPU evidence must be staged to each native B200 working set.
     for runtime in PROVIDERS:
-        items.append((runtime + "_scratch", "experiment_0_scratch_stage.slurm", [runtime]))
+        items.append((runtime + "_scratch", "0_scratch_stage.slurm", [runtime]))
     for runtime in PROVIDERS:
         storage = "gpfs_storage" if runtime == "cloudflare" else runtime + "_gpfs_storage"
-        items.append((storage, "experiment_0_storage_gpfs.slurm", [runtime]))
+        items.append((storage, "0_storage_gpfs.slurm", [runtime]))
     for encoder_id in load_yaml("feature_creation/embedding_models")["models"]:
         items.append(
             (
                 "embeddings_" + encoder_id,
-                "experiment_0_embeddings.slurm",
+                "0_embeddings.slurm",
                 ["cloudflare", durable, encoder_id],
             )
         )
     for provider in PROVIDERS:
         for task, script in (
-            ("contracts", "experiment_0_decision_contracts.slurm"),
-            ("pilot", "experiment_0_decision_pilot.slurm"),
+            ("contracts", "0_decision_contracts.slurm"),
+            ("pilot", "0_decision_pilot.slurm"),
         ):
             items.append((f"{provider}_{task}", script, [provider]))
-    scheduling = load_yaml("experiment_0/scheduling")
+    scheduling = load_yaml("0/scheduling")
     token_steps = [dict(name=s["name"], cluster=s["cluster"], depends_on=s["dependencies"],
                    **({"pool": s["pool"]} if "pool" in s else {}),
                    command=["sbatch", "--parsable", export_root, *s["flags"], f"scripts/slurm/{s['script']}", *s["args"]])
@@ -167,7 +167,7 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
         if cfg["live_extraction"].get("enabled") is not True:
             raise ValueError("Enable the reviewed private pilot configuration first")
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
-    folder = paths.phase_path("experiment_0", "manifests", report["stage"])
+    folder = paths.phase_path("0", "manifests", report["stage"])
     receipt = folder / f"{run_id}.json"
     if site == "vsc":
         receipts = list(folder.glob("*.json"))
@@ -178,19 +178,19 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
             report = json.loads(receipt.read_text(encoding="utf-8"))
             if report.get("stage_identity") != identity:
                 raise ValueError(
-                    "Saved 0A sequence belongs to different source/runtime/settings; review before resuming"
+                    "Saved Experiment 0 sequence belongs to different source/runtime/settings; review before resuming"
                 )
             plan = report["steps"]
             run_id = report["run_id"]
             if report["status"] == "stopped_requires_review":
                 raise ValueError(
-                    "Earlier 0A submission stopped; inspect job receipts before retrying"
+                    "Earlier Experiment 0 submission stopped; inspect job receipts before retrying"
                 )
         else:
             require_idle_vsc()
             folder.mkdir(parents=True, exist_ok=False)
     log = get_logger(
-        "jevpfn.exp0", paths.phase_path("experiment_0", "logs", report["stage"]) / f"{run_id}.log"
+        "jevpfn.exp0", paths.phase_path("0", "logs", report["stage"]) / f"{run_id}.log"
     )
     report.update(status="running" if site == "local" else "submitting", run_id=run_id)
     write_json(receipt, report)
@@ -226,7 +226,7 @@ def run(site, *, execute=False, dataset_pilot=False, config="feature_creation/je
                 write_json(receipt, report)
                 log.info("Submitted %s as %s", step["name"], step["job_id"])
 
-            report["summary"] = advance(plan, settings=load_yaml("experiment_0/scheduling"),
+            report["summary"] = advance(plan, settings=load_yaml("0/scheduling"),
                                         state=scheduler_state, submit=submit,
                                         save=lambda: write_json(receipt, report))
             report["status"] = (
@@ -328,7 +328,7 @@ def main(argv=None):
 
     while True:
         if args.execute and args.site == "vsc":
-            with file_lock(paths.manifests_dir("experiment_0") / ".0A_submission.lock", timeout=1):
+            with file_lock(paths.manifests_dir("0") / ".0A_submission.lock", timeout=1):
                 report = run(
                     args.site, execute=True, dataset_pilot=args.dataset_pilot, config=args.config
                 )

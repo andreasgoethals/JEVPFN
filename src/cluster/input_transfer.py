@@ -154,7 +154,7 @@ def install(bundle, *, writers_stopped=False):
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
     report = {"status": "validating", "bundle_sha256": expected, "datasets": []}
     receipt = (
-        paths.manifests_dir("experiment_0") / "before_extraction" / f"input_upload_{run_id}.json"
+        paths.manifests_dir("0") / "before_extraction" / f"input_upload_{run_id}.json"
     )
     with (
         file_lock(paths.outputs_dir().parent / ".maintenance.lock", timeout=1),

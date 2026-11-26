@@ -1,4 +1,4 @@
-"""Require complete, current 0B evidence before a benchmark arm can fit."""
+"""Require complete, current B0 evidence before a benchmark arm can fit."""
 
 import importlib.metadata
 import json
@@ -18,19 +18,19 @@ from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
 
 PHASE_CONFIGS = {
-    "experiment_1": "experiment_1/main",
-    "experiment_2": "experiment_2/embeddings",
-    "experiment_3": "experiment_3/tar",
-    "experiment_4": "experiment_4/native_text",
-    "rq2": "rq2/text_column_refits",  # B3 text-column refits
-    "data_efficiency": "data_efficiency/data_efficiency",  # B4 training-size curves
-    "representations": "representations/representations",  # C1 Strands hidden states
-    "rq3": "rq3/adaptation",  # C2 Strands learning from labels
+    "B1": "B1",
+    "B2": "B2",
+    "B3": "B3",
+    "B4": "B4/text_column_refits",  # text-column refits
+    "B5": "B5",  # training-size curves
+    "B6": "B6",
+    "C1": "C1",  # Strands hidden states
+    "C2": "C2",  # Strands learning from labels
 }
 # Full-size shape, task and class extremes; other phases use targeted real-path profiles.
-PROFILED_PHASES = ("experiment_1", "experiment_2", "experiment_3", "experiment_4")
-GROUP_C_PHASES = ("representations", "rq3")
-#: Declared 0B case (23 Nov 2026): the widest Kumo arm above the default 500-column recipe
+PROFILED_PHASES = ("B1", "B2", "B3", "B6")
+GROUP_C_PHASES = ("C1", "C2")
+#: Declared B0 case (23 Nov 2026): the widest Kumo arm above the default 500-column recipe
 #: (Rotten Tomatoes decision + E5, 557 columns) runs a full-fold profile on a real B200 with
 #: every column per estimator, recording peak GPU memory and fold time.
 KUMO_OVERRIDE_PROFILE = "kumo_max_columns_override_b200_profile"
@@ -98,7 +98,7 @@ def execution_runtime():
 
 
 def profile_plan(arms=None, *, cohort="all"):
-    """Core 0B covers Group B. Explicit C1/C2 arms are profiled after their assets exist."""
+    """Core B0 covers Group B. Explicit C1/C2 arms are profiled after their assets exist."""
     from src.evaluation.campaign import benchmark_plan
     from src.evaluation.design import decision_providers
 
@@ -161,12 +161,12 @@ def profile_plan(arms=None, *, cohort="all"):
             continue
         paths_to_check = {}
         for arm in group:
-            if arm["phase"] == "experiment_1":
+            if arm["phase"] == "B1":
                 family = (arm["feature_set"], arm.get("provider") if arm["feature_set"] == "non_text_plus_both"
                           else arm.get("provider") in paid_providers)
-            elif arm["phase"] == "experiment_2":
+            elif arm["phase"] == "B2":
                 family = (arm["feature_set"], arm.get("encoder"))
-            elif arm["phase"] == "experiment_3" and arm.get("probe_view"):
+            elif arm["phase"] == "B3" and arm.get("probe_view"):
                 family = (arm["encoder"], arm["probe_view"])
             else:
                 continue
@@ -208,11 +208,11 @@ def _phase_profiles(phase, model, arms, rows, semantics):
                     key=lambda a: (-len(semantics[a["dataset_id"]].get("classes", [])), *small(a)))
                 for task in sorted(tasks)]
 
-    if phase == "rq2":
+    if phase == "B4":
         # Stress the widest retained per-column block. A second field is dropped where possible.
         return [max(arms, key=lambda a: (a["predictor_columns"], rows[a["dataset_id"]],
                                          a["dropped_text_column"] == 1)), *task_witnesses(arms)]
-    if phase == "data_efficiency":
+    if phase == "B5":
         cases = []
         for dataset, feature, size in (
             ("REG_TEXT_BOOK_READABILITY", SUPERVISED_PROBE, 128),
@@ -225,7 +225,7 @@ def _phase_profiles(phase, model, arms, rows, semantics):
             if matching:
                 cases.append(next((a for a in matching if a.get("provider") == "strands"), matching[0]))
         return cases
-    if phase == "representations":
+    if phase == "C1":
         cases = []
         for feature, view in ((HIDDEN, "per_column"), (HIDDEN, "joint"),
                               (PER_COLUMN_PLUS_HIDDEN, "per_column"), (JOINT_PLUS_HIDDEN, "joint")):
@@ -241,7 +241,7 @@ def _phase_profiles(phase, model, arms, rows, semantics):
                 cases.append(min((a for a in hidden if (a["hidden_view"], a["hidden_position"],
                                                         a["hidden_layer"]) == (view, pos, layer)), key=small))
         return cases + task_witnesses(hidden)
-    if phase == "rq3":
+    if phase == "C2":
         cases = [min((a for a in arms if a["adaptation_cell"] == cell), key=small)
                  for cell in sorted({a["adaptation_cell"] for a in arms})]
         return cases + task_witnesses([a for a in arms if a["adaptation_cell"] == "head_only"])
@@ -250,14 +250,14 @@ def _phase_profiles(phase, model, arms, rows, semantics):
 
 def profile_fold_number(arm):
     # Small-sample sparse probes exercise fold 0, B3 and other B4 paths also cover a later fold.
-    if arm["phase"] == "rq2" or (arm["phase"] == "data_efficiency" and not arm.get("probe_view")):
+    if arm["phase"] == "B4" or (arm["phase"] == "B5" and not arm.get("probe_view")):
         return 1
     return 0
 
 
 def _needs_inner(arm, task_type):
     return task_type == "binary_classification" and arm["phase"] not in {
-        "experiment_3", "data_efficiency", "rq3"
+        "B3", "B5", "C2"
     }
 
 
@@ -309,7 +309,7 @@ def verify_arm_recipe(metadata, arm, artifact_ids, runtime):
     """Match the saved fit to the planned arm even when two recipes have equal width."""
     recipe = metadata.get("representation_recipe")
     if not isinstance(recipe, dict):
-        raise ValueError("Published 0B predictions differ: missing fold recipe")
+        raise ValueError("Published B0 predictions differ: missing fold recipe")
     embedding = recipe.get("embedding") or {}
     probe = recipe.get("probe") or {}
     hidden = recipe.get("hidden") or {}
@@ -330,12 +330,12 @@ def verify_arm_recipe(metadata, arm, artifact_ids, runtime):
               adapted.get("cell"), recipe.get("dropped_text_column"),
               sample.get("training_size"), sample.get("draw"))
     if (expected != actual or (probe and probe.get("encoder_id") != arm.get("encoder"))
-            or (arm.get("phase") == "representations" and hidden.get("provider") != "strands")
-            or (arm.get("phase") == "rq3" and (adapted.get("provider"), adapted.get("question"),
+            or (arm.get("phase") == "C1" and hidden.get("provider") != "strands")
+            or (arm.get("phase") == "C2" and (adapted.get("provider"), adapted.get("question"),
                                                adapted.get("crossfit_parts")) != ("strands", "joint", 3))
             or sorted(metadata["feature_artifact_ids"]) != sorted(artifact_ids)
             or metadata["estimator_settings"].get("execution_runtime") != runtime):
-        raise ValueError("Published 0B predictions differ from the planned fold recipe, runtime or input artifacts")
+        raise ValueError("Published B0 predictions differ from the planned fold recipe, runtime or input artifacts")
 
 
 def save_profile(arm, dataset, features, runtime, records, *, specification=None):
@@ -384,7 +384,7 @@ def save_profile(arm, dataset, features, runtime, records, *, specification=None
     if roles:
         raise ValueError("Full-fold profile lacks required prediction roles")
     if len(fold_ids) != 1:
-        raise ValueError("0B roles belong to different completed folds")
+        raise ValueError("B0 roles belong to different completed folds")
     measured = profile_resources(outer)
     overrides = kumo_overrides(records)
     from src.evaluation.models import KUMO_RECIPE_COLUMNS
@@ -415,7 +415,7 @@ def save_profile(arm, dataset, features, runtime, records, *, specification=None
         "created_at": datetime.now(UTC).isoformat(),
     }
     write_json(
-        paths.phase_path("experiment_0", "manifests", "after_extraction")
+        paths.phase_path("B0", "manifests")
         / f"profile_{arm['model']}_{uuid4().hex}.json",
         report,
     )
@@ -462,7 +462,7 @@ def verify_kumo_override_profile(report, planned):
         or type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0
         or 1.5 * 5 * seconds + 1800 > LONGEST_JOB_SECONDS
     ):
-        raise ValueError(f"0B lacks a passing {KUMO_OVERRIDE_PROFILE} for {planned['dataset_id']}")
+        raise ValueError(f"B0 lacks a passing {KUMO_OVERRIDE_PROFILE} for {planned['dataset_id']}")
 
 
 def verify_profile_resources(report, gpu):
@@ -476,15 +476,15 @@ def verify_profile_resources(report, gpu):
             or wall * 5 * 1.5 + 1800 > LONGEST_JOB_SECONDS
             or type(rss) is not int or rss < 1 or measured.get("device_workers") != 1
             or sizing._memory_mib({"peak_rss_bytes": rss}, 1) > sizing._memory_ceiling(gpu)):
-        raise ValueError("0B profile lacks feasible measured wall time, host memory or exclusive workers")
+        raise ValueError("B0 profile lacks feasible measured wall time, host memory or exclusive workers")
     device = measured.get("device", "")
     if gpu:
         reserved, total = measured.get("peak_gpu_reserved_bytes"), measured.get("gpu_total_bytes")
         if (not device.startswith("cuda") or "B200" not in str(measured.get("gpu_name"))
                 or type(reserved) is not int or type(total) is not int or not 0 < reserved <= total):
-            raise ValueError("0B GPU profile lacks measured B200 memory or device evidence")
+            raise ValueError("B0 GPU profile lacks measured B200 memory or device evidence")
     elif device != "cpu":
-        raise ValueError("0B CPU profile has the wrong device")
+        raise ValueError("B0 CPU profile has the wrong device")
 
 
 def _complete(rows, keys, expected, label):
@@ -494,7 +494,7 @@ def _complete(rows, keys, expected, label):
         or set(seen) != expected
         or any(row.get("status") != "passed" for row in rows)
     ):
-        raise ValueError(f"0B requires complete passing {label} evidence")
+        raise ValueError(f"B0 requires complete passing {label} evidence")
     return seen
 
 
@@ -516,7 +516,7 @@ def provider_scope(providers, main, *, declared=None):
 
     if (not isinstance(providers, list) or not providers
             or any(not isinstance(p, str) or not p for p in providers) or len(set(providers)) != len(providers)):
-        raise ValueError("0B requires at least one named decision provider")
+        raise ValueError("B0 requires at least one named decision provider")
     scopes = decision_scopes(main)
     if declared is None:
         for cohort in ("all", *scopes):
@@ -528,7 +528,7 @@ def provider_scope(providers, main, *, declared=None):
         cohort = _frozen_equivalent(declared, providers, scopes)
         if cohort:
             return cohort
-    raise ValueError("0B acceptance must name the complete ordered decision providers in its cohort")
+    raise ValueError("B0 acceptance must name the complete ordered decision providers in its cohort")
 
 
 def acceptance_for(setting, provider):
@@ -539,7 +539,7 @@ def acceptance_for(setting, provider):
 
     dedicated = setting.get("providers", {})
     if not isinstance(dedicated, dict):
-        raise ValueError("0B provider receipt paths must be a mapping")
+        raise ValueError("B0 provider receipt paths must be a mapping")
     if provider is not None and provider in dedicated:
         return dedicated[provider]
     scopes = decision_scopes()
@@ -554,7 +554,7 @@ def acceptance_for(setting, provider):
 
 def feature_evidence(report):
     """Check coverage against the current selected grid, including all three encoders."""
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     providers = report.get("qualified_decision_providers", main["candidate_extractors"])
     provider_scope(providers, main, declared=report.get("decision_cohort"))
     versions = {}
@@ -563,15 +563,15 @@ def feature_evidence(report):
             or any("model" in row or "version" in row for row in artifacts)):
         from src.evaluation.design import decision_versions
         if not report.get("decision_cohort") or "qualified_decision_providers" not in report:
-            raise ValueError("0B must name the cohort and decision providers of its versioned artifacts")
+            raise ValueError("B0 must name the cohort and decision providers of its versioned artifacts")
         current = decision_versions(providers)
         if report.get("decision_model_versions") != current:
-            raise ValueError("0B must record the exact registered model versions for this decision cohort")
+            raise ValueError("B0 must record the exact registered model versions for this decision cohort")
         versions = {entry["provider"]: entry for entry in current}
     entries = selected_entries(load_catalog(), main)
     datasets = {entry["id"] for entry in entries}
     if not datasets:
-        raise ValueError("0B requires selected datasets")
+        raise ValueError("B0 requires selected datasets")
     data = _complete(
         report.get("datasets", []), ("dataset_id",), {(d,) for d in datasets}, "dataset"
     )
@@ -586,7 +586,7 @@ def feature_evidence(report):
             or type(row.get("rows")) is not int
             or row["rows"] < 5
         ):
-            raise ValueError("0B requires the verified identity, task, rows and five-fold split of each dataset")
+            raise ValueError("B0 requires the verified identity, task, rows and five-fold split of each dataset")
     decisions = _complete(
         artifacts,
         ("dataset_id", "provider"),
@@ -596,7 +596,7 @@ def feature_evidence(report):
     embeddings = _complete(
         report.get("embedding_artifacts", []),
         ("dataset_id", "encoder_id"),
-        {(d, e) for d in datasets for e in load_yaml("experiment_2/embeddings")["encoders"]},
+        {(d, e) for d in datasets for e in load_yaml("B2")["encoders"]},
         "encoder feature",
     )
     def valid_ids(values, count):
@@ -608,7 +608,7 @@ def feature_evidence(report):
         row = data[dataset_id,]
         columns = row.get("text_columns")
         if type(columns) is not int or columns < 1:
-            raise ValueError("0B lacks the verified text-column count")
+            raise ValueError("B0 lacks the verified text-column count")
         from src.evaluation.design import pca_grid
 
         return 5 * sum(columns if scope == "per_column" else 1 for scope, _ in pca_grid())
@@ -623,41 +623,41 @@ def feature_evidence(report):
         sums = item.get("artifact_checksums", {})
         if (set(ids) != {"joint", "per_column"} or not valid_ids(list(ids.values()), 2)
                 or set(sums) != set(ids.values()) or not all(sums.values())):
-            raise ValueError("0B requires exact artifact IDs and checksums for both decision modes")
+            raise ValueError("B0 requires exact artifact IDs and checksums for both decision modes")
     for (dataset_id, _), item in embeddings.items():
         inner = 4 if data[dataset_id,]["task_type"] == "binary_classification" else 1
         if not item.get("artifact_id") or item.get("prepared_pca_keys") != inner * outer_pca_keys(dataset_id):
-            raise ValueError("0B requires exact artifact IDs and complete frozen PCA partition counts")
+            raise ValueError("B0 requires exact artifact IDs and complete frozen PCA partition counts")
         if not valid_ids(item.get("prepared_probe_keys"), 10):
-            raise ValueError("0B requires both supervised probe views for all five outer folds")
+            raise ValueError("B0 requires both supervised probe views for all five outer folds")
     from src.evaluation.tar import ENCODER
     tar = _complete(report.get("tar_artifacts", []), ("dataset_id", "encoder_id"),
                     {(d, ENCODER) for d in datasets}, "TAR fold feature")
     for key, item in tar.items():
         if (not valid_ids(item.get("artifact_ids"), 5)
                 or not valid_ids(item.get("prepared_pca_keys"), outer_pca_keys(key[0]))):
-            raise ValueError("0B requires all five TAR folds and their distinct PCA parameters")
+            raise ValueError("B0 requires all five TAR folds and their distinct PCA parameters")
         embeddings[key] = item
     return data, decisions, embeddings
 
 
 def verify_published_profile(report, *, dataset=None, specification=None):
-    """Reopen the durable records, including their Parquet payloads, at 0B review."""
+    """Reopen the durable records, including their Parquet payloads, at B0 review."""
     from src.evaluation.store import RecordRef, database, read_predictions, readonly
 
     if paths.on_vsc() and paths.staging_override() != paths.durable_project_override():
-        raise ValueError("Verify published 0B profiles against durable PROJECT, outside scratch")
-    db = database(report["arm"]["dataset_id"], "experiment_0")
+        raise ValueError("Verify published B0 profiles against durable PROJECT, outside scratch")
+    db = database(report["arm"]["dataset_id"], "0")
     with readonly(db) as connection:
         marker = connection.execute("SELECT recipe, records FROM folds WHERE id=?", (report.get("fold_recipe_id"),)).fetchone()
     if marker is None or digest(json.loads(marker[0])) != report["fold_recipe_id"]:
-        raise ValueError("Published 0B predictions differ: missing completed fold recipe")
+        raise ValueError("Published B0 predictions differ: missing completed fold recipe")
     registered = {r["id"]: r["sha256"] for r in json.loads(marker[1])}
     for item in report["roles"]:
         record = RecordRef(db, item["record_id"])
         saved = json.loads(record.read_text())
         if registered.get(item["record_id"]) != digest(saved) or saved["metadata"]["fold_recipe_id"] != report["fold_recipe_id"]:
-            raise ValueError("Published 0B predictions differ from the completed fold")
+            raise ValueError("Published B0 predictions differ from the completed fold")
         verify_arm_recipe(saved["metadata"], report["arm"], report["feature_artifact_ids"], report["runtime_identity"])
         table = read_predictions(record)
         if specification is not None:
@@ -667,18 +667,18 @@ def verify_published_profile(report, *, dataset=None, specification=None):
                 sample = saved["metadata"]["representation_recipe"].get("subsample", {})
                 if any(sample.get(k) != specification["subsample"][k] for k in
                        ("parent_split_id", "training_size", "draw", "method")):
-                    raise ValueError("Published 0B sampling recipe differs from the reconstructed split")
+                    raise ValueError("Published B0 sampling recipe differs from the reconstructed split")
             if (report["split_id"] != specification["split_id"]
                     or table.row_id.tolist() != [f"csv:{i}" for i in positions]
                     or table.y_true.tolist() != dataset.frame[dataset.metadata.target].iloc[positions].tolist()):
-                raise ValueError("Published 0B predictions differ from the independently reconstructed split")
+                raise ValueError("Published B0 predictions differ from the independently reconstructed split")
         if item["role"] == "outer_test":
             measured = report.get("resources", {})
             resources = saved.get("resources", {})
             if (measured != profile_resources(saved)
                     or report.get("job_id") != resources.get("fit_job_id")
                     or report.get("cluster") != resources.get("fit_cluster")):
-                raise ValueError("Published 0B resource use differs from the measured fold")
+                raise ValueError("Published B0 resource use differs from the measured fold")
         if (
             saved["metadata"]["prediction_role"] != item["role"]
             or saved["metadata"]["outer_fold"] != profile_fold_number(report["arm"])
@@ -691,9 +691,9 @@ def verify_published_profile(report, *, dataset=None, specification=None):
             or saved["predictions"]["sha256"] != item["prediction_sha256"]
             or len(table) != item["rows"]
         ):
-            raise ValueError("Published 0B predictions differ from the profile receipt")
+            raise ValueError("Published B0 predictions differ from the profile receipt")
     if sorted(registered) != sorted(item["record_id"] for item in report["roles"]):
-        raise ValueError("0B profile omits or duplicates a completed fold record")
+        raise ValueError("B0 profile omits or duplicates a completed fold record")
 
 
 def benchmark_evidence(filename, arm, *, verify_publication=False, required_cohort=None):
@@ -704,7 +704,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
 
     current = evaluation_identity()
     approval = reviewed_acceptance(
-        filename, stage="after_extraction", expected={"evaluation_identity": current}
+        filename, stage="B0", expected={"evaluation_identity": current}
     )
     reports = [
         json.loads(evidence_path(filename, item).read_text(encoding="utf-8"))
@@ -715,8 +715,8 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
         r
         for r in live
         if (
-            r.get("phase") == "experiment_0_preflight"
-            and r.get("stage") == "after_extraction"
+            r.get("phase") == "preflight"
+            and r.get("stage") == "B0"
             and r.get("execution_site") == "vsc_compute_node"
             and r.get("status") == "preflight_passed"
             and r.get("contract_tests", {}).get("status") == "passed"
@@ -724,14 +724,14 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
         )
     ]
     if len(preflight) != 1:
-        raise ValueError("0B requires one current VSC preflight with all offline contracts passing")
-    main = load_yaml("experiment_1/main")
+        raise ValueError("B0 requires one current VSC preflight with all offline contracts passing")
+    main = load_yaml("B1")
     # Historical full-roster files predate scoped releases. New preflights must be
     # counter-signed for exactly the named providers, including an all-provider release.
     providers = approval.get("qualified_decision_providers", main["candidate_extractors"])
     if ("qualified_decision_providers" in preflight[0] and "qualified_decision_providers" not in approval
             or providers != preflight[0].get("qualified_decision_providers", main["candidate_extractors"])):
-        raise ValueError("The signed 0B decision providers differ from the validated preflight")
+        raise ValueError("The signed B0 decision providers differ from the validated preflight")
     if "qualified_decision_providers" in preflight[0]:
         from src.evaluation.acceptance import decision_input_identity
         if preflight[0].get("decision_input_identity") != decision_input_identity(providers):
@@ -745,13 +745,13 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
             continue
         if (not isinstance(name, str) or name not in scopes or incremental_cohort(name) != incremental_cohort(cohort)
                 or set(scopes[name]) != members and not (signed and _frozen_equivalent(name, providers, scopes))):
-            raise ValueError("The signed 0B decision providers differ from the requested cohort")
+            raise ValueError("The signed B0 decision providers differ from the requested cohort")
     if ("decision_model_versions" in approval
             and approval["decision_model_versions"] != preflight[0].get("decision_model_versions")):
         raise ValueError("The signed model versions differ from the validated preflight")
     if (arm.get("provider") and arm["provider"] not in providers
             or not arm.get("provider") and incremental_cohort(cohort)):
-        raise ValueError("This arm is outside the signed 0B decision-provider cohort")
+        raise ValueError("This arm is outside the signed B0 decision-provider cohort")
     features = feature_evidence(preflight[0])
     predictors = {
         r["model"]: r
@@ -765,7 +765,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
     }
     approved_contracts = [r for r in live if r.get("status") == "predictor_contracts_passed_requires_full_fold_profile"]
     if len(approved_contracts) != len(predictors) or set(predictors) != set(MAIN_MODELS + TEXT_MODELS):
-        raise ValueError(f"0B requires passing real predictor contracts for all {len(MAIN_MODELS + TEXT_MODELS)} models")
+        raise ValueError(f"B0 requires passing real predictor contracts for all {len(MAIN_MODELS + TEXT_MODELS)} models")
     for model, report in predictors.items():
         cases = {(f["task_type"], f["classes"], f["feature_case"]) for f in report["fixtures"]}
         # Five outer test records, plus five inner-OOF records for the binary threshold.
@@ -775,17 +775,17 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
             or len(f["records"]) != (10 if f["task_type"] == "binary_classification" else 5)
             for f in report["fixtures"]
         ):
-            raise ValueError(f"0B predictor fixtures for {model} lack their saved fold records")
+            raise ValueError(f"B0 predictor fixtures for {model} lack their saved fold records")
         if (
             len(cases) != len(report["fixtures"])
             or cases != required_fixture_cases(model)
             or not report.get("runtime_identity", {}).get("container_id")
         ):
-            raise ValueError(f"0B predictor fixtures or sealed runtime are incomplete for {model}")
+            raise ValueError(f"B0 predictor fixtures or sealed runtime are incomplete for {model}")
         if not any(f.get("partial_fold_resume_verified") and f.get("interrupted_record_id")
                    and f["task_type"] == "binary_classification"
                    and f["feature_case"] in {"original_text", "non_text"} for f in report["fixtures"]):
-            raise ValueError(f"0B lacks an interrupted fixture resume for {model}")
+            raise ValueError(f"B0 lacks an interrupted fixture resume for {model}")
         if verify_publication:
             from src.cluster.predictor_contracts import verify_published_fixtures
             verify_published_fixtures(report)
@@ -823,7 +823,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
             raw = load_dataset(entry, allow_download=False)
             parent = shared_splits(raw, seed=main["random_seed"])
             if parent["split_id"] != dataset["split_id"]:
-                raise ValueError("Published 0B source or shared split differs from preflight")
+                raise ValueError("Published B0 source or shared split differs from preflight")
             samples = {}
         expected_ids, expected_hashes = expected_artifacts(features, planned)
         roles = {"outer_test"}
@@ -834,22 +834,22 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
             # hidden store or five trained bundles, checked again on durable publication.
             supplied = report.get("feature_artifact_ids") or []
             additional = [item for item in supplied if item not in expected_ids]
-            n_assets = 5 if planned["phase"] == "rq3" else 1
+            n_assets = 5 if planned["phase"] == "C2" else 1
             if len(set(additional)) != n_assets or not all(isinstance(i, str) and i for i in additional):
-                raise ValueError("0B Group C profile lacks its producer artifacts")
+                raise ValueError("B0 Group C profile lacks its producer artifacts")
             if verify_publication:
                 key = (planned["dataset_id"], planned.get("adaptation_cell"))
                 if key not in group_c_inputs:
-                    if planned["phase"] == "representations":
+                    if planned["phase"] == "C1":
                         from src.jev.strands_hidden import read_manifest
                         group_c_inputs[key] = [read_manifest(key[0])["artifact_id"]]
                     else:
                         from src.evaluation import group_c
                         group_c_inputs[key] = group_c.expected_artifacts(planned, raw, parent)
                 if sorted(additional) != sorted(group_c_inputs[key]):
-                    raise ValueError("0B Group C producer identity differs from the published store")
+                    raise ValueError("B0 Group C producer identity differs from the published store")
             expected_ids = [*expected_ids, *additional]
-        sampled = planned["phase"] == "data_efficiency"
+        sampled = planned["phase"] == "B5"
         if (
             not report or not report.get("cluster")
             or report.get("runtime_identity")
@@ -872,7 +872,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
             )
         ):
             raise ValueError(
-                f"0B lacks a current full-fold profile for {planned['model']}/{planned['phase']}"
+                f"B0 lacks a current full-fold profile for {planned['model']}/{planned['phase']}"
             )
         # A full-fold profile scores the whole first outer fold: its test rows are one fifth of
         # the dataset (balanced folds differ by at most one row) and its inner OOF rows are the
@@ -887,7 +887,7 @@ def benchmark_evidence(filename, arm, *, verify_publication=False, required_coho
             != total - sizes["outer_test"]
         ):
             raise ValueError(
-                f"0B full-fold profile rows differ from the complete first fold for {planned['model']}"
+                f"B0 full-fold profile rows differ from the complete first fold for {planned['model']}"
             )
         if planned == wide or planned.get("kumo_max_columns_override"):
             verify_kumo_override_profile(report, planned)
@@ -914,12 +914,12 @@ def verify_inputs(evidence, dataset, features, arm, runtime, *, specification):
     (data, decisions, embeddings), expected_runtime = evidence
     dataset_id = arm["dataset_id"]
     if runtime != expected_runtime or not runtime.get("container_id"):
-        raise ValueError("Predictor runtime differs from the qualified 0B image")
+        raise ValueError("Predictor runtime differs from the qualified B0 image")
     qualified = data[dataset_id,]
     if dataset.source["data_identity"] != qualified["data_identity"]:
-        raise ValueError("Dataset differs from the qualified 0B input")
+        raise ValueError("Dataset differs from the qualified B0 input")
     if specification["split_id"] != qualified["split_id"]:
-        raise ValueError("Split differs from the qualified 0B partition")
+        raise ValueError("Split differs from the qualified B0 partition")
     ids, checksums = expected_artifacts((data, decisions, embeddings), arm)
     from src.evaluation.features import GROUP_C_FEATURE_SETS
 
@@ -931,7 +931,7 @@ def verify_inputs(evidence, dataset, features, arm, runtime, *, specification):
         sorted(features.attrs["feature_artifact_ids"]) != sorted(ids)
         or features.attrs["decision_artifact_checksums"] != checksums
     ):
-        raise ValueError("Feature artifacts differ from the qualified 0B inputs")
+        raise ValueError("Feature artifacts differ from the qualified B0 inputs")
 
 
 def expected_artifacts(evidence, arm):

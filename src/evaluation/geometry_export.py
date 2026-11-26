@@ -1,7 +1,7 @@
-"""A3 (exp03_geometry): one compact export of the completed geometry summaries.
+"""A3: one compact export of the completed geometry summaries.
 
 The analysis itself is unchanged (`geometry_study`, `config/A/geometry.yaml`).
-The Mindwell CPU job (`scripts/slurm/rq1_geometry_export.slurm`) packages every full
+The Mindwell CPU job (`scripts/slurm/A3_export.slurm`) packages every full
 (non-pilot) dataset summary in the selected roster directory into its `geometry.zip`.
 Sampled text keys stay on PROJECT; only counts travel.
 """
@@ -26,7 +26,7 @@ TABLES = ("sources", "comparisons", "encoder_references", "coverage")
 def export_path(cohort=None) -> Path:
     from src.evaluation.benchmark_export import cohort_key
 
-    return paths.results_dir("geometry", cohort_key(cohort), "geometry.zip", phase="rq1")
+    return paths.results_dir("geometry", cohort_key(cohort), "geometry.zip", phase="A3")
 
 
 def _flatten(rows):
@@ -47,8 +47,8 @@ def collect(root: Path, *, members=None) -> dict[str, pd.DataFrame]:
         if members is not None:
             from src.evaluation.geometry_study import geometry_protocol
 
-            expected = geometry_protocol(body["dataset"], body["data_identity"], load_yaml("rq1/geometry"),
-                                         load_yaml("experiment_1/main"), members)
+            expected = geometry_protocol(body["dataset"], body["data_identity"], load_yaml("A3"),
+                                         load_yaml("B1"), members)
             if (body.get("protocol") != expected or body["missing_providers"]
                     or {row["provider"] for row in body["comparisons"]} != set(members)):
                 raise ValueError(f"Geometry summary has incompatible protocol or provider coverage: {file.name}")
@@ -74,14 +74,14 @@ def analysis_identity(cfg: dict, cohort=None) -> str:
 
 def read_export(target=None, *, cohort=None):
     return study_export.read_export(target or export_path(cohort), schema=SCHEMA, tables=TABLES,
-                                    identity=analysis_identity(load_yaml("rq1/geometry"), cohort))
+                                    identity=analysis_identity(load_yaml("A3"), cohort))
 
 
 def build(cohort=None):
     from src.evaluation.benchmark_export import cohort_record
 
     study_export.require_mindwell_cpu("A3 geometry")
-    cfg = load_yaml("rq1/geometry")
+    cfg = load_yaml("A3")
     record = cohort_record(cohort)
     target_path = export_path(cohort)
     tables = collect(target_path.parent, members=record["decision_roster"])

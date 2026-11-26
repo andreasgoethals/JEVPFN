@@ -1,4 +1,4 @@
-"""Preview, then explicitly sign matching open-provider Experiment 0A evidence.
+"""Preview, then explicitly sign matching open-provider Experiment 0 evidence.
 
 This records an owner's review; it never submits jobs, enables extraction, or
 claims that a passing finite test suite proves the absence of all bugs.
@@ -57,7 +57,7 @@ def evidence_for(provider, *, campaign=None):
             not campaign_path or str(report.get("job_id")) == jobs.get(step)
         )
 
-    root = paths.manifests_dir("experiment_0")
+    root = paths.manifests_dir("0")
     before = root / "before_extraction"
     current = {
         i["dataset_id"]: (i["input_set_id"], i["input_file_sha256"]) for i in selected_inputs()
@@ -198,7 +198,7 @@ def approve(
             )
         report.update(accepted=True, reviewed_utc=datetime.now(UTC).isoformat())
         destination = (
-            paths.manifests_dir("experiment_0") / "before_extraction" / f"accepted_{provider}.json"
+            paths.manifests_dir("0") / "before_extraction" / f"accepted_{provider}.json"
         )
         if destination.exists():
             raise ValueError("Acceptance already exists; do not silently replace a signed review")

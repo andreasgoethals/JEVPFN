@@ -1,4 +1,4 @@
-"""B3 figures (B/exp08_when_text_helps): when and for whom do decision features help?
+"""B4 figures: when and for whom do decision features help?
 
 Reads the B3 export schema (`benchmark_export` B3 tables) through `group_b_views`. Every
 function yields ``(figure, name, caption)`` and yields nothing for an empty table. Descriptive
@@ -229,7 +229,7 @@ def lodo(predictions, summary, *, name, what):
     for table in (predictions, summary):
         if table is not None and not table.empty and (
                 "outcome" not in table or not table.outcome.eq("headroom_share").fillna(False).all()):
-            raise ValueError("B3 LODO figures require headroom-share predictions and regret")
+            raise ValueError("B4 LODO figures require headroom-share predictions and regret")
     sets = [s for s in INPUT_SETS if s in set(predictions.input_set)]
     fig = plt.figure(figsize=(style.WIDTH_FULL, 4.2), layout="constrained")
     grid = fig.add_gridspec(2, len(sets), height_ratios=[1.25, 1])

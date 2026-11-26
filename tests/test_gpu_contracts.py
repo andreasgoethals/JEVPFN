@@ -68,7 +68,7 @@ class FakeClient:
 @pytest.mark.parametrize("provider", ["cloudflare", "intern"])
 def test_real_harness_reopens_features_without_extra_forwards(isolated_output, provider):
     client = gc.MeasuredClient(FakeClient(provider), 100)
-    directory = paths.results_dir("fixture_contracts", phase="experiment_0")
+    directory = paths.results_dir("fixture_contracts", phase="0")
     directory.mkdir(parents=True)
     for dataset in gc.synthetic_datasets():
         report = gc.exercise_feature_pipeline(client, dataset, directory)
@@ -76,7 +76,7 @@ def test_real_harness_reopens_features_without_extra_forwards(isolated_output, p
         assert report["empty_features_missing"] and report["cache_reopen_and_reuse"]
         assert len(report["artifacts"]) == 2
     assert client.calls == client.client.forwards == 30
-    assert len(list((paths.manifests_dir("experiment_0") / "features").glob("*.json"))) == 6
+    assert len(list((paths.manifests_dir("0") / "features").glob("*.json"))) == 6
     assert not paths.manifests_dir("feature_creation").exists()
     assert (
         not paths.jev_cache_path().exists()
@@ -85,7 +85,7 @@ def test_real_harness_reopens_features_without_extra_forwards(isolated_output, p
 
 @pytest.mark.parametrize("provider", ["cloudflare", "intern"])
 def test_boundary_inputs_cannot_reach_forward(isolated_output, provider):
-    directory = paths.results_dir("fixture_boundaries", phase="experiment_0")
+    directory = paths.results_dir("fixture_boundaries", phase="0")
     directory.mkdir(parents=True)
     client = gc.MeasuredClient(FakeClient(provider), 1)
     assert all(gc.exercise_boundaries(client, directory).values())
@@ -128,7 +128,7 @@ def test_real_input_selection_and_reuse(isolated_output):
     report = audit_provider("cloudflare", inputs, counter=counter)
     sample = gc.real_sample(report, Path(report["counts_database"]))
     client = gc.MeasuredClient(FakeClient("cloudflare"), 100)
-    log = paths.logs_dir("experiment_0") / "fixture.log"
+    log = paths.logs_dir("0") / "fixture.log"
     first = gc.exercise_real_inputs(client, sample, log)
     second = gc.exercise_real_inputs(client, sample, log)
     assert first[0]["new"] == second[0]["reused"] == len(sample[0][1])
@@ -154,11 +154,11 @@ def test_missing_token_report_stops_before_model_loading(isolated_output, monkey
     monkeypatch.setattr(gc, "ExactCounter", lambda _: SimpleNamespace(limit=limit))
     loader = Mock()
     monkeypatch.setattr(gc, "SelfHostedClient", loader)
-    with pytest.raises(ValueError, match="experiment_0_tokens.slurm"):
+    with pytest.raises(ValueError, match="0_tokens.slurm"):
         gc.run("cloudflare", execute=True)
     loader.assert_not_called()
     reports = list(
-        (paths.manifests_dir("experiment_0") / "before_extraction/gpu_contracts").glob("*.json")
+        (paths.manifests_dir("0") / "before_extraction/gpu_contracts").glob("*.json")
     )
     report = json.loads(reports[0].read_text())
     assert report["status"] == "failed" and report["synthetic"] == []
@@ -207,11 +207,11 @@ def test_checkpoint_load_failure_leaves_diagnostic_manifest(isolated_output, mon
     with pytest.raises(RuntimeError, match="CUDA mismatch"):
         gc.run("intern", execute=True)
     files = list(
-        (paths.manifests_dir("experiment_0") / "before_extraction/gpu_contracts").glob("*.json")
+        (paths.manifests_dir("0") / "before_extraction/gpu_contracts").glob("*.json")
     )
     report = json.loads(files[0].read_text())
     assert report["status"] == "failed" and report["error_type"] == "RuntimeError"
-    assert not report["full_extraction_authorized"] and not report["full_experiment_0_passed"]
+    assert not report["full_extraction_authorized"] and not report["full_qualification_passed"]
 
 
 def test_success_report_exposes_acceptance_identity(isolated_output, monkeypatch):

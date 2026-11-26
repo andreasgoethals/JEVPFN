@@ -24,7 +24,7 @@ def folds(dataset="d", providers=("strands",), *, size=128, draws=1):
         for outer_fold in range(5):
             for provider in (None, *providers):
                 rows.append({"dataset_id": dataset, "task_type": "binary_classification", "model_id": "linear",
-                             "phase": "data_efficiency", "metric": "roc_auc", "training_size": size,
+                             "phase": "B5", "metric": "roc_auc", "training_size": size,
                              "draw": draw, "checkpoint_id": "checkpoint", "split_id": f"{dataset}/{draw}",
                              "outer_fold": outer_fold, "provider": provider, "pairing_identity": "same-data",
                              "feature_set": "non_text_plus_both" if provider else "non_text",
@@ -64,13 +64,13 @@ def test_b4_requires_finite_folds_planned_draws_and_the_declared_dataset_cohort(
 def test_empty_b3_exports_lodo_schema_and_exposes_missing_cells(monkeypatch):
     from src.evaluation import row_benefit
 
-    records = folds().loc[lambda r: r.provider.isna()].assign(phase="experiment_1")
+    records = folds().loc[lambda r: r.provider.isna()].assign(phase="B1")
     monkeypatch.setattr(benchmark_export, "coverage", lambda *a, **k: pd.DataFrame())
     monkeypatch.setattr(benchmark_export, "dataset_properties_and_redundancy",
                         lambda **k: (pd.DataFrame({"dataset_id": ["d"]}), pd.DataFrame()))
     monkeypatch.setattr(benchmark_export, "_group_a_frames", lambda **k: {})
     monkeypatch.setattr(row_benefit, "summaries", lambda **k: (pd.DataFrame(), pd.DataFrame()))
-    tables = benchmark_export.build_tables("B3", records)
+    tables = benchmark_export.build_tables("B4", records)
     assert tables["dataset_gains"].empty and "family" in tables["dataset_gains"]
     assert tables["lodo_predictions"].empty and {"model_id", "dataset_id", "input_set"} <= set(tables["lodo_predictions"])
     assert tables["lodo"].empty and "status" in tables["lodo"]
@@ -83,7 +83,7 @@ def test_b3_export_predicts_and_shuffles_headroom_share_on_the_common_dataset_co
     from src.evaluation.moderator_statistics import benjamini_hochberg
     from src.utils.config import load_yaml
 
-    cfg = deepcopy(load_yaml("rq2/when_text_helps"))
+    cfg = deepcopy(load_yaml("B4"))
     cfg["n_permutations"] = cfg["predict_in_advance"]["n_shuffles"] = 7
     rule = cfg["predict_in_advance"]
     ids = [f"d{i}" for i in range(12)] + ["zero", "unmeasured"]
@@ -99,7 +99,7 @@ def test_b3_export_predicts_and_shuffles_headroom_share_on_the_common_dataset_co
         for fold in range(5):
             for provider in (None, "jev"):
                 records.append({"dataset_id": dataset, "task_type": task, "model_id": "linear", "outer_fold": fold,
-                                "phase": "experiment_1", "metric": "roc_auc" if task == "binary_classification" else "r2",
+                                "phase": "B1", "metric": "roc_auc" if task == "binary_classification" else "r2",
                                 "checkpoint_id": "fixed", "split_id": dataset, "provider": provider,
                                 "feature_set": "non_text_plus_both" if provider else "non_text",
                                 "value": base + gain if provider else base})
@@ -109,7 +109,7 @@ def test_b3_export_predicts_and_shuffles_headroom_share_on_the_common_dataset_co
                         lambda **kwargs: (properties, pd.DataFrame()))
     monkeypatch.setattr(benchmark_export, "_group_a_frames", lambda **kwargs: {})
     monkeypatch.setattr(row_benefit, "summaries", lambda **kwargs: (pd.DataFrame(), pd.DataFrame()))
-    tables = benchmark_export.build_tables("B3", pd.DataFrame(records), cohort="paid")
+    tables = benchmark_export.build_tables("B4", pd.DataFrame(records), cohort="paid")
     got = tables["lodo_predictions"]
     summary = tables["lodo"].set_index("input_set")
     assert set(got.outcome) == set(summary.outcome) == {"headroom_share"}
@@ -149,10 +149,10 @@ def test_undefined_omnibus_keeps_valid_pairwise_results_and_invalid_p_values_sto
 
 def test_complementarity_differentiates_real_arms_and_does_not_break_ties_by_row_order():
     emb = {"embedding": {"encoder_id": "e5", "pca_scope": "per_column", "pca_components_per_column": 32}}
-    labels = [_representation({**emb, "provider": provider}, "non_text_plus_both_plus_frozen_e5", "experiment_2")
+    labels = [_representation({**emb, "provider": provider}, "non_text_plus_both_plus_frozen_e5", "B2")
               for provider in ("strands", "liquid")]
-    labels += [_representation(emb, "non_text_plus_frozen_e5", "experiment_2"),
-               _representation({**emb, "probe": {"view": "joint"}}, "non_text_plus_supervised_probe", "experiment_3")]
+    labels += [_representation(emb, "non_text_plus_frozen_e5", "B2"),
+               _representation({**emb, "probe": {"view": "joint"}}, "non_text_plus_supervised_probe", "B3")]
     assert len(set(labels)) == 4
     result = complementarity.pair_statistics(np.zeros(100), np.zeros(100))
     assert result["top_overlap_status"] == "tied_cutoff" and np.isnan(result["jaccard_top"])
@@ -243,7 +243,7 @@ def test_row_benefits_use_the_same_models_and_equal_dataset_weights():
     from src.evaluation.models import MAIN_MODELS
 
     records = [{"dataset": dataset, "task": task, "model": model, "features": "non_text_plus_both",
-                "axis": "length", "cohort": "bin_1", "benefit": value, "phase": "experiment_1",
+                "axis": "length", "cohort": "bin_1", "benefit": value, "phase": "B1",
                 "representation": '{"provider": "' + p + '"}'}
                for dataset, task, value in (("bin", "binary_classification", 0.6),
                                             ("multi1", "multiclass_classification", 0.3),
@@ -297,7 +297,7 @@ def test_a2_canonicalized_field_order_and_descriptive_jensen_are_distinguished()
         plt.close(fig)
     framework = fx.approved_analysis()["framework"]
     assert framework["confirmatory_scores"]["A2"] == "proper_score_skill"
-    for name in ("B1_decision_features", "B2_representations"):
+    for name in ("B1_decision_features", "B2_frozen_embeddings"):
         entry = framework["application"][name]
         assert entry["inference"] == "confirmatory" and entry["holm_family"].endswith("within_each_predictor")
 
@@ -363,10 +363,10 @@ def test_paid_comparisons_include_saved_controls_without_planning_new_control_fi
     plan = design.plan
     assert design.roster == ("jev",) and len(design.datasets) == 18
     assert plan.provider.notna().sum() == len(pending_fits)
-    assert set(plan.loc[plan.phase.eq("data_efficiency") & plan.provider.isna(), "representation"]) >= {"baseline"}
-    assert plan.loc[plan.phase.eq("experiment_4"), "provider"].isna().all()
+    assert set(plan.loc[plan.phase.eq("B5") & plan.provider.isna(), "representation"]) >= {"baseline"}
+    assert plan.loc[plan.phase.eq("B6"), "provider"].isna().all()
     dataset = next(d for d, task in design.datasets.items() if task == "binary_classification")
-    phases = benchmark_export.STUDIES["B2"]["phases"]
+    phases = ("B1", "B2", "B3")  # The B2 and B3 exports share the B1 controls.
     arms = plan[plan.dataset_id.eq(dataset) & plan.model_id.eq("linear") & plan.phase.isin(phases)].copy()
     arms["dataset_id"] = "fixture"
     arms = arms.to_dict("records")
@@ -381,17 +381,20 @@ def test_paid_comparisons_include_saved_controls_without_planning_new_control_fi
     monkeypatch.setattr(complementarity, "summaries", lambda **kwargs: (pd.DataFrame(), pd.DataFrame()))
     unrelated = folds[folds.provider.eq("jev")].assign(provider="strands")
     mixed = pd.concat([folds, unrelated])
-    tables = benchmark_export.build_tables("B2", mixed, cohort="paid")
-    assert set(tables["folds"].provider.dropna()) == {"jev"}
-    coverage = tables["coverage"]
-    assert coverage.planned_arms.sum() == len(arms) and coverage.complete_arms.eq(coverage.planned_arms).all()
-    pd.testing.assert_frame_equal(benchmark_export.coverage(mixed, phases, cohort="paid"), coverage)
-    assert {"frozen", "tar", "probe"} <= set(tables["contrasts"].family)
     local = learner_scores.Design({"fixture": "binary_classification"}, design.roster, pd.DataFrame(arms))
-    group, = learner_scores.b2_groups(tables, local)
-    assert {"frozen/e5_small_v2/per_column32", "tar/e5_small_v2_tar/per_column32",
-            "probe/e5_small_v2/joint"} <= set(group.learners)
-    assert group.scores.status.eq(learner_scores.OK).all()
+    expected = {"B2": ({"frozen"}, {"frozen/e5_small_v2/per_column32"}),
+                "B3": ({"tar", "probe"}, {"tar/e5_small_v2_tar/per_column32", "probe/e5_small_v2/joint"})}
+    for study, (families, learners) in expected.items():
+        own = mixed[mixed.phase.isin(benchmark_export.STUDIES[study]["phases"])]
+        tables = benchmark_export.build_tables(study, own, cohort="paid")
+        assert set(tables["folds"].provider.dropna()) == {"jev"}
+        coverage = tables["coverage"]
+        planned = [a for a in arms if a["phase"] in benchmark_export.STUDIES[study]["phases"]]
+        assert coverage.planned_arms.sum() == len(planned) and coverage.complete_arms.eq(coverage.planned_arms).all()
+        assert families <= set(tables["contrasts"].family)
+        group, = getattr(learner_scores, f"{study.lower()}_groups")(tables, local)
+        assert learners <= set(group.learners)
+        assert group.scores.status.eq(learner_scores.OK).all()
     assert learner_scores.run_confirmatory_family(cohort="paid")["status"] == "not_applicable"
 
 
@@ -426,20 +429,21 @@ def test_all_21_contrasts_run_with_identical_procedure_before_and_after_paid_ext
                 base = {"dataset_id": dataset, "task_type": task, "model_id": model, "outer_fold": fold,
                         "checkpoint_id": model + "-checkpoint", "split_id": dataset + "-split", "metric": HEADLINES[task]}
                 baseline = 0.5 + number / 1000
-                records.append({**base, "phase": "experiment_1", "feature_set": "non_text", "value": baseline})
+                records.append({**base, "phase": "B1", "feature_set": "non_text", "value": baseline})
                 for index, provider in enumerate(all_providers):
-                    records.append({**base, "phase": "experiment_1", "feature_set": "non_text_plus_both",
+                    records.append({**base, "phase": "B1", "feature_set": "non_text_plus_both",
                                     "provider": provider, "value": baseline + 0.01 + index / 1000})
-                for phase, fs, encoder, gain in (("experiment_2", "non_text_plus_frozen_e5", "e5_small_v2", 0.005),
-                                                 ("experiment_3", "non_text_plus_tar", "e5_small_v2_tar", 0.007)):
+                for phase, fs, encoder, gain in (("B2", "non_text_plus_frozen_e5", "e5_small_v2", 0.005),
+                                                 ("B3", "non_text_plus_tar", "e5_small_v2_tar", 0.007)):
                     records.append({**base, "phase": phase, "feature_set": fs, "encoder": encoder,
                                     "pca_scope": "per_column", "pca_components": 32, "value": baseline + gain})
     complete = pd.DataFrame(records)
     archives = []
     for cohort in ("open_weight", "all"):
         available = complete[complete.provider.ne("jev")] if cohort == "open_weight" else complete
-        inputs = {"B1_decision_features": {"folds": available[available.phase.eq("experiment_1")]},
-                  "B2_representations": {"folds": available}}
+        inputs = {"B1_decision_features": {"folds": available[available.phase.eq("B1")]},
+                  "B2_frozen_embeddings": {"folds": available[available.phase.isin(["B1", "B2"])]},
+                  "B3_label_trained": {"folds": available[available.phase.isin(["B1", "B3"])]}}
         if cohort == "open_weight":
             stopped = learner_scores.run_confirmatory_family(inputs, cohort="all", n_boot=5)
             assert stopped["status"] == "stopped"

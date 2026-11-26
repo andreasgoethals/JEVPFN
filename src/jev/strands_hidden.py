@@ -21,7 +21,7 @@ with the publisher's ``SystemOneEngine.evaluate``. Stores are per dataset on GPF
 (SQLite, resumable by input number) with ``manifest.json`` (SHA-256 of every file).
 
 CLI: ``--estimate`` (local, read-only storage estimate), ``--dataset D --execute`` (B200 job,
-``scripts/slurm/c1_strands_hidden.slurm``), ``--dataset D --finalize``.
+``scripts/slurm/C1_strands_hidden.slurm``), ``--dataset D --finalize``.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ from src.utils.locking import file_lock
 from src.utils.serialization import digest, file_sha256, write_json
 
 SCHEMA = "jevpfn.strands_hidden.v2"
-CONFIG = "representations/representations"
+CONFIG = "C1"
 POSITIONS = ("state_end", "question_end", "answer")
 LAYERS = (12, 24)
 #: Order of the six vectors inside one stored block.
@@ -186,7 +186,7 @@ def published_vector(answer: dict, kind: str, n_options: int) -> np.ndarray:
 
 
 def store_dir(dataset_id: str) -> Path:
-    return paths.group_c_dir("representations", "strands_hidden", paths.output_component(dataset_id))
+    return paths.group_c_dir("C1", "strands_hidden", paths.output_component(dataset_id))
 
 
 def _connect(path: Path, *, readonly=False):
@@ -340,7 +340,7 @@ def storage_estimate(hidden: int = 2048) -> pd.DataFrame:
     from src.data.selection import selected_entries
 
     rows = []
-    for entry in selected_entries(load_catalog(), load_yaml("experiment_1/main")):
+    for entry in selected_entries(load_catalog(), load_yaml("B1")):
         _, _, summary, _, joint = input_plan(entry["id"])
         k = option_count(entry["id"])
         vectors = summary["unique_inputs"] * len(BLOCK) * hidden * 2
@@ -560,7 +560,7 @@ def _extract(dataset_id, extraction, limit):
     backend.no_padding()
     backend.no_truncation()
     pending, checks, started, new = [], [], time.perf_counter(), 0
-    log = paths.logs_dir("representations") / "strands_hidden" / f"{dataset_id}_{os.environ['SLURM_JOB_ID']}.log"
+    log = paths.logs_dir("C1") / "strands_hidden" / f"{dataset_id}_{os.environ['SLURM_JOB_ID']}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     for record in iter_prepared_inputs(paths.dataset_question_path(dataset_id), input_set_id=identity):
         number = record["input_no"]

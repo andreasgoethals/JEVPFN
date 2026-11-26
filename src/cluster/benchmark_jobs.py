@@ -1,8 +1,8 @@
 """Write bounded, bundled Slurm array plans; never submit jobs or enable experiments.
 
 One array task runs a time-bounded group of supported arms of one dataset for one predictor and phase
-(each arm: five folds, resumed by the evaluation store). Group B phases (experiment_1-4,
-rq2 text-column refits, data_efficiency training-size curves) use the same bundling. Inputs are loaded once per
+(each arm: five folds, resumed by the evaluation store). Group B phases (B1-B6, including the B4
+text-column refits and B5 training-size curves) use the same bundling. Inputs are loaded once per
 process; every arm and fit is evaluated exactly as a single-arm task would evaluate
 it. A task may run several worker processes concurrently on one B200 or on disjoint
 CPU cores; each worker keeps the reviewed thread count, so settings identities and
@@ -53,7 +53,7 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
         model != "linear" or not profile_fold or profile_runtime not in {"JEVPFN", "linear"}
     ):
         raise ValueError("Only linear fold profiling can select the controller or linear predictor image")
-    runtime = load_yaml("experiment_1/models")["models"][model]["runtime"]
+    runtime = load_yaml("B1/models")["models"][model]["runtime"]
     gpu = runtime["device"].startswith("cuda")
     if model in CPU_ONLY_MODELS and gpu:
         raise ValueError(f"{model} is a CPU-node predictor; its runtime must not request CUDA")
@@ -76,7 +76,7 @@ def plan(phase, model, *, profile=None, concurrency=8, profile_fold=False, worke
     if profile_summary is None and not profile_fold and paths.on_vsc():
         from src.evaluation.qualification import PHASE_CONFIGS, acceptance_for
 
-        acceptance = load_yaml(PHASE_CONFIGS[phase]).get("experiment_0_acceptance")
+        acceptance = load_yaml(PHASE_CONFIGS[phase]).get("gate_acceptance")
         receipts = {acceptance_for(acceptance, provider) for provider in {a.get("provider") for a in arms}}
         profile_summary = sizing.summarize([row for path in receipts for row in sizing.profile_records(
             model, phase=phase, cluster=route["cluster"], acceptance=path)])
@@ -143,7 +143,7 @@ def write_plan(body):
     environment = body["model"]
     control_id = None
     if body["model"] == "linear":
-        # A linear 0B contract can run inside the sealed CPU controller (same reviewed sklearn).
+        # A linear B0 contract can run inside the sealed CPU controller (same reviewed sklearn).
         active = Path(body["route"]["staging_root"]) / paths.PROJECT_NAME / "containers/control.active.json"
         if active.is_file():
             control_id = json.loads(active.read_text(encoding="utf-8"))["container_id"]
@@ -154,7 +154,7 @@ def write_plan(body):
     if not body["profile_fold"]:
         from src.evaluation.qualification import PHASE_CONFIGS, acceptance_for, benchmark_evidence
 
-        setting = load_yaml(PHASE_CONFIGS[body["phase"]]).get("experiment_0_acceptance")
+        setting = load_yaml(PHASE_CONFIGS[body["phase"]]).get("gate_acceptance")
         reviews = {}
         for arm in body["arms"]:
             reviews.setdefault(arm.get("provider"), arm)
@@ -164,10 +164,10 @@ def write_plan(body):
             if body["model"] == "linear":
                 linear_ids.add(evidence[1]["container_id"])
         if len(linear_ids) > 1:
-            raise ValueError("The selected 0B reviews qualify different linear predictor images")
+            raise ValueError("The selected B0 reviews qualify different linear predictor images")
         if control_id and linear_ids == {control_id}:
             environment = "JEVPFN"
-    output_phase = "experiment_0" if body["profile_fold"] else body["phase"]
+    output_phase = "0" if body["profile_fold"] else body["phase"]
     logs = paths.logs_dir(output_phase)
     logs.mkdir(parents=True, exist_ok=True)
     route = body["route"]
@@ -195,7 +195,7 @@ def write_plan(body):
             project_export(route.get("durable_root", route["staging_root"])),
             f"--clusters={route['cluster']}",
             f"--partition={partition}",
-            f"--account={load_yaml('experiment_0/scheduling')['account']}",
+            f"--account={load_yaml('0/scheduling')['account']}",
             f"--array=0-{len(tier) - 1}%{body['concurrency']}",
             f"--cpus-per-task={cpus}",
             f"--time={request['time_hours']}:00:00",

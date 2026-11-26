@@ -27,7 +27,7 @@ def test_encoder_report_binds_source_runtime_job_and_failure(isolated_output, mo
     with pytest.raises(ValueError, match="synthetic"):
         embedding_contracts.run(execute=True, encoder_factory=fail)
     path = next(
-        (paths.manifests_dir("experiment_0") / "before_extraction/embeddings").glob("*.json")
+        (paths.manifests_dir("0") / "before_extraction/embeddings").glob("*.json")
     )
     saved = json.loads(path.read_text())
     assert saved["status"] == "failed"

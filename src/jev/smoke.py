@@ -23,7 +23,7 @@ from src.utils.config import load_yaml
 from src.utils.locking import file_lock
 from src.utils.serialization import digest, write_json
 
-POLICY = load_yaml("experiment_0/jev_smoke")
+POLICY = load_yaml("0/jev_smoke")
 MODEL = POLICY["model"]
 PRICE = POLICY["input_price_per_million_usd"]
 TOKEN_BOUND = POLICY["documented_request_context_tokens"]
@@ -39,7 +39,7 @@ def preserve_smoke_state():
     """
     directory = paths.jev_cache_path("jev_cache/_control/jev_smoke")
     state = directory / "state.json"
-    legacy = paths.manifests_dir("experiment_0") / "before_extraction" / "jev_smoke.json"
+    legacy = paths.manifests_dir("0") / "before_extraction" / "jev_smoke.json"
     with file_lock(directory / "state.lock", timeout=1):
         if legacy.exists():
             latest = json.loads(legacy.read_text(encoding="utf-8"))
@@ -78,7 +78,7 @@ def preserve_smoke_state():
         responses = []
         for attempt in report["attempts"]:
             name = paths.output_component(attempt["probe"]) + ".json"
-            old = paths.results_dir("jev_smoke", phase="experiment_0") / name
+            old = paths.results_dir("jev_smoke", phase="0") / name
             if old.exists():
                 raw = json.loads(old.read_text(encoding="utf-8"))
                 if digest(raw) != attempt.get("response_sha256"):
@@ -154,8 +154,8 @@ def run(
         state_path = directory / "state.json"
     else:
         directory, state_path = preserve_smoke_state()
-    output_directory = paths.results_dir(test_name, phase="experiment_0")
-    report_path = paths.manifests_dir("experiment_0") / "before_extraction" / f"{test_name}.json"
+    output_directory = paths.results_dir(test_name, phase="0")
+    report_path = paths.manifests_dir("0") / "before_extraction" / f"{test_name}.json"
     planned = (
         requests(real=True)
         if dataset_robustness
@@ -261,7 +261,7 @@ def run(
                         )
                     if len(report["attempts"]) >= maximum:
                         raise RuntimeError("Synthetic-test attempt ceiling reached")
-                    committed = campaign_committed(cache_folder, replay_folder=paths.results_dir("hosted_ledgers", phase="rq1"))
+                    committed = campaign_committed(cache_folder, replay_folder=paths.results_dir("hosted_ledgers", phase="A2"))
                     if committed + TOKEN_BOUND * PRICE / 1e6 > JEV_CEILING_USD + 1e-12:
                         raise RuntimeError("Cumulative Jev spending ceiling reached")
                     if client is None:
@@ -450,7 +450,7 @@ def main():
                     "error_type": type(exc).__name__,
                     "http_status": getattr(exc, "status", None),
                     "hint": error_hint(exc)
-                    or "Inspect the experiment_0 before_extraction Jev report and permanent _control ledger; saved responses can be revalidated without new calls.",
+                    or "Inspect the Experiment 0 before_extraction Jev report and permanent _control ledger; saved responses can be revalidated without new calls.",
                 }
             )
         )

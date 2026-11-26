@@ -24,8 +24,8 @@ def test_active_rosters_and_provider_pins_agree():
     for providers in (
         load_yaml("decision_pilot")["providers"],
         load_yaml("feature_comparison")["comparison"]["providers"],
-        load_yaml("experiment_1/main")["candidate_extractors"],
-        load_yaml("experiment_1/main")["feature_selectors"],
+        load_yaml("B1")["candidate_extractors"],
+        load_yaml("B1")["feature_selectors"],
     ):
         assert set(providers) == roster
     assert {k: v["context_tokens"] for k, v in catalog.items()} == CONTEXT_LIMITS
@@ -47,20 +47,20 @@ def test_execution_catalog_and_metric_version_match_implementation():
     )
 
     for config, combinations in (
-        ("experiment_1/main", DECISION_FEATURE_SETS),
-        ("experiment_2/embeddings", EMBEDDING_FEATURE_SETS[:1]),
-        ("experiment_4/native_text", NATIVE_FEATURE_SETS[:1]),
+        ("B1", DECISION_FEATURE_SETS),
+        ("B2", EMBEDDING_FEATURE_SETS[:1]),
+        ("B6", NATIVE_FEATURE_SETS[:1]),
     ):
         assert tuple(load_yaml(config)["candidate_combinations"]) == combinations
     assert tuple(load_yaml("feature_creation/text_embeddings")["models"]) == MAIN_MODELS
-    assert set(load_yaml("experiment_1/models")["models"]) == set(MAIN_MODELS + TEXT_MODELS)
+    assert set(load_yaml("B1/models")["models"]) == set(MAIN_MODELS + TEXT_MODELS)
     assert (
-        load_yaml("experiment_1/protocol")["evaluation"]["metric_conventions"]["version"]
+        load_yaml("B1/protocol")["evaluation"]["metric_conventions"]["version"]
         == METRICS_VERSION
     )
     for folder in (paths.REPO_ROOT / "config").iterdir():
-        assert (folder.is_dir() and folder.name in paths.layout().config_dirs) or (
-            folder.name == "structure.yaml")
+        assert (folder.is_dir() and folder.name in paths.layout().top_level) or (
+            folder.name in {"structure.yaml", "layout_aliases.yaml"})
 
 
 def test_citation_matches_project_metadata():

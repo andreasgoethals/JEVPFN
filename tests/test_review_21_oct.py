@@ -9,8 +9,8 @@ from src.evaluation.models import predictor_settings_identity
 
 def test_predictor_identity_excludes_only_output_routing():
     settings = {"seed": 7, "checkpoint": "pinned", "parameters": {"epochs": 2}}
-    assert predictor_settings_identity({**settings, "output_phase": "experiment_4"}) == (
-        predictor_settings_identity({**settings, "output_phase": "experiment_2"})
+    assert predictor_settings_identity({**settings, "output_phase": "B6"}) == (
+        predictor_settings_identity({**settings, "output_phase": "B2"})
     )
     assert predictor_settings_identity(settings) != predictor_settings_identity(
         {**settings, "seed": 8}
@@ -26,7 +26,7 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
         dataset_id="fixture",
         model="tabstar",
         provider=None,
-        phase="experiment_4",
+        phase="B6",
         feature_set="original_features",
     )
     original_config = campaign.load_yaml
@@ -42,7 +42,7 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
         cfg = copy.deepcopy(original_config(name))
         cfg["enabled"] = True
         cfg["full_fold_profile_enabled"] = True
-        if name == "experiment_1/models":
+        if name == "B1/models":
             cfg["models"]["tabstar"]["runtime"]["device"] = "cpu"
         if "feature_selectors" in cfg:
             cfg["feature_selectors"]["jev"] = selector
@@ -73,8 +73,8 @@ def test_tabstar_campaign_pairs_across_output_phases(isolated_output, monkeypatc
     campaign.run_arm(base, allow_model_runs=True)
     campaign.run_arm(base, allow_model_runs=True, profile=True)
     assert [c["estimator_settings"]["output_phase"] for c in captured] == [
-        "experiment_4",
-        "experiment_0",
+        "B6",
+        "0",
     ]
     assert captured[0]["checkpoint_id"] == captured[1]["checkpoint_id"]
 

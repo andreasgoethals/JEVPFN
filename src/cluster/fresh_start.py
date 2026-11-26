@@ -201,7 +201,7 @@ def run(*, apply=False, writers_stopped=False, local=False, delete=False, includ
             for root in roots.values():
                 root.mkdir(exist_ok=True)
             if not local:
-                paths.logs_dir("experiment_0").mkdir(parents=True, exist_ok=True)
+                paths.logs_dir("0").mkdir(parents=True, exist_ok=True)
         report["status"] = "fresh_outputs_ready"
         return report
     journal = journal_root / "archived_output_JEVPFN" / f"{run_id}.json"
@@ -221,7 +221,7 @@ def run(*, apply=False, writers_stopped=False, local=False, delete=False, includ
                     write_json(journal, report)
                 source.mkdir(exist_ok=True)
             if not local:
-                paths.logs_dir("experiment_0").mkdir(parents=True, exist_ok=True)
+                paths.logs_dir("0").mkdir(parents=True, exist_ok=True)
             report["status"] = "fresh_outputs_ready"
         except BaseException as exc:
             report.update(status="interrupted_archives_preserved", error_type=type(exc).__name__)

@@ -43,7 +43,7 @@ def datasets() -> pd.DataFrame:
 
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
-    for entry in selected_entries(load_catalog(), load_yaml("experiment_1/main")):
+    for entry in selected_entries(load_catalog(), load_yaml("B1")):
         task = semantics[entry["id"]]["task_type"]
         summary = entry["paper_summary"]
         rows.append({"dataset_id": entry["id"], "task_type": task, "rows": summary["rows"],
@@ -132,66 +132,66 @@ FEATURE_SET = {"per_column": "non_text_plus_per_column", "joint": "non_text_plus
                "both": "non_text_plus_both"}
 
 
-def folds(phases=("experiment_1",), *, predictors=MAIN_MODELS, seed=SEED) -> pd.DataFrame:
+def folds(phases=("B1",), *, predictors=MAIN_MODELS, seed=SEED) -> pd.DataFrame:
     """Complete five-fold records of the requested phases (B4 lives in `size_folds`)."""
     gen = _Generator(seed)
     rows = []
     for dataset, info in gen.data.iterrows():
         single = info.text_columns == 1
         for model in predictors:
-            if "experiment_1" in phases:
-                _arm(rows, gen, dataset, model, "experiment_1", "non_text", 0.0, 0)
+            if "B1" in phases:
+                _arm(rows, gen, dataset, model, "B1", "non_text", 0.0, 0)
                 for provider, quality in gen.quality.items():
                     for view in ("per_column", "joint", "both"):
                         # One text column: the three views are the same block (deduplicated).
                         factor = 0.95 if single else VIEW_FACTOR[view]
-                        _arm(rows, gen, dataset, model, "experiment_1", FEATURE_SET[view],
+                        _arm(rows, gen, dataset, model, "B1", FEATURE_SET[view],
                              gen.gain(dataset, model, quality * factor), gen.width(dataset, view),
                              provider=provider)
-            if "experiment_2" in phases:
+            if "B2" in phases:
                 for i, encoder in enumerate(ENCODERS):
                     for scope, components in (("per_column", 32), ("joint", 64)):
                         width = components * (info.text_columns if scope == "per_column" else 1)
-                        _arm(rows, gen, dataset, model, "experiment_2", "non_text_plus_frozen_e5",
+                        _arm(rows, gen, dataset, model, "B2", "non_text_plus_frozen_e5",
                              gen.gain(dataset, model, 0.55 + 0.08 * i - 0.1 * (scope == "joint")),
                              width, encoder=encoder, pca_scope=scope, pca_components=components)
                 for provider, quality in gen.quality.items():
-                    _arm(rows, gen, dataset, model, "experiment_2", "non_text_plus_both_plus_frozen_e5",
+                    _arm(rows, gen, dataset, model, "B2", "non_text_plus_both_plus_frozen_e5",
                          gen.gain(dataset, model, quality * 1.05 + 0.15),
                          gen.width(dataset, "both") + 32 * info.text_columns, provider=provider,
                          encoder="e5_small_v2", pca_scope="per_column", pca_components=32)
-            if "experiment_3" in phases:
+            if "B3" in phases:
                 for scope, components in (("per_column", 32), ("joint", 64)):
                     width = components * (info.text_columns if scope == "per_column" else 1)
-                    _arm(rows, gen, dataset, model, "experiment_3", "non_text_plus_tar",
+                    _arm(rows, gen, dataset, model, "B3", "non_text_plus_tar",
                          gen.gain(dataset, model, 1.2 - 0.1 * (scope == "joint")), width,
                          encoder="e5_small_v2_tar", pca_scope=scope, pca_components=components,
                          seconds=4.0)
                 for i, encoder in enumerate(ENCODERS):
                     for view in PROBE_VIEWS:
-                        _arm(rows, gen, dataset, model, "experiment_3",
+                        _arm(rows, gen, dataset, model, "B3",
                              "non_text_plus_supervised_probe",
                              gen.gain(dataset, model, 1.1 + 0.05 * i - 0.1 * (view == "joint")),
                              gen.width(dataset, view), encoder=encoder, probe_view=view)
-            if "rq2" in phases and info.text_columns >= 2:
+            if "B4" in phases and info.text_columns >= 2:
                 weights = gen.rng.dirichlet(np.ones(info.text_columns))
                 for provider, quality in gen.quality.items():
                     full = gen.gain(dataset, model, quality * VIEW_FACTOR["per_column"])
                     for column in range(info.text_columns):
-                        _arm(rows, gen, dataset, model, "rq2",
+                        _arm(rows, gen, dataset, model, "B4",
                              "non_text_plus_per_column_without_one_text",
                              full * (1 - weights[column]),
                              gen.width(dataset, "per_column") - gen.width(dataset, "joint"),
                              provider=provider, dropped_text_column=column)
-        if "experiment_4" in phases:
+        if "B6" in phases:
             for i, model in enumerate(TEXT_MODELS):
-                _arm(rows, gen, dataset, "catboost", "experiment_4", "original_features",
+                _arm(rows, gen, dataset, "catboost", "B6", "original_features",
                      gen.gain(dataset, "catboost", 1.4 - 0.3 * i), 0, seconds=60.0)
                 rows[-15:] = [dict(r, model_id=model, checkpoint_id=f"{model}-checkpoint")
                               for r in rows[-15:]]
     frame = _categorise(rows)
-    if "experiment_4" in phases:  # recipe ids of renamed native rows stay unique per system
-        native = frame.phase.eq("experiment_4")
+    if "B6" in phases:  # recipe ids of renamed native rows stay unique per system
+        native = frame.phase.eq("B6")
         recipe_id = frame.recipe_id.astype(str)
         recipe_id.loc[native] = recipe_id[native] + "-" + frame.loc[native, "model_id"].astype(str)
         frame["recipe_id"] = recipe_id.astype("category")
@@ -225,7 +225,7 @@ def size_folds(*, predictors=MAIN_MODELS, seed=SEED) -> pd.DataFrame:
                               {"encoder": "e5_small_v2", "probe_view": "per_column"}, 0.2 + 1.0 * shrink)]
                     for feature_set, fields, factor in arms:
                         gain = lift + (gen.gain(dataset, model, factor) if factor else 0.0)
-                        _arm(rows, gen, dataset, model, "data_efficiency", feature_set,
+                        _arm(rows, gen, dataset, model, "B5", feature_set,
                              gain, 0, **common, **fields)
     frame = _categorise([r for r in rows if r["metric"] != "columns.representation"])
     frame["split_id"] = (frame.split_id.astype(str) + "-" + frame.training_size.astype(str) + "-"
@@ -260,7 +260,7 @@ def complementarity_pairs(gains: pd.DataFrame, seed=SEED) -> pd.DataFrame:
     }, columns=complementarity.PAIR_COLUMNS)
 
 
-def b3_properties(seed=SEED) -> pd.DataFrame:
+def b4_properties(seed=SEED) -> pd.DataFrame:
     """Label-free dataset properties in the exported columns (dataset_covariates + redundancy)."""
     rng = np.random.default_rng(seed + 3)
     info = datasets()
@@ -279,7 +279,7 @@ def b3_properties(seed=SEED) -> pd.DataFrame:
     })
 
 
-def b3_model_diagnostics(seed=SEED) -> pd.DataFrame:
+def b4_model_diagnostics(seed=SEED) -> pd.DataFrame:
     rng = np.random.default_rng(seed + 4)
     models = roster()
     return pd.DataFrame({
@@ -293,7 +293,7 @@ def b3_model_diagnostics(seed=SEED) -> pd.DataFrame:
     })
 
 
-def b3_row_cohorts(seed=SEED) -> pd.DataFrame:
+def b4_row_cohorts(seed=SEED) -> pd.DataFrame:
     """B3 per-dataset, per-predictor row benefits over the complete model roster."""
     rng = np.random.default_rng(seed + 5)
     axes = {"availability": ["present", "absent"], "length": [f"bin_{i}" for i in range(4)] + ["missing"],
@@ -307,7 +307,7 @@ def b3_row_cohorts(seed=SEED) -> pd.DataFrame:
             for mode in ("per_column", "joint", "both"):
                 for axis, cohorts in {"all": ["all"], **axes}.items():
                     for i, cohort in enumerate(cohorts):
-                        rows.append({"dataset": dataset, "task": task, "phase": "experiment_1", "model": model,
+                        rows.append({"dataset": dataset, "task": task, "phase": "B1", "model": model,
                                      "checkpoint": f"{model}-checkpoint", "features": FEATURE_SET[mode],
                                      "representation": f'{{"mode": "{mode}"}}', "axis": axis,
                                      "cohort": cohort, "interpretation": "pre-specified",
@@ -315,7 +315,7 @@ def b3_row_cohorts(seed=SEED) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> dict:
+def b4_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> dict:
     """B3 tables through the export's own `group_b` functions (raw data replaced by fixtures)."""
     from src.utils.config import load_yaml
 
@@ -323,8 +323,8 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
     gains = group_b.dataset_gains(group_b.fold_gains(head))
     gains = gains[gains.family.eq("decision")]
     medians = group_b.median_over_decision_models(gains, roster=roster())
-    properties = b3_properties()
-    rule = load_yaml("rq2/when_text_helps")["predict_in_advance"]
+    properties = b4_properties()
+    rule = load_yaml("B4")["predict_in_advance"]
     outcome = medians[medians.representation.eq(rule["outcome_representation"])]
     lodo_rows, lodo = [], []
     for model, group in outcome.groupby("model_id"):
@@ -333,7 +333,7 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
             threshold=rule["use_threshold"], n_shuffles=n_shuffles, value=rule["outcome"])
         lodo_rows.append(predictions.assign(model_id=model))
         lodo.append(summary.assign(model_id=model))
-    diagnostics = b3_model_diagnostics()
+    diagnostics = b4_model_diagnostics()
     usefulness = group_b.per_model_usefulness(gains, datasets=properties)
     relations = group_b.model_relations(usefulness, diagnostics, n_permutations=n_permutations, min_units=5)
     redundancy = pd.DataFrame([{"dataset_id": d, "provider": p, "status": "computed", "rows": 1000,
@@ -341,12 +341,12 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
                                for d, r in zip(properties.dataset_id, properties.decision_redundancy_r2)
                                for p in roster()])
     return {
-        "coverage": benchmark_export.coverage(e1_folds, benchmark_export.STUDIES["B3"]["phases"]),
+        "coverage": benchmark_export.coverage(e1_folds, benchmark_export.STUDIES["B4"]["phases"]),
         "folds": e1_folds, "dataset_gains": gains, "summary": group_b.summarize(gains),
         "properties": properties, "redundancy": redundancy,
         "associations": group_b.dataset_associations(medians, properties, n_permutations=n_permutations),
         "model_diagnostics": diagnostics, "model_usefulness": usefulness, "model_relations": relations,
-        "column_importance": group_b.text_column_importance(head), "row_cohorts": b3_row_cohorts(),
+        "column_importance": group_b.text_column_importance(head), "row_cohorts": b4_row_cohorts(),
         "lodo_predictions": pd.concat(lodo_rows, ignore_index=True),
         "lodo": pd.concat(lodo, ignore_index=True),
     }
@@ -355,19 +355,19 @@ def b3_tables(e1_folds: pd.DataFrame, *, n_permutations=200, n_shuffles=50) -> d
 def tables(study: str) -> dict[str, pd.DataFrame]:
     """Every table of one study's export, in memory."""
     if study == "B1":
-        return benchmark_export.build_tables("B1", folds(("experiment_1",)), cohort="all")
-    if study == "B2":
-        built = benchmark_export.build_tables("B2", folds(("experiment_1", "experiment_2", "experiment_3")), cohort="all")
+        return benchmark_export.build_tables("B1", folds(("B1",)), cohort="all")
+    if study in ("B2", "B3"):
+        built = benchmark_export.build_tables(study, folds(("B1", study)), cohort="all")
         pairs = complementarity_pairs(built["dataset_gains"])
         built.update(complementarity_pairs=pairs,
                      complementarity_summary=complementarity.complementarity_summary(pairs, roster=roster(), n_boot=200))
         return built
-    if study == "B3":
-        return b3_tables(folds(("experiment_1", "rq2")))
     if study == "B4":
-        return benchmark_export.build_tables("B4", size_folds(), cohort="all")
+        return b4_tables(folds(("B1", "B4")))
     if study == "B5":
-        return benchmark_export.build_tables("B5", folds(("experiment_1", "experiment_4")), cohort="all")
+        return benchmark_export.build_tables("B5", size_folds(), cohort="all")
+    if study == "B6":
+        return benchmark_export.build_tables("B6", folds(("B1", "B6")), cohort="all")
     raise KeyError(study)
 
 

@@ -9,7 +9,7 @@ from src.utils.serialization import digest
 
 def decision_scopes(main=None):
     """Resolve immutable first-edition membership and declared, successive additions."""
-    cfg = main if main is not None else load_yaml("experiment_1/main")
+    cfg = main if main is not None else load_yaml("B1")
     members = tuple(cfg["candidate_extractors"])
     if len(set(members)) != len(members):
         raise ValueError("Duplicate decision model in the configured roster")
@@ -99,7 +99,7 @@ def cohort_record(cohort=None, *, main=None):
 
 
 def pca_grid():
-    grid = load_yaml("experiment_2/embeddings")["pca_grid"]
+    grid = load_yaml("B2")["pca_grid"]
     expected = {"per_column": [32], "joint": [64]}
     if grid != expected:
         raise ValueError("PCA grid differs from the reviewed per-column PCA32 and joint PCA64 design")

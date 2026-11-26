@@ -64,7 +64,7 @@ def run(command, *, interval=10, host_step=False):
     job = os.environ.get("SLURM_JOB_ID")
     if not job or not paths.on_vsc():
         raise RuntimeError("Telemetry belongs inside a VSC allocation")
-    phase = os.environ.get("JEVPFN_PHASE", "experiment_0")
+    phase = os.environ.get("JEVPFN_PHASE", "0")
     from uuid import uuid4
 
     identity = f"{job}_{os.environ.get('SLURM_ARRAY_TASK_ID', '0')}_{uuid4().hex[:8]}"
@@ -182,7 +182,7 @@ def main():
 
     interval = args.interval
     if interval is None:
-        interval = load_yaml("experiment_0/scheduling")["monitor_interval_seconds"]
+        interval = load_yaml("0/scheduling")["monitor_interval_seconds"]
     raise SystemExit(run(command, interval=interval, host_step=args.host_step))
 
 

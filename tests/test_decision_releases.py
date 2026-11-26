@@ -12,7 +12,7 @@ from src.utils.serialization import digest
 
 @pytest.mark.parametrize("first_delivery", ["self_hosted", "hosted"])
 def test_successive_releases_add_only_new_fits_and_preserve_edition_identities(monkeypatch, first_delivery):
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     catalog = load_yaml("extractors")
     earlier = benchmark_export.cohort_record("open_weight", main=main)
     first_jev = benchmark_export.cohort_record("with_jev", main=main)
@@ -26,7 +26,7 @@ def test_successive_releases_add_only_new_fits_and_preserve_edition_identities(m
         "second_addition": {"parent": "first_addition", "add": ["added_b"]},
     })
     monkeypatch.setattr(design, "load_yaml", lambda name: catalog if name == "extractors"
-                        else main if name == "experiment_1/main" else load_yaml(name))
+                        else main if name == "B1" else load_yaml(name))
     def recipes(name):
         return Counter(digest(arm) for arm in campaign.benchmark_plan(main=main, cohort=name))
 
@@ -78,7 +78,7 @@ def test_an_open_model_needs_fixed_component_revisions(monkeypatch, field):
     {"parent": "all", "add": ["jev"]},
 ])
 def test_an_extension_cannot_redefine_its_parent_or_add_unregistered_work(change):
-    main = deepcopy(load_yaml("experiment_1/main"))
+    main = deepcopy(load_yaml("B1"))
     main["decision_extensions"]["later"] = change
     with pytest.raises(ValueError):
         design.decision_scopes(main)

@@ -82,7 +82,7 @@ def account_check(client_factory=None):
         "balance_verified": False,
         "pinned_version_access_verified": False,
     }
-    write_json(paths.manifests_dir("experiment_0") / "jev_account.json", report)
+    write_json(paths.manifests_dir("0") / "jev_account.json", report)
     return report
 
 

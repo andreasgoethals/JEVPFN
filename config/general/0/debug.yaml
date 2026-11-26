@@ -1,0 +1,93 @@
+phase: '0'
+name: debugging
+enabled: false  # Full experiment acceptance remains disabled; bounded checks are separate commands.
+predictor_execution_enabled: true  # Bounded fixtures still require --execute and a staged runtime.
+full_fold_profile_enabled: false
+execution_site: vsc_compute_node
+local_preparation_command: python -m src.cluster.preflight --local --verify-data --tests
+feature_config: feature_creation
+cluster:
+  account: lp_verbekelab  # Same account as CreditPFN; verify current association on VSC.
+  cpu: {name: mindwell, partition: batch_graniterapids}
+  gpu: {name: mindwell, partition: gpu_b200, gpus: 1}
+environment: JEVPFN
+feature_artifacts: []  # Optional exact cross-check of the benchmark's immutable feature selectors.
+requires: []  # Infrastructure and tokenizer checks must run BEFORE features exist.
+stages:
+  before_extraction:
+    requires: [frozen_prepared_inputs]
+    token_command: python -m src.cluster.token_audit
+    storage_command: python -m src.cluster.storage_contracts --execute
+    gpu_contract_command: python -m src.cluster.gpu_contracts --provider PROVIDER --execute
+    embedding_contract_command: python -m src.cluster.embedding_contracts --encoder ENCODER --execute
+    acceptance_ids: [provider_task_contracts, context_and_request_robustness, extraction_recovery_and_budget, allocation_and_native_storage, runtime_and_checkpoint_identity]
+  B0:
+    requires: [complete_selected_provider_features, complete_all_three_encoder_features, complete_frozen_PCA, complete_90_outer_fold_TAR_bundles_and_PCA, both_supervised_probe_views_every_outer_fold_and_encoder]
+    acceptance_ids: [feature_campaign_coverage, consistent_transfer_and_backup, predictor_task_compatibility, predictive_pipeline_boundaries, full_fold_resource_profile, real_run_output_and_resume]
+checks:
+  - python_and_dependency_versions
+  - dataset_hashes_and_row_alignment
+  - no_target_in_jev_state
+  - response_validation_and_probability_mass
+  - cache_reuse_after_restart
+  - feature_artifact_integrity
+  - predictions_and_large_outputs_on_project_storage
+  - compact_manifests_and_logs_on_data_storage
+  - inner_oof_and_outer_test_predictions_saved_with_row_ids
+  - tabpfn_3_5_import_and_cuda
+  - proposed_model_imports_and_task_class_limits
+  - full_outer_training_fold_resource_feasibility_no_silent_row_cap
+  - same_five_fold_split_manifest_across_arms
+  - binary_threshold_uses_inner_validation_only
+  - fold_specific_non_text_and_native_text_preprocessing
+  - all_three_encoders_exact_reuse_missing_inputs_long_text_chunks_and_resume
+  - all_experiment_1_2_3_4_feature_combinations_and_provider_provenance
+  - frozen_PCA_inside_inner_and_outer_training_partitions_and_TAR_outer_only
+  - TAR_source_seals_runtime_offline_checkpoint_training_rows_early_stopping_and_resume
+  - TAR_all_column_adapter_replay_missing_unicode_longest_input_duplicates_and_batch_order
+  - TAR_binary_30class_regression_upstream_examples_and_training_only_scaling_PCA_equivalence
+  - CPU_prepared_PCA_reuse_exact_training_partition_and_encoder_identity
+  - parallel_scheduler_dependencies_resume_and_native_filesystem_guards
+  - GPU_utilization_logging_and_explicit_unknown_if_sampling_unavailable
+  - identical_single_text_columns_not_duplicated_in_combined_view
+  - later_small_inference_smoke_after_weights_are_prepared
+acceptance: pending_real_runtime_evidence  # Preflight success is not full experiment-0 acceptance.
+# Preflights report these as pending even if synthetic contract tests pass. They do
+# not load checkpoints, invoke a provider, fit a predictor or acquire an allocation.
+acceptance_checks:
+  - id: provider_task_contracts
+    site: local_or_approved_self_hosted_allocation
+    evidence: All selected providers pass binary, multiclass and nine-option score requests; full probabilities, option order, expected direction, usage and version are validated.
+  - id: context_and_request_robustness
+    site: local_or_approved_self_hosted_allocation
+    evidence: Actual tokenizer counts, maximum accepted input/options, missing text, Unicode, embedded instructions, refusal, paraphrase and answer-order checks pass without silent truncation.
+  - id: extraction_recovery_and_budget
+    site: local_or_approved_self_hosted_allocation
+    evidence: Rate limiting, timeout ambiguity, bounded retry, interruption/resume, deduplication, spending stop and model-version drift are exercised against the selected transport.
+  - id: feature_campaign_coverage
+    site: local_and_vsc
+    evidence: Every selected dataset/provider/question version and encoder cache has complete numeric tables, all original row IDs, declared missing inputs, source hashes and explicit immutable artifact selections.
+  - id: consistent_transfer_and_backup
+    site: local_and_vsc
+    evidence: Closed dataset stores survive transfer and independent restore with matching checksums; interrupted transfer cannot be accepted as complete.
+  - id: allocation_and_native_storage
+    site: vsc_compute_node
+    evidence: Current account/partition association, native Lustre or GPFS, cross-node writer locks, SQLite snapshot/restore, quota, write access and independent backup policy are verified; capacity is not confused with personal quota.
+  - id: runtime_and_checkpoint_identity
+    site: vsc_compute_node
+    evidence: Each selected environment has frozen dependencies, audited checkpoint/code hashes, compatible driver/CUDA, offline weight loading and explicit PROJECT caches.
+  - id: predictor_task_compatibility
+    site: vsc_compute_node
+    evidence: All seven structured predictors fit the baseline, decision features and both PCA recipes across the registered encoder widths. TabSTAR, ConTextTab and AG-MM fit original-text fixtures. Four fixtures cover binary, multiclass, 30-class and regression tasks. The reviewer reopens their published predictions and verifies their fold, role, target and row identities.
+  - id: predictive_pipeline_boundaries
+    site: local_and_vsc
+    evidence: Actual adapters preserve shared outer folds, inner-only F1 thresholds (fixed 0.5 for TAR), fresh fold-local preprocessing and full-training refits; they save every inner/outer prediction with row and feature identities.
+  - id: full_fold_resource_profile
+    site: vsc_compute_node
+    evidence: Representative full outer-training folds, including real binary inner-OOF fitting where required, fit memory/time limits without hidden row caps, checkpoint downloads or HPO; TabSTAR required adaptation is recorded separately; fit/predict timings synchronize CUDA.
+  - id: real_run_output_and_resume
+    site: vsc_compute_node
+    evidence: Real interrupted/restarted prediction jobs preserve immutable outputs; large tables stay on PROJECT and compact logs/indexes stay on DATA; failed arms remain explicit.
+
+dataset_selection:
+  exclude: [REG_TEXT_ZOMATO_RESTAURANTS, MUL_TEXT_SPOTIFY_GENRES]

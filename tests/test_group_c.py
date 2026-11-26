@@ -330,7 +330,7 @@ def test_joint_hidden_group_keeps_text_presence_flags_and_missing_rows():
 def test_group_c_arm_counts():
     from src.evaluation.campaign import benchmark_plan
 
-    plan = [a for a in benchmark_plan() if a["phase"] in ("representations", "rq3")]
+    plan = [a for a in benchmark_plan() if a["phase"] in ("C1", "C2")]
     count = Counter(a["feature_set"] for a in plan)
     assert count == {"non_text_plus_hidden": 1512, "non_text_plus_per_column_plus_hidden": 126,
                      "non_text_plus_joint_plus_hidden": 126, "non_text_plus_adapted_joint": 378}
@@ -339,8 +339,8 @@ def test_group_c_arm_counts():
               if a["feature_set"] == "non_text_plus_hidden"}
     assert len(hidden) == 12 and {a["pca_components"] for a in one if a.get("hidden_view") == "joint"} == {64}
     assert all(a["provider"] == "strands" and a["view"] == "probabilities" for a in one
-               if a["feature_set"] != "non_text_plus_hidden" and a["phase"] == "representations")
-    assert {a["adaptation_cell"] for a in one if a["phase"] == "rq3"} == set(sa.CELLS)
+               if a["feature_set"] != "non_text_plus_hidden" and a["phase"] == "C1")
+    assert {a["adaptation_cell"] for a in one if a["phase"] == "C2"} == set(sa.CELLS)
     assert not [a for a in plan if a["width_status"] == "unsupported_width"]
     assert [(a["model"], a["dataset_id"], a["feature_set"], a["kumo_max_columns_override"])
             for a in plan if a.get("kumo_max_columns_override")] == [
@@ -377,15 +377,15 @@ def test_exports_wait_when_absent(tmp_path):
     frames, receipt = group_c.read("C1", tmp_path / "missing.zip")
     assert frames == {} and receipt["status"] == "awaiting_export"
     assert group_c.export_path("C2").parts[-3:] == ("results", "group_c", "c2_adaptation.zip")
-    assert group_c.export_path("C2").parts[-5:-3] == ("C", "exp11_adaptation")
-    assert group_c.export_path("C1").parts[-5:-3] == ("C", "exp10_representations")
+    assert group_c.export_path("C2").parts[-5:-3] == ("C", "C2")
+    assert group_c.export_path("C1").parts[-5:-3] == ("C", "C1")
 
 
 def test_group_c_slurm_scripts_use_b200_without_a100_and_lf():
-    for name in ("c1_strands_hidden.slurm", "c2_adaptation.slurm"):
+    for name in ("C1_strands_hidden.slurm", "C2_adaptation.slurm"):
         text = (paths.REPO_ROOT / "scripts/slurm" / name).read_bytes()
         assert b"\r" not in text and b"--partition=gpu_b200" in text and b"a100" not in text.lower()
     export = Path(paths.REPO_ROOT / "scripts/slurm/group_c_export.slurm").read_bytes()
     assert b"batch_graniterapids" in export and b"\r" not in export
-    # C2's log belongs to C/exp11_adaptation: the documented submission overrides the C1 default.
-    assert b"--output=output_JEVPFN/C/exp11_adaptation/logs/" in export
+    # C2's log belongs to C/C2: the documented submission overrides the C1 default.
+    assert b"--output=output_JEVPFN/C/C2/logs/" in export

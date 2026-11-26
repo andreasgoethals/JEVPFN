@@ -120,7 +120,7 @@ def test_shared_assets_release_retires_only_published_mutable_copies(roots, unkn
         request("intern"), kind="verified_response") == response()
 
 
-@pytest.mark.parametrize("folder,registered", [("B/exp04_decision_features", True), ("B/misspelled", False)])
+@pytest.mark.parametrize("folder,registered", [("B/B1", True), ("B/misspelled", False)])
 def test_shared_release_requires_a_registered_result_folder(roots, folder, registered):
     durable, work = roots
     marker(durable, work)
@@ -264,7 +264,7 @@ def test_shared_asset_workspaces_still_consume_resident_slots(roots):
 def test_byte_budget_is_not_confused_with_filesystem_free_space(roots, monkeypatch, budget):
     durable, work = roots
     marker(durable, work)
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     settings[budget] = 1
     monkeypatch.setattr(cap, "load_yaml", lambda name: settings)
     monkeypatch.setattr(cap.shutil, "disk_usage", lambda p: SimpleNamespace(free=10**15))
@@ -281,7 +281,7 @@ def test_predictors_do_not_copy_any_decision_token_database(roots, monkeypatch):
     p.parent.mkdir(parents=True)
     with sqlite3.connect(p) as db:
         db.execute("CREATE TABLE x (id)")
-    tokens = durable / "output_JEVPFN" / paths.phase_folder("experiment_0") / "results/token_audit"
+    tokens = durable / "output_JEVPFN" / paths.phase_folder("0") / "results/token_audit"
     tokens.mkdir(parents=True)
     (tokens / "decision3_large.sqlite3").write_bytes(b"must never be copied")
     image = durable / "containers/blackwell-cu130/linear"
@@ -305,7 +305,7 @@ def test_graph_bounds_residency_through_queue_wait_and_releases_after_failure():
             ),
         ]
     steps = add_releases(steps)
-    cfg = load_yaml("experiment_0/scheduling")
+    cfg = load_yaml("0/scheduling")
     cfg["test_pool_limits"]["transfer"] = (
         2  # Exercise residency independently of transfer throttling.
     )
@@ -345,7 +345,7 @@ def test_graph_bounds_residency_through_queue_wait_and_releases_after_failure():
     assert next(s for s in steps if s["name"] == "c_pilot")["status"] == "completed"
 
 
-@pytest.mark.parametrize("entrypoint", ["experiment_0_cpu.slurm", "experiment_0_predictor_cpu.slurm",
+@pytest.mark.parametrize("entrypoint", ["0_cpu.slurm", "B0_predictor_cpu.slurm",
                                       "prepare_tar.slurm", "prepare_tar_pca.slurm"])
 def test_independent_job_does_not_block_runtime_release(monkeypatch, entrypoint):
     monkeypatch.setattr(paths, "on_vsc", lambda: True)
@@ -371,7 +371,7 @@ def test_publication_failure_blocks_new_staging_and_preserves_other_branches():
     steps[-2].update(status="failed", job_id="2")
     result = job_graph.advance(
         steps,
-        settings=load_yaml("experiment_0/scheduling"),
+        settings=load_yaml("0/scheduling"),
         state=lambda *a, **k: None,
         submit=lambda s: s.update(status="submitted", job_id="3"),
         save=lambda: None,

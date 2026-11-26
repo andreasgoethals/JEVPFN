@@ -1,19 +1,20 @@
-"""Group B: one compact, checksummed ZIP per experiment (B1-B5), built on a Mindwell CPU job.
+"""Group B: one compact, checksummed ZIP per experiment (B1-B6), built on a Mindwell CPU job.
 
 Follows the Group A pattern (`study_export`): fold records, predictions and row-level data stay
 on VSC PROJECT; `python -m src.evaluation.benchmark_export --study B1` (Slurm:
-`scripts/slurm/rq2_group_b_export.slurm B1`) writes one ZIP of Parquet tables plus
+`scripts/slurm/B_export.slurm B1`) writes one ZIP of Parquet tables plus
 `manifest.json` (member SHA-256 values and a receipt; refused above 150 MB). The owner copies
 only that ZIP to the same relative path under the local `output_JEVPFN/`; each notebook reads
 nothing else and shows an explicit waiting state when it is absent.
 
-| Study | Folder and notebook (`<group>/<folder>`) | Phases read |
+| Study | Folder and notebook | Phases read |
 |---|---|---|
-| B1 decision features | B/exp04_decision_features | experiment_1 |
-| B2 representations | B/exp05_frozen_embeddings (also read by B/exp06_tar) | experiment_1-3 |
-| B3 when and for whom | B/exp08_when_text_helps | experiment_1, rq2 (+ Group A exports, row cohorts) |
-| B4 amount of labelled data | B/exp09_data_efficiency (exp11_data_efficiency until 23-11-2026) | data_efficiency |
-| B5 native systems | B/exp07_native_text | experiment_1, experiment_4 |
+| B1 decision features | B/B1 | B1 |
+| B2 frozen embeddings and decision + embedding | B/B2 | B1, B2 |
+| B3 TAR and the label-trained classifier | B/B3 | B1, B3 |
+| B4 when decision features help | B/B4 | B1, B4 (+ Group A exports, row cohorts) |
+| B5 amount of labelled data | B/B5 | B5 |
+| B6 native-text systems | B/B6 | B1, B6 |
 """
 
 from __future__ import annotations
@@ -33,29 +34,31 @@ from src.utils.config import load_yaml
 from src.utils.serialization import digest, file_sha256
 
 SCHEMA = "jevpfn.group_b.export.v1"
+#: One export per experiment; each also carries the B1 arms it is compared with.
 STUDIES = {
-    "B1": {"phase": "experiment_1", "file": "b1_decision_features.zip",
-           "phases": ("experiment_1",)},
-    "B2": {"phase": "experiment_2", "file": "b2_representations.zip",
-           "phases": ("experiment_1", "experiment_2", "experiment_3")},
-    "B3": {"phase": "rq2", "file": "b3_when_and_for_whom.zip", "phases": ("experiment_1", "rq2")},
-    "B4": {"phase": "data_efficiency", "file": "b4_data_efficiency.zip",
-           "phases": ("data_efficiency",)},
-    "B5": {"phase": "experiment_4", "file": "b5_native_text.zip",
-           "phases": ("experiment_1", "experiment_4")},
+    "B1": {"phase": "B1", "file": "b1_decision_features.zip", "phases": ("B1",)},
+    "B2": {"phase": "B2", "file": "b2_frozen_embeddings.zip", "phases": ("B1", "B2")},
+    "B3": {"phase": "B3", "file": "b3_label_trained.zip", "phases": ("B1", "B3")},
+    "B4": {"phase": "B4", "file": "b4_when_text_helps.zip", "phases": ("B1", "B4")},
+    "B5": {"phase": "B5", "file": "b5_data_efficiency.zip", "phases": ("B5",)},
+    "B6": {"phase": "B6", "file": "b6_native_text.zip", "phases": ("B1", "B6")},
 }
+#: B2 and B3 compare decision features with an alternative representation family.
+REPRESENTATION_STUDIES = ("B2", "B3")
 COMMON_TABLES = ("coverage", "folds", "dataset_gains", "summary")
 EXTRA_TABLES = {
     "B1": ("median_gains", "median_summary", "median_roster_gaps"),
     "B2": ("median_gains", "median_roster_gaps", "contrasts", "complementarity_pairs",
            "complementarity_summary"),
-    "B3": ("properties", "redundancy", "associations", "model_diagnostics", "model_usefulness",
+    "B3": ("median_gains", "median_roster_gaps", "contrasts", "complementarity_pairs",
+           "complementarity_summary"),
+    "B4": ("properties", "redundancy", "associations", "model_diagnostics", "model_usefulness",
            "model_relations", "column_importance", "row_cohorts", "lodo_predictions", "lodo"),
-    "B4": ("size_gains", "pooled_raw", "pooled_share", "slopes"),
-    "B5": (),
+    "B5": ("size_gains", "pooled_raw", "pooled_share", "slopes"),
+    "B6": (),
 }
-#: B4's grid is large: only the headline and one proper score travel; all metrics stay on PROJECT.
-B4_METRICS = ("roc_auc", "roc_auc_ovr_macro", "r2", "log_loss", "rmse")
+#: B5's grid is large: only the headline and one proper score travel; all metrics stay on PROJECT.
+B5_METRICS = ("roc_auc", "roc_auc_ovr_macro", "r2", "log_loss", "rmse")
 RECIPE_COLUMNS = ["phase", "dataset_id", "task_type", "model_id", "checkpoint_id", "feature_set",
                   "provider", "view", "encoder", "pca_scope", "pca_components", "probe_view",
                   "dropped_text_column", "training_size", "draw", "hidden_view", "hidden_position",
@@ -101,15 +104,15 @@ def scientific_configs(names, *, roster=None):
 def analysis_identity(study, cohort=None) -> str:
     from src.utils.provenance import code_identity
 
-    configs = scientific_configs(("experiment_1/main", "experiment_1/protocol", "experiment_2/embeddings",
-                                  "experiment_3/tar", "experiment_4/native_text", "rq2/when_text_helps",
-                                  "rq2/text_column_refits", "data_efficiency/data_efficiency"),
+    configs = scientific_configs(("B1", "B1/protocol", "B2",
+                                  "B3", "B6", "B4",
+                                  "B4/text_column_refits", "B5"),
                                  roster=decision_roster(cohort))
     modules = ["group_b", "benchmark_export", "campaign", "design", "data_efficiency", "endpoints",
                "records", "study_export"]
-    if study == "B2":
+    if study in REPRESENTATION_STUDIES:
         modules.extend(["attribution", "complementarity", "row_benefit", "moderators"])
-    if study == "B3":
+    if study == "B4":
         modules.extend(["group_a", "group_b_views", "moderators", "moderator_statistics", "row_benefit", "comparison_report",
                         "robustness_export", "study_reports"])
     return digest({"schema": SCHEMA, "study": study, "configs": configs, "cohort": cohort_record(cohort),
@@ -202,7 +205,7 @@ def collect_folds(phases, *, metrics=None, cohort=None, providers=None) -> pd.Da
 
     scope = None
     if cohort is not None or providers is not None:
-        main = load_yaml("experiment_1/main")
+        main = load_yaml("B1")
     if providers is not None:
         from src.evaluation.design import decision_versions
 
@@ -326,7 +329,7 @@ def _group_a_frames(*, cohort=None):
     # contents before checking its analysis identity so that corruption stops the export.
     found, receipt = study_export.read_export(robustness_export.export_path(cohort),
                                               schema=robustness_export.SCHEMA, tables=robustness_export.TABLES)
-    if found and receipt["config_sha256"] == robustness_export.analysis_identity(load_yaml("rq1/behavior"), cohort):
+    if found and receipt["config_sha256"] == robustness_export.analysis_identity(load_yaml("A2"), cohort):
         frames.update({f"a2_{k}": v for k, v in found.items()})
     return frames
 
@@ -340,9 +343,9 @@ def dataset_properties_and_redundancy(*, roster=None):
     from src.evaluation.moderators import dataset_covariates
     from src.evaluation.row_benefit import block_probabilities, load_decision_block
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     roster = decision_roster() if roster is None else roster
-    pilot = load_yaml("rq2/when_text_helps")["predict_in_advance"]["pilot"]
+    pilot = load_yaml("B4")["predict_in_advance"]["pilot"]
     properties, redundancy = [], []
     for entry in selected_entries(load_catalog(), main):
         dataset = load_dataset(entry, allow_download=False)
@@ -382,12 +385,12 @@ def dataset_properties_and_redundancy(*, roster=None):
 
 
 def build_tables(study, folds, *, cohort=None) -> dict[str, pd.DataFrame]:
-    cfg = load_yaml("rq2/when_text_helps")
+    cfg = load_yaml("B4")
     roster = decision_roster(cohort)
     folds = folds[folds.provider.isna() | folds.provider.isin(roster)]
     head = group_b.headline(folds)
     tables = {"coverage": coverage(folds, STUDIES[study]["phases"], cohort=cohort), "folds": folds}
-    if study == "B4":
+    if study == "B5":
         paired, gains = _gains(head, extra_keys=("training_size", "draw"))
         from src.evaluation import data_efficiency
 
@@ -404,7 +407,7 @@ def build_tables(study, folds, *, cohort=None) -> dict[str, pd.DataFrame]:
             slopes=data_efficiency.gain_slopes(sizes))
         return tables
     paired, gains = _gains(head)
-    if study == "B3":
+    if study == "B4":
         gains = gains[gains.family.eq("decision")]
     tables.update(dataset_gains=gains, summary=group_b.summarize(gains))
     medians = group_b.median_over_decision_models(gains, roster=roster)
@@ -412,7 +415,7 @@ def build_tables(study, folds, *, cohort=None) -> dict[str, pd.DataFrame]:
     if study == "B1":
         tables.update(median_gains=medians, median_summary=group_b.summarize(medians),
                       median_roster_gaps=gaps)
-    elif study == "B2":
+    elif study in REPRESENTATION_STUDIES:
         from src.evaluation import complementarity
 
         pairs, _ = complementarity.summaries(cohort=cohort, headline_folds=head)
@@ -422,7 +425,7 @@ def build_tables(study, folds, *, cohort=None) -> dict[str, pd.DataFrame]:
                       complementarity_pairs=pairs,
                       complementarity_summary=complementarity.complementarity_summary(pairs, roster=roster)
                       if not pairs.empty else pd.DataFrame())
-    elif study == "B3":
+    elif study == "B4":
         from src.evaluation.row_benefit import summaries
 
         properties, redundancy = dataset_properties_and_redundancy(roster=roster)
@@ -475,7 +478,7 @@ def read(study, target=None, *, cohort=None):
 
 def build(study, *, cohort=None):
     study_export.require_mindwell_cpu(f"Group B {study}")
-    metrics = B4_METRICS if study == "B4" else None
+    metrics = B5_METRICS if study == "B5" else None
     folds = collect_folds(STUDIES[study]["phases"], metrics=metrics, cohort=cohort_name(cohort))
     if folds.empty:
         raise ValueError(f"No complete five-fold arm exists for {study}")

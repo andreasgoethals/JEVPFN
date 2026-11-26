@@ -1,6 +1,6 @@
-"""Exp 8 (RQ2-E) statistics fixed before results: primary moderators, FDR, pooling.
+"""B4 statistics fixed before results: primary moderators, FDR, pooling.
 
-The plan lives in `config/B/when_text_helps.yaml` (status
+The plan lives in `config/B/B4.yaml` (status
 ``proposed_before_results``). Three analyses use the per-dataset gains of
 ``aggregate.dataset_gains`` restricted to the headline grid (median over decision models per
 decision mode, and each embedding/TAR recipe), each predictor separately:
@@ -17,7 +17,7 @@ decision mode, and each embedding/TAR recipe), each predictor separately:
 
 About eighteen datasets give little power. Results are associations, never causal effects or
 a basis for selecting a representation, and nothing here replaces the confirmatory plan in
-`config/05_synthesis/analysis.yaml`.
+`config/general/4_synthesis/analysis.yaml`.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from src.evaluation.moderators import (
     spearman_rows,
 )
 
-CONFIG = "B/when_text_helps"
+CONFIG = "B4"
 STATUS = "proposed_before_results"
 TEST_COLUMNS = [
     "model_id", "checkpoint_id", "family", "representation", "outcome", "task_family", "moderator", "role",
@@ -54,15 +54,15 @@ _KEYS = ["model_id", "checkpoint_id", "family", "representation"]
 
 
 def load_plan(raw: dict | None = None) -> dict:
-    """The validated Exp 8 analysis plan."""
+    """The validated B4 analysis plan."""
     if raw is None:
         from src.utils.config import load_yaml
 
         raw = load_yaml(CONFIG)
-    if raw.get("schema") != "jevpfn.exp08_analysis.v1":
-        raise ValueError("Unknown Exp 8 analysis-plan schema")
+    if raw.get("schema") != "jevpfn.b4_analysis.v1":
+        raise ValueError("Unknown B4 analysis-plan schema")
     if raw.get("status") not in {STATUS, "approved"}:
-        raise ValueError("Exp 8 analysis plan must be proposed before results or approved")
+        raise ValueError("B4 analysis plan must be proposed before results or approved")
     # Owner decision (19-11-2026): no moderator is singled out in advance. With an empty
     # list every moderator is exploratory and BH-adjusted across the whole grid.
     primary = raw.get("primary_moderators") or []

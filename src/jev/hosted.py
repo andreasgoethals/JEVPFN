@@ -121,7 +121,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
     if prefix_policy is not None:
         if full or review.get("workers") != 1 or review.get("full_feature_creation_enabled"):
             raise ValueError("Prefix validation requires one worker and full extraction disabled")
-        if prefix_policy != load_yaml("experiment_0/jev_prefix_pilot"):
+        if prefix_policy != load_yaml("0/jev_prefix_pilot"):
             raise ValueError("Prefix policy differs from the reviewed bounded configuration")
         if review["requests_per_second"] > review["verified_account_requests_per_second"]:
             raise ValueError("Pilot rate exceeds the verified account limit")
@@ -171,7 +171,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
                 "context_envelope_sha256": digest(review["context_envelope"]),
             },
         )
-    phase, run_id = ("feature_creation" if full else "experiment_0"), uuid4().hex
+    phase, run_id = ("feature_creation" if full else "0"), uuid4().hex
     from src.utils.timing import TimingJournal
 
     timings = TimingJournal("jev", phase=phase, run_id=run_id,
@@ -201,7 +201,7 @@ def run(cfg, *, execute=False, full=False, dataset_ids=None, transport_factory=T
             from src.jev.spending import JEV_CEILING_USD, campaign_committed
 
             cache_folder = paths.jev_cache_path()
-            total_usage = campaign_committed(cache_folder, replay_folder=paths.results_dir("hosted_ledgers", phase="rq1"))
+            total_usage = campaign_committed(cache_folder, replay_folder=paths.results_dir("hosted_ledgers", phase="A2"))
             ceiling = min(JEV_CEILING_USD, review["campaign_spending_limit_usd"])
             if prefix_policy:
                 ceiling = min(ceiling, prefix_policy["cumulative_dataset_cost_limit_usd"])

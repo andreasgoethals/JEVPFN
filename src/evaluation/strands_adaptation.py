@@ -1,4 +1,4 @@
-"""Group C: C0 training qualification and C2 learning from labels with Strands v1 (C/exp11_adaptation, internal phase rq3).
+"""Group C: C0 training qualification and C2 learning from labels with Strands v1 (C/C2).
 
 A 2 x 2 design on the JOINT question with probability features only:
 
@@ -19,7 +19,7 @@ three epochs) and scores part k; test rows get the mean of the three fits' proba
 same parts serve all trained cells. Empty joint text has no request: its features stay missing.
 Training rows thus never receive a probability from a model that saw their label.
 
-GPU entry points (B200; ``scripts/slurm/c2_adaptation.slurm``): ``--dataset D --fold F --cell C
+GPU entry points (B200; ``scripts/slurm/C2_adaptation.slurm``): ``--dataset D --fold F --cell C
 --execute`` trains the three cross-fitted fits of one cell and publishes the fold bundle;
 ``--pilot`` exercises one bounded cross-fitted fold, including scoring, publication and
 readback. Pilot bundles have their own directory and never enter benchmark results.
@@ -48,7 +48,7 @@ from src.utils.locking import file_lock
 from src.utils.serialization import canonical_json, digest, file_sha256, scalar, write_json
 
 SCHEMA = "jevpfn.strands_adaptation.v2"
-CONFIG = "rq3/adaptation"
+CONFIG = "C2"
 CELLS = ("head_only", "lora_only", "lora_head")
 TASK_TYPES = ("binary_classification", "multiclass_classification", "regression")
 SNAPSHOT = Path("dm-library/repositories/StrandsDecider.txt")
@@ -220,7 +220,7 @@ def smallest_dataset(task_type=None) -> str:
     from src.data.loaders import load_catalog
     from src.data.selection import selected_entries
 
-    entries = selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+    entries = selected_entries(load_catalog(), load_yaml("B1"))
     if task_type is not None:
         tasks = load_yaml("dataset_semantics")["datasets"]
         entries = [e for e in entries if tasks[e["id"]]["task_type"] == task_type]
@@ -235,7 +235,7 @@ def training_plan() -> list[dict]:
     cfg = config()
     return [dict(dataset_id=e["id"], fold=fold, part=part, cell=cell,
                  device="b200", execution_enabled=cfg["training_enabled"] is True)
-            for e in selected_entries(load_catalog(), load_yaml("experiment_1/main"))
+            for e in selected_entries(load_catalog(), load_yaml("B1"))
             for fold in range(5) for part in range(cfg["crossfit"]["parts"]) for cell in CELLS]
 
 
@@ -245,7 +245,7 @@ def training_plan() -> list[dict]:
 def bundle_dir(dataset_id: str, fold: int, cell: str) -> Path:
     if cell not in CELLS:
         raise ValueError(f"Unknown trained cell {cell}")
-    return paths.group_c_dir("rq3", "adaptation", paths.output_component(dataset_id), f"fold_{fold}", cell)
+    return paths.group_c_dir("C2", "adaptation", paths.output_component(dataset_id), f"fold_{fold}", cell)
 
 
 def _source_assets(dataset, cell):
@@ -748,7 +748,7 @@ def _dataset_split(dataset_id):
     from src.data.selection import selected_entries
     from src.evaluation.protocol import shared_splits
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     selected = {e["id"]: e for e in selected_entries(load_catalog(), main)}
     if dataset_id not in selected:
         raise ValueError("C2 requires a selected benchmark dataset")
@@ -854,7 +854,7 @@ def _train_locked(dataset, split, fold, cell, folder, recipe, *, max_epochs):
 def run_fold(dataset_id: str, fold: int, cell: str, *, execute=False) -> dict:
     """Train a production fold after a matching, published native pilot for its cell and task."""
     if execute is not True or config()["training_enabled"] is not True:
-        raise RuntimeError("C2 training is disabled; enable rq3/adaptation training and pass --execute")
+        raise RuntimeError("C2 training is disabled; enable C2 training and pass --execute")
     if cell not in CELLS or fold not in range(5):
         raise ValueError("Choose a trained C2 cell and an outer fold from 0 to 4")
     runtime = _require_native_runtime()
@@ -867,7 +867,7 @@ def run_fold(dataset_id: str, fold: int, cell: str, *, execute=False) -> dict:
 def _pilot_token_lengths(dataset_id):
     """Use the existing exact Strands audit to exercise the pilot fold's longest joint requests."""
     identity, joint = _joint_inputs(dataset_id)
-    evidence = paths.manifests_dir("experiment_0") / "before_extraction" / "token_audit.json"
+    evidence = paths.manifests_dir("0") / "before_extraction" / "token_audit.json"
     combined = json.loads(evidence.read_text(encoding="utf-8"))
     report, = [r for r in combined["self_hosted"] if r["provider"] == "strands"]
     item, = [d for d in report["datasets"] if d["dataset_id"] == dataset_id]
@@ -923,8 +923,8 @@ def _pilot_inputs(dataset_id, cell):
     longest = {role: int(max(lengths[rows])) for role, rows in split["folds"][spec["fold"]].items()}
     recipe = dict(fold_recipe(dataset, split, spec["fold"], cell), pilot=spec,
                   parent_split_id=parent["split_id"], pilot_max_joint_tokens=longest)
-    folder = paths.group_c_dir("rq3", "adaptation_pilots", dataset_id, cell)
-    receipt = paths.manifests_dir("rq3") / "adaptation_pilot" / f"{dataset_id}_{cell}.json"
+    folder = paths.group_c_dir("C0", "adaptation_pilots", dataset_id, cell)
+    receipt = paths.manifests_dir("C2") / "adaptation_pilot" / f"{dataset_id}_{cell}.json"
     return dataset, split, recipe, folder, receipt
 
 
@@ -1000,7 +1000,7 @@ def size_jobs(pilot_report: dict) -> list[dict]:
         raise ValueError("C2 sizing requires a passing end-to-end pilot with positive, finite throughput")
     out = []
     semantics = load_yaml("dataset_semantics")["datasets"]
-    for e in selected_entries(load_catalog(), load_yaml("experiment_1/main")):
+    for e in selected_entries(load_catalog(), load_yaml("B1")):
         if semantics[e["id"]]["task_type"] != task_type:
             continue
         rows = e["paper_summary"]["rows"]

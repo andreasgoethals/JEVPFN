@@ -8,8 +8,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
 #SBATCH --time=01:00:00
-#SBATCH --output="output_JEVPFN/02_feature_creation/logs/%x_%j.log"
-#SBATCH --error="output_JEVPFN/02_feature_creation/logs/%x_%j.log"
+#SBATCH --output="output_JEVPFN/general/2_feature_creation/logs/%x_%j.log"
+#SBATCH --error="output_JEVPFN/general/2_feature_creation/logs/%x_%j.log"
 set -euo pipefail
 # A separately published DATA checkout permits QA while the old publisher finishes.
 cd "${1:-${VSC_DATA:?}/JEVPFN}"
@@ -85,7 +85,7 @@ report = {'status': 'operational_recovery_checks_passed', 'job_id': os.environ['
           'source': source_snapshot(), 'comparison_revision': reference, 'unchanged_scientific_files': unchanged if reference else [],
           'native_publication': first, 'idempotent_publication': again,
           'warm_cache_integrity': True, 'production_caches_modified': False,
-          'meaning': 'Synthetic GPFS recovery QA; no new inference or new 0A acceptance'}
+          'meaning': 'Synthetic GPFS recovery QA; no new inference or new Experiment 0 acceptance'}
 destination = paths.manifests_dir('feature_creation') / ('recovery_qa_' + os.environ['SLURM_JOB_ID'] + '.json')
 write_json(destination, report)
 print(json.dumps({'status': report['status'], 'report': str(destination)}))

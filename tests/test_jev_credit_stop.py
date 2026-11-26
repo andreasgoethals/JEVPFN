@@ -208,7 +208,7 @@ def test_hosted_receipt_explains_credit_stop_and_preserves_safe_restart(isolated
     assert len(calls) == 1
     assert first["stop_details"]["http_status"] == 402
     assert first["stop_details"]["dataset_id"] == identifier
-    manifest = paths.manifests_dir("experiment_0") / "hosted" / f"{first['run_id']}.json"
+    manifest = paths.manifests_dir("0") / "hosted" / f"{first['run_id']}.json"
     assert json.loads(manifest.read_text())["stop_details"] == first["stop_details"]
 
 

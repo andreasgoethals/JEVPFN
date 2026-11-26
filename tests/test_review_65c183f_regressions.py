@@ -1,4 +1,4 @@
-"""Regressions for the independent review of commit 65c183f (Group B/C analyses, 0B identity).
+"""Regressions for the independent review of commit 65c183f (Group B/C analyses, B0 identity).
 
 Each test reproduces one reviewed claim on constructed data; no predictor is fitted.
 """
@@ -97,7 +97,7 @@ def _collect(monkeypatch, tmp_path, recipes, **selection):
 
     monkeypatch.setattr(store, "all_recipes", lambda phase: recipes)
     monkeypatch.setattr(records, "completed_fold", completed)
-    return benchmark_export.collect_folds(("experiment_1",), **selection)
+    return benchmark_export.collect_folds(("B1",), **selection)
 
 
 def test_collect_folds_never_completes_an_arm_from_two_recipes(monkeypatch, tmp_path):
@@ -116,7 +116,7 @@ def test_scoped_folds_match_the_recorded_version_selector_and_artifacts(monkeypa
     from src.evaluation.design import decision_versions
     from src.utils.config import load_yaml
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     registered, = decision_versions(["kev"])
     selected = {k: registered[k] for k in ("provider", "model", "version")}
     selected.update(question_bank_id="bank", question_variant="main", settings_sha256="settings")
@@ -199,7 +199,7 @@ def test_b2_contrasts_wait_when_only_frozen_arms_exist():
     assert out.empty and "difference" in out.columns
 
 
-# --------------------------------------------------------------- claim 4: 0B identity
+# --------------------------------------------------------------- claim 4: B0 identity
 
 
 def test_group_b_and_c_scientific_configs_enter_the_0b_identity(monkeypatch):
@@ -215,13 +215,13 @@ def test_group_b_and_c_scientific_configs_enter_the_0b_identity(monkeypatch):
 
     monkeypatch.setattr(acceptance, "load_yaml", load)
     before = acceptance.evaluation_identity()
-    load("rq3/adaptation")["training_enabled"] = True  # execution switch: identity unchanged
-    load("rq3/adaptation")["status"] = "pilot_reviewed"
+    load("C2")["training_enabled"] = True  # execution switch: identity unchanged
+    load("C2")["status"] = "pilot_reviewed"
     assert acceptance.evaluation_identity() == before
-    load("rq3/adaptation")["regression_bins"] = 3
+    load("C2")["regression_bins"] = 3
     assert acceptance.evaluation_identity() != before
-    load("rq3/adaptation")["regression_bins"] = 9
-    load("data_efficiency/data_efficiency")["training_sizes"] = [128]
+    load("C2")["regression_bins"] = 9
+    load("B5")["training_sizes"] = [128]
     assert acceptance.evaluation_identity() != before
 
 

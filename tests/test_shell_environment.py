@@ -49,7 +49,7 @@ def test_perplexity_guard_accepts_actual_per_cpu_or_per_node_memory(allocation, 
     assert result.returncode == (0 if passed else 2), result.stderr
     if passed:
         assert "112000 MiB allocated" in result.stdout
-    for name in ("feature_creation", "experiment_0_decision_contracts", "experiment_0_decision_pilot"):
+    for name in ("feature_creation", "0_decision_contracts", "0_decision_pilot"):
         source = (ROOT / "scripts/slurm" / (name + ".slurm")).read_text()
         assert "source scripts/slurm/_provider_memory.sh" in source
         assert "SLURM_MEM_PER_NODE" not in source
@@ -224,12 +224,12 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
     "script,args,expected",
     [
         (
-            "experiment_0_decision_contracts",
+            "0_decision_contracts",
             ["intern"],
             ["intern", "/gpfs1/project/example/JEVPFN/environments/intern"],
         ),
         (
-            "experiment_0_decision_pilot",
+            "0_decision_pilot",
             ["cloudflare", "/project/env with spaces", "/project/custom"],
             ["cloudflare", "/project/env with spaces", "/project/custom"],
         ),
@@ -239,14 +239,14 @@ def test_setup_selects_only_verified_conda_python(tmp_path, failure):
             ["liquid", "/gpfs1/project/example/JEVPFN/environments/liquid"],
         ),
         (
-            "experiment_0_predictor",
+            "B0_predictor",
             ["catboost", "/project/catboost"],
             ["catboost", "/project/catboost"],
         ),
-        ("experiment_0_gpu", ["/project/gpu"], ["/project/gpu"]),
-        ("experiment_0_tokens", [], ["JEVPFN", "/gpfs1/project/example"]),
-        ("experiment_0_storage", [], ["JEVPFN", "/gpfs1/project/example"]),
-        ("experiment_0_cpu", [], ["JEVPFN", "/gpfs1/project/example"]),
+        ("0_gpu", ["/project/gpu"], ["/project/gpu"]),
+        ("0_tokens", [], ["JEVPFN", "/gpfs1/project/example"]),
+        ("0_storage", [], ["JEVPFN", "/gpfs1/project/example"]),
+        ("0_cpu", [], ["JEVPFN", "/gpfs1/project/example"]),
     ],
 )
 def test_job_arguments_survive_clean_submission_environment(tmp_path, script, args, expected):
@@ -284,7 +284,7 @@ def test_gpu_memory_profiles_fit_b200_and_token_job_matches_four_cores():
                              if line.startswith("#SBATCH --cpus-per-task=")))
             assert 1 <= cores <= 24  # B200 node: 192 cores / 8 GPUs.
     assert gpu_jobs >= 8
-    assert "#SBATCH --mem=" not in (ROOT / "scripts/slurm/experiment_0_tokens.slurm").read_text()
+    assert "#SBATCH --mem=" not in (ROOT / "scripts/slurm/0_tokens.slurm").read_text()
 
 
 
@@ -329,7 +329,7 @@ def test_all_monitored_jobs_separate_host_monitor_from_workload_interpreter():
             prefix = 'jevpfn_run "${JEVPFN_MONITOR_PYTHON:?}" -m src.cluster.monitor '
             assert call.lstrip().startswith(prefix)
             expected_flags = ("--host-step -- " if script.name in {
-                "experiment_0_predictor_cpu.slurm", "prepare_tar.slurm", "experiment_0_robustness.slurm"} else "-- ")
+                "B0_predictor_cpu.slurm", "prepare_tar.slurm", "A0_robustness.slurm"} else "-- ")
             assert call.lstrip()[len(prefix):].startswith(expected_flags)
             assert '-- "${JEVPFN_PYTHON:?}" -m ' in call
             monitored.append(script.name)
@@ -654,7 +654,7 @@ conda activate $CW_ENV_NAME
 
 
 def test_native_gpfs_storage_probe_uses_two_cpu_nodes_and_publication_wrapper():
-    script = (ROOT / "scripts/slurm/experiment_0_storage_gpfs.slurm").read_text()
+    script = (ROOT / "scripts/slurm/0_storage_gpfs.slurm").read_text()
     for required in (
         "--clusters=mindwell",
         "--partition=batch_graniterapids",

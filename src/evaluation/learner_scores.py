@@ -1,4 +1,4 @@
-"""Per-dataset learner scores for the statistical framework (`config/05_synthesis/analysis.yaml`).
+"""Per-dataset learner scores for the statistical framework (`config/general/4_synthesis/analysis.yaml`).
 
 Turns the compact study exports (A1 `comparison.zip`, A2 `robustness.zip`, B1-B5 Group B and
 C1-C2 Group C ZIPs) into the ``(dataset_id, learner, score)`` frames that
@@ -80,7 +80,7 @@ def planned_design(cohort=None) -> Design:
     from src.evaluation.benchmark_export import comparison_plan, decision_roster
     from src.utils.config import load_yaml
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     semantics = load_yaml("dataset_semantics")["datasets"]
     entries = selected_entries(load_catalog(), main)
     datasets = {e["id"]: semantics[e["id"]]["task_type"] for e in entries}
@@ -91,7 +91,7 @@ def planned_design(cohort=None) -> Design:
     plan = pd.DataFrame(comparison_plan(cohort))
     plan["model_id"] = plan["model"]
     plan["representation"] = [group_b.representation(r) for r in plan.to_dict("records")]
-    rule = load_yaml("rq2/when_text_helps")["predict_in_advance"]
+    rule = load_yaml("B4")["predict_in_advance"]
     multiclass = [d for d, t in datasets.items() if t == "multiclass_classification"]
     return Design(datasets=datasets, roster=tuple(decision_roster(cohort)), plan=plan,
                   lodo_input_sets=tuple(rule["input_sets"]), lodo_threshold=float(rule["use_threshold"]),
@@ -255,7 +255,7 @@ class Group:
 
 
 def _main_models(design: Design) -> list[str]:
-    return list(dict.fromkeys(design.plan.loc[design.plan.phase.eq("experiment_1"), "model_id"]))
+    return list(dict.fromkeys(design.plan.loc[design.plan.phase.eq("B1"), "model_id"]))
 
 
 def _planned(design: Design, phase, prefix=None) -> list[str]:
@@ -291,20 +291,30 @@ def b2_groups(frames, design: Design) -> list[Group]:
     gains = gains_over_baseline(arm_means(frames["folds"]))
     gains = pd.concat([gains, decision_medians(gains, design.roster, prefixes=("decision", "decision+frozen"))],
                       ignore_index=True)
-    others = [*_planned(design, "experiment_2", ("frozen",)), *_planned(design, "experiment_3", ("tar", "probe"))]
+    others = _planned(design, "B2", ("frozen",))
     learners = ["decision/both/median", "decision+frozen/both/median", *others]
     folds = fold_values(frames["folds"], design.roster, prefixes=("decision", "decision+frozen"))
     return _per_predictor(design, gains, learners, "decision/both/median", fold_scores=folds)
 
 
-def b4_groups(frames, design: Design) -> list[Group]:
+def b3_groups(frames, design: Design) -> list[Group]:
+    """Decision features against the label-trained alternatives (TAR, label-trained classifier)."""
+    gains = gains_over_baseline(arm_means(frames["folds"]))
+    gains = pd.concat([gains, decision_medians(gains, design.roster, prefixes=("decision",))],
+                      ignore_index=True)
+    learners = ["decision/both/median", *_planned(design, "B3", ("tar", "probe"))]
+    folds = fold_values(frames["folds"], design.roster, prefixes=("decision",))
+    return _per_predictor(design, gains, learners, "decision/both/median", fold_scores=folds)
+
+
+def b5_groups(frames, design: Design) -> list[Group]:
     """Per predictor and training size: gain per draw (five-fold means), then mean over draws."""
     means = arm_means(frames["folds"], extra=("training_size", "draw"))
     means = means[means.training_size.notna()]
     per_draw = gains_over_baseline(means, extra=("training_size", "draw"))
     fold_draws = fold_values(frames["folds"], extra=("training_size", "draw"))
     fold_draws = fold_draws[fold_draws.training_size.notna()]
-    plan = design.plan[design.plan.phase.eq("data_efficiency")]
+    plan = design.plan[design.plan.phase.eq("B5")]
     out = []
     for size in sorted(plan.training_size.dropna().unique()):
         at = plan[plan.training_size.eq(size)]
@@ -325,20 +335,20 @@ def b4_groups(frames, design: Design) -> list[Group]:
                                               and np.isfinite(g.score.to_numpy(float)).all() else np.nan}
                      for key, g in fold_draws[fold_draws.training_size.eq(size)].groupby(keys)]
         out += _per_predictor(design, gains, learners, BASELINE, groups_of=f"n{int(size)}",
-                              datasets=datasets, match={"phase": "data_efficiency", "training_size": size},
+                              datasets=datasets, match={"phase": "B5", "training_size": size},
                               fold_scores=pd.DataFrame(fold_rows, columns=[*keys, "score"]))
     return out
 
 
-def b5_groups(frames, design: Design) -> list[Group]:
+def b6_groups(frames, design: Design) -> list[Group]:
     """Native systems: five-fold mean headline metric (descriptive; ranks per dataset)."""
     # The B5 export also carries structured baselines for its separate reference plots.
     folds = frames["folds"]
-    native = folds if folds.empty else folds[folds.phase.eq("experiment_4")]
+    native = folds if folds.empty else folds[folds.phase.eq("B6")]
     means = arm_means(native)
     means = means.assign(score=means["mean"].where(means.complete),
                          status=np.where(means.complete, OK, INCOMPLETE))
-    learners = _planned(design, "experiment_4")
+    learners = _planned(design, "B6")
     folds = _fold_grid(fold_values(native), "native_systems", learners, design.datasets)
     return [Group("native_systems", learners, None, _grid(means, "native_systems", learners, design.datasets),
                   folds=folds)]
@@ -351,16 +361,16 @@ def _c_groups(frames, design, phase, extra_learners, control):
 
 
 def c1_groups(frames, design: Design) -> list[Group]:
-    return _c_groups(frames, design, "representations", [BASELINE], BASELINE)
+    return _c_groups(frames, design, "C1", [BASELINE], BASELINE)
 
 
 def c2_groups(frames, design: Design) -> list[Group]:
     from src.evaluation.group_c import PROVIDER
 
-    return _c_groups(frames, design, "rq3", [f"decision/joint/{PROVIDER}"], None)
+    return _c_groups(frames, design, "C2", [f"decision/joint/{PROVIDER}"], None)
 
 
-def b3_groups(frames, design: Design) -> list[Group]:
+def b4_groups(frames, design: Design) -> list[Group]:
     """Per-dataset regret of the three LODO rules and of always/never using the features.
 
     Regret = max(actual, 0) - realised, realised = actual gain if the rule uses the features
@@ -481,10 +491,11 @@ APPLICATIONS = {
     "A1_outputs": Application("A1", ("quality",), a1_groups, "log_loss", False),
     "A2_stability": Application("A2", ("averaging_quality",), a2_groups, "proper_score_skill", True),
     "B1_decision_features": Application("B1", ("folds",), b1_groups, NORMALISED_GAIN, True),
-    "B2_representations": Application("B2", ("folds",), b2_groups, NORMALISED_GAIN, True),
-    "B3_when_text_helps": Application("B3", ("lodo_predictions",), b3_groups, REGRET, False),
-    "B4_data_efficiency": Application("B4", ("folds",), b4_groups, NORMALISED_GAIN, True),
-    "B5_native_text_systems": Application("B5", ("folds",), b5_groups, HEADLINE, True),
+    "B2_frozen_embeddings": Application("B2", ("folds",), b2_groups, NORMALISED_GAIN, True),
+    "B3_label_trained": Application("B3", ("folds",), b3_groups, NORMALISED_GAIN, True),
+    "B4_when_text_helps": Application("B4", ("lodo_predictions",), b4_groups, REGRET, False),
+    "B5_data_efficiency": Application("B5", ("folds",), b5_groups, NORMALISED_GAIN, True),
+    "B6_native_text_systems": Application("B6", ("folds",), b6_groups, HEADLINE, True),
     "C1_strands_states": Application("C1", ("folds",), c1_groups, NORMALISED_GAIN, True),
     "C2_strands_adaptation": Application("C2", ("folds",), c2_groups, NORMALISED_GAIN, True),
 }
@@ -747,7 +758,7 @@ def confirmatory_forest_table(pooled: pd.DataFrame, contrasts, results: pd.DataF
 
 def run_confirmatory_family(frames_by_application: dict | None = None, *, analysis: dict | None = None,
                             design: Design | None = None, n_boot: int = group_b.N_BOOT, cohort=None) -> dict:
-    """Run the declared confirmatory family (`config/05_synthesis/analysis.yaml` ``contrasts``).
+    """Run the declared confirmatory family (`config/general/4_synthesis/analysis.yaml` ``contrasts``).
 
     Returns a record with ``status``: ``awaiting_owner_approval`` (plan not approved; nothing
     read), ``awaiting_export`` (``missing`` lists the applications whose export is absent; no
@@ -839,7 +850,7 @@ def publish_confirmatory(result, *, target=None, analysis=None):
         raise ValueError("A primary archive requires the recorded ordered cohort, exact model versions and their digest")
     signature = result["roster_sha256"]
     if target is None:
-        target = (paths.notebook_artifacts("general/5_synthesis", kind="results") / "confirmatory"
+        target = (paths.notebook_artifacts("general/4_synthesis", kind="results") / "confirmatory"
                   / f"{cohort}-{signature[:16]}.zip")
     plan = analysis or load_yaml("synthesis/analysis")
     contrasts = plan["contrasts"]

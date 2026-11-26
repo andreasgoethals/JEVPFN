@@ -1,4 +1,4 @@
-"""0B approval stays valid across activation, not across untested pipeline changes."""
+"""B0 approval stays valid across activation, not across untested pipeline changes."""
 
 import copy
 
@@ -13,16 +13,18 @@ from src.utils.serialization import file_sha256, write_json
 def configuration(monkeypatch):
     original = acceptance.load_yaml
     names = [
-        "experiment_1/main",
-        "experiment_1/models",
-        "experiment_1/protocol",
-        "experiment_2/embeddings",
-        "experiment_3/tar",
-        "experiment_4/native_text",
+        "B1",
+        "B1/models",
+        "B1/protocol",
+        "B2",
+        "B3",
+        "B6",
         "feature_creation/embedding_models",
-        "rq1/behavior",
-        "rq1/geometry",
-        "experiment_0/research_questions",
+        "A2",
+        "A3",
+        "A0",
+        "B0",
+        "C0",
         "datasets",
         "dataset_semantics",
         *acceptance.GROUP_B_C_CONFIGS,
@@ -36,13 +38,13 @@ def test_execution_switch_and_acceptance_path_do_not_change_0b_identity(configur
     before = acceptance.evaluation_identity()
     for cfg in configuration.values():
         cfg["enabled"] = True
-        cfg["experiment_0_acceptance"] = "/new/reviewed.json"
+        cfg["gate_acceptance"] = "/new/reviewed.json"
     for cfg in configuration["feature_creation/embedding_models"]["models"].values():
         cfg["enabled"] = True
-    configuration["rq3/adaptation"]["pilot_acceptance"] = "owner-reviewed-b200-pilot.json"
-    configuration["rq3/adaptation"]["pilot_enabled"] = True
-    configuration["rq3/adaptation"]["training_enabled"] = True
-    configuration["representations/representations"]["extraction"]["enabled"] = True
+    configuration["C2"]["pilot_acceptance"] = "owner-reviewed-b200-pilot.json"
+    configuration["C2"]["pilot_enabled"] = True
+    configuration["C2"]["training_enabled"] = True
+    configuration["C1"]["extraction"]["enabled"] = True
     assert acceptance.evaluation_identity() == before
 
 
@@ -51,19 +53,19 @@ def test_execution_switch_and_acceptance_path_do_not_change_0b_identity(configur
 def test_untested_recipes_invalidate_0b_identity(configuration, change):
     before = acceptance.evaluation_identity()
     if change == "checkpoint":
-        configuration["experiment_1/models"]["models"]["tabpfn_3_5"]["runtime"]["checkpoints"][
+        configuration["B1/models"]["models"]["tabpfn_3_5"]["runtime"]["checkpoints"][
             "binary_classification"
         ]["sha256"] = "different-checkpoint"
     elif change == "seed":
-        configuration["experiment_2/embeddings"]["random_seed"] = 4
+        configuration["B2"]["random_seed"] = 4
     elif change == "pca":
-        configuration["experiment_2/embeddings"]["pca_grid"]["joint"] = [7]
+        configuration["B2"]["pca_grid"]["joint"] = [7]
     elif change == "classes":
-        configuration["experiment_1/protocol"]["evaluation"]["binary"]["positive_class"] = "first"
+        configuration["B1/protocol"]["evaluation"]["binary"]["positive_class"] = "first"
     elif change == "c1_extraction_layer":
-        configuration["representations/representations"]["extraction"]["layers"]["middle"] = 11
+        configuration["C1"]["extraction"]["layers"]["middle"] = 11
     elif change == "c1_pca_grid":
-        configuration["representations/representations"]["arms"]["views"]["joint"]["pca_components"] = 32
+        configuration["C1"]["arms"]["views"]["joint"]["pca_components"] = 32
     else:
         configuration["feature_creation/embedding_models"]["models"]["e5_small_v2"]["revision"] = (
             "other"
@@ -78,13 +80,13 @@ def test_optional_paid_selectors_preserve_open_review_and_shared_predictor_contr
     open_providers, paid = decision_providers("open_weight"), decision_providers("paid")
     open_identity = acceptance.decision_input_identity(open_providers)
     paid_identity = acceptance.decision_input_identity(paid)
-    for name in ("experiment_1/main", *acceptance.GROUP_B_C_CONFIGS):
+    for name in ("B1", *acceptance.GROUP_B_C_CONFIGS):
         configuration[name].setdefault("feature_selectors", {})["jev"] = {"version": "new"}
         configuration[name].setdefault("dataset_feature_artifacts", {})["data"] = {"jev": {"joint": "new"}}
     assert acceptance.evaluation_identity() == shared
     assert acceptance.decision_input_identity(open_providers) == open_identity
     assert acceptance.decision_input_identity(paid) != paid_identity
-    configuration["experiment_1/main"]["feature_selectors"]["strands"] = {"version": "new"}
+    configuration["B1"]["feature_selectors"]["strands"] = {"version": "new"}
     assert acceptance.decision_input_identity(open_providers) != open_identity
 
 
@@ -92,7 +94,7 @@ def test_changed_code_invalidates_0b_identity(configuration, monkeypatch, tmp_pa
     root = tmp_path / "workspace"
     (root / "src/evaluation").mkdir(parents=True)
     (root / "src/jev").mkdir()
-    questions = root / "config/A/question_versions.csv"
+    questions = root / "config/A/A2_question_versions.csv"
     questions.parent.mkdir(parents=True)
     questions.write_text("dataset,original\nexample,Sentence?\n", encoding="utf-8")
     source = root / "src/evaluation/protocol.py"
@@ -119,24 +121,24 @@ def test_checksums_alone_do_not_authorize_a_different_pipeline(tmp_path):
     signed = tmp_path / "accepted.json"
     body = {
         "accepted": True,
-        "stage": "after_extraction",
+        "stage": "B0",
         "reviewed_by": "reviewer",
         "evaluation_identity": "tested",
         "evidence": [{"path": str(report), "sha256": file_sha256(report)}],
     }
     write_json(signed, body)
     assert reviewed_acceptance(
-        signed, stage="after_extraction", expected={"evaluation_identity": "tested"}
+        signed, stage="B0", expected={"evaluation_identity": "tested"}
     )["accepted"]
     with pytest.raises(ValueError, match="current runtime/inputs"):
         reviewed_acceptance(
-            signed, stage="after_extraction", expected={"evaluation_identity": "changed"}
+            signed, stage="B0", expected={"evaluation_identity": "changed"}
         )
     del body["evaluation_identity"]
     write_json(signed, body)
     with pytest.raises(ValueError, match="current runtime/inputs"):
         reviewed_acceptance(
-            signed, stage="after_extraction", expected={"evaluation_identity": "tested"}
+            signed, stage="B0", expected={"evaluation_identity": "tested"}
         )
 
 
@@ -176,7 +178,7 @@ def test_importing_group_c_fit_recipes_does_not_require_group_b_reporting():
 def test_imported_absolute_vsc_receipt_reopens_the_exact_signed_bytes(tmp_path):
     from src.utils.acceptance import evidence_path
 
-    manifests = tmp_path / "output_JEVPFN" / "01_exp0a" / "manifests"
+    manifests = tmp_path / "output_JEVPFN" / "general/0" / "manifests"
     review = manifests / "before_extraction" / "accepted.json"
     original = manifests / "question_audit.json"
     write_json(original, {"source": "desktop audit"})
@@ -186,7 +188,7 @@ def test_imported_absolute_vsc_receipt_reopens_the_exact_signed_bytes(tmp_path):
     imported = manifests / "imported_revisions" / "evidence" / (sha + ".json")
     imported.parent.mkdir(parents=True)
     source.replace(imported)
-    item = {"path": "/data/account/JEVPFN/output_JEVPFN/01_exp0a/manifests/question_audit.json", "sha256": sha}
+    item = {"path": "/data/account/JEVPFN/output_JEVPFN/general/0/manifests/question_audit.json", "sha256": sha}
     write_json(review, {"accepted": True, "stage": "before_extraction", "reviewed_by": "reviewer",
                         "evidence": [item]})
     assert evidence_path(review, item) == imported
@@ -202,7 +204,7 @@ def test_direct_production_cli_requires_a_freeze_before_checking_evidence(monkey
     from src.cluster import freeze
     from src.evaluation import campaign
 
-    arm = {"phase": "experiment_1", "dataset_id": "fixture", "model": "linear",
+    arm = {"phase": "B1", "dataset_id": "fixture", "model": "linear",
            "feature_set": "non_text", "provider": None}
     monkeypatch.setattr(campaign, "benchmark_plan", lambda **kwargs: [arm])
     monkeypatch.setattr(campaign, "load_yaml", lambda name: {"candidates": {}, "enabled": True})
@@ -225,7 +227,7 @@ def test_campaign_refuses_stale_0b_before_loading_models(tmp_path, monkeypatch):
         reviewed,
         {
             "accepted": True,
-            "stage": "after_extraction",
+            "stage": "B0",
             "reviewed_by": "reviewer",
             "evaluation_identity": "old",
             "evidence": [{"path": str(report), "sha256": file_sha256(report)}],
@@ -236,7 +238,7 @@ def test_campaign_refuses_stale_0b_before_loading_models(tmp_path, monkeypatch):
     monkeypatch.setattr(
         campaign,
         "load_yaml",
-        lambda *a: {"enabled": True, "experiment_0_acceptance": str(reviewed)},
+        lambda *a: {"enabled": True, "gate_acceptance": str(reviewed)},
     )
     with pytest.raises(ValueError, match="current runtime/inputs"):
-        campaign.run_arm({"phase": "experiment_1"}, allow_model_runs=True)
+        campaign.run_arm({"phase": "B1"}, allow_model_runs=True)

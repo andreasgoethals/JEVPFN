@@ -1,4 +1,4 @@
-"""Study-at-a-glance table for `general/5_synthesis` from the verified Group B/C exports.
+"""Study-at-a-glance table for `general/4_synthesis` from the verified Group B/C exports.
 
 Each prespecified arm is reduced per dataset to the mean gain over the seven predictors
 (datasets are the unit), then summarised with `group_b.summarize`: the headroom-normalised
@@ -20,8 +20,8 @@ GLANCE_ARMS = (
     ("Decision, median model (both)", "B1", "median_gains", "decision/both/median"),
     ("Decision + E5, median model", "B2", "median_gains", "decision+frozen/both/median"),
     ("Frozen E5-small, per-column PCA32", "B2", "dataset_gains", "frozen/e5_small_v2/per_column32"),
-    ("Label-trained classifier (E5-small)", "B2", "dataset_gains", "probe/e5_small_v2/per_column"),
-    ("TAR E5-small, per-column PCA32", "B2", "dataset_gains", "tar/e5_small_v2_tar/per_column32"),
+    ("Label-trained classifier (E5-small)", "B3", "dataset_gains", "probe/e5_small_v2/per_column"),
+    ("TAR E5-small, per-column PCA32", "B3", "dataset_gains", "tar/e5_small_v2_tar/per_column32"),
     ("Strands LoRA + head (C2)", "C2", "dataset_gains", "adapted/joint/lora_head"),
 )
 COLUMNS = ["arm", "scope", "statistic", "estimate", "low", "high", "datasets", "predictors", "predictors_max"]
@@ -90,7 +90,7 @@ def normalized_rows(frames_by_study: dict, *, arms=GLANCE_ARMS, n_boot=group_b.N
         if folds is not None and not folds.empty:
             sources[study] = folds
             labels[representation] = label
-    # Overlapping B1, B2 and C2 scores must refer to the same split, predictor and recipe.
+    # Overlapping B1, B2, B3 and C2 scores must refer to the same split, predictor and recipe.
     head = group_b_views.merged_heads(*sources.values())
     parts = [head[head.representation.isin(labels)]]
     for representation in labels:

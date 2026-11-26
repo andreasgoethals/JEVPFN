@@ -70,7 +70,7 @@ def capacity_lease(work):
 def disposable_paths(work):
     """Only copied inputs/images: never response queues, embeddings or predictions."""
     relatives = ["data/raw", "data/decision_inputs", "checkpoints", "containers"]
-    relatives += [f"output_JEVPFN/{paths.phase_folder('experiment_0')}/results/token_audit"]
+    relatives += [f"output_JEVPFN/{paths.phase_folder('0')}/results/token_audit"]
     return [reject_links(work / name) for name in relatives if (work / name).exists()]
 
 
@@ -119,7 +119,7 @@ def check_capacity(work, candidates, source_container, *, additional_containers=
     Other projects may grow after this check; reserve headroom, never claim a quota
     reservation. Filesystem-wide statvfs free space alone is not a personal quota.
     """
-    settings = load_yaml("experiment_0/scheduling")
+    settings = load_yaml("0/scheduling")
     for key in (
         "max_resident_workspaces",
         "scratch_working_set_gib",
@@ -216,14 +216,14 @@ def require_runtime_idle(runtime):
             # TAR uses fold-specific PROJECT bundles and its own temporary job cache;
             # CPU contracts use PROJECT directly. Both can overlap workspace release.
             independent = {
-                "experiment_0_tokens.slurm",
-                "experiment_0_cpu.slurm",
-                "experiment_0_stage.slurm",
-                "experiment_0_container_build.slurm",
-                "experiment_0_embedding_stage.slurm",
+                "0_tokens.slurm",
+                "0_cpu.slurm",
+                "0_stage.slurm",
+                "0_container_build.slurm",
+                "0_embedding_stage.slurm",
                 "stage_tabstar.slurm",
-                "experiment_0_storage.slurm",
-                "experiment_0_predictor_cpu.slurm",
+                "0_storage.slurm",
+                "B0_predictor_cpu.slurm",
                 "prepare_tar.slurm",
                 "prepare_tar_pca.slurm",
             }
@@ -379,7 +379,7 @@ def release(runtime, *, apply=False):
         write_json(marker_path, {**marker, "status": "released_requires_restage"})
         report.update(status="released_inputs_preserved_results", applied=True)
         write_json(
-            paths.manifests_dir("experiment_0") / "scratch" / f"{runtime}_release.json", report
+            paths.manifests_dir("0") / "scratch" / f"{runtime}_release.json", report
         )
         return report
 

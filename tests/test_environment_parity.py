@@ -24,7 +24,7 @@ ON_VSC = bool(os.environ.get("VSC_DATA"))
 
 
 def _lock():
-    return load_yaml("experiment_0/control_runtime")
+    return load_yaml("0/control_runtime")
 
 
 def test_control_extra_matches_lock():
@@ -49,7 +49,7 @@ def test_local_venv_matches_control_lock():
         if parity["installed"][name] != expected
     ]
     assert not diff, (
-        "Local environment differs from config/01_exp0a/control_runtime.yaml:\n"
+        "Local environment differs from config/general/0/control_runtime.yaml:\n"
         + "\n".join(diff)
         + "\nSync it with the one-line command in README.md (Local environment)."
     )

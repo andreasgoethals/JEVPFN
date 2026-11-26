@@ -26,9 +26,9 @@ def roots(tmp_path, monkeypatch):
     monkeypatch.setenv("JEVPFN_RUNTIME_PROFILE", "blackwell-cu130")
     # Tiny unit fixtures must not depend on a compute node's real /tmp free space.
     monkeypatch.setattr(stage.shutil, "disk_usage", lambda p: SimpleNamespace(free=10**15))
-    config = tmp_path / "repo/config" / paths.phase_folder("experiment_0") / "scheduling.yaml"
+    config = tmp_path / "repo/config" / paths.phase_folder("0") / "scheduling.yaml"
     config.parent.mkdir(parents=True)
-    config.write_bytes(paths.config_path("experiment_0/scheduling").read_bytes())
+    config.write_bytes(paths.config_path("0/scheduling").read_bytes())
     monkeypatch.setattr(paths, "REPO_ROOT", tmp_path / "repo")
     return stage.roots("intern")
 
@@ -918,8 +918,8 @@ def test_restage_unions_active_dataset_db_on_native_root_and_preserves_its_queue
 
 
 @pytest.mark.parametrize(
-    "phase", ["experiment_0", "experiment_1", "experiment_2", "experiment_3", "experiment_4",
-              "rq2", "data_efficiency", "representations", "rq3"]
+    "phase", ["0", "B1", "B2", "B3", "B6",
+              "B4", "B5", "C1", "C2"]
 )
 def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results(
     roots, monkeypatch, tmp_path, phase
@@ -989,8 +989,8 @@ def test_fresh_predictor_workspace_reuses_durable_folds_and_unions_later_results
         assert reused[0].database.is_relative_to(work)
         assert paths.results_dir("splits", phase=phase).is_relative_to(work)
         assert paths.results_dir("cv_locks", phase=phase).is_relative_to(work)
-        if phase in {"rq2", "representations", "rq3"}:
-            export = "group_b" if phase == "rq2" else "group_c"
+        if phase in {"B4", "C1", "C2"}:
+            export = "group_b" if phase == "B4" else "group_c"
             assert paths.results_dir(export, phase=phase).is_relative_to(durable)
         assert [r.key for r in reused] == [r.key for r in original]
         meta = json.loads(reused[0].read_text())["metadata"]
@@ -1134,5 +1134,5 @@ def test_new_benchmark_phases_are_restored_into_fresh_workspaces():
     from src.cluster import scratch_stage
 
     source = inspect.getsource(scratch_stage.stage)
-    for phase in ("rq2", "data_efficiency", "representations", "rq3"):
+    for phase in ("B4", "B5", "C1", "C2"):
         assert f'"{phase}"' in source

@@ -1,0 +1,159 @@
+# Select headline metrics/contrasts before viewing comparative evaluation outcomes.
+# The available test is not an automatic assertion that the dataset sample is random.
+# Owner approval in chat on 24-11-2026 ("you can ungate everything"); verified before any
+# comparative result export existed locally (no B1-B5 or C1-C2 export; the A1 ZIP is a
+# superseded-schema RQ1A output description, not a predictor comparison).
+approved_before_results: true
+reviewed_by: Andreas Goethals (owner approval in chat, 24-11-2026; recorded by Claude)
+unit: per_dataset_mean_of_five_paired_outer_fold_differences
+fold_sd: descriptive_only
+test: two_sided_wilcoxon_signed_rank
+correction: holm_across_all_predeclared_contrasts
+# The confirmatory family (Holm over all 21): the proposal's three primary contrasts, each per
+# predictor (7), on the pooled headroom-normalised gain of all 18 datasets, run by
+# `inference.pooled_confirmatory_tests` on `learner_scores.pooled_scores`. Decision features are
+# the both-view median over the complete, explicitly recorded cohort of decision models;
+# the frozen and TAR references are the prespecified matched recipes (E5-small, per-column
+# PCA32; the decision + embedding arm and the B synthesis main arms use the same). Additional
+# views, encoders and the label-trained classifier are descriptive for the primary analysis.
+# The application tables retain their prespecified comparisons within each predictor.
+# The 18 benchmark datasets (selection order); every pooled contrast uses all of them.
+confirmatory_datasets: &all_18_datasets
+- BIN_TEXT_FAKE_JOB_POSTING
+- BIN_TEXT_JIGSAW_TOXICITY
+- BIN_TEXT_KICKSTARTER_FUNDING
+- MUL_TEXT_DATA_SCIENTIST_SALARY
+- MUL_TEXT_MICHELIN_RESTAURANTS
+- MUL_TEXT_PRODUCT_SENTIMENT
+- MUL_TEXT_US_ACCIDENTS
+- MUL_TEXT_WINE_REVIEW
+- MUL_TEXT_WOMEN_CLOTHING_REVIEW
+- REG_TEXT_BABIES_PRICES
+- REG_TEXT_BOOK_PRICE
+- REG_TEXT_BOOK_READABILITY
+- REG_TEXT_MERCARI_MARKETPLACE
+- REG_TEXT_MONTGOMERY_SALARIES
+- REG_TEXT_ROTTEN_TOMATOES
+- REG_TEXT_SCIMAGOJR_IMPACT
+- REG_TEXT_VANCOUVER_SALARIES
+- REG_TEXT_VIDEO_GAMES_SALES
+contrasts:
+# decision_features_vs_non_text: decision/both/median vs baseline, per predictor
+- {type: pooled_normalised_gain, application: B1_decision_features, group: catboost, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B1_decision_features, group: tabpfn_3_5, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B1_decision_features, group: tabicl_v2, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B1_decision_features, group: limix_2, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B1_decision_features, group: kumo_tabular, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B1_decision_features, group: linear, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B1_decision_features, group: lightgbm, learner: decision/both/median, versus: baseline, direction: 1,
+   datasets: *all_18_datasets}
+# decision_features_vs_frozen_embeddings: decision/both/median vs frozen/e5_small_v2/per_column32, per predictor
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: catboost, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: tabpfn_3_5, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: tabicl_v2, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: limix_2, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: kumo_tabular, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: linear, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B2_frozen_embeddings, group: lightgbm, learner: decision/both/median, versus: frozen/e5_small_v2/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+# decision_features_vs_tar: decision/both/median vs tar/e5_small_v2_tar/per_column32, per predictor
+- {type: pooled_normalised_gain, application: B3_label_trained, group: catboost, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B3_label_trained, group: tabpfn_3_5, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B3_label_trained, group: tabicl_v2, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B3_label_trained, group: limix_2, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B3_label_trained, group: kumo_tabular, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B3_label_trained, group: linear, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+- {type: pooled_normalised_gain, application: B3_label_trained, group: lightgbm, learner: decision/both/median, versus: tar/e5_small_v2_tar/per_column32, direction: 1,
+   datasets: *all_18_datasets}
+undefined_or_incomplete: stop_inferential_analysis_and_report_missing_results
+native_text_baselines: descriptive_original_text_system_references
+pretraining_overlap: unknown_unless_documented_evidence_establishes_otherwise
+# Proposal of 18 November 2026, approved by the owner on 24-11-2026; its primary contrasts are
+# declared in `contrasts` above (the confirmatory runner reads only `contrasts`). Pooled contrasts
+# over all 18 datasets use `type: pooled_normalised_gain` or `pooled_proper_score_skill` with
+# application, group, learner, versus, datasets and direction; they run only through
+# `inference.pooled_confirmatory_tests` (Holm over every declared contrast), on scores from
+# `src/evaluation/learner_scores.py` (`run_confirmatory_family`).
+proposal:
+  status: approved
+  headline_estimand: headroom_normalised_gain_over_same_predictor_non_text
+  headline_metric: {binary: roc_auc, multiclass: roc_auc_ovr_macro, regression: r2}
+  aggregation: equal_dataset_weight_all_18_datasets
+  summaries: [mean, median]  # owner 23-11-2026: median next to the mean, both with dataset-bootstrap CIs
+  uncertainty: percentile_bootstrap_over_datasets
+  primary_contrasts:
+  - decision_features_vs_non_text
+  - decision_features_vs_frozen_embeddings
+  - decision_features_vs_tar
+  contrast_scope: each_predictor_separately_median_over_decision_models
+  decision_modes_reported: [per_column, joint, both]
+  ranking_stability: kendall_tau_b_between_predictors
+  task_types: descriptive_only_never_separate_inference
+  when_text_helps_axes: [availability, length, novelty, baseline_entropy, prediction_shift, field_type]
+# Statistical framework (23-11-2026), implemented in src/evaluation/inference.py
+# (`compare_learners`, `confirmatory_tests`) and src/evaluation/fold_wins.py (`fold_win_rate`,
+# `pama`). Sources: Demsar 2006; Iman & Davenport 1980; Holm 1979; Wilcoxon 1945; Friedman 1937;
+# Nemenyi 1963; Benavoli et al. 2014, 2017; Gneiting & Raftery 2007; Fernandez-Delgado et al. 2014.
+# Owner decision 23-11-2026: no Finner or Shaffer corrections and no mean-rank z post-hoc
+# p-values; Holm is the only multiplicity correction. Fold-level win rates and PAMA count the
+# (dataset, outer fold) cells (18 x 5 = 90) but are descriptive: folds of one dataset share data,
+# so their 95% intervals resample whole datasets (cluster bootstrap), never single folds.
+# Always all 18 datasets as the units; folds only form each dataset's mean. Only 9 are
+# classification and 9 regression, so a test over all 18 needs one dimensionless score
+# shared by both tasks (Demsar 2006: differences must be commensurable). Task-specific
+# metrics (AUC, R^2, log loss, RPS) have N = 9 and are descriptive: with N = 9 the
+# smallest exact two-sided Wilcoxon p is 2/2^9 = 0.0039, which Holm over 13+ contrasts
+# can never bring below 0.05.
+# Approved by the owner on 24-11-2026 together with the contrasts above.
+# Descriptive companion (not inference): the MulTaBench-style normalised score
+# (`group_b.normalized_scores`, Arazi et al. 2026) pools AUC and R^2 on one 0-1 scale by
+# per-dataset min-max over the compared configurations; it is relative to that set and shown
+# next to, never instead of, the per-task-family views.
+framework:
+  status: approved
+  unit: per_dataset_mean_of_five_outer_folds_all_18_datasets
+  confirmatory_scores: {B: headroom_normalised_gain, A2: proper_score_skill}
+  # The initial release uses open_weight. The optional expanded release uses all.
+  # Each release applies Holm to its own complete 21 contrasts on the same 18 datasets.
+  primary_holm_family: all_declared_contrasts_for_one_recorded_complete_decision_cohort
+  omnibus_several_learners: friedman_with_iman_davenport_f_tie_corrected
+  ranks_and_cd_diagram: descriptive_nemenyi_critical_difference
+  confirmatory_pairwise: two_sided_wilcoxon_signed_rank_on_dataset_differences
+  family_correction: holm_across_all_primary_contrasts_within_release
+  omnibus_gate: none  # Holm controls the family itself; a Friedman gate is not required
+  bayesian: {test: bayesian_signed_rank_dirichlet_process, prior_strength: 0.5, decision: largest_posterior_region}
+  rope: {headroom_normalised_gain: 0.01, proper_score_skill: 0.01, roc_auc: 0.01, roc_auc_ovr_macro: 0.01, r2: 0.01, log_loss: 0.01}  # log_loss: A1, descriptive
+  mean_rank_post_hoc: not_reported  # mean ranks only in the descriptive CD diagram (Benavoli et al. 2016)
+  win_rate: fold_level_with_dataset_cluster_bootstrap_ci  # wins/ties/losses vs reference; complete cells only, excluded counted
+  pama: fold_level  # Fernandez-Delgado et al. 2014; ties at the top credit each tied learner; dataset-cluster bootstrap CI
+  population: the_18_benchmark_datasets_not_a_random_sample_of_all_tabular_text_tasks
+  application:
+    A1_outputs: {comparison: selected_decision_model_cohort, procedure: friedman_ranks_cd_diagram, metric: log_loss_joint_requests, inference: descriptive}
+    A2_stability: {comparison: averaged_presentations_vs_canonical_per_model, procedure: wilcoxon_holm_within_factor_over_selected_models_plus_bayesian, metric: proper_score_skill, descriptive_metrics: [log_loss, ranked_probability_score, brier, roc_auc], inference: confirmatory, holm_family: selected_models_vs_original_within_each_factor}
+    A3_geometry: {inference: descriptive_only}
+    B1_decision_features: {comparison: decision_modes_vs_non_text_control_per_predictor, procedure: wilcoxon_holm_plus_bayesian, ranking: friedman_cd_over_arms, inference: confirmatory, holm_family: decision_modes_vs_non_text_within_each_predictor}
+    B2_frozen_embeddings: {comparison: decision_vs_frozen_embeddings_and_decision_plus_frozen, procedure: wilcoxon_holm_plus_bayesian, inference: confirmatory, holm_family: frozen_representations_vs_decision_control_within_each_predictor}
+    B3_label_trained: {comparison: decision_vs_tar_and_label_trained_classifier, procedure: wilcoxon_holm_plus_bayesian, inference: confirmatory, holm_family: label_trained_representations_vs_decision_control_within_each_predictor}
+    B4_when_text_helps: {comparison: three_lodo_rules_vs_always_and_never, procedure: wilcoxon_on_regret_plus_bayesian, inference: exploratory}
+    B5_data_efficiency: {comparison: arms_vs_baseline_per_size, procedure: wilcoxon_holm_vs_control, inference: exploratory}
+    B6_native_text_systems: {comparison: native_text_systems, procedure: friedman_cd_diagram, inference: descriptive}
+    C1_strands_states: {comparison: 14_arms_vs_non_text_control, procedure: friedman_then_wilcoxon_holm_vs_control, inference: exploratory}
+    C2_strands_adaptation: {comparison: 2x2_zero_shot_head_lora_both, procedure: friedman_then_all_pairwise_wilcoxon_holm, inference: exploratory}

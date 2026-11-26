@@ -1,4 +1,4 @@
-"""A1 (exp01_outputs): stand-alone quality and calibration of each decision model.
+"""A1: stand-alone quality and calibration of each decision model.
 
 REFERENCE ONLY — DECISION MODELS ARE NOT TABULAR PREDICTORS. Nothing is fitted or
 recalibrated. Each decision model's stored JOINT-request probabilities (all available text

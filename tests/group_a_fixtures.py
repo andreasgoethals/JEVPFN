@@ -28,7 +28,7 @@ def design():
     from src.data.loaders import load_catalog
     from src.data.selection import selected_entries
 
-    main = load_yaml("experiment_1/main")
+    main = load_yaml("B1")
     semantics = load_yaml("dataset_semantics")["datasets"]
     rows = []
     for entry in selected_entries(load_catalog(), main):
@@ -189,7 +189,7 @@ def a3_tables(seed: int = 0, texts: int = 30):
     from src.evaluation.geometry_study import relation
 
     datasets, providers = design()
-    encoders = load_yaml("rq1/geometry")["encoders"]
+    encoders = load_yaml("A3")["encoders"]
     rng = np.random.default_rng(seed)
     traits = _model_traits(providers, rng)
     comparisons, references, coverage = [], [], []

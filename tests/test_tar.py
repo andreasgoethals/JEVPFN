@@ -27,7 +27,7 @@ from src.utils.serialization import digest, file_sha256, write_json
 def bundles(isolated_output, monkeypatch):
     monkeypatch.setattr(paths, "tar_results_dir", lambda *p: isolated_output.joinpath("tar", *p))
     dataset = next(fixtures())
-    split = shared_splits(dataset, seed=tar.load_yaml("experiment_3/tar")["random_seed"])
+    split = shared_splits(dataset, seed=tar.load_yaml("B3")["random_seed"])
     rng = np.random.default_rng(42)
     bodies = []
     for fold, partition in enumerate(split["folds"]):
@@ -286,7 +286,7 @@ def test_tar_fixed_threshold_no_inner_refits_and_resumes(isolated_output):
 
     kwargs = dict(model_id="fixture", checkpoint_id="fixture", feature_set="non_text_plus_tar",
                   specification=shared_splits(dataset, seed=42), estimator_settings={"fixture": True},
-                  phase="experiment_3", binary_threshold_policy="fixed_0_5", allow_model_runs=True)
+                  phase="B3", binary_threshold_policy="fixed_0_5", allow_model_runs=True)
     records = evaluate_cv(dataset, base, Count, **kwargs)
     assert len(records) == len(fitted) == 5
     for record in records:

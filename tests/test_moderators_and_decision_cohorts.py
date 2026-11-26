@@ -1,4 +1,4 @@
-"""RQ2-E dataset moderators and label-free decision-input row cohorts (synthetic only)."""
+"""B4 dataset moderators and label-free decision-input row cohorts (synthetic only)."""
 
 import json
 from types import SimpleNamespace
@@ -174,9 +174,9 @@ def test_decision_inputs_average_blocks_and_mark_missing_rows():
     fixed = rb.DecisionInputs(dataset, {"candidate_extractors": ["jev", "kev", "nim"]},
                               loader=loader, require_complete_artifacts=True)
     assert np.isnan(fixed.agreement(("joint",))).all()
-    assert rb.decision_modes({"provider": "jev"}, "non_text_plus_both", "experiment_1") == (
+    assert rb.decision_modes({"provider": "jev"}, "non_text_plus_both", "B1") == (
         "per_column", "joint")
-    assert rb.decision_modes({"provider": None}, "non_text", "experiment_1") is None
+    assert rb.decision_modes({"provider": None}, "non_text", "B1") is None
 
 
 def test_paired_cohorts_add_decision_axes_only_when_supplied():
@@ -220,7 +220,7 @@ def test_saved_decision_arm_joins_decision_inputs_by_row(isolated_output, monkey
                                          ("jev", {**selected, "settings_sha256": "other"}, ["current"])]:
         feature_set = "non_text_plus_joint" if provider else "non_text"
         evaluate_cv(ds, features, DummyClassifier, specification=spec, model_id="linear",
-                    checkpoint_id="fixture", feature_set=feature_set, phase="experiment_1",
+                    checkpoint_id="fixture", feature_set=feature_set, phase="B1",
                     allow_model_runs=True, estimator_settings={"seed": 1},
                     representation_recipe={"provider": provider, "selector": selector, "feature_set": feature_set},
                     feature_artifact_ids=artifacts)

@@ -18,13 +18,20 @@ from src.utils.serialization import digest, write_json
 
 def load_yaml(name: str, *, _seen: tuple[str, ...] = ()) -> dict:
     path = paths.config_path(name)
-    key = str(path)
+    # One file per experiment: `sections:` holds its further named configurations (B1/models).
+    section = paths.config_section(name)
+    key = f"{path}#{section}" if section is not None else str(path)
     if key in _seen:
         raise ValueError("Cyclic configuration inheritance.")
     with path.open(encoding="utf-8") as handle:
         child = yaml.safe_load(handle)
     if not isinstance(child, dict):
         raise ValueError("Configuration must be a mapping.")
+    sections = child.pop("sections", None) or {}
+    if section is not None:
+        if section not in sections or not isinstance(sections[section], dict):
+            raise ValueError(f"Unknown config section: {name}")
+        child = copy.deepcopy(sections[section])
     parent = child.pop("extends", None)
     if parent is None:
         return child

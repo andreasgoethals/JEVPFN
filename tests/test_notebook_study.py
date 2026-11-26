@@ -21,10 +21,10 @@ def fixture_folds():
     for task, metric in HEADLINES.items():
         dataset = next(d for d, s in load_yaml("dataset_semantics")["datasets"].items() if s["task_type"] == task)
         for model in ["catboost", "tabstar", "contexttab", "ag_mm"]:
-            phase = "experiment_1" if model == "catboost" else "experiment_4"
+            phase = "B1" if model == "catboost" else "B6"
             for fold in range(5):
                 base = dict(arm_id=f"{dataset}/{model}", phase=phase, dataset_id=dataset, task_type=task,
-                            model_id=model, checkpoint_id=model, feature_set="non_text" if phase == "experiment_1" else "original_features",
+                            model_id=model, checkpoint_id=model, feature_set="non_text" if phase == "B1" else "original_features",
                             provider=None, encoder=None, pca_scope=None, pca_components=None,
                             split_id=dataset, outer_fold=fold, metric=metric, value=0.65+fold/100,
                             comparison_id=model, inference_status="prespecified", feature_artifact_ids="[]")
@@ -33,7 +33,7 @@ def fixture_folds():
 
 
 def test_headline_configuration_matches_user_and_multabench():
-    protocol = load_yaml("experiment_1/protocol")["evaluation"]
+    protocol = load_yaml("B1/protocol")["evaluation"]
     assert protocol["binary"]["primary_metric"] == HEADLINES["binary_classification"]
     assert protocol["multiclass"]["primary_metric"] == HEADLINES["multiclass_classification"]
     assert protocol["regression"]["primary_metric"] == HEADLINES["regression"]
@@ -50,14 +50,14 @@ def test_r2_differences_are_not_rescaled_or_dropped_for_negative_references():
 
 def test_coverage_requires_five_defined_folds_and_rejects_duplicate_campaign():
     frame = fixture_folds()
-    table = study.planned_coverage(frame, "experiment_1")
-    assert table.planned.eq(1 + 3 * len(load_yaml("experiment_1/main")["candidate_extractors"])).all() and table.completed.sum() == 3
+    table = study.planned_coverage(frame, "B1")
+    assert table.planned.eq(1 + 3 * len(load_yaml("B1")["candidate_extractors"])).all() and table.completed.sum() == 3
     broken = frame.drop(frame[frame.model_id.eq("catboost") & frame.outer_fold.eq(4)].index)
-    assert study.planned_coverage(broken, "experiment_1").completed.sum() == 0
+    assert study.planned_coverage(broken, "B1").completed.sum() == 0
     bad = frame[frame.model_id.eq("catboost")].copy()
     bad["arm_id"] += "other"
     with pytest.raises(ValueError, match="Multiple campaigns"):
-        study.planned_coverage(pd.concat([frame, bad]), "experiment_1")
+        study.planned_coverage(pd.concat([frame, bad]), "B1")
 
 
 def test_headline_summary_never_selects_best_recipe():
@@ -73,7 +73,7 @@ def test_cross_system_pairing_is_explicit_and_split_bound():
     paired = study.cross_system_contrasts(frame)
     assert len(paired) == 45 and paired.reference_model.nunique() == 3
     assert np.allclose(paired.difference, 0)
-    frame.loc[frame.phase.eq("experiment_4"), "split_id"] = "other"
+    frame.loc[frame.phase.eq("B6"), "split_id"] = "other"
     assert study.cross_system_contrasts(frame).empty
 
 
@@ -81,7 +81,7 @@ def test_cross_system_pairing_is_explicit_and_split_bound():
 
 def test_future_plots_draw_on_final_print_canvas_without_winner_selection():
     style.apply()
-    figures = list(coverage_figures(study.planned_coverage(fixture_folds(), "experiment_1"), "Fixture"))
+    figures = list(coverage_figures(study.planned_coverage(fixture_folds(), "B1"), "Fixture"))
     for fig, _, _ in figures:
         fig.canvas.draw()
         assert fig.get_size_inches()[0] == style.WIDTH_FULL
@@ -90,7 +90,7 @@ def test_future_plots_draw_on_final_print_canvas_without_winner_selection():
 
 
 def test_no_empty_coverage_figures_before_results_exist():
-    table = study.planned_coverage(pd.DataFrame(), "experiment_1")
+    table = study.planned_coverage(pd.DataFrame(), "B1")
     assert list(coverage_figures(table, "Pending")) == []
 
 
@@ -109,8 +109,8 @@ def test_every_experiment_has_thin_notebook_and_complete_printed_report():
 
 
 def test_synthesis_uses_general_notebook_output_without_fake_experiment():
-    assert paths.notebook_phase("8. synthesis/01_representation_comparison") == "synthesis"
-    assert paths.phase_folder("synthesis") == "05_synthesis"
+    assert paths.notebook_phase("synthesis/01_representation_comparison") == "synthesis"
+    assert paths.phase_folder("synthesis") == "general/4_synthesis"
 
 
 def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():
@@ -118,7 +118,7 @@ def test_burden_table_preserves_null_recipe_fields_and_complete_measurements():
     samples = []
     for metric, value in [("seconds.fit", 10), ("seconds.predict", 2), ("columns.representation", 4)]:
         samples.append(base.assign(metric=metric, value=value))
-    table = study.burden_table(pd.concat(samples), ["experiment_1"])
+    table = study.burden_table(pd.concat(samples), ["B1"])
     assert len(table) == 3 and table["seconds.fit"].eq(10).all()
     for fig, _, _ in burden_figures(table):
         fig.canvas.draw()
@@ -132,9 +132,9 @@ def test_historical_mean_folds_cannot_complete_primary_probability_plan():
                           "task_type":"regression", "metric":"r2", "value":0.5,
                           "outer_fold":i, "encoder":None, "pca_scope":None,
                           "pca_components":None} for i in range(5)])
-    old = study.planned_coverage(rows, "experiment_1")
+    old = study.planned_coverage(rows, "B1")
     assert old.completed.sum() == 0
-    current = study.planned_coverage(rows.assign(view="probabilities"), "experiment_1")
+    current = study.planned_coverage(rows.assign(view="probabilities"), "B1")
     assert current.completed.sum() == 1
 
 

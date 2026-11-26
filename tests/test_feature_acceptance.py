@@ -17,7 +17,7 @@ def evidence(isolated_output, monkeypatch):
     monkeypatch.setattr(storage_contracts, "storage_backend", lambda _: "lustre")
 
     validation = current_identity()
-    root = paths.manifests_dir("experiment_0")
+    root = paths.manifests_dir("0")
     before = root / "before_extraction"
     inputs = [{"dataset_id": "fixture", "input_set_id": "v3", "input_file_sha256": "sha"}]
     monkeypatch.setattr(acceptance, "selected_inputs", lambda: inputs)

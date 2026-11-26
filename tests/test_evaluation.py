@@ -171,11 +171,11 @@ def test_result_record_preserves_predictions_timings_and_undefined_values(isolat
     from src.evaluation.store import read_predictions
 
     pd.testing.assert_frame_equal(read_predictions(path), predictions)
-    manifest = paths.manifests_dir("experiment_1") / "evaluations" / "test.json"
+    manifest = paths.manifests_dir("B1") / "evaluations" / "test.json"
     compact = json.loads(manifest.read_text())
     assert compact["project_relative_path"] == "results/evaluation/test.sqlite3"
     assert data["scores"]["metrics"] == scores["metrics"]
-    assert paths.logs_dir("experiment_1").joinpath("evaluations.log").is_file()
+    assert paths.logs_dir("B1").joinpath("evaluations.log").is_file()
     assert not list((isolated_output / "vsc_data").rglob("*.parquet"))
     with pytest.raises(ValueError, match="project storage"):
         save_evaluation(

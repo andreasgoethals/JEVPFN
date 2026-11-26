@@ -78,12 +78,12 @@ def test_primary_results_pair_exact_predictors_and_keep_native_references(isolat
     data = LoadedDataset(frame, meta, official, {"data_identity": "fixed"}, [])
     matrix = frame[["x"]].set_axis([f"csv:{i}" for i in range(20)])
     for model, phase, features, error, provider in (
-        ("catboost", "experiment_1", "non_text", 3, None),
-        ("catboost", "experiment_1", "non_text_plus_joint", 1, "jev"),
-        ("catboost", "experiment_1", "non_text_plus_joint", 1.5, "liquid"),
-        ("catboost", "experiment_2", "non_text_plus_frozen_e5", 2, None),
-        ("catboost", "experiment_2", "non_text_plus_frozen_e5", 4, None),
-        ("tabstar", "experiment_4", "original_features", 1, None),
+        ("catboost", "B1", "non_text", 3, None),
+        ("catboost", "B1", "non_text_plus_joint", 1, "jev"),
+        ("catboost", "B1", "non_text_plus_joint", 1.5, "liquid"),
+        ("catboost", "B2", "non_text_plus_frozen_e5", 2, None),
+        ("catboost", "B2", "non_text_plus_frozen_e5", 4, None),
+        ("tabstar", "B6", "original_features", 1, None),
     ):
         evaluate_cv(data, matrix,
             lambda error=error: SimpleNamespace(fit=lambda x,y: None, predict=lambda x: x.x.to_numpy()+error),
@@ -99,7 +99,7 @@ def test_primary_results_pair_exact_predictors_and_keep_native_references(isolat
     assert len(rmse) == 20
     np.testing.assert_allclose(rmse.reference_value, 3)
     np.testing.assert_allclose(rmse.difference, rmse.value - 3)
-    assert len(rmse[rmse.phase.eq("experiment_2")].embedding_recipe_id.unique()) == 2
+    assert len(rmse[rmse.phase.eq("B2")].embedding_recipe_id.unique()) == 2
     assert "descriptive" in report["fold_sd"]
 
 

@@ -114,7 +114,7 @@ def test_other_cluster_can_be_reconciled_but_new_submissions_wait():
             raise job_graph.AccountingUnavailable(dict(cluster=cluster, job_id=job, error_type="test"))
         return "COMPLETED", "0:0"
 
-    summary = job_graph.advance(steps, settings=load_yaml("experiment_0/scheduling"),
+    summary = job_graph.advance(steps, settings=load_yaml("0/scheduling"),
                                 state=state, submit=lambda s: pytest.fail("Wait for accounting"),
                                 save=lambda: None)
     assert calls == ["1", "2"] and steps[1]["status"] == "completed"
@@ -125,7 +125,7 @@ def test_ambiguous_submission_still_stops_even_during_outage():
     steps = [dict(name="cpu", cluster="wice", job_id="1", status="submitted"),
              dict(name="storage", cluster="wice", status="starting")]
     with pytest.raises(ValueError, match="Interrupted submission"):
-        job_graph.advance(steps, settings=load_yaml("experiment_0/scheduling"),
+        job_graph.advance(steps, settings=load_yaml("0/scheduling"),
                           state=lambda *a, **k: pytest.fail("Ambiguity must be checked first"),
                           submit=lambda s: pytest.fail("No new submissions"), save=lambda: None)
 
@@ -136,5 +136,5 @@ def test_programming_errors_are_not_swallowed_as_accounting_outages():
 
     with pytest.raises(ValueError, match="implementation error"):
         job_graph.advance([dict(name="cpu", cluster="wice", job_id="1", status="submitted")],
-                          settings=load_yaml("experiment_0/scheduling"), state=broken,
+                          settings=load_yaml("0/scheduling"), state=broken,
                           submit=lambda s: pytest.fail("No submission"), save=lambda: None)

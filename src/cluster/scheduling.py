@@ -23,7 +23,7 @@ def gpu_profile(name=None, *, runtime=None):
     This is configuration, not proof that the route is staged or GPU-compatible.
     The launcher must validate its stage receipt before loading any model.
     """
-    configuration = load_yaml("experiment_0/scheduling")
+    configuration = load_yaml("0/scheduling")
     profiles = configuration["profiles"]
     name = name or configuration["default_gpu_profile"]
     if name not in profiles:

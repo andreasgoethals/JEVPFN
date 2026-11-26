@@ -1,7 +1,7 @@
-"""Read-only analysis of explicit, bounded real-text Experiment 0A diagnostics.
+"""Read-only analysis of explicit, bounded real-text Experiment 0 diagnostics.
 
 Pass exact report files; never silently mix historical versions or dispatch new calls.
-The inference entry points remain the bounded local Jev/GPU contracts in Experiment 0A.
+The inference entry points remain the bounded local Jev/GPU contracts in Experiment 0.
 """
 
 import json
