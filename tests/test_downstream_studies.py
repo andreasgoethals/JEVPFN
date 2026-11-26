@@ -228,9 +228,19 @@ def test_geometry_joins_raw_encoder_vectors_to_decision_rows(tmp_path, monkeypat
         ),
     )
     manifest = {"identity": {"data_identity": "frozen"}, "text_columns": ["note"]}
-    block = SimpleNamespace(manifest=manifest)
+    source_rows = [f"csv:{i}" for i in range(6)]
+    block = SimpleNamespace(
+        manifest=manifest, values=pd.DataFrame({"row_id": source_rows}),
+        requests=pd.DataFrame({"row_id": source_rows, "group": "text_000", "request_key": source_rows}),
+    )
     monkeypatch.setattr(gs, "load_block", lambda *a, **k: block)
-    monkeypatch.setattr(gs, "payload_hashes", lambda *a: {})
+
+    def sampled_hashes(_, sampled):
+        assert sampled.requests.group.unique().tolist() == ["text_000"]
+        assert set(sampled.requests.row_id) == {"csv:1", "csv:3", "csv:4", "csv:5"}
+        return {}
+
+    monkeypatch.setattr(gs, "payload_hashes", sampled_hashes)
     rows = np.array(["csv:" + str(i) for i in reversed(range(6))])
     prob = np.array([0.9, 0.1, 0.6, np.nan, 0.3, 0.1])
     group = SimpleNamespace(

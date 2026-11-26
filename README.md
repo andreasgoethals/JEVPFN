@@ -28,7 +28,14 @@ AutoGluon-Multimodal are descriptive native-text system references.
 
 ## Campaign evidence
 
-**25 November 2026, 12:12 Brussels snapshot.** The desktop holds both feature views for 259 of 288 open-weight dataset–model pairs, plus both Jev 1.14.0 views for Product Sentiment. All 520 views match their registered model revisions. The 54 frozen encoder stores, 54 PCA stores and one real TAR pilot are also available locally. All five additional open-weight providers have signed native Experiment 0 reviews. Every remaining extraction has a Slurm job ID. The repaired jobs can checkpoint during inference and KnowLine's 100,000-row Jigsaw retry completed. The current benchmark still needs a full native B0 review. C0 qualifies Strands v1 training on the VSC before production C2.
+**26 November 2026.** Slurm and the canonical GPFS PROJECT inventory confirm
+feature publication for all 288 open-weight dataset–model pairs (576 joint and
+per-column blocks). All three frozen encoders have vectors for the 18 datasets.
+The selections retain the exact settings recorded for each dataset, including
+the GLiDE and Mammoth batches that used different settings. Full Jev extraction
+remains incomplete. A0 qualifies the open-weight replay and geometry paths, B0
+qualifies the predictors, and C0 qualifies Strands v1 training. These gates
+keep separate evidence from feature creation.
 
 ## Repository navigation
 

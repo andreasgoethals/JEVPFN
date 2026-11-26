@@ -17,7 +17,7 @@ from src.evaluation.decision_comparison import normalize_group, payload_hashes
 from src.evaluation.geometry import decision_distances, encoder_distances
 from src.evaluation.portable_features import notebook_inventory, verified_payload_hashes
 from src.evaluation.research_questions import random_probe_requests
-from src.jev.features import load_block
+from src.jev.features import FeatureBlock, load_block
 from src.utils import paths
 from src.utils.config import load_yaml
 from src.utils.serialization import digest, write_json
@@ -200,15 +200,24 @@ def run(dataset_id, *, pilot=False, cohort=None):
             or list(dataset.metadata.text_columns) != block.manifest["text_columns"]
         ):
             raise ValueError("Source rows or field identities differ")
-        hashes = (
-            verified_payload_hashes(path, block.requests.request_key.dropna().unique())
-            if item.portable
-            else payload_hashes(path, block)
-        )
+        values = block.values.set_index("row_id", drop=False)
+        requests = block.requests.set_index(["group", "row_id"], drop=False)
         for index, sample in enumerate(samples):
             if len(sample["rows"]) < 2:
                 continue
-            group = normalize_group(block, f"text_{index:03d}", hashes)
+            group_name = f"text_{index:03d}"
+            row_ids = sample["rows"]
+            sampled = FeatureBlock(
+                values.loc[row_ids].reset_index(drop=True),
+                requests.loc[group_name].loc[row_ids].reset_index(drop=True),
+                block.manifest,
+            )
+            hashes = (
+                verified_payload_hashes(path, sampled.requests.request_key.dropna().unique())
+                if item.portable
+                else payload_hashes(path, sampled)
+            )
+            group = normalize_group(sampled, group_name, hashes)
             positions = {row: i for i, row in enumerate(group.row_ids)}
             indices = [positions[i] for i in sample["rows"]]
             observed = group.input_hashes[indices].tolist()
