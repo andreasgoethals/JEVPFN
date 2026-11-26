@@ -53,7 +53,7 @@ entries:
   phases: [feature_creation]
   notebook: {phase: feature_creation}
   configs: [feature_creation, approved_additions, decision_pilot, embedding_models,
-            extractors, feature_comparison, model_properties, text_embeddings]
+            extractors, model_properties, text_embeddings]
 - id: study_audit
   group: general
   folder: 3_study_audit
@@ -80,6 +80,7 @@ entries:
   folder: A1
   title: 'A1: decision outputs and context'
   phases: [A1]
+  config: [A1]
   notebook: {phase: A1}
 - id: A2
   group: A

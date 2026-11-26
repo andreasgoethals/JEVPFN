@@ -111,7 +111,7 @@ def load_decision_block(dataset_id, provider, mode, cfg):
     from src.jev.features import feature_inventory
 
     try:
-        selector = decision_selector(cfg, provider)
+        selector = decision_selector(cfg, provider, dataset_id)
     except ValueError:
         return None, "no_configured_feature_selector"
     pins = decision_artifact_pins(cfg, dataset_id, provider)

@@ -23,7 +23,7 @@ def test_active_rosters_and_provider_pins_agree():
     assert {"jev"} <= set(HOSTED_UNAVAILABLE) <= roster - set(SELF_HOSTED)
     for providers in (
         load_yaml("decision_pilot")["providers"],
-        load_yaml("feature_comparison")["comparison"]["providers"],
+        load_yaml("A1")["comparison"]["providers"],
         load_yaml("B1")["candidate_extractors"],
         load_yaml("B1")["feature_selectors"],
     ):

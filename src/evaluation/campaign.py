@@ -309,7 +309,7 @@ def run_arm(arm, *, allow_model_runs=False, profile=False):
 
     selectors, additions, checksums = {}, [], {}
     for provider in providers:
-        selector = decision_selector(cfg, provider)
+        selector = decision_selector(cfg, provider, entry["id"])
         pins = decision_artifact_pins(cfg, entry["id"], provider)
         modes = (
             ("per_column", "joint")

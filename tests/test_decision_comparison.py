@@ -27,7 +27,7 @@ from src.utils.serialization import canonical_json, digest
 
 
 def options(providers=("jev", "liquid", "strands")):
-    result = copy.deepcopy(load_config("feature_comparison")["comparison"])
+    result = copy.deepcopy(load_config("A1")["comparison"])
     result["providers"] = list(providers)
     result["scatter_rows_per_group"] = 4
     return result
@@ -220,7 +220,7 @@ def test_semantic_hashes_come_from_verified_raw_requests(tmp_path):
 def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, monkeypatch):
     from src.evaluation import portable_features
 
-    cfg = load_config("feature_comparison")
+    cfg = load_config("A1")
     monkeypatch.setattr(
         paths, "dataset_cache_path", lambda dataset: tmp_path / "protected" / f"{dataset}.sqlite3"
     )
@@ -241,7 +241,7 @@ def test_empty_real_cache_is_read_only_and_report_has_no_fake_results(tmp_path, 
 def test_real_sqlite_contract_and_ambiguous_versions(isolated_output, monkeypatch):
     import src.evaluation.decision_comparison as comparison
 
-    cfg = load_config("feature_comparison")
+    cfg = load_config("A1")
     cfg["dataset_selection"]["exclude"] = []
     cfg["comparison"] = options(("jev", "liquid"))
     cfg["comparison"]["representations"] = ["joint"]

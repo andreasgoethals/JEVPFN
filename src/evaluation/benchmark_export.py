@@ -176,9 +176,13 @@ def cohort_recipes(recipes, scope, main):
                 yield recipe
             continue
         saved = rep.get("selector")
+        expected = dict(selectors.get(provider, {}))
+        overrides = expected.pop("settings_sha256_by_dataset", {})
+        if recipe["dataset_id"] in overrides:
+            expected["settings_sha256"] = overrides[recipe["dataset_id"]]
         if (provider not in selectors or not isinstance(saved, dict)
                 or rep.get("providers", [provider]) != [provider]
-                or any(k not in saved or saved[k] != v for k, v in selectors[provider].items())):
+                or any(k not in saved or saved[k] != v for k, v in expected.items())):
             continue
         pinned = pins.get(recipe["dataset_id"], {}).get(provider)
         if pinned is not None:

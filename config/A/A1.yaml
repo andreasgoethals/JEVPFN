@@ -1,4 +1,5 @@
 extends: feature_creation
+phase: A1
 name: saved_decision_feature_comparison
 comparison:
   complete_providers_only: true

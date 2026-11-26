@@ -29,7 +29,7 @@ def compare(values, *, task="binary_classification", hashes=None, mode="joint"):
         ids = np.array([f"csv:{i}" for i in range(len(p))])
         groups.append(GroupFeatures(name, ids, p, np.array(hashes or [f"h{i}" for i in range(len(p))], dtype=object),
                                     () if task == "regression" else tuple(range(p.shape[1])), task, "same"))
-    cfg = {**load_config("feature_comparison")["comparison"], "providers": names}
+    cfg = {**load_config("A1")["comparison"], "providers": names}
     result = Comparison()
     analyze_group(groups, {"dataset": "Fixture", "dataset_id": "fixture", "representation": mode,
                            "group": "all_text", "text_column": "text"}, cfg, result)

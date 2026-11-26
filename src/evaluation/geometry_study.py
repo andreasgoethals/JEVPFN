@@ -86,15 +86,15 @@ def relation(left, right, seed, permutations=19):
 
 def geometry_protocol(dataset_id, source, cfg, main, members):
     from src.evaluation.design import decision_versions
-    from src.evaluation.qualification import decision_artifact_pins
+    from src.evaluation.qualification import decision_artifact_pins, decision_selector
     from src.utils.provenance import code_identity
 
     return {
         "source": source, "config": digest(cfg), "decision_model_versions": decision_versions(members),
         "implementation": code_identity(["src/evaluation/geometry_study.py", "src/evaluation/geometry.py",
                                          "src/evaluation/decision_comparison.py"]),
-        "providers": {p: [main["feature_selectors"].get(p), decision_artifact_pins(main, dataset_id, p)]
-                      for p in members},
+        "providers": {p: [decision_selector(main, p, dataset_id) if main["feature_selectors"].get(p) else None,
+                          decision_artifact_pins(main, dataset_id, p)] for p in members},
         "decision_roster": members,
     }
 
@@ -187,7 +187,7 @@ def run(dataset_id, *, pilot=False, cohort=None):
             missing.append(provider)
             continue
         selected = match_artifact_pins(selected, decision_artifact_pins(main, dataset_id, provider))
-        pinned = decision_selector(main, provider)
+        pinned = decision_selector(main, provider, dataset_id)
         for key, value in pinned.items():
             selected = selected.loc[selected[key] == value]
         if len(selected) != 1:
@@ -247,7 +247,7 @@ def run(dataset_id, *, pilot=False, cohort=None):
         missing_providers=missing,
     )
     if pilot and (missing or not rows):
-        raise ValueError("B0 geometry pilot requires every selected provider and a measurable text field")
+        raise ValueError("A0 geometry pilot requires every selected provider and a measurable text field")
     if not pilot and (prior["encoders"] != encoder_ids or
             {r["provider"]: r["artifact_id"] for r in prior["comparisons"]} !=
             {r["provider"]: r["artifact_id"] for r in rows}):
@@ -261,6 +261,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--cohort", metavar="COHORT")
-    parser.add_argument("--pilot", action="store_true", help="B0 readback with at most 12 distinct texts per field")
+    parser.add_argument("--pilot", action="store_true", help="A0 readback with at most 12 distinct texts per field")
     args = parser.parse_args()
     print(run(args.dataset, pilot=args.pilot, cohort=args.cohort))

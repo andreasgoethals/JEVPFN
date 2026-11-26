@@ -7,6 +7,15 @@ if [[ "${JEVPFN_STORAGE_MODE:-}" == tar_preparation ]]; then
     export JEVPFN_SHARED_IMMUTABLES=1 JEVPFN_RUNTIME_PROFILE=blackwell-cu130
     export JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
     # Fold-specific immutable bundles publish atomically; Trainer checkpoints use native scratch.
+elif [[ "${JEVPFN_STORAGE_MODE:-}" == a0_pilot ]]; then
+    [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && "${SLURM_JOB_PARTITION:-}" == gpu_b200 &&
+       "${JEVPFN_PHASE:-}" == A0 && "${JEVPFN_DURABLE_ROOT:-}" == /gpfs*/project/* ]] || {
+        echo 'A0 replay requires a Mindwell B200 allocation and native GPFS PROJECT.' >&2
+        return 2
+    }
+    export JEVPFN_SHARED_IMMUTABLES=1 JEVPFN_RUNTIME_PROFILE=blackwell-cu130
+    export JEVPFN_STAGING_ROOT="$JEVPFN_DURABLE_ROOT"
+    # Replay reads immutable inputs and only writes a locked, dedicated A0 result store.
 elif [[ "${SLURM_CLUSTER_NAME:-}" == mindwell && ( "${SLURM_JOB_PARTITION:-}" == gpu* || "${JEVPFN_STORAGE_MODE:-}" == scratch_mirror ) ]]; then
     export JEVPFN_STORAGE_MODE=scratch_mirror JEVPFN_RUNTIME_PROFILE=blackwell-cu130
     export JEVPFN_DURABLE_ROOT="${JEVPFN_DURABLE_ROOT:-${JEVPFN_PROJECT_ROOT:-${VSC_PROJECT_ROOT:-${JEVPFN_PROJECT_ROOT:?Select the allocated durable PROJECT root}}}}"

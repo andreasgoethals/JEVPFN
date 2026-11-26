@@ -235,7 +235,7 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
     if not pilot:
         from src.evaluation.qualification import decision_selector
 
-        selector = decision_selector(load_yaml("B1"), provider)
+        selector = decision_selector(load_yaml("B1"), provider, dataset)
         if selector["settings_sha256"] != design["settings"]:
             raise ValueError("Robustness settings differ from the frozen RQ2 extractor")
         passed = set()
@@ -247,9 +247,9 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
                 )
             ) as bank:
                 frozen_id, _, _, _ = _read_set(bank, None)
-            for file in paths.results_dir("robustness", dataset_id, provider, phase="A2").glob(
-                "*.json"
-            ):
+            for file in paths.manifests_dir("A0").joinpath(
+                "robustness", dataset_id, provider
+            ).glob("*.json"):
                 receipt = json.loads(file.read_text(encoding="utf-8"))
                 tested = receipt.get("design", {})
                 if (
@@ -270,7 +270,7 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
             )
     if hosted:
         client.start(design)
-    folder = paths.results_dir("robustness", dataset, provider, phase="A2")
+    folder = paths.results_dir("robustness", dataset, provider, phase="A0" if pilot else "A2")
     folder.mkdir(parents=True, exist_ok=True)
     store = folder / (digest(design) + ".sqlite3")
     with file_lock(store.with_suffix(".lock"), timeout=1), closing(sqlite3.connect(store)) as db:
@@ -392,8 +392,11 @@ def run(dataset, provider, *, pilot, acceptance, client=None):
                            for item in paired.values() if {variant, "repeat_1", "repeat_2"} <= item.keys()]
             contrasts[variant] = dict(matched_requests=len(differences),
                                       excess_tv=float(np.mean(differences)) if differences else None)
+        receipt = store.with_suffix(".json")
+        if pilot:
+            receipt = paths.manifests_dir("A0") / "robustness" / dataset / provider / receipt.name
         return write_json(
-            store.with_suffix(".json"),
+            receipt,
             dict(
                 design=design,
                 decision_settings=client.settings,

@@ -70,22 +70,136 @@ dataset_feature_artifacts:
       joint: 70bf81c3b07118c7cf68934f2800eb22b5b8187637f89eb5f5fdee59157c8d57
 feature_selectors:
   jev: null
-  liquid: null
-  liquid_lfm3: null
-  perplexity: null
-  cloudflare: null
-  strands: null
-  intern: null
-  h2o: null
-  sii: null
-  kev: null
-  decision3: null
-  nimble: null
-  mammoth: null
-  drex_max: null
-  knowline: null
-  sieve: null
-  glide: null
+  liquid:
+    provider: liquid
+    model: LiquidAI/d1-3B
+    version: 051bcc464b01b9f92942b364d9586b0ef5912432
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 95499c894954bef315a502cdcb26bb498945f1939520e05299dfc23cc892da37
+  liquid_lfm3:
+    provider: liquid_lfm3
+    model: LiquidAI/d1-2B
+    version: cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: e75b6c0d95ab4b293185527ec84ba2d1cd2776a75e58a927980d8527fd8dfded
+  perplexity:
+    provider: perplexity
+    model: perplexity-ai/pplx-decider-v1.1-27b
+    version: 14c9d90137962d300f3de95633f7b6535e80c5ce
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: cf668264b7d2d6bd03413162ae8f26b9b675c9ed02078d48ae5e90ce631936a1
+  cloudflare:
+    provider: cloudflare
+    model: Cloudflare/clef-flash
+    version: 8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: a255ce6d98b8c0c095bf516028082c5da53cd6c9f9098863df83107946e36bd3
+  strands:
+    provider: strands
+    model: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
+    version: 216d1ccb46a9e9b036eb9187b248db98480f77d4
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 3a195c92a8bbb40085a09d906276717eabfb0cda6b2fcf6bbda83895ddbe740d
+  intern:
+    provider: intern
+    model: internlm/Intern-Decision-4B
+    version: 0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 673ab8eb2ffe01ec81f6a9d4c39da7a9b77267aad4c922b53fe22ede0a1d0b62
+  h2o:
+    provider: h2o
+    model: h2oai/h2o-lightning-4b
+    version: e7b32490c9d2a994bd75a4d1ea7e45716080175e
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 9afb83c8d3e1347fe9b58572cd9ff13a2dc6b248ef4fee3bfaf07ec24759e7bc
+  sii:
+    provider: sii
+    model: jylin001206/SII-Decision-27B-Full
+    version: 8f5a51dcde7b0fd6a2eea3ab423bad5e3b11dfda
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: fb4b44b8f0442a8a81238f9a693817a7839d64c1468717464be482266f5036e2
+  kev:
+    provider: kev
+    model: jaredpalmer/kev-27b
+    version: af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: cb73166922200bce96f44ed5576f16f9a45538a7ec48f2a9091fa4448f22d1c7
+  decision3:
+    provider: decision3
+    model: vllm-sr/d3-turbo
+    version: a0f3e9e59ebd1202fe1d4de1c4c0f9a986758cbb
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: c92c475fc03f9a5f1b62c04d20a24b414705840275ec8db35d489e37628b3dcf
+  nimble:
+    provider: nimble
+    model: bespokelabs/Bespoke-Nimble-9B
+    version: bd792f44ec8e265be861bfcdf4e05967ffe0e858
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 0e696d05cd4df8fa6bc8a63d88a20a7f5e927bf8a89019a854e06794d369199f
+  mammoth:
+    provider: mammoth
+    model: baselabs/mammoth-1
+    version: 61cec44c281c693992e3d6ebeb44dd3402dfa186
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 2436a5d980d19d1c40bae71b6d276df3aab86b4ee81e090ba24c1a3490062851
+    settings_sha256_by_dataset:
+      BIN_TEXT_FAKE_JOB_POSTING: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      BIN_TEXT_JIGSAW_TOXICITY: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      BIN_TEXT_KICKSTARTER_FUNDING: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      MUL_TEXT_DATA_SCIENTIST_SALARY: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      MUL_TEXT_MICHELIN_RESTAURANTS: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      MUL_TEXT_PRODUCT_SENTIMENT: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      MUL_TEXT_US_ACCIDENTS: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+      MUL_TEXT_WINE_REVIEW: 31b4b36b8dd2c98bac34a9fa5ccc88b4f8b00aa4a1e6d7e51281decb0eb6afff
+  drex_max:
+    provider: drex_max
+    model: nace-ai/drex-max-v1
+    version: 005d4eb46cd2f2f56ae0e82c6444fba8363c9c17
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 1b09577bae8ba4f6e11a7cc6e7d41d9f4dba48f6f8f25c8edcc5c55a80d912e2
+  knowline:
+    provider: knowline
+    model: PelaAI/KnowLine-31B-Gen1
+    version: a45b64060e1d6928e7e20bdffd2c482e4ebf7de6
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 54071d7591cb3c4a8412f6f821fbd7ba2dd6165476360073a6341756ad6b3b14
+  sieve:
+    provider: sieve
+    model: sthanika-ai/Sieve-31B-v3
+    version: ed0a046788205f0457918af8dbae3c6e8c3ee9f5
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 52fb61b3da15be6fd9250bada1d57019c2fd2a1d8abb9723aee9718d42377e3f
+  glide:
+    provider: glide
+    model: fastino/GLiDE-27B
+    version: 4d32743ae96b74f0116f050d37742bbd43c04e7d
+    question_bank_id: a81d6e9c60687b64530924c4c429909423941e5ca363b5f2fb4bae0465df2ed5
+    question_variant: documented
+    settings_sha256: 381f93d7bf9e5ae747ccb6789ddf3fb5d571f48ddc52769d25f6b59b59465548
+    settings_sha256_by_dataset:
+      REG_TEXT_BOOK_PRICE: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_BOOK_READABILITY: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_MERCARI_MARKETPLACE: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_MONTGOMERY_SALARIES: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_ROTTEN_TOMATOES: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_SCIMAGOJR_IMPACT: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_VANCOUVER_SALARIES: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
+      REG_TEXT_VIDEO_GAMES_SALES: 7048c781a7f0b8ff977ac40b7f1026c524bc2df5804fe8d20f231d8e670d3801
 
 # Further named configurations of B1 (load_yaml('B1/models'), load_yaml('B1/protocol')):
 # the predictor catalogue and the evaluation protocol shared by every Group B experiment.

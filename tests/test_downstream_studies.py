@@ -26,6 +26,7 @@ def test_replay_is_fresh_and_resume_keeps_only_completed_trials(request, monkeyp
     )
     monkeypatch.setattr(robust, "catalogue", lambda: {ds: wording})
     monkeypatch.setattr(robust.paths, "dataset_question_path", lambda _: saved["path"])
+    monkeypatch.setattr(robust.paths, "manifests_dir", lambda phase: tmp_path / phase / "manifests")
     monkeypatch.setattr(
         robust.paths, "results_dir", lambda *args, **kwargs: tmp_path.joinpath(*args)
     )
@@ -51,7 +52,9 @@ def test_replay_is_fresh_and_resume_keeps_only_completed_trials(request, monkeyp
     result = json.loads(report.read_text())
     assert result["completed"]
     assert result["decision_settings"] == client.settings
-    with sqlite3.connect(report.with_suffix(".sqlite3")) as db:
+    assert report.parent == robust.paths.manifests_dir("A0") / "robustness" / ds / "strands"
+    store = robust.paths.results_dir("robustness", ds, "strands", phase="A0") / (report.stem + ".sqlite3")
+    with sqlite3.connect(store) as db:
         assert db.execute("SELECT DISTINCT json_extract(data,'$.reported_model'), json_extract(data,'$.reported_version') "
                           "FROM results WHERE json_extract(data,'$.status')='measured'").fetchall() == [
                               ("strands-test", "test-revision")]

@@ -20,6 +20,7 @@ native_robustness_qualification:
   scope: each_qualified_open_weight_provider
   evidence: frozen_input_ids_and_settings_match_before_scientific_dispatch
 native_geometry_qualification:
+  script: scripts/slurm/A0_geometry.slurm
   entry_point: src.evaluation.geometry_study
   invocation: --dataset DATASET --pilot
   coverage: complete_selected_providers_and_three_frozen_encoders

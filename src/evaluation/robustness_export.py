@@ -94,7 +94,9 @@ def _release_selectors(roster=None):
     for release in decision_versions(members):
         provider = release["provider"]
         selector = decision_selector(main, provider) if main["feature_selectors"].get(provider) else {}
-        out[provider] = {**release, "settings_sha256": selector.get("settings_sha256")}
+        recorded = main["feature_selectors"].get(provider) or {}
+        out[provider] = {**release, "settings_sha256": selector.get("settings_sha256"),
+                         "settings_sha256_by_dataset": recorded.get("settings_sha256_by_dataset", {})}
     return out
 
 
@@ -118,7 +120,7 @@ def _selected_runs(root, *, roster, release_evidence):
         pin = expected[provider]
         settings = body.get("decision_settings")
         fingerprint = design.get("settings")
-        known_hash = pin["settings_sha256"]
+        known_hash = pin.get("settings_sha256_by_dataset", {}).get(design["dataset"], pin["settings_sha256"])
         if settings is None:
             status = ("matched_legacy_settings" if known_hash and fingerprint == known_hash
                       else "unidentified_release")

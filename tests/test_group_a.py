@@ -34,7 +34,7 @@ NOTEBOOKS = Path(__file__).resolve().parents[1] / "notebooks"
 
 
 def options(providers):
-    result = copy.deepcopy(load_config("feature_comparison")["comparison"])
+    result = copy.deepcopy(load_config("A1")["comparison"])
     result["providers"] = list(providers)
     result["scatter_rows_per_group"] = 2
     return result
@@ -413,6 +413,10 @@ def test_robustness_export_collect_reads_completed_stores_only(tmp_path, monkeyp
 
     pin, = decision_versions(["kev"])
     settings = {k: pin[k] for k in ("provider", "model", "version")}
+    monkeypatch.setattr(robustness_export, "_release_selectors", lambda _: {
+        "kev": {**pin, "settings_sha256": digest(settings)},
+    })
+
     def store(dataset, provider, pilot):
         folder = tmp_path / dataset / provider
         folder.mkdir(parents=True)
@@ -613,3 +617,19 @@ def test_regression_averaging_quality_reports_ranked_probability_score():
     rps = rows.query("metric == 'ranked_probability_score'").set_index("presentation").value
     assert set(rps.index) == {"original", "average", "mean_single"}
     assert rps["average"] <= rps["mean_single"] + 1e-12  # Convexity (Jensen).
+
+
+def test_feature_selector_uses_dataset_specific_production_settings(monkeypatch):
+    from src.evaluation import design
+    from src.evaluation.qualification import decision_selector
+
+    provider = "glide"
+    release = {"provider": provider, "model": "publisher/model", "version": "revision"}
+    monkeypatch.setattr(design, "decision_versions", lambda _: [release])
+    selector = {**release, "question_bank_id": "bank", "question_variant": "documented",
+                "settings_sha256": "default", "settings_sha256_by_dataset": {"older": "historical"}}
+    config = {"feature_selectors": {provider: selector}}
+    assert decision_selector(config, provider, "older")["settings_sha256"] == "historical"
+    assert decision_selector(config, provider, "newer")["settings_sha256"] == "default"
+    assert "settings_sha256_by_dataset" not in decision_selector(config, provider, "older")
+    assert config["feature_selectors"][provider] == selector

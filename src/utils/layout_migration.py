@@ -95,8 +95,14 @@ def destination_path(root: Path, target: PurePosixPath) -> Path:
     root = Path(root)
     destination = Path(os.path.normpath(root / target))
     archive = paths.archive_dir(root)
-    if not (destination.is_relative_to(root) or destination.is_relative_to(archive)):
+    ancestor = root if destination.is_relative_to(root) else archive
+    if not destination.is_relative_to(ancestor):
         raise ValueError(f"Destination outside the output root and its archive: {target}")
+    for parent in destination.parents:
+        if not parent.is_relative_to(ancestor):
+            break
+        if _linked(parent):
+            raise ValueError(f"Linked layout destination requires separate review: {parent}")
     return destination
 
 
@@ -204,7 +210,7 @@ def _require_stopped(writers_stopped: bool) -> None:
     if paths.on_vsc():
         from src.cluster.maintenance import require_idle_vsc
 
-        require_idle_vsc()
+        require_idle_vsc(allow_current=True)
 
 
 def migrate(root: Path, *, writers_stopped: bool = False) -> dict:

@@ -47,7 +47,7 @@ SCHEMA = "jevpfn.rq1a.report.v2"
 def report_config(cohort=None):
     from src.evaluation.benchmark_export import cohort_record
 
-    cfg = load_config("feature_comparison")
+    cfg = load_config("A1")
     selected = cohort_record(cohort)
     configured = cfg["comparison"]["providers"]
     if set(selected["decision_roster"]) - set(configured):

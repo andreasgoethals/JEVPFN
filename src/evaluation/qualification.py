@@ -54,10 +54,14 @@ def kumo_override_arm(arms):
     return max(wide, key=lambda a: (a["predictor_columns"], rows[a["dataset_id"]]))
 
 
-def decision_selector(config, provider):
+def decision_selector(config, provider, dataset_id=None):
     from src.evaluation.design import decision_versions
 
-    selector = config["feature_selectors"].get(provider)
+    recorded = config["feature_selectors"].get(provider)
+    selector = dict(recorded or {})
+    settings_by_dataset = selector.pop("settings_sha256_by_dataset", {})
+    if dataset_id in settings_by_dataset:
+        selector["settings_sha256"] = settings_by_dataset[dataset_id]
     fields = ("model", "version", "question_bank_id", "question_variant", "settings_sha256")
     if (
         not selector

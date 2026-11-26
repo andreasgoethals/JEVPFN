@@ -58,7 +58,7 @@ def _probabilities(latent, k, traits, rng):
 
 
 def _options(providers):
-    result = copy.deepcopy(load_config("feature_comparison")["comparison"])
+    result = copy.deepcopy(load_config("A1")["comparison"])
     result["providers"] = list(providers)
     result["scatter_rows_per_group"] = 1
     return result

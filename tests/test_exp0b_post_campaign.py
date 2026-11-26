@@ -76,7 +76,7 @@ def decision_store(isolated_output, monkeypatch, request):
     monkeypatch.setattr(preflight, "selected_entries", lambda catalog, cfg: [entry])
     monkeypatch.setattr(preflight, "load_catalog", lambda: {"datasets": [entry]})
     monkeypatch.setattr(preflight, "load_dataset", lambda e, allow_download=False: dataset)
-    monkeypatch.setattr(q, "decision_selector", lambda cfg, provider: {"provider": provider})
+    monkeypatch.setattr(q, "decision_selector", lambda cfg, provider, dataset_id=None: {"provider": provider})
     return dataset
 
 

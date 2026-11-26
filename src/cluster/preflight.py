@@ -282,7 +282,7 @@ def decision_feature_checks(cfg):
         for provider in cfg["candidate_extractors"]:
             item = {"dataset_id": entry["id"], "provider": provider, "status": "failed"}
             try:
-                selector = decision_selector(cfg, provider)
+                selector = decision_selector(cfg, provider, entry["id"])
                 pins = decision_artifact_pins(cfg, entry["id"], provider)
                 blocks = load_feature_selection(paths.dataset_cache_path(entry["id"]), selector, artifact_pins=pins)
                 for feature_set in ("non_text_plus_per_column", "non_text_plus_joint", "non_text_plus_both"):
