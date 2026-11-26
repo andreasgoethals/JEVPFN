@@ -1,6 +1,6 @@
 """Label-free comparisons of complete, immutable, saved decision-model features.
 
-Read only: no provider imports, requests, model loads, target labels or cache writes.
+Read only: no requests, model loads, target labels or cache writes.
 Metrics use all aligned inputs; only illustrative scatter points are subsampled.
 """
 
@@ -22,6 +22,7 @@ from src.data.loaders import load_catalog
 from src.data.selection import selected_entries
 from src.evaluation.portable_features import notebook_inventory, verified_payload_hashes
 from src.jev.features import FeatureBlock, load_block
+from src.jev.provider import ROUNDING_DECIMALS
 from src.utils import paths
 from src.utils.serialization import canonical_json, digest, write_json
 
@@ -107,23 +108,40 @@ def normalize_group(block: FeatureBlock, group: str, hashes: dict[str, str]) -> 
     )
     if not set(suffixes) <= set(columns):
         raise ValueError("Comparison requires complete retained probability vectors")
-    p = block.values[[columns[s] for s in suffixes]].to_numpy(dtype=float)
+    p = block.values[[columns[s] for s in suffixes]].to_numpy(dtype=float, copy=True)
     if task == "binary_classification":
         p = np.column_stack([1 - p[:, 0], p[:, 0]])
     valid = p[~missing]
+    totals = valid.sum(axis=1)
     if (
         not np.isnan(p[missing]).all()
         or not np.isfinite(valid).all()
         or (valid < 0).any()
         or (valid > 1).any()
-        or not np.allclose(valid.sum(axis=1), 1, rtol=0, atol=1e-6)
     ):
         raise ValueError("Invalid or incomplete probability distribution")
+    off_simplex = np.abs(totals - 1) > 1e-6
+    if off_simplex.any():
+        digits = ROUNDING_DECIMALS.get(identity["provider"])
+        if digits is None or np.any(np.abs(totals[off_simplex] - 1) > 1e-5):
+            raise ValueError("Invalid or incomplete probability distribution")
+        rounded = valid[off_simplex]
+        scale = 10**digits
+        half_step = 0.5 / scale
+        # The decoder may retain rounded vectors within its strict 1e-5 envelope.
+        # Check that those entries could have come from a unit-mass distribution.
+        if (
+            not np.allclose(rounded * scale, np.rint(rounded * scale), atol=1e-8, rtol=0)
+            or (np.maximum(rounded - half_step, 0).sum(axis=1) > 1 + 1e-12).any()
+            or (np.minimum(rounded + half_step, 1).sum(axis=1) < 1 - 1e-12).any()
+        ):
+            raise ValueError("Invalid or incomplete probability distribution")
     if task == "regression":
         if manifest["regression_index_to_direction"] != {str(i): i - 4 for i in range(9)}:
             raise ValueError("Regression probability/score order differs")
         score = block.values[columns["expected_direction"]].to_numpy(dtype=float)
-        if not np.allclose(score[~missing], valid @ np.arange(-4, 5), atol=1e-6, rtol=0):
+        # Compare with the decoder's saved 0..8 expectation shifted by four.
+        if not np.allclose(score[~missing], valid @ np.arange(9) - 4, atol=1e-6, rtol=0):
             raise ValueError("Saved regression score differs from its retained probabilities")
     input_ids = refs.request_key.map(hashes).to_numpy()
     if pd.isna(input_ids[~missing]).any():
@@ -134,6 +152,9 @@ def normalize_group(block: FeatureBlock, group: str, hashes: dict[str, str]) -> 
         _, first, inverse = np.unique(input_ids[~missing], return_index=True, return_inverse=True)
         if not np.array_equal(valid, valid[first[inverse]]):
             raise ValueError("Repeated input has inconsistent cached features")
+    # Probability distances require unit mass. Rescale only the analysis copy,
+    # preserving exact rankings and the sealed feature and response bytes.
+    p[~missing] = valid / totals[:, None]
     common = {
         k: identity.get(k)
         for k in (

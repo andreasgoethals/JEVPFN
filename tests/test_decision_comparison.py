@@ -198,6 +198,34 @@ def test_normalization_validates_probabilities_and_reuse():
         normalize_group(block, "all_text", {"key": "same"})
 
 
+def test_mammoth_rounded_features_keep_decoder_score_and_use_unit_mass_for_distances():
+    block = block_fixture()
+    values = np.array([0.111112] * 4 + [0.111111] * 5)
+    columns = [f"mammoth__joint__text_only__all_text__p_{i}" for i in range(9)]
+    score = "mammoth__joint__text_only__all_text__expected_direction"
+    block.manifest.update(
+        class_labels=[],
+        feature_columns=[*columns, score],
+        regression_index_to_direction={str(i): i - 4 for i in range(9)},
+    )
+    block.manifest["identity"]["provider"] = "mammoth"
+    for column, value in zip(columns, values):
+        block.values[column] = [value, value, np.nan]
+    block.values[score] = [values @ np.arange(9) - 4] * 2 + [np.nan]
+    normalized = normalize_group(block, "all_text", {"key": "same"})
+    np.testing.assert_allclose(normalized.probabilities[:2], [values / values.sum()] * 2)
+    np.testing.assert_array_equal(block.values.loc[0, columns].to_numpy(float), values)
+
+    block.manifest["identity"]["provider"] = "unknown"
+    with pytest.raises(ValueError, match="Invalid"):
+        normalize_group(block, "all_text", {"key": "same"})
+
+    block.manifest["identity"]["provider"] = "mammoth"
+    block.values.loc[:1, columns[0]] += 0.000002
+    with pytest.raises(ValueError, match="Invalid"):
+        normalize_group(block, "all_text", {"key": "same"})
+
+
 def test_semantic_hashes_come_from_verified_raw_requests(tmp_path):
     path = tmp_path / "fixture.sqlite3"
     block = block_fixture()
